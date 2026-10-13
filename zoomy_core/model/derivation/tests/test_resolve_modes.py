@@ -1,19 +1,19 @@
-"""Milestone-6 tests: ``resolve_modes`` — the moment-row SHAPE BUMP.
+"""Milestone-6 tests: `resolve_modes` — the moment-row SHAPE BUMP.
 
-``resolve_modes`` takes a row carrying an ABSTRACT test index ``l`` (after a
-Galerkin ``Project(c·φ(l,ζ)) + ExtractBrackets`` style projection) and expands
-it, via a per-mode index specialisation ``{l: k}``,
-into one row per ``l``, GROUPED UNDER THE PARENT as an indexed moment family.
+`resolve_modes` takes a row carrying an ABSTRACT test index `l` (after a
+Galerkin `Project(c·φ(l,ζ)) + ExtractBrackets` style projection) and expands
+it, via a per-mode index specialisation `{l: k}`,
+into one row per `l`, GROUPED UNDER THE PARENT as an indexed moment family.
 
 Shape algebra:
 
-  * scalar ``mass`` ``(1,)`` → ``(N+1,)``   → ``model.mass[l]`` (and ``.eq0``…)
-  * vector ``momentum`` ``(2,)`` → ``(2, N+1)`` → ``model.momentum.x[l]``
-    (the ``(x, l)`` slice of the bumped tensor).
+  * scalar `mass` `(1,)` → `(N+1,)`   → `model.mass[l]` (and `.eq0`…)
+  * vector `momentum` `(2,)` → `(2, N+1)` → `model.momentum.x[l]`
+    (the `(x, l)` slice of the bumped tensor).
 
-Per-row ``ResolveBasis`` / ``Resolve`` then closes the Galerkin brackets per
+Per-row `ResolveBasis` / `Resolve` then closes the Galerkin brackets per
 moment.  These tests pin the SHAPE BUMP + the family access; the bit-exact SME
-acceptance lives in ``test_sme_kt19`` / ``test_slip_sme``.
+acceptance lives in `test_sme_kt19` / `test_slip_sme`.
 """
 
 import sympy as sp
@@ -35,9 +35,9 @@ l = sp.Symbol("l", integer=True, nonnegative=True)
 
 
 def _modal_model():
-    """A minimal model: a scalar ``mass`` row and a 2-vector ``momentum`` row,
-    each carrying the abstract test index ``l`` via an ``a(l, t, x)`` head — a
-    stand-in for a post-``Project(c·φ(l,ζ))`` Galerkin row.  No σ-map needed for
+    """A minimal model: a scalar `mass` row and a 2-vector `momentum` row,
+    each carrying the abstract test index `l` via an `a(l, t, x)` head — a
+    stand-in for a post-`Project(c·φ(l,ζ))` Galerkin row.  No σ-map needed for
     the pure shape-bump tests."""
     model = Model(coords=(t, x, z), parameters={"g": 9.81, "rho": 1.0})
     a = sp.Function("a")
@@ -114,8 +114,8 @@ def test_resolve_modes_vector_momentum_shape_bump():
 
 def test_collapse_to_single_mode_keeps_moment_family():
     """When a closure consumes all but one mode, the family must NOT decay back
-    to a bare scalar ``Equation``: ``model.mass`` stays a ``MomentFamily``,
-    ``model.mass[0]`` is the surviving moment row, and ``model.mass[0].term[i]``
+    to a bare scalar `Equation`: `model.mass` stays a `MomentFamily`,
+    `model.mass[0]` is the surviving moment row, and `model.mass[0].term[i]`
     indexes that row's additive terms."""
     model, a, h = _modal_model()
     N = 2
@@ -148,8 +148,8 @@ def test_collapse_to_single_mode_keeps_moment_family():
 
 
 def test_resolve_modes_with_galerkin_close():
-    """With ``resolve=`` the bumped rows are each closed by the concrete-level
-    Galerkin ``Resolve`` (φ(l,ζ) → φ(k,ζ) at the bound mode), so the opaque
+    """With `resolve=` the bumped rows are each closed by the concrete-level
+    Galerkin `Resolve` (φ(l,ζ) → φ(k,ζ) at the bound mode), so the opaque
     basis brackets are gone."""
     model = Model(coords=(t, x, z), parameters={"g": 9.81, "rho": 1.0})
     a = sp.Function("a")

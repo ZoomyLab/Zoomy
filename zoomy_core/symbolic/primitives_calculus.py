@@ -2,35 +2,35 @@
 
 Each function in this module implements ONE textbook calculus rule
 that fires only when its structural pattern matches.  The rules
-**never** call ``.doit()``, ``sp.simplify``, ``sp.cancel``,
-``sp.together``, or ``sp.factor``.  Sympy is used only for:
+**never** call `.doit()`, `sp.simplify`, `sp.cancel`,
+`sp.together`, or `sp.factor`.  Sympy is used only for:
 
-* ``sp.expand`` (Mul-over-Add only, via
-  :func:`zoomy_core.symbolic.primitives_canonical.distribute_mul_over_add`),
-* ``sp.Poly(...).integrate()`` for finite polynomial antiderivatives,
-* ``Add``/``Mul``/``Pow`` constructors (commutative-ring arithmetic),
-* ``xreplace`` for purely-structural substitution.
+* `sp.expand` (Mul-over-Add only, via
+  `zoomy_core.symbolic.primitives_canonical.distribute_mul_over_add`),
+* `sp.Poly(...).integrate()` for finite polynomial antiderivatives,
+* `Add`/`Mul`/`Pow` constructors (commutative-ring arithmetic),
+* `xreplace` for purely-structural substitution.
 
 Refusal semantics: when the input contains no atom matching the
 primitive's pattern, the function returns the input unchanged
 (silent no-op — preserving the equation but doing nothing).  Use
-:meth:`Expression.apply_to_term(i, primitive)` for explicit
+`Expression.apply_to_term(i, primitive)` for explicit
 single-term targeting.
 
 Functions are lifted from
-``zoomy_core.model.models.ins_generator`` with two surgical
+`zoomy_core.model.models.ins_generator` with two surgical
 changes:
 
-* ``ProductRuleInverse`` no longer calls ``Derivative(coeff,
+* `ProductRuleInverse` no longer calls ``Derivative(coeff,
   var).doit()`` on the residual (legacy bug source —
-  ``ins_generator.py:3402``); the residual is left as a held
-  ``Derivative`` atom which Canonicalise reduces structurally.
-* ``Leibniz`` no longer runs the inner ``_doit_only_derivatives``
-  walk (legacy bug source — ``ins_generator.py:2026``); the caller
-  must apply ``DistributeDerivativeOverAdd`` first if they want
-  ``var``-factor surfacing.
-* ``PolynomialIntegrate`` no longer runs ``_doit_derivs``
-  (``ins_generator.py:2078``).  Same reason.
+  `ins_generator.py:3402`); the residual is left as a held
+  `Derivative` atom which Canonicalise reduces structurally.
+* `Leibniz` no longer runs the inner `_doit_only_derivatives`
+  walk (legacy bug source — `ins_generator.py:2026`); the caller
+  must apply `DistributeDerivativeOverAdd` first if they want
+  `var`-factor surfacing.
+* `PolynomialIntegrate` no longer runs `_doit_derivs`
+  (`ins_generator.py:2078`).  Same reason.
 """
 
 from __future__ import annotations
@@ -62,16 +62,16 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 def fundamental_theorem(integrand, var, lower, upper):
-    """``∫_lo^hi ∂_var g dvar = g|_hi − g|_lo``.
+    """`∫_lo^hi ∂_var g dvar = g|_hi − g|_lo`.
 
-    Lifted verbatim from ``_rule_fundamental_theorem``
-    (ins_generator.py:1934).  Handles single-order ``∂_var g`` and
-    higher-order-in-``var`` (one ``var`` peels off).  Mixed-order
-    ``∂_var ∂_other g`` strips one ``var`` from the diff-tuple.
+    Lifted verbatim from `_rule_fundamental_theorem`
+    (ins_generator.py:1934).  Handles single-order `∂_var g` and
+    higher-order-in-`var` (one `var` peels off).  Mixed-order
+    `∂_var ∂_other g` strips one `var` from the diff-tuple.
 
-    Returns ``None`` if the integrand isn't a ``Derivative`` whose
-    diff-vars include ``var`` (caller convention preserved from
-    ins_generator's rule-registry: ``None`` = "rule does not apply",
+    Returns `None` if the integrand isn't a `Derivative` whose
+    diff-vars include `var` (caller convention preserved from
+    ins_generator's rule-registry: `None` = "rule does not apply",
     not an exception).
     """
     if not isinstance(integrand, Derivative):
@@ -105,23 +105,23 @@ def fundamental_theorem(integrand, var, lower, upper):
 # ---------------------------------------------------------------------------
 
 def leibniz(integrand, var, lower, upper):
-    """``∫_lo^hi ∂_y f dvar = ∂_y(∫_lo^hi f dvar) − f(hi)·∂_y hi + f(lo)·∂_y lo``
-    when ``y ≠ var`` and ``f`` is polynomial in ``var``.
+    """`∫_lo^hi ∂_y f dvar = ∂_y(∫_lo^hi f dvar) − f(hi)·∂_y hi + f(lo)·∂_y lo`
+    when `y ≠ var` and `f` is polynomial in `var`.
 
-    Lifted from ``_rule_derivative_of_polynomial`` (ins_generator.py:1976)
-    with the inner ``_doit_only_derivatives`` walk **removed**.  If
-    the caller wants ``var``-factors to surface from
-    ``Derivative(var·g, y)`` etc. they must run
-    :func:`distribute_derivative_over_add` first.
+    Lifted from `_rule_derivative_of_polynomial` (ins_generator.py:1976)
+    with the inner `_doit_only_derivatives` walk **removed**.  If
+    the caller wants `var`-factors to surface from
+    `Derivative(var·g, y)` etc. they must run
+    `distribute_derivative_over_add` first.
 
-    Returns ``None`` when:
+    Returns `None` when:
 
-    * integrand is not a ``Derivative``,
+    * integrand is not a `Derivative`,
     * diff-tuple has more than one entry,
-    * differentiation is w.r.t. ``var`` itself
-      (``fundamental_theorem`` handles that),
-    * the integrand is independent of ``var``,
-    * ``sp.Poly`` cannot build a polynomial in ``var``.
+    * differentiation is w.r.t. `var` itself
+      (`fundamental_theorem` handles that),
+    * the integrand is independent of `var`,
+    * `sp.Poly` cannot build a polynomial in `var`.
     """
     if not isinstance(integrand, Derivative):
         return None
@@ -156,27 +156,29 @@ def leibniz(integrand, var, lower, upper):
 
 
 def leibniz_general(integrand, var, lower, upper):
-    """Conservative-form Leibniz that does NOT require ``f`` to be
-    polynomial in ``var``.
+    """Conservative-form Leibniz that does NOT require `f` to be
+    polynomial in `var`.
 
-    For ``∫_lo^hi ∂_y f dvar`` with ``y ≠ var``::
+    For `∫_lo^hi ∂_y f dvar` with `y ≠ var`:
 
+    ```
         = ∂_y[ ∫_lo^hi f dvar ]   −  f|_hi · ∂_y hi   +   f|_lo · ∂_y lo
+    ```
 
-    The volume ``∫f dvar`` stays as a held :class:`sympy.Integral`
+    The volume `∫f dvar` stays as a held `sympy.Integral`
     atom — no attempt to evaluate it.  Boundary terms are produced as
-    held :class:`sympy.Subs` atoms when the bounds depend on ``y``.
+    held `sympy.Subs` atoms when the bounds depend on `y`.
 
     Use this when the integrand's antiderivative is unknown or
-    opaque; use :func:`leibniz` (poly-specialised) when ``f`` is
-    polynomial in ``var`` and you want the closed-form volume.
+    opaque; use `leibniz` (poly-specialised) when `f` is
+    polynomial in `var` and you want the closed-form volume.
 
-    Returns ``None`` if:
+    Returns `None` if:
 
-    * integrand is not a ``Derivative``,
+    * integrand is not a `Derivative`,
     * diff-tuple has more than one entry,
-    * differentiation is w.r.t. ``var`` itself
-      (``fundamental_theorem`` handles that).
+    * differentiation is w.r.t. `var` itself
+      (`fundamental_theorem` handles that).
     """
     if not isinstance(integrand, Derivative):
         return None
@@ -206,16 +208,16 @@ def leibniz_general(integrand, var, lower, upper):
 # ---------------------------------------------------------------------------
 
 def polynomial_integrate(integrand, var, lower, upper):
-    """``∫_lo^hi p(var) dvar`` via ``sp.Poly.integrate`` for polynomial
-    ``p`` (with arbitrary opaque coefficients).
+    """`∫_lo^hi p(var) dvar` via `sp.Poly.integrate` for polynomial
+    `p` (with arbitrary opaque coefficients).
 
-    Lifted from ``_rule_polynomial_integrand`` (ins_generator.py:2061)
-    with the inner ``_doit_derivs`` walk **removed**.  If the caller
-    wants ``var``-factors to surface from ``Derivative(var·g, y)``
-    etc. they must run :func:`distribute_derivative_over_add` first.
+    Lifted from `_rule_polynomial_integrand` (ins_generator.py:2061)
+    with the inner `_doit_derivs` walk **removed**.  If the caller
+    wants `var`-factors to surface from `Derivative(var·g, y)`
+    etc. they must run `distribute_derivative_over_add` first.
 
-    Returns ``(hi − lo) · integrand`` for ``var``-free integrands
-    (constant integrand rule).  Returns ``None`` if ``sp.Poly`` cannot
+    Returns `(hi − lo) · integrand` for `var`-free integrands
+    (constant integrand rule).  Returns `None` if `sp.Poly` cannot
     build a polynomial.
     """
     expr = distribute_mul_over_add(integrand)
@@ -234,16 +236,16 @@ def polynomial_integrate(integrand, var, lower, upper):
 # ---------------------------------------------------------------------------
 
 def integration_by_parts(f, g, var, lower, upper):
-    """``∫_lo^hi (∂_var f)·g dvar = [f·g]_lo^hi − ∫_lo^hi f·∂_var g dvar``.
+    """`∫_lo^hi (∂_var f)·g dvar = [f·g]_lo^hi − ∫_lo^hi f·∂_var g dvar`.
 
     Returns a 3-tuple ``(volume_integrand, boundary_upper,
     boundary_lower)`` so the caller can place each piece in the
-    appropriate term tag.  ``volume_integrand`` already carries the
-    ``-`` sign and is wrapped in a ``Integral(..., (var, lower,
+    appropriate term tag.  `volume_integrand` already carries the
+    `-` sign and is wrapped in a ``Integral(..., (var, lower,
     upper))``.
 
-    Lifted from ``integrate_by_parts`` (ins_generator.py:4757), with
-    the ``IBPResult`` wrapper unpacked since it lives in the legacy
+    Lifted from `integrate_by_parts` (ins_generator.py:4757), with
+    the `IBPResult` wrapper unpacked since it lives in the legacy
     layer.
     """
     volume = -Integral(f * Derivative(g, var), (var, lower, upper))
@@ -257,17 +259,17 @@ def integration_by_parts(f, g, var, lower, upper):
 # ---------------------------------------------------------------------------
 
 def product_rule_forward(term, var):
-    """``∂_v(Π fᵢ) → Σᵢ (Π_{j≠i} fⱼ)·∂_v fᵢ`` and
-    ``∂_v(f^n) → n·f^(n-1)·∂_v f`` for integer ``n ≥ 2``.
+    """`∂_v(Π fᵢ) → Σᵢ (Π_{j≠i} fⱼ)·∂_v fᵢ` and
+    `∂_v(f^n) → n·f^(n-1)·∂_v f` for integer `n ≥ 2`.
 
-    Acts on a single ``Derivative`` atom.  If ``term`` is not a
-    ``Derivative``, returns ``term`` unchanged (no-op).  If the
+    Acts on a single `Derivative` atom.  If `term` is not a
+    `Derivative`, returns `term` unchanged (no-op).  If the
     derivative has multiple variables or its inner is neither a Mul
-    nor an integer-power Pow, returns ``term`` unchanged.
+    nor an integer-power Pow, returns `term` unchanged.
 
-    Lifted from the forward branch of ``ProductRule._one_term``
-    (ins_generator.py:3358).  No ``.doit()`` involved — every output
-    factor is a held ``Derivative``.
+    Lifted from the forward branch of `ProductRule._one_term`
+    (ins_generator.py:3358).  No `.doit()` involved — every output
+    factor is a held `Derivative`.
     """
     if not isinstance(term, Derivative) or len(term.variables) != 1:
         return term
@@ -291,19 +293,19 @@ def product_rule_forward(term, var):
 
 
 def product_rule_inverse(term, var):
-    """``coeff · ∂_v f → ∂_v(coeff · f) − ∂_v(coeff) · f``.
+    """`coeff · ∂_v f → ∂_v(coeff · f) − ∂_v(coeff) · f`.
 
-    The legacy version (``ProductRule._one_term`` inverse branch,
-    ins_generator.py:3402) called ``Derivative(coeff, var).doit()`` on
-    the residual.  That ``.doit()`` was the exact bug-3 source: when
-    ``coeff`` is e.g. ``φ_1((z-b)/h)``, ``.doit()`` fires the chain
+    The legacy version (`ProductRule._one_term` inverse branch,
+    ins_generator.py:3402) called `Derivative(coeff, var).doit()` on
+    the residual.  That `.doit()` was the exact bug-3 source: when
+    `coeff` is e.g. `φ_1((z-b)/h)`, `.doit()` fires the chain
     rule against the moving frame at exactly the wrong pipeline
     position.
 
     The redesigned primitive leaves the residual as a held
-    ``Derivative(coeff, var)`` atom.  Canonicalise will reduce it to
-    zero when ``coeff`` is genuinely ``var``-free, otherwise the
-    user calls :func:`chain_rule` or :func:`product_rule_forward`
+    `Derivative(coeff, var)` atom.  Canonicalise will reduce it to
+    zero when `coeff` is genuinely `var`-free, otherwise the
+    user calls `chain_rule` or `product_rule_forward`
     explicitly to expand it.
     """
     if not isinstance(term, Mul):
@@ -326,26 +328,28 @@ def product_rule_inverse(term, var):
 # ---------------------------------------------------------------------------
 
 def chain_rule(term, outer_predicate, var):
-    """``∂_v f(g(v)) → f'(g)·∂_v g`` where ``outer_predicate(f) → bool``
+    """`∂_v f(g(v)) → f'(g)·∂_v g` where `outer_predicate(f) → bool`
     selects the function families to expand.
 
     Walks the expression and applies the chain rule wherever the
-    pattern matches.  ``outer_predicate`` is a callable taking a
-    ``Function`` instance (the call site, e.g. ``phi_1((z-b)/h)``)
-    and returning ``True`` if this primitive should chain-rule it.
+    pattern matches.  `outer_predicate` is a callable taking a
+    `Function` instance (the call site, e.g. `phi_1((z-b)/h)`)
+    and returning `True` if this primitive should chain-rule it.
 
-    For example, to chain-rule every ``phi_*`` family call::
+    For example, to chain-rule every `phi_*` family call:
 
+    ```
         def is_basis(call):
             name = getattr(call.func, '__name__', '')
             return name.startswith('phi_')
 
         chain_rule(expr, is_basis, var=x)
+    ```
 
-    Implementation: walks ``Derivative`` atoms whose inner is a
+    Implementation: walks `Derivative` atoms whose inner is a
     matching function call; replaces with the explicit chain-rule
-    expansion using held ``Derivative`` atoms.  No ``.doit()`` —
-    other ``Derivative`` atoms are not touched.
+    expansion using held `Derivative` atoms.  No `.doit()` —
+    other `Derivative` atoms are not touched.
     """
     if not isinstance(term, sp.Basic):
         return term
@@ -379,20 +383,20 @@ def chain_rule(term, outer_predicate, var):
 # ---------------------------------------------------------------------------
 
 def distribute_derivative_over_add(expr):
-    """``∂_v Add(t1, t2) → Add(∂_v t1, ∂_v t2)`` — linearity.
+    """`∂_v Add(t1, t2) → Add(∂_v t1, ∂_v t2)` — linearity.
 
-    Hoisted from the Add branch of ``_evaluate_linear_derivatives``
+    Hoisted from the Add branch of `_evaluate_linear_derivatives`
     (ins_generator.py:4651).  Distinguishes:
 
-    * Inner is structurally an ``Add`` → distribute outer Derivative.
-    * Inner is a ``Mul`` whose ``as_coeff_Mul`` separates a numeric
+    * Inner is structurally an `Add` → distribute outer Derivative.
+    * Inner is a `Mul` whose `as_coeff_Mul` separates a numeric
       scalar → pull it out (separate primitive
-      :func:`pull_scalar_out_of_derivative` does that; this one only
+      `pull_scalar_out_of_derivative` does that; this one only
       does Add-distribution).
-    * Trivially zero (``inner == 0`` or inner doesn't reference any
+    * Trivially zero (`inner == 0` or inner doesn't reference any
       diff-var) → returns 0.
 
-    No ``.doit()`` — distributed Derivative atoms are held.
+    No `.doit()` — distributed Derivative atoms are held.
     """
     if not isinstance(expr, sp.Basic):
         return expr
@@ -423,11 +427,11 @@ def distribute_derivative_over_add(expr):
 
 
 def pull_scalar_out_of_derivative(expr):
-    """``∂_v(c·f) → c·∂_v f`` when ``c`` is a sympy ``Number``
-    (``Integer``/``Rational``/``Float``).
+    """`∂_v(c·f) → c·∂_v f` when `c` is a sympy `Number`
+    (`Integer`/`Rational`/`Float`).
 
-    Hoisted from the ``Mul.as_coeff_Mul`` branch of
-    ``_evaluate_linear_derivatives`` (ins_generator.py:4644).
+    Hoisted from the `Mul.as_coeff_Mul` branch of
+    `_evaluate_linear_derivatives` (ins_generator.py:4644).
     Numeric-only — free symbols stay inside.
     """
     if not isinstance(expr, sp.Basic):
@@ -453,10 +457,10 @@ def pull_scalar_out_of_derivative(expr):
 
 
 def push_scalar_into_derivative(expr):
-    """``c · ∂_v f → ∂_v(c · f)`` when ``c`` is a sympy ``Number``.
+    """`c · ∂_v f → ∂_v(c · f)` when `c` is a sympy `Number`.
 
-    Inverse of :func:`pull_scalar_out_of_derivative`.  Lifted verbatim
-    from ``_fold_numeric_coeffs_into_derivative`` (ins_generator.py:4674).
+    Inverse of `pull_scalar_out_of_derivative`.  Lifted verbatim
+    from `_fold_numeric_coeffs_into_derivative` (ins_generator.py:4674).
     """
     if not isinstance(expr, sp.Basic):
         return expr

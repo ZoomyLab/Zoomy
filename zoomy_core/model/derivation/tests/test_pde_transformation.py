@@ -2,15 +2,15 @@
 
 Covers three building blocks:
 
-A. :class:`PDETransformation` — the explicit-geometry σ-map ``z = b + h·ζ``
-   that mints decorated heads (``ũ``) of ``(t, x, ζ)`` and applies the σ
-   chain rule with NO leftover ``Subs``.
-B. :class:`~zoomy_core.model.operations.KinematicBC` — added to the model as an
+A. `PDETransformation` — the explicit-geometry σ-map `z = b + h·ζ`
+   that mints decorated heads (`ũ`) of `(t, x, ζ)` and applies the σ
+   chain rule with NO leftover `Subs`.
+B. `KinematicBC` — added to the model as an
    oriented relation BEFORE the σ-map, σ-mapped in place by
-   :class:`PDETransformation` (``w(b) → w̃(0)`` …), then applied as a
+   `PDETransformation` (`w(b) → w̃(0)` …), then applied as a
    substitution.
-C. the conservative fold — ``Multiply(h)`` + ``ProductRule()`` on a momentum
-   row reaches divergence form (a ``∂_x(h·…)`` appears).
+C. the conservative fold — `Multiply(h)` + `ProductRule()` on a momentum
+   row reaches divergence form (a `∂_x(h·…)` appears).
 """
 
 import sympy as sp
@@ -196,8 +196,8 @@ def test_kinematic_bc_substitutes_bed_relation():
 
 
 def test_kinematic_bc_surface_interface():
-    """``PDETransformation`` σ-maps a stored surface KBC's ``{lhs: rhs}`` rule:
-    ``w(b+h) → w̃(1)``, ``u(b+h) → ũ(1)``."""
+    """`PDETransformation` σ-maps a stored surface KBC's `{lhs: rhs}` rule:
+    `w(b+h) → w̃(1)`, `u(b+h) → ũ(1)`."""
     model, s = _build()
     u, w, b, h = s["u"], s["w"], s["b"], s["h"]
     model.add_equation("kbc_top", KinematicBC(w=w, u=u, interface=b + h))

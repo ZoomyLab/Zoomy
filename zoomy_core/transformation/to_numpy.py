@@ -27,9 +27,9 @@ _solve_numpy = _uf.solve
 
 
 def _broadcast_array(x, *args, **kwargs):
-    """``numpy.array`` that BROADCASTS its entries to a common shape: the
+    """`numpy.array` that BROADCASTS its entries to a common shape: the
     vectorised boundary kernels stack per-face rows next to scalar constants
-    (a Dirichlet value, a time-only expression), which plain ``np.array``
+    (a Dirichlet value, a time-only expression), which plain `np.array`
     rejects as an inhomogeneous shape."""
     if isinstance(x, (list, tuple)):
         rows = [_broadcast_array(e) for e in x]
@@ -40,7 +40,7 @@ def _broadcast_array(x, *args, **kwargs):
 
 
 def _branch_groups(bc_idx):
-    """Static ``[(branch, face positions), …]`` of an integer branch vector,
+    """Static `[(branch, face positions), …]` of an integer branch vector,
     plus the inverse permutation that restores face order after the groups
     are concatenated."""
     bc_idx = np.asarray(bc_idx, dtype=int).ravel()
@@ -55,7 +55,7 @@ def _branch_groups(bc_idx):
 
 class _TemplateSlotsMixin:
     """New-template slots of the numpy runtime (lazy, built on first use so
-    the old solvers never pay for them): ``admissible`` and the D5/D6
+    the old solvers never pay for them): `admissible` and the D5/D6
     boundary GHOST kernels."""
 
     def _template_model(self):
@@ -77,7 +77,7 @@ class _TemplateSlotsMixin:
     # ── admissibility ────────────────────────────────────────────────
     def admissible(self, Q, Qaux, parameters):
         """The admissibility list evaluated per cell: ``(n_constraints,
-        n_cells)`` — every row must stay ``>= 0`` (decision D1).  ``(0,
+        n_cells)` — every row must stay `>= 0`` (decision D1).  ``(0,
         n_cells)`` for a system that declares none."""
         fn = getattr(self, "_admissible_fn", None)
         if fn is None:
@@ -122,8 +122,8 @@ class _TemplateSlotsMixin:
     def boundary_ghost_state(self, bc_idx, time, position, distance, Q, Qaux,
                              parameters, normal, bdata=None):
         """The indexed D5 ghost kernel, evaluated as ONE vectorised Piecewise:
-        works per face (scalar ``bc_idx``, ``(n,)`` state) and batched over
-        faces (``bc_idx`` ``(n_f,)``, state ``(n, n_f)``).  ``bdata=None``
+        works per face (scalar `bc_idx`, `(n,)` state) and batched over
+        faces (`bc_idx` `(n_f,)`, state `(n, n_f)`).  `bdata=None`
         means the BC input state (extrapolation fallback of coupled faces)."""
         whole, _br, n = self._ghost_lowered()
         Q = np.asarray(Q, dtype=float)
@@ -133,14 +133,14 @@ class _TemplateSlotsMixin:
         return out.reshape(Q.shape)
 
     def boundary_ghost(self, bc_idx):
-        """BATCHED ghost kernel for a STATIC branch vector ``bc_idx`` (one
+        """BATCHED ghost kernel for a STATIC branch vector `bc_idx` (one
         entry per boundary face, routed by tag name — see
-        :func:`zoomy_core.model.boundary_conditions.boundary_face_branches`).
+        `zoomy_core.model.boundary_conditions.boundary_face_branches`).
 
         Returns ``ghost(time, position, distance, Q_in, Qaux_in, parameters,
         normal, bdata=None) -> (Q_ghost, Qaux_ghost)`` with every face array
-        carrying a trailing face axis (``position`` ``(3, n_f)``, ``distance``
-        ``(n_f,)``, ``Q_in`` ``(n, n_f)``, ``normal`` ``(≥dim, n_f)``).  Each
+        carrying a trailing face axis (`position` `(3, n_f)`, `distance`
+        `(n_f,)`, `Q_in` `(n, n_f)`, `normal` `(≥dim, n_f)`).  Each
         BC branch is evaluated ONCE on its own faces (no Python loop over
         faces, no evaluation of a branch on foreign faces).  The ghost aux is
         the model's own aux update rule applied to the ghost state (D6); aux
@@ -178,8 +178,8 @@ class _TemplateSlotsMixin:
 class NumpyRuntimeModel(_TemplateSlotsMixin):
     """Runtime model generated from a symbolic Model.
 
-    Instead of assuming hardcoded attributes (e.g. ``_flux``), this class
-    compiles all functions registered in ``model.functions`` and exposes them
+    Instead of assuming hardcoded attributes (e.g. `_flux`), this class
+    compiles all functions registered in `model.functions` and exposes them
     as callable runtime attributes.
     """
 
@@ -215,13 +215,13 @@ class NumpyRuntimeModel(_TemplateSlotsMixin):
         numpy / jax).
 
         The producers emit every component read of the opaque kernels in the
-        CANONICAL ``pick(K(*a), idx)`` form (K ∈ {eigensystem, eigenvalues,
-        solve}).  numpy and jax register ``K`` (returns the whole packed stack)
-        and ``pick`` (trailing-axis index read) in their module dict, so the
-        form lowers directly and lambdify's cse hoists the shared ``K(*a)`` node
+        CANONICAL `pick(K(*a), idx)` form (K ∈ {eigensystem, eigenvalues,
+        solve}).  numpy and jax register `K` (returns the whole packed stack)
+        and `pick` (trailing-axis index read) in their module dict, so the
+        form lowers directly and lambdify's cse hoists the shared `K(*a)` node
         to ONE call per face — no rewrite needed here.  The per-component
         backends override this seam: :meth:`to_ufl.UFLRuntimeModel.
-        _lower_opaque_kernels` restores the ``K(idx, *a)`` form their UFL
+        _lower_opaque_kernels` restores the `K(idx, *a)` form their UFL
         bindings expect."""
         return expr
 
@@ -286,10 +286,10 @@ class NumpyRuntimeModel(_TemplateSlotsMixin):
             _build_plan(expected, arg_idx, ())
 
         def _safe_hasattr(obj, name):
-            """``hasattr`` shadowed by ``getattr`` with broad exception
-            handling — UFL exposes ``.T`` as a property that raises
-            ``ValueError`` on rank-1 tensors, and Python's ``hasattr``
-            returns ``False`` only on AttributeError, propagating
+            """`hasattr` shadowed by `getattr` with broad exception
+            handling — UFL exposes `.T` as a property that raises
+            `ValueError` on rank-1 tensors, and Python's `hasattr`
+            returns `False` only on AttributeError, propagating
             everything else.  Treat any exception as 'attribute not
             usable here'."""
             try:
@@ -424,15 +424,15 @@ class NumpyRuntimeModel(_TemplateSlotsMixin):
 
     def _lower_ndarray_operator(self, name, arr, n_cols, n_eq, n_dim,
                                 op_sig, modules):
-        """Lower a rank-3 operator ``arr(Q, Qaux, p)`` of shape
-        ``(n_eq, n_cols, n_dim)`` (NCP / quasilinear) to a runtime callable.
+        """Lower a rank-3 operator `arr(Q, Qaux, p)` of shape
+        `(n_eq, n_cols, n_dim)` (NCP / quasilinear) to a runtime callable.
 
-        Backend hook consumed by :meth:`from_system_model`.  The numpy
-        lowering emits one ``(n_eq, n_cols)`` matrix per spatial axis
-        (each routed through ``_lambdify_function`` so each slab is
-        vectorised), then ``np.stack``\\ s them along the last axis to
-        rebuild the grid-broadcast ``(n_eq, n_cols, n_dim)`` array.  The
-        UFL backend overrides this to emit a single ``ufl.as_tensor``."""
+        Backend hook consumed by `from_system_model`.  The numpy
+        lowering emits one `(n_eq, n_cols)` matrix per spatial axis
+        (each routed through `_lambdify_function` so each slab is
+        vectorised), then `np.stack`\\ s them along the last axis to
+        rebuild the grid-broadcast `(n_eq, n_cols, n_dim)` array.  The
+        UFL backend overrides this to emit a single `ufl.as_tensor`."""
         slab_fns = []
         for d in range(n_dim):
             slab = sp.Matrix(n_eq, n_cols, lambda i, j, _d=d: arr[i, j, _d])
@@ -450,15 +450,15 @@ class NumpyRuntimeModel(_TemplateSlotsMixin):
 
     def _lower_rank4_operator(self, name, A_arr, n_eq, n_st, n_dim,
                               op_sig, modules):
-        """Lower a rank-4 constitutive tensor ``A(Q, Qaux, p)`` of shape
-        ``(n_eq, n_state, n_dim, n_dim)`` (the ``div(A : grad Q)``
+        """Lower a rank-4 constitutive tensor `A(Q, Qaux, p)` of shape
+        `(n_eq, n_state, n_dim, n_dim)` (the `div(A : grad Q)`
         diffusion tensor) to a runtime callable.
 
-        Backend hook consumed by :meth:`from_system_model`.  The numpy
-        lowering emits one ``(n_eq, n_state)`` matrix per ``(d_flux,
+        Backend hook consumed by `from_system_model`.  The numpy
+        lowering emits one `(n_eq, n_state)` matrix per ``(d_flux,
         d_grad)`` pair, stacks along the trailing axis, and reshapes back
         to rank-4.  The UFL backend overrides this to emit a single
-        ``ufl.as_tensor``."""
+        `ufl.as_tensor`."""
         slab_fns_4d = []
         for d in range(n_dim):
             for e in range(n_dim):
@@ -568,21 +568,21 @@ class NumpyRuntimeModel(_TemplateSlotsMixin):
 
     @classmethod
     def from_system_model(cls, sm, *, module=None, printer=None):
-        """Build a runtime by lambdifying a :class:`SystemModel`'s
+        """Build a runtime by lambdifying a `SystemModel`'s
         stored matrices.
 
         Lightweight adapter that mirrors the operator-API surface of
-        the runtime built from a ``Model``: the resulting object has
-        ``flux``, ``nonconservative_matrix``, ``source``,
-        ``hydrostatic_pressure``, ``mass_matrix`` callable attributes,
+        the runtime built from a `Model`: the resulting object has
+        `flux`, `nonconservative_matrix`, `source`,
+        `hydrostatic_pressure`, `mass_matrix` callable attributes,
         each accepting its DECLARED operator args (read off
-        ``sm.operator_signature(name)`` — e.g. ``(Q, Qaux, p)`` for flux,
-        ``(Q, Qaux, p, t, [dt], x)`` for source) and returning the
+        `sm.operator_signature(name)` — e.g. `(Q, Qaux, p)` for flux,
+        `(Q, Qaux, p, t, [dt], x)` for source) and returning the
         corresponding numpy array.
 
-        For most solver code paths the existing ``NumpyRuntimeModel(model)``
+        For most solver code paths the existing `NumpyRuntimeModel(model)`
         flow is still preferred because it carries the model's full
-        function registry (``boundary_conditions`` kernel etc.) — this
+        function registry (`boundary_conditions` kernel etc.) — this
         factory is the right entry point when the analysis or
         transformation pipeline starts from a SystemModel that may not
         have a backing Model (e.g. SystemModel constructed from
@@ -641,8 +641,8 @@ class NumpyRuntimeModel(_TemplateSlotsMixin):
         dt_in_params = bool(getattr(p_struct, "contains", lambda *_: False)("dt"))
 
         def _op_sig(name):
-            """Declared ``args`` for ``name``, minus the ``dt`` group when
-            ``dt`` is already a parameter (duplicate lambdify argument)."""
+            """Declared `args` for `name`, minus the `dt` group when
+            `dt` is already a parameter (duplicate lambdify argument)."""
             args = sm.operator_signature(name)
             if dt_in_params and args.contains("dt"):
                 args = Zstruct(**{k: args[k] for k in args.keys()
@@ -652,7 +652,7 @@ class NumpyRuntimeModel(_TemplateSlotsMixin):
         rt.runtime_functions = {}
 
         def _register(name, definition, sig_name=None):
-            """Route the operator through ``_lambdify_function`` with its
+            """Route the operator through `_lambdify_function` with its
             DECLARED signature (read off the SystemModel Function)."""
             if definition is None:
                 return
@@ -662,11 +662,11 @@ class NumpyRuntimeModel(_TemplateSlotsMixin):
             setattr(rt, name, rt.runtime_functions[name])
 
         def _column_to_rank1(mat):
-            """``(n, 1)`` Matrix → rank-1 ``sp.Array(n)``.  ``_to_matrix``
-            in ``from_model`` coerces column-like ZArrays to ``(n, 1)``;
-            consumers (IMEX ``S[:, c]``, the source operator broadcast
-            pattern) expect rank-1 → ``(n_eq, n_cells)`` after
-            vectorisation, not 3-D ``(n_eq, 1, n_cells)``."""
+            """`(n, 1)` Matrix → rank-1 `sp.Array(n)`.  `_to_matrix`
+            in `from_model` coerces column-like ZArrays to `(n, 1)`;
+            consumers (IMEX `S[:, c]`, the source operator broadcast
+            pattern) expect rank-1 → `(n_eq, n_cells)` after
+            vectorisation, not 3-D `(n_eq, 1, n_cells)`."""
             if mat is None:
                 return None
             return sp.Array([mat[i, 0] for i in range(mat.shape[0])])
@@ -784,8 +784,8 @@ class NumpyRuntimeSymbolic(NumpyRuntimeModel):
     """
     Runtime wrapper for generic symbolic registrars (e.g. Numerics).
 
-    Compiles all entries from ``symbolic_obj.functions`` using the same
-    lambdify/argument-flattening machinery as ``NumpyRuntimeModel``.
+    Compiles all entries from `symbolic_obj.functions` using the same
+    lambdify/argument-flattening machinery as `NumpyRuntimeModel`.
     """
 
     def __init__(

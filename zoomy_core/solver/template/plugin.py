@@ -1,18 +1,18 @@
 """Plugins: fill template hooks and add carried state.
 
 A plugin declares
-  * ``blocks()``           block / callback specs it calls (registry additions)
-  * ``define_constants``   named constants it needs
-  * ``inputs()`` / ``outputs()``  extra march ports (traced inputs, carried
+  * `blocks()`           block / callback specs it calls (registry additions)
+  * `define_constants`   named constants it needs
+  * `inputs()` / `outputs()`  extra march ports (traced inputs, carried
                            results)
-  * ``hook_outputs(hook)`` names it writes in a hook that are bound before it
-  * ``fills(ctx)``         ``{hook_name: [statements]}``
-  * ``bodies()``           block bodies it supplies (e.g. observer functions)
-  * ``defaults()``         default values of its extra march inputs
+  * `hook_outputs(hook)` names it writes in a hook that are bound before it
+  * `fills(ctx)`         `{hook_name: [statements]}`
+  * `bodies()`           block bodies it supplies (e.g. observer functions)
+  * `defaults()`         default values of its extra march inputs
 
-Hooks of the time loop: ``loop_init``, ``pre_step``, ``observe``, ``output``,
-``loop_finalize``; of the step: ``post_step``; of the explicit stage:
-``face_equilibrium``, ``face_fixup``.
+Hooks of the time loop: `loop_init`, `pre_step`, `observe`, `output`,
+`loop_finalize`; of the step: `post_step`; of the explicit stage:
+`face_equilibrium`, `face_fixup`.
 """
 from __future__ import annotations
 
@@ -59,14 +59,14 @@ class Plugin:
 class Output(Plugin):
     """Snapshot output with a drift-free cadence.
 
-    Snapshot ``i`` is due at the stamp ``t_ref + (i - i_ref) * write_interval``
+    Snapshot `i` is due at the stamp `t_ref + (i - i_ref) * write_interval`
     (recomputed from the index every step, never accumulated); the first step
-    reaching it writes it.  The initial state (at ``time0``) and the final
-    state are written unless disabled.  ``write_interval`` and the starting
-    index ``i_snapshot`` are TRACED march inputs; with ``snapshots=N`` the
-    interval is ``(time_end - time0) / (N - 1)``, computed in-template (so
-    ``time_end`` stays traced).  ``write_fields`` is an idempotent callback
-    keyed by ``i_snapshot``."""
+    reaching it writes it.  The initial state (at `time0`) and the final
+    state are written unless disabled.  `write_interval` and the starting
+    index `i_snapshot` are TRACED march inputs; with `snapshots=N` the
+    interval is `(time_end - time0) / (N - 1)`, computed in-template (so
+    `time_end` stays traced).  `write_fields` is an idempotent callback
+    keyed by `i_snapshot`."""
 
     name = "output"
 
@@ -138,14 +138,14 @@ class Output(Plugin):
 
 
 class Observer(Plugin):
-    """Run accumulator ``acc`` (any pytree of fixed shapes), carried by the
+    """Run accumulator `acc` (any pytree of fixed shapes), carried by the
     loop and differentiable like the state:
 
         acc = init(Q, Qaux, p)                       before the loop
         acc = update(acc, time, dt, Q, Qaux, p)      after every step
 
-    ``observer`` is any object with ``init`` / ``update`` (e.g.
-    ``zoomy_jax.fvm.observers.Observer``)."""
+    `observer` is any object with `init` / `update` (e.g.
+    `zoomy_jax.fvm.observers.Observer`)."""
 
     def __init__(self, observer=None, *, init=None, update=None,
                  name: str = "observer", acc: str = "acc"):

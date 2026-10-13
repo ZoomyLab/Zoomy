@@ -67,12 +67,12 @@ def analytic_source_jvp(
     - Without chain rule: Jv = (dS/dQ) v
     - With chain rule:    Jv = (dS/dQ) v + (dS/dQaux) (dQaux/dQ v)
 
-    ``parameters`` is the NUMERIC parameter vector the solver holds
-    (``self._sim_parameters``).  REQ-144: it MUST be passed in — since REQ-163
+    `parameters` is the NUMERIC parameter vector the solver holds
+    (`self._sim_parameters`).  REQ-144: it MUST be passed in — since REQ-163
     the model's parameters stay FREE SYMBOLS through derivation/lowering, so
-    reconstructing them from ``symbolic_model.parameters.values()`` yields
-    Symbols and ``float(Symbol)`` raised ``TypeError: Cannot convert expression
-    to float``, crashing the whole ``source_mode='global'`` implicit path.
+    reconstructing them from `symbolic_model.parameters.values()` yields
+    Symbols and `float(Symbol)` raised ``TypeError: Cannot convert expression
+    to float``, crashing the whole `source_mode='global'` implicit path.
     """
     parameters = np.asarray(parameters, dtype=float)
     Jq = runtime_model.source_jacobian_wrt_variables(Q, Qaux, parameters)

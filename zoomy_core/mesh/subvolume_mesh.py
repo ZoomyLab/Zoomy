@@ -10,7 +10,7 @@ from zoomy_core.mesh.fvm_mesh import FVMMesh
 
 
 class SubVolumeMesh(FVMMesh):
-    """FVMMesh plus precomputed ``face_subvolumes``."""
+    """FVMMesh plus precomputed `face_subvolumes`."""
 
     _face_subvolumes = param.Array(default=None, allow_None=True)
 
@@ -55,7 +55,7 @@ class SubVolumeMesh(FVMMesh):
 
     @classmethod
     def from_msh(cls, filepath: str) -> "SubVolumeMesh":
-        """Load a gmsh ``.msh`` file as a SubVolumeMesh."""
+        """Load a gmsh `.msh` file as a SubVolumeMesh."""
         fvm = FVMMesh.from_msh(filepath)
         return cls.from_fvm(fvm)
 
@@ -67,18 +67,18 @@ class SubVolumeMesh(FVMMesh):
 
     @classmethod
     def create_1d(cls, domain: tuple, n_inner_cells: int) -> "SubVolumeMesh":
-        """Structured 1D SubVolumeMesh on ``domain`` with ``n_inner_cells`` cells."""
+        """Structured 1D SubVolumeMesh on `domain` with `n_inner_cells` cells."""
         fvm = FVMMesh.create_1d(domain, n_inner_cells)
         return cls.from_fvm(fvm)
 
     @classmethod
     def create_2d(cls, domain: tuple, nx: int, ny: int) -> "SubVolumeMesh":
-        """Structured 2D SubVolumeMesh on ``domain`` with ``nx`` x ``ny`` cells."""
+        """Structured 2D SubVolumeMesh on `domain` with `nx` x `ny` cells."""
         fvm = FVMMesh.create_2d(domain, nx, ny)
         return cls.from_fvm(fvm)
 
     @classmethod
     def create_3d(cls, domain: tuple, nx: int, ny: int, nz: int) -> "SubVolumeMesh":
-        """Structured 3D SubVolumeMesh on ``domain`` with ``nx`` x ``ny`` x ``nz`` cells."""
+        """Structured 3D SubVolumeMesh on `domain` with `nx` x `ny` x `nz` cells."""
         fvm = FVMMesh.create_3d(domain, nx, ny, nz)
         return cls.from_fvm(fvm)

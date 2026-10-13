@@ -1,7 +1,7 @@
 """IMEX solver: explicit flux + implicit source (numpy backend).
 
-Extends ``HyperbolicSolver`` with:
-- Derivative-aware auxiliary variable updates (``DerivativeAwareSolverMixin``)
+Extends `HyperbolicSolver` with:
+- Derivative-aware auxiliary variable updates (`DerivativeAwareSolverMixin`)
 - Implicit source stepping: local (cell-wise Newton) or global (Newton-GMRES)
 
 Solver hierarchy:
@@ -41,7 +41,7 @@ class IMEXStats:
 class IMEXSolver(DerivativeAwareSolverMixin, HyperbolicSolver):
     """IMEX: explicit flux (Riemann solver) + implicit source (Newton/GMRES).
 
-    Inherits the symbolic Riemann solver from ``HyperbolicSolver``.
+    Inherits the symbolic Riemann solver from `HyperbolicSolver`.
     Adds derivative-aware Qaux updates and implicit source stepping.
 
     Parameters
@@ -227,13 +227,13 @@ class IMEXSolver(DerivativeAwareSolverMixin, HyperbolicSolver):
     def _apply_implicit_diffusion(self, Qexp, Qaux, dt, time_now):
         """Apply implicit diffusion with boundary face gradients.
 
-        Two paths (built in ``_build_diffusion_operators``):
+        Two paths (built in `_build_diffusion_operators`):
 
-        * dense / state-dependent ``diffusion_matrix`` → the single
-          :class:`DenseDiffusionOperator` on ``self._dense_diffusion`` solves the
-          cross-variable ``∇·(A:∇Q)`` implicitly (Newton when ``A`` is
-          state-dependent), evaluating the model's runtime ``diffusion_matrix``;
-        * scalar-``ν`` diagonal → the per-variable ``self._diffusion_ops`` loop.
+        * dense / state-dependent `diffusion_matrix` → the single
+          `DenseDiffusionOperator` on `self._dense_diffusion` solves the
+          cross-variable `∇·(A:∇Q)` implicitly (Newton when `A` is
+          state-dependent), evaluating the model's runtime `diffusion_matrix`;
+        * scalar-`ν` diagonal → the per-variable `self._diffusion_ops` loop.
         """
         dense = getattr(self, "_dense_diffusion", None)
         scalar_ops = getattr(self, "_diffusion_ops", None)

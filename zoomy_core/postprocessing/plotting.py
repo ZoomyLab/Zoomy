@@ -16,13 +16,13 @@ def read_vtk_or_series(path, index=0, verbose=True):
     """Read a single mesh or one frame from a series.
 
     Supported extensions:
-      * ``.vtk`` / ``.vtu`` — read directly via meshio.
-      * ``.vtk.series`` — Paraview's JSON-flavoured series.
-      * ``.pvd``         — Paraview's XML collection (``<DataSet ... file="..."/>``).
+      * `.vtk` / `.vtu` — read directly via meshio.
+      * `.vtk.series` — Paraview's JSON-flavoured series.
+      * `.pvd`         — Paraview's XML collection (`<DataSet ... file="..."/>`).
 
-    For the series formats, ``index`` selects which frame to load and the
-    function also returns a single ``meshio.Mesh``; use
-    :func:`list_series_frames` to iterate.
+    For the series formats, `index` selects which frame to load and the
+    function also returns a single `meshio.Mesh`; use
+    `list_series_frames` to iterate.
     """
     path = os.path.abspath(path)
 
@@ -60,7 +60,7 @@ def read_vtk_or_series(path, index=0, verbose=True):
 
 
 def list_series_frames(path):
-    """Return ``(filenames, times)`` for a ``.vtk.series`` or ``.pvd`` index.
+    """Return `(filenames, times)` for a `.vtk.series` or `.pvd` index.
 
     Use this to drive an animation loop:
 
@@ -233,11 +233,11 @@ def plot_2d_mesh(
         Override the color scale.  When animating a series, pass the
         global min/max so every frame uses the same colorbar.
     edgecolors, linewidths : color, float
-        Mesh-line styling.  Pass ``edgecolors=None`` (or ``"none"``) to
+        Mesh-line styling.  Pass `edgecolors=None` (or `"none"`) to
         disable cell outlines — useful for dense meshes where the lines
         otherwise dominate the image.
     colorbar_label : str, optional
-        Override the colorbar label (defaults to ``field_name``).
+        Override the colorbar label (defaults to `field_name`).
 
     Returns
     -------

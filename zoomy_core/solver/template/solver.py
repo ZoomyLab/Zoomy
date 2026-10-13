@@ -1,12 +1,12 @@
-"""``Solver``: assemble scheme + stages + plugins into a template, show it,
+"""`Solver`: assemble scheme + stages + plugins into a template, show it,
 lower it for a backend, run it.
 
 A solver VARIANT is a catalogue entry (constructor arguments); there is no
 capability-checking code -- an impossible combination fails where a walker or
 backend has no lowering for a statement it meets.
 
-Presets (``HyperbolicSolver`` ...) subclass :class:`Solver` and implement
-:meth:`Solver.setup_bodies` (mesh + NSM -> block bodies, flags, geometry,
+Presets (`HyperbolicSolver` ...) subclass `Solver` and implement
+`Solver.setup_bodies` (mesh + NSM -> block bodies, flags, geometry,
 initial state); everything else is generic.
 """
 from __future__ import annotations
@@ -27,8 +27,8 @@ from zoomy_core.solver.template.walker_python import Generated, PythonWalker
 
 
 def resolve_backend(backend):
-    """A backend primitive object, or a name: ``numpy`` | ``jax`` /
-    ``jax-forward`` | ``jax-reverse`` (the jax names import zoomy_jax lazily;
+    """A backend primitive object, or a name: `numpy` | `jax` /
+    `jax-forward` | `jax-reverse` (the jax names import zoomy_jax lazily;
     zoomy_core itself never imports jax)."""
     if backend is None or backend == "numpy":
         from zoomy_core.solver.template.backend_numpy import NumpyBackend
@@ -46,7 +46,7 @@ def resolve_backend(backend):
 
 @dataclasses.dataclass
 class Setup:
-    """What a preset's :meth:`Solver.setup_bodies` returns."""
+    """What a preset's `Solver.setup_bodies` returns."""
 
     bodies: dict
     flags: dict
@@ -74,16 +74,16 @@ class Solver:
 
     Parameters
     ----------
-    scheme    : :class:`ShuOsher` or None (default from the reconstruction
+    scheme    : `ShuOsher` or None (default from the reconstruction
                 order: EULER / SSPRK2 / SSPRK3)
     stages    : stage objects (or classes); one RK stage applies them as a
-                composite in order.  Default ``[Hyperbolic()]``.
-    plugins   : :class:`~.plugin.Plugin` objects (Output, Observer, ...)
-    backend   : backend primitive object or name (see :func:`resolve_backend`)
+                composite in order.  Default `[Hyperbolic()]`.
+    plugins   : `Plugin` objects (Output, Observer, ...)
+    backend   : backend primitive object or name (see `resolve_backend`)
     time_end  : default end time (TRACED: changing it does not recompile)
     cfl       : CFL safety factor (emitted constant)
     dt_max    : dt cap (emitted constant; None = no cap)
-    mood      : ``d1`` | ``guard`` | ``off``
+    mood      : `d1` | `guard` | `off`
     """
 
     name = "solver"
@@ -151,8 +151,8 @@ class Solver:
 
     def template(self, *, order=None, dimension=None, degree=None,
                  dt_max=None):
-        """``(march Procedure, BuildContext)``: hooks filled by the plugins,
-        ``IfStatic`` still unresolved."""
+        """`(march Procedure, BuildContext)`: hooks filled by the plugins,
+        `IfStatic` still unresolved."""
         order = order or self.order or 2
         ctx = self.context(order=order, dimension=dimension, degree=degree,
                            dt_max=dt_max)
@@ -186,8 +186,8 @@ class Solver:
 
     def compile(self, bodies, *, flags, dimension, degree, order=None,
                 dt_max=None, backend=None) -> Generated:
-        """Lower the template for ``backend`` (default: the solver's) and
-        load it with ``bodies``; cached per configuration."""
+        """Lower the template for `backend` (default: the solver's) and
+        load it with `bodies`; cached per configuration."""
         B = resolve_backend(backend) if backend is not None else self.backend
         key = (id(B), tuple(sorted(flags.items())), dimension, degree, order,
                dt_max, id(bodies))
@@ -208,7 +208,7 @@ class Solver:
     # -- running ----------------------------------------------------------------
     def setup_bodies(self, mesh, nsm, backend) -> Setup:
         """Preset hook: build the block bodies, build flags, geometry and the
-        initial state for ``mesh`` / ``nsm`` on ``backend``."""
+        initial state for `mesh` / `nsm` on `backend`."""
         raise NotImplementedError(
             f"{type(self).__name__} has no setup_bodies(); a preset (e.g. "
             "HyperbolicSolver) supplies the block bodies")
@@ -251,9 +251,9 @@ class Solver:
 
     def run_simulation(self, Q, Qaux=None, parameters=None, time0=0.0,
                        time_end=None, **plugin_inputs):
-        """March from ``time0`` to ``time_end`` (default: the solver's);
-        ``Qaux=None`` rebuilds the aux from ``Q`` inside the march.  Returns
-        ``(Q, Qaux)``; all outputs are in :attr:`last_outputs`."""
+        """March from `time0` to `time_end` (default: the solver's);
+        `Qaux=None` rebuilds the aux from `Q` inside the march.  Returns
+        `(Q, Qaux)`; all outputs are in `last_outputs`."""
         o = self._call(Q, Qaux, parameters, time0, time_end, plugin_inputs)
         return o["Q"], o["Qaux"]
 

@@ -275,19 +275,19 @@ class DerivativeAwareSolverMixin:
     """Computes declared derivative buffer entries and fills Qaux."""
 
     def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model, parameters, time, dt):
-        """Run the canonical aux legs, then overlay any ``derivative_specs``.
+        """Run the canonical aux legs, then overlay any `derivative_specs`.
 
-        COMPOSE, don't shadow.  ``super().update_qaux`` resolves (via the MRO
+        COMPOSE, don't shadow.  `super().update_qaux` resolves (via the MRO
         of every concrete user — IMEXSolver, DerivativeAwareSolver — past this
-        mixin to ``Solver.update_qaux``) and fills the two canonical legs: the
-        local ``update_aux_variables`` formula (e.g. KP ``hinv``) and the
-        non-local ``aux_registry`` spatial-derivative rows.  Canonical
-        ``aux_registry`` models (SME/VAM/…) carry no ``derivative_specs``, so
-        they get *exactly* the explicit ``HyperbolicSolver`` aux path —
-        previously this method early-returned ``Qaux`` unchanged and silently
+        mixin to `Solver.update_qaux`) and fills the two canonical legs: the
+        local `update_aux_variables` formula (e.g. KP `hinv`) and the
+        non-local `aux_registry` spatial-derivative rows.  Canonical
+        `aux_registry` models (SME/VAM/…) carry no `derivative_specs`, so
+        they get *exactly* the explicit `HyperbolicSolver` aux path —
+        previously this method early-returned `Qaux` unchanged and silently
         froze their aux at the IC.  On top, any model that DOES declare
-        ``derivative_specs`` (StructuredDerivativeModel / Green-Naghdi) gets
-        its declared buffer rows — including the ``(Q-Qold)/dt`` time
+        `derivative_specs` (StructuredDerivativeModel / Green-Naghdi) gets
+        its declared buffer rows — including the `(Q-Qold)/dt` time
         derivative, the one capability the canonical leg lacks — overlaid here.
         """
         out = super().update_qaux(

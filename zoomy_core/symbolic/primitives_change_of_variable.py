@@ -1,11 +1,11 @@
 """Change-of-variable primitive: affine map + Jacobian.
 
-Replaces both ``IntegralTransform`` (ins_generator.py:2523) and
-``AffineProjection`` (ins_generator.py:2874) with a single primitive
+Replaces both `IntegralTransform` (ins_generator.py:2523) and
+`AffineProjection` (ins_generator.py:2874) with a single primitive
 that requires the caller to specify the source ``(var, lower,
-upper)`` triple explicitly — no implicit ``state.b/state.eta``
-defaults, no ``sp.simplify(bound_diff) == 0`` matching for running
-integrals (the legacy ``AffineProjection`` Pass 2 logic).
+upper)`` triple explicitly — no implicit `state.b/state.eta`
+defaults, no `sp.simplify(bound_diff) == 0` matching for running
+integrals (the legacy `AffineProjection` Pass 2 logic).
 
 The redesigned primitive matches Integral atoms by **structural
 equality** of the limits tuple.  Callers who have outer + nested
@@ -35,9 +35,9 @@ def affine_change_of_variable(
     """Apply ``∫_{lower}^{upper} f(var) dvar
                  = ((upper-lower)/(ref_hi-ref_lo)) ·
                    ∫_{ref_lo}^{ref_hi} f(φ(ref_var)) d(ref_var)``
-    where ``φ(s) = lower + (upper-lower)·(s-ref_lo)/(ref_hi-ref_lo)``.
+    where `φ(s) = lower + (upper-lower)·(s-ref_lo)/(ref_hi-ref_lo)`.
 
-    Walks ``expr`` and rewrites every ``Integral(f, (var, lower,
+    Walks `expr` and rewrites every ``Integral(f, (var, lower,
     upper))`` whose limits structurally match the given tuple.
     Other Integral atoms are left untouched — call the primitive
     again with their limits if you want them transformed.

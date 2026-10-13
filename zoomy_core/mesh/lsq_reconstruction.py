@@ -1,5 +1,5 @@
 """Pure-numpy least-squares reconstruction: monomial bases, Vandermonde matrices, per-cell LSQ
-stencils and derivatives, used by ``LSQMesh``.
+stencils and derivatives, used by `LSQMesh`.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import numpy as np
 # ── Monomial helpers ──────────────────────────────────────────────────────────
 
 def build_monomial_indices(degree: int, dim: int):
-    """Monomial multi-indices up to total ``degree`` in ``dim`` dimensions, excluding the constant."""
+    """Monomial multi-indices up to total `degree` in `dim` dimensions, excluding the constant."""
     mon_indices = []
     for powers in product(range(degree + 1), repeat=dim):
         if 0 < sum(powers) <= degree:
@@ -29,7 +29,7 @@ def scale_lsq_derivative(mon_indices):
 
 
 def find_derivative_indices(full_monomials_arr, requested_derivs_arr):
-    """Positions of the requested derivative multi-indices in the monomial list, as an ``(M,)``
+    """Positions of the requested derivative multi-indices in the monomial list, as an `(M,)`
     array (-1 where absent).
     """
     full_monomials_arr = np.array(full_monomials_arr)
@@ -49,14 +49,14 @@ def get_polynomial_degree(mon_indices):
 
 
 def get_required_monomials_count(degree, dim):
-    """Number of monomials (constant included) of a polynomial of ``degree`` in ``dim`` dimensions."""
+    """Number of monomials (constant included) of a polynomial of `degree` in `dim` dimensions."""
     return comb(int(degree + dim), int(dim))
 
 
 # ── Vandermonde & weights ─────────────────────────────────────────────────────
 
 def build_vandermonde(cell_diffs, mon_indices):
-    """Vandermonde matrix of the monomials ``mon_indices`` at the offsets ``cell_diffs``."""
+    """Vandermonde matrix of the monomials `mon_indices` at the offsets `cell_diffs`."""
     n_neighbors, dim = cell_diffs.shape
     n_monomials = len(mon_indices)
     V = np.zeros((n_neighbors, n_monomials))
@@ -66,7 +66,7 @@ def build_vandermonde(cell_diffs, mon_indices):
 
 
 def expand_neighbors(neighbors_list, initial_neighbors, n_valid=None):
-    """Grow a neighbour set by one ring, skipping sentinel indices ``>= n_valid``."""
+    """Grow a neighbour set by one ring, skipping sentinel indices `>= n_valid`."""
     expanded = set(initial_neighbors)
     for n in initial_neighbors:
         if n_valid is not None and n >= n_valid:
@@ -80,7 +80,7 @@ def expand_neighbors(neighbors_list, initial_neighbors, n_valid=None):
 
 
 def build_vertex_to_cells(cell_vertices, n_inner_cells):
-    """Inverse of ``cell_vertices`` (shape ``(verts_per_cell, n_cells)``): per vertex, the inner
+    """Inverse of `cell_vertices` (shape `(verts_per_cell, n_cells)`): per vertex, the inner
     cells touching it.
     """
     n_cells = cell_vertices.shape[1]
@@ -96,7 +96,7 @@ def build_vertex_to_cells(cell_vertices, n_inner_cells):
 
 
 def vertex_one_ring(ic, cell_vertices, vertex_to_cells, n_inner_cells):
-    """Inner cells sharing at least one vertex with cell ``ic`` (excluding ``ic``), sorted."""
+    """Inner cells sharing at least one vertex with cell `ic` (excluding `ic`), sorted."""
     ring = set()
     for v in cell_vertices[:, ic]:
         v_int = int(v)
@@ -109,7 +109,7 @@ def vertex_one_ring(ic, cell_vertices, vertex_to_cells, n_inner_cells):
 
 
 def compute_gaussian_weights(dX, sigma=1.0):
-    """Gaussian weights ``exp(-(|dX|/sigma)^2)`` of the offsets ``dX``."""
+    """Gaussian weights `exp(-(|dX|/sigma)^2)` of the offsets `dX`."""
     distances = np.linalg.norm(dX, axis=1)
     return np.exp(-((distances / sigma) ** 2))
 
@@ -124,19 +124,19 @@ def least_squares_reconstruction_local(
     cell_vertices=None,
 ):
     """Build the per-cell LSQ gradient operators over the vertex-1-ring stencil, with boundary faces
-    as virtual ghost samples at ``2*(face_center - cell_center)``.  The value placed there must
-    be a ghost value (``2*u_face - u_cell``).
+    as virtual ghost samples at `2*(face_center - cell_center)`.  The value placed there must
+    be a ghost value (`2*u_face - u_cell`).
 
     Args:
         neighbors_list: face-neighbour table, used only to top up or replace the vertex ring.
-        boundary_face_centers: ``(n_boundary_faces, dim)``; required when
-            ``cell_boundary_faces`` is non-empty.
+        boundary_face_centers: `(n_boundary_faces, dim)`; required when
+            `cell_boundary_faces` is non-empty.
         cell_boundary_faces: per cell, the boundary faces it touches.
-        cell_vertices: ``(verts_per_cell, n_cells)``; without it the stencil is the biased
+        cell_vertices: `(verts_per_cell, n_cells)`; without it the stencil is the biased
             face-neighbour expansion.
     Returns:
-        ``(A_glob, neighbors_array, boundary_face_neighbors_array, mon_indices)``; ``A_glob`` is
-            ``(n_cells, max_neighbors + max_bdy_per_cell, n_monomials)``, boundary slots are
+        `(A_glob, neighbors_array, boundary_face_neighbors_array, mon_indices)`; `A_glob` is
+            `(n_cells, max_neighbors + max_bdy_per_cell, n_monomials)`, boundary slots are
             padded with -1.
     References:
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
@@ -364,8 +364,8 @@ _BC_EXTRAPOLATION = "extrapolation"
 
 
 def _resolve_u_boundary_face(u, u_boundary_face, mesh):
-    """Ghost-cell value at each boundary face: the inner value for ``'extrapolation'``
-    (Neumann-zero) or ``2*u_face - u_cell`` for an array of face values; anything else raises.
+    """Ghost-cell value at each boundary face: the inner value for `'extrapolation'`
+    (Neumann-zero) or `2*u_face - u_cell` for an array of face values; anything else raises.
     """
     if isinstance(u_boundary_face, np.ndarray):
         return 2.0 * u_boundary_face - u[mesh.boundary_face_cells]
@@ -384,14 +384,14 @@ def _resolve_u_boundary_face(u, u_boundary_face, mesh):
 
 def compute_derivatives(u, mesh, derivatives_multi_index=None, *,
                         u_boundary_face):
-    """Cell-wise derivative estimates of ``u`` from the mesh LSQ stencil.
+    """Cell-wise derivative estimates of `u` from the mesh LSQ stencil.
 
     Args:
-        u: ``(n_cells,)`` values at cell centres (inner plus ghost slots).
-        u_boundary_face: required; ``(n_boundary_faces,)`` face values for prescribed BCs, or
-            ``'extrapolation'`` for Neumann-zero.
+        u: `(n_cells,)` values at cell centres (inner plus ghost slots).
+        u_boundary_face: required; `(n_boundary_faces,)` face values for prescribed BCs, or
+            `'extrapolation'` for Neumann-zero.
     Returns:
-        ``(n_cells, len(derivatives_multi_index))`` array.
+        `(n_cells, len(derivatives_multi_index))` array.
     References:
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
     """
@@ -428,7 +428,7 @@ def compute_derivatives(u, mesh, derivatives_multi_index=None, *,
 
 
 def get_physical_boundary_labels(filepath):
-    """Map physical-group names of a ``.msh`` file to their tags via meshio."""
+    """Map physical-group names of a `.msh` file to their tags via meshio."""
     import meshio
     mesh = meshio.read(filepath)
     return {key: value[0] for key, value in mesh.field_data.items()}

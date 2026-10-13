@@ -1,7 +1,7 @@
-"""One-call ``NumericalSystemModel`` construction over the depth-law axes (regularization path,
-``eps``, eigenvalue treatment, wet/dry guard) for parameter sweeps.
+"""One-call `NumericalSystemModel` construction over the depth-law axes (regularization path,
+`eps`, eigenvalue treatment, wet/dry guard) for parameter sweeps.
 It measures nothing and asserts no physics; every regularization path uses the Kurganov-Petrova
-reciprocal ``kp_hinv``.
+reciprocal `kp_hinv`.
 
 References:
     Kurganov, Petrova 2007, https://doi.org/10.4310/CMS.2007.v5.n1.a6
@@ -61,8 +61,8 @@ AXES = {
 
 
 def iter_axes(axes: Optional[dict] = None) -> Iterator[dict]:
-    """Yield one ``{axis: value}`` kwargs dict per point of the cartesian product of ``axes``
-    (default ``AXES``), ready for ``build_nsm``.
+    """Yield one `{axis: value}` kwargs dict per point of the cartesian product of `axes`
+    (default `AXES`), ready for `build_nsm`.
     """
     axes = AXES if axes is None else axes
     keys = list(axes)
@@ -72,7 +72,7 @@ def iter_axes(axes: Optional[dict] = None) -> Iterator[dict]:
 
 def axis_id(combo: dict) -> str:
     """Short stable label of an axis point for test ids and filenames, e.g.
-    ``"aux-noguard-evexclude"``.
+    `"aux-noguard-evexclude"`.
     """
     guard = combo.get("guard") or "noguard"
     return (f"{combo.get('path', 'legacy')}-{guard}"
@@ -90,17 +90,17 @@ def build_nsm(
     riemann=None,
     **nsm_kwargs,
 ) -> NumericalSystemModel:
-    """Build a derived ``NumericalSystemModel`` at one point of the depth-law axes.
+    """Build a derived `NumericalSystemModel` at one point of the depth-law axes.
 
     Args:
-        model: a ``Model``, a ``SystemModel`` or a zero-argument callable returning either; prefer
-            a callable, since the NSM promotes a ``SystemModel`` in place.
-        path: ``"direct"`` | ``"aux"`` | ``"legacy"`` | ``"none"`` (see ``PATHS``).
-        eps: regularization scale for ``"direct"``/``"aux"``, not ``wet_dry_eps``.
-        guard: ``None`` | ``"power"`` | ``"gate"`` | ``"both"``.
-        eigenvalues: ``"regularize"`` | ``"exclude"``; ignored by ``"legacy"`` and ``"none"``.
-        riemann: Riemann class, forwarded verbatim (``None`` keeps the NSM default).
-        **nsm_kwargs: forwarded to ``NumericalSystemModel.from_system_model``.
+        model: a `Model`, a `SystemModel` or a zero-argument callable returning either; prefer
+            a callable, since the NSM promotes a `SystemModel` in place.
+        path: `"direct"` | `"aux"` | `"legacy"` | `"none"` (see `PATHS`).
+        eps: regularization scale for `"direct"`/`"aux"`, not `wet_dry_eps`.
+        guard: `None` | `"power"` | `"gate"` | `"both"`.
+        eigenvalues: `"regularize"` | `"exclude"`; ignored by `"legacy"` and `"none"`.
+        riemann: Riemann class, forwarded verbatim (`None` keeps the NSM default).
+        **nsm_kwargs: forwarded to `NumericalSystemModel.from_system_model`.
 
     Returns:
         The NSM with its operators, spectrum and aux rows final.

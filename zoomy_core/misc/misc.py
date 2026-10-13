@@ -25,10 +25,10 @@ class ZArray(MutableDenseNDimArray):
 
     def __reduce__(self):
         """Pickle support (REQ-163 SystemModel cache): sympy's NDimArray
-        reduce protocol does not satisfy ZArray's required ``iterable``
+        reduce protocol does not satisfy ZArray's required `iterable`
         argument — reconstruct from the nested list form instead.  Also fixes
-        ``applyfunc``-style reconstruction paths that hand ``__new__`` a
-        ``map`` (see the reshape below)."""
+        `applyfunc`-style reconstruction paths that hand `__new__` a
+        `map` (see the reshape below)."""
         return (type(self), (self.tolist() if self.shape else [self._array[0]],))
 
     def __new__(cls, iterable, *args, **kwargs):
@@ -138,7 +138,7 @@ class ZArray(MutableDenseNDimArray):
         return ZArray(sp.Array(self._to_array(other)) + (-1 * self))
 
     def tomatrix(self):
-        """Return a SymPy ``Matrix`` (rank-2 arrays only)."""
+        """Return a SymPy `Matrix` (rank-2 arrays only)."""
         if self.rank() != 2:
             raise ValueError("Only rank-2 ZArrays can be converted to Matrix.")
         return sp.Matrix(self.tolist())
@@ -257,8 +257,8 @@ class ZArray(MutableDenseNDimArray):
     def xreplace(self, rule):
         """Element-wise xreplace — sympy's fast pattern-free substitution.
 
-        ZArray inherits from ``MutableDenseNDimArray`` which does not
-        define ``xreplace``; we apply it per-element and rebuild.
+        ZArray inherits from `MutableDenseNDimArray` which does not
+        define `xreplace`; we apply it per-element and rebuild.
         """
         current_shape = self.shape
         new_elements = []
@@ -270,13 +270,13 @@ class ZArray(MutableDenseNDimArray):
         return ZArray(new_elements, shape=current_shape)
 
     def replace(self, query, value, **kwargs):
-        """Element-wise ``sympy.Basic.replace`` — pattern-based substitution.
+        """Element-wise `sympy.Basic.replace` — pattern-based substitution.
 
-        ``MutableDenseNDimArray`` defines no ``replace``; we apply sympy's
-        per-element ``replace(query, value, …)`` and rebuild, exactly as
-        :meth:`xreplace` / :meth:`subs` do.  ``query`` / ``value`` may be the
-        callable form (``lambda expr: bool`` + ``lambda expr: expr``) so a
-        whole *family* (e.g. every ``h**(-n)``) is rewritten in one pass.
+        `MutableDenseNDimArray` defines no `replace`; we apply sympy's
+        per-element `replace(query, value, …)` and rebuild, exactly as
+        `xreplace` / `subs` do.  `query` / `value` may be the
+        callable form (`lambda expr: bool` + `lambda expr: expr`) so a
+        whole *family* (e.g. every `h**(-n)`) is rewritten in one pass.
         """
         current_shape = self.shape
         new_elements = []
@@ -288,8 +288,8 @@ class ZArray(MutableDenseNDimArray):
         return ZArray(new_elements, shape=current_shape)
 
     def doit(self, **kwargs):
-        """Element-wise ``.doit()`` — evaluates unevaluated Derivative
-        / Integral / Function calls.  Same pattern as ``xreplace``."""
+        """Element-wise `.doit()` — evaluates unevaluated Derivative
+        / Integral / Function calls.  Same pattern as `xreplace`."""
         current_shape = self.shape
         new_elements = []
         for item in self._array:
@@ -300,7 +300,7 @@ class ZArray(MutableDenseNDimArray):
         return ZArray(new_elements, shape=current_shape)
 
     def expand(self, **kwargs):
-        """Element-wise ``sp.expand``."""
+        """Element-wise `sp.expand`."""
         current_shape = self.shape
         new_elements = [sp.expand(item, **kwargs) if hasattr(item, "expand")
                         else item for item in self._array]
@@ -315,14 +315,14 @@ class ZArray(MutableDenseNDimArray):
     @property
     def is_zero_matrix(self):
         """All entries are symbolically zero.  Mirrors
-        ``sp.MatrixBase.is_zero_matrix`` so consumers that branch on
+        `sp.MatrixBase.is_zero_matrix` so consumers that branch on
         zero operators (e.g. splitter's algebraic-row detection)
         work uniformly."""
         return all(item == 0 for item in self._array)
 
     def __eq__(self, other):
         """Element-wise equality.  Cross-type comparison with sympy
-        ``MatrixBase`` works via shared ``.tolist()`` representation
+        `MatrixBase` works via shared `.tolist()` representation
         (both produce nested lists of sympy expressions).  Falls back
         to the inherited NDimArray equality for ZArray-to-ZArray."""
         if isinstance(other, sp.MatrixBase):
@@ -399,11 +399,11 @@ class Zstruct(SimpleNamespace):
         """Hook `__getitem__`.
 
         Supports lookup by string name, by integer index, or by any
-        object with a ``.name`` attribute that matches a key (e.g. a
-        sympy ``Symbol``).  The Symbol path lets callers write
-        ``z[sym]`` after iterating ``for sym in z`` — the iterator
+        object with a `.name` attribute that matches a key (e.g. a
+        sympy `Symbol`).  The Symbol path lets callers write
+        `z[sym]` after iterating `for sym in z` — the iterator
         yields *values* (Symbols), so re-indexing them needs to round-
-        trip through ``Symbol.name``.
+        trip through `Symbol.name`.
         """
         if isinstance(key, str):
             return getattr(self, key)
@@ -447,7 +447,7 @@ class Zstruct(SimpleNamespace):
             return self.values()
 
     def as_dict(self, recursive: bool = True):
-        """Serialize to plain dicts (recursive for nested ``Zstruct``)."""
+        """Serialize to plain dicts (recursive for nested `Zstruct`)."""
         data = self._filter_dict()
         if recursive:
             output = {}
@@ -501,7 +501,7 @@ class Zstruct(SimpleNamespace):
 
     @classmethod
     def from_dict(cls, d):
-        """Build a ``Zstruct`` tree from nested dicts."""
+        """Build a `Zstruct` tree from nested dicts."""
         if not isinstance(d, dict):
             raise TypeError("Input must be a dictionary.")
         data = d.copy()
@@ -576,7 +576,7 @@ class Settings(Zstruct):
         return cls(**data)
 
     def write_json(self, filepath=None):
-        """Persist settings next to the simulation output unless ``filepath`` is given."""
+        """Persist settings next to the simulation output unless `filepath` is given."""
         if filepath is None:
             filepath = os.path.join(
                 get_main_directory(), self.output.directory, "settings.json"

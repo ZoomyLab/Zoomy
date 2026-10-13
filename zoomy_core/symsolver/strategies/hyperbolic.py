@@ -1,5 +1,5 @@
 """The explicit hyperbolic solver, written once for every backend: a finite-volume
-SSP-RK march with MOOD and IMEX options. A :class:`HyperbolicTemplate` holds the
+SSP-RK march with MOOD and IMEX options. A `HyperbolicTemplate` holds the
 configuration and its methods are the graphs a backend prints.
 """
 import sympy as sp
@@ -14,31 +14,31 @@ from zoomy_core.symsolver.vocabulary import (
 
 
 class HyperbolicTemplate:
-    """The configuration of the explicit hyperbolic solver; its methods (``step``,
-    ``dt``, ``initial_aux``, ``march``) are the graphs a backend prints.
+    """The configuration of the explicit hyperbolic solver; its methods (`step`,
+    `dt`, `initial_aux`, `march`) are the graphs a backend prints.
     """
 
     def __init__(self, nsm, *, cfl, dimension, mood=False, dt_write=None,
                  imex=False, cfl_check_every=10, wave_speed="faces",
                  dt_constant=None, time_order=None, dt_checkpoint=None):
-        """Set the configuration; ``nsm`` is the NumericalSystemModel.
+        """Set the configuration; `nsm` is the NumericalSystemModel.
 
         Args:
             cfl: CFL number.
             dimension: mesh dimension, enters the CFL step.
             mood: a-posteriori MOOD guard of the RK step.
-            dt_write: output interval; ``None``: no output.
-            imex: ``False`` (implicit slots inside the RK step), ``"lie"`` (implicit
+            dt_write: output interval; `None`: no output.
+            imex: `False` (implicit slots inside the RK step), `"lie"` (implicit
                 step
-                after it) or ``"ssp2"`` (IMEX-SSP2(2,2,2) stages).
-            cfl_check_every: constant ``dt``: CFL test every N steps (1: each, 0:
+                after it) or `"ssp2"` (IMEX-SSP2(2,2,2) stages).
+            cfl_check_every: constant `dt`: CFL test every N steps (1: each, 0:
                 never).
-            wave_speed: CFL speeds from the first stage's Riemann problem (``"faces"``)
+            wave_speed: CFL speeds from the first stage's Riemann problem (`"faces"`)
                 or
-                from the cell states of each face (``"cells"``).
-            dt_constant: constant step, or ``None`` for the adaptive CFL step.
-            time_order: SSP-RK order; ``None``: the reconstruction order (2 for
-                ``"ssp2"``).
+                from the cell states of each face (`"cells"`).
+            dt_constant: constant step, or `None` for the adaptive CFL step.
+            time_order: SSP-RK order; `None`: the reconstruction order (2 for
+                `"ssp2"`).
             dt_checkpoint: interval of `io.save_state` (landed on); `None`: at the end only.
         """
         if time_order is not None and time_order not in SSP_RK:
@@ -66,14 +66,14 @@ class HyperbolicTemplate:
         return self.nsm.reconstruction.order
 
     def step(self, Q, Qaux, p, time, dt, mesh, *, coupled=None, dt_rule=None):
-        """One time step ``(Q, Qaux, dt)``: the (MOOD-guarded) RK step, then the
+        """One time step `(Q, Qaux, dt)`: the (MOOD-guarded) RK step, then the
         implicit slots by Lie splitting or inside the stages of IMEX-SSP2 when
-        ``imex`` is set.
+        `imex` is set.
 
         Args:
-            coupled: ``(mask, flux)``, the faces carrying a shared answer.
-            dt_rule: the first stage picks ``dt`` from its own face wave speeds
-                (``ssp2``: the cell states').
+            coupled: `(mask, flux)`, the faces carrying a shared answer.
+            dt_rule: the first stage picks `dt` from its own face wave speeds
+                (`ssp2`: the cell states').
         """
         nsm, order, imex = self.nsm, self.order, self.imex
         if imex is Imex.ssp2:
@@ -102,12 +102,12 @@ class HyperbolicTemplate:
         return full_aux(self.nsm, Q, Qaux, p, sp.S.Zero, sp.S.One, mesh)
 
     def march(self, Q, Qaux, p, time, time_end, mesh):
-        """March from ``time`` to ``time_end``."""
+        """March from `time` to `time_end`."""
         nsm, cfl, dimension = self.nsm, self.cfl, self.dimension
         dt_constant, cfl_check_every = self.dt_constant, self.cfl_check_every
 
         def step(Q, Qaux, time, cap):
-            """One step of size at most ``cap``, with ``dt`` from the configured rule.
+            """One step of size at most `cap`, with `dt` from the configured rule.
             """
             if self.wave_speed == "faces":
                 return self.step(Q, Qaux, p, time, None, mesh,
@@ -127,8 +127,8 @@ class HyperbolicTemplate:
 
         Args:
             side: 0 if this domain is the low side of the interface.
-            subcycling: ``False``: one step per window (warns above the CFL step), mass
-                conserved exactly. ``True``: adaptive steps inside the window, mass not
+            subcycling: `False`: one step per window (warns above the CFL step), mass
+                conserved exactly. `True`: adaptive steps inside the window, mass not
                 exactly conserved.
 
         References:

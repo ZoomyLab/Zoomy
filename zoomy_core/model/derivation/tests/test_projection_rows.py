@@ -1,10 +1,10 @@
-"""``Basisfunction.projection_rows`` — the symbolic, fixed-node, hand-rolled
+"""`Basisfunction.projection_rows` — the symbolic, fixed-node, hand-rolled
 projection of a sampled profile onto the basis (the reusable core building
-block behind ``project_from_3d``).
+block behind `project_from_3d`).
 
 Pins three properties:
-1. each row is PLAIN ARITHMETIC in the input sample symbols — no ``Integral``,
-   no free symbols beyond ``samples`` — so every code printer lowers it for
+1. each row is PLAIN ARITHMETIC in the input sample symbols — no `Integral`,
+   no free symbols beyond `samples` — so every code printer lowers it for
    free;
 2. with Gauss-Legendre nodes/weights the projection is the EXACT inverse of
    basis evaluation for a profile that lies in the basis (round-trip to

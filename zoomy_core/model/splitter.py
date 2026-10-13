@@ -1,31 +1,31 @@
 """Predictor / pressure / corrector splitter for non-hydrostatic SystemModels.
 
 =========================================================================
-CANONICAL SPLITTER:  ``split_for_pressure_structural``
+CANONICAL SPLITTER:  `split_for_pressure_structural`
 =========================================================================
 This is the ONE generic, supported pressure splitter — use it for every
-non-hydrostatic model (VAM, ML-VAM, …).  It is what ``model.chorin_split(dt)``
-calls (see ``VAM.chorin_split`` / ``MLVAM.chorin_split``).  It is "structural":
+non-hydrostatic model (VAM, ML-VAM, …).  It is what `model.chorin_split(dt)`
+calls (see `VAM.chorin_split` / `MLVAM.chorin_split`).  It is "structural":
 it discovers the row roles purely from the OPERATORS — the divergence
 constraints are exactly the rows with an identically-zero mass-matrix row, the
-rest are evolution rows — so it needs NO ``equation_names`` convention and works
+rest are evolution rows — so it needs NO `equation_names` convention and works
 for any level / dimension / basis straight out of a declarative derivation.
 
     >>> split = VAM(level=1).chorin_split(dt)      # (SM_pred, SM_press, SM_corr)
     >>> split = split_for_pressure_structural(sm, P_syms, dt)   # explicit form
 
-DEPRECATED — do NOT use for new work (each raises a ``DeprecationWarning``):
-  * :func:`split_for_pressure` — old chain-DAE splitter; dispatches rows by the
-    fragile ``equation_names`` convention (``mass`` / ``xmom_j*`` / ``zmom_j*`` /
-    ``cont_j*``).  A declarative SystemModel carries no such names.
-  * :func:`split_simple` — minimal hand-rolled splitter; used only by the
-    hand-built ``escalante_vam_bump/run.py`` oracle (also name-based).
-  * :func:`build_pressure_elliptic_block` — internal helper for the two
+DEPRECATED — do NOT use for new work (each raises a `DeprecationWarning`):
+  * `split_for_pressure` — old chain-DAE splitter; dispatches rows by the
+    fragile `equation_names` convention (`mass` / `xmom_j*` / `zmom_j*` /
+    `cont_j*`).  A declarative SystemModel carries no such names.
+  * `split_simple` — minimal hand-rolled splitter; used only by the
+    hand-built `escalante_vam_bump/run.py` oracle (also name-based).
+  * `build_pressure_elliptic_block` — internal helper for the two
     deprecated splitters; the structural splitter does NOT use it.
 
 The deprecated three are kept only so the legacy hand-built reference cases keep
-running; new models and agents must go through ``chorin_split`` /
-``split_for_pressure_structural``.
+running; new models and agents must go through `chorin_split` /
+`split_for_pressure_structural`.
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ from zoomy_core.systemmodel.system_model import SystemModel
 
 
 def _residuals_by_name(sm):
-    """Return ``{equation_name: residual_expr}`` for the SystemModel."""
+    """Return `{equation_name: residual_expr}` for the SystemModel."""
     if not hasattr(sm, "equation_names"):
         raise ValueError(
             "SystemModel must carry equation_names for the splitter to "
@@ -72,30 +72,30 @@ def build_pressure_elliptic_block(
     *,
     bottom=None,
 ):
-    """Build the pressure-stage elliptic block for ``SM_press``.
+    """Build the pressure-stage elliptic block for `SM_press`.
 
     Parameters
     ----------
     sm : SystemModel
         Chain-DAE SystemModel (e.g. ``SystemModel.from_model(
-        VAMModelGalerkin(level=1))``).  Must carry ``equation_names``
+        VAMModelGalerkin(level=1))``).  Must carry `equation_names`
         with the canonical mass / xmom_j / zmom_j / cont_j layout.
     pressure_vars : Sequence
-        Pressure mode state Symbols (e.g. ``[P_0, P_1]`` for
+        Pressure mode state Symbols (e.g. `[P_0, P_1]` for
         VAM(1,2,2)).  Internally converted to Function form to match
         the residual representation produced by
-        :meth:`SystemModel.reconstruct_residuals`.
+        `SystemModel.reconstruct_residuals`.
     dt : sp.Symbol
         Symbolic time-step.
     bottom : optional
-        Bottom-topography Function ``b(x)``.  If None, located by
-        scanning equation residuals for a Function named ``b``.
+        Bottom-topography Function `b(x)`.  If None, located by
+        scanning equation residuals for a Function named `b`.
 
     Returns
     -------
-    dict with keys ``rows``, ``U_tilde``, ``W_tilde``, ``T_u``, ``T_w``,
-    ``U_corr``, ``W_corr``, ``pressure_vars``, ``h``, ``bottom``, ``t``,
-    ``x``.  All entries are in Function form (coordinate-dependent).
+    dict with keys `rows`, `U_tilde`, `W_tilde`, `T_u`, `T_w`,
+    `U_corr`, `W_corr`, `pressure_vars`, `h`, `bottom`, `t`,
+    `x`.  All entries are in Function form (coordinate-dependent).
     """
     residuals = _residuals_by_name(sm)
     name_to_sym = _state_symbol_by_name(sm)
@@ -255,7 +255,7 @@ def build_pressure_elliptic_block(
 
 
 def verify_p_linearity(rows, pressure_vars, x):
-    """Verify each row is linear in ``(P_l, ∂_x P_l, ∂_xx P_l)``."""
+    """Verify each row is linear in `(P_l, ∂_x P_l, ∂_xx P_l)`."""
     P_VARS = []
     for p in pressure_vars:
         name = str(p)
@@ -309,13 +309,13 @@ def verify_p_linearity(rows, pressure_vars, x):
 
 
 def _extract_pressure_T(residuals, equation_name, pressure_vars, mu_k):
-    """Extract ``T_*[k]`` from a chain-DAE residual.
+    """Extract `T_*[k]` from a chain-DAE residual.
 
-    ``residual = μ_k ∂_t(h·Q_k) + … + pressure_terms = 0``.  The
-    pressure-linear part divided by ``μ_k`` is the source per
-    conserved variable ``h·Q_k``.
+    `residual = μ_k ∂_t(h·Q_k) + … + pressure_terms = 0`.  The
+    pressure-linear part divided by `μ_k` is the source per
+    conserved variable `h·Q_k`.
 
-    ``.doit()`` is called first so compound ``Derivative(A+P*B, x)``
+    `.doit()` is called first so compound `Derivative(A+P*B, x)`
     atoms distribute via the product / sum rule; otherwise the
     eq-vs-no_p subtraction leaves spurious cancelling pairs.
     """
@@ -331,17 +331,17 @@ def _extract_pressure_T(residuals, equation_name, pressure_vars, mu_k):
 
 
 def _resolve_subs(arr):
-    """Collapse every bed/surface-trace ``Subs(f(ζ), ζ, 0|1)`` node in a
-    sub-system operator array into its concrete ``Σ αₖ φₖ(0|1)`` value.
+    """Collapse every bed/surface-trace `Subs(f(ζ), ζ, 0|1)` node in a
+    sub-system operator array into its concrete `Σ αₖ φₖ(0|1)` value.
 
-    Same discipline as REQ-130's ``_resolve_boundary_traces`` at the NSM
+    Same discipline as REQ-130's `_resolve_boundary_traces` at the NSM
     lowering seam, but applied HERE at chorin-split construction so the
     SM_pred / SM_press / SM_corr sub-SystemModels are Subs-free for ALL
     consumers — the amrex Chorin header generator reads their operators
-    directly (``write_chorin_headers`` → ``AmrexSystemModelPrinter``), never
-    through ``NumericalSystemModel.from_system_model``, so the central resolve
-    never reaches them and a leftover ``Subs`` prints as an undeclared C++
-    symbol.  Only ``sp.Subs`` nodes are ``.doit()``-ed (never opaque Galerkin
+    directly (`write_chorin_headers` → `AmrexSystemModelPrinter`), never
+    through `NumericalSystemModel.from_system_model`, so the central resolve
+    never reaches them and a leftover `Subs` prints as an undeclared C++
+    symbol.  Only `sp.Subs` nodes are `.doit()`-ed (never opaque Galerkin
     bracket integrals), matching REQ-130."""
     if arr is None or not hasattr(arr, "applyfunc"):
         return arr
@@ -356,41 +356,41 @@ def _resolve_subs(arr):
 
 
 def _zero_ndim(*shape):
-    """A zero rank-3 NCP array whose entries are sympy ``Zero`` (not the
-    Python ``int`` 0 ``MutableDenseNDimArray.zeros`` fills with).
+    """A zero rank-3 NCP array whose entries are sympy `Zero` (not the
+    Python `int` 0 `MutableDenseNDimArray.zeros` fills with).
 
-    ``from_model`` operators are sympy expressions throughout; the C++ /
-    foam code printers walk them with ``expr.replace(...)``.  A bare
-    Python ``int`` entry (as produced by ``...zeros(...)`` directly) has
-    no ``.replace`` and crashes the printer — so the corrector's all-zero
+    `from_model` operators are sympy expressions throughout; the C++ /
+    foam code printers walk them with `expr.replace(...)`.  A bare
+    Python `int` entry (as produced by `...zeros(...)` directly) has
+    no `.replace` and crashes the printer — so the corrector's all-zero
     flux/NCP must be sympified to print standalone like any other model."""
     return sp.MutableDenseNDimArray.zeros(*shape).applyfunc(sp.sympify)
 
 
 def _partition_pressure_aux(sm_press, pressure_vars):
-    """Split ``sm_press.aux_registry`` into LIVE vs INPUT derivative aux.
+    """Split `sm_press.aux_registry` into LIVE vs INPUT derivative aux.
 
     A Chorin pressure stage solves an elliptic block for the pressure
-    modes ``P_l``.  During that solve the ONLY aux that changes is the
-    pressure derivatives (``P_l_x``, ``P_l_xx``); every other derivative
-    in the elliptic source (``q_k_x``, ``h_x``, ``h_xx``, ``b_x`` …) is a
+    modes `P_l`.  During that solve the ONLY aux that changes is the
+    pressure derivatives (`P_l_x`, `P_l_xx`); every other derivative
+    in the elliptic source (`q_k_x`, `h_x`, `h_xx`, `b_x` …) is a
     derivative of the *frozen* predictor state and is therefore a constant
     INPUT to the pressure solve — re-deriving it inside the Krylov loop is
     wasted work and, worse, misrepresents the model: a standalone Model
-    printer reading ``aux_registry`` would emit compute-derivative calls
+    printer reading `aux_registry` would emit compute-derivative calls
     for aux this sub-model does not actually re-derive.
 
-    This routine makes ``sm_press`` self-describing:
+    This routine makes `sm_press` self-describing:
 
-    * ``aux_registry``        — keeps EXACTLY the pressure-mode derivative
-      entries (``target_name`` is a pressure variable).  This is the
+    * `aux_registry`        — keeps EXACTLY the pressure-mode derivative
+      entries (`target_name` is a pressure variable).  This is the
       minimal "what I re-derive" list a Model printer emits as the natural
-      ``update_aux_variables`` — no ``state_index_filter`` needed.
-    * ``aux_input_registry``  — the frozen predictor-produced derivative /
-      function aux this stage READS but does not re-derive.  ``aux_state``
+      `update_aux_variables` — no `state_index_filter` needed.
+    * `aux_input_registry`  — the frozen predictor-produced derivative /
+      function aux this stage READS but does not re-derive.  `aux_state`
       is left whole (both groups remain inputs the kernels reference); a
       runtime that keeps a private pressure aux-pool fills it once per step
-      from ``aux_registry + aux_input_registry`` (the input group is
+      from `aux_registry + aux_input_registry` (the input group is
       constant across the Krylov iterations).
 
     Idempotent and a no-op when there is no live pressure derivative.
@@ -411,9 +411,9 @@ def _partition_pressure_aux(sm_press, pressure_vars):
 
 @dataclass
 class PressureLinearOperator:
-    """Explicit coefficient fields (``A0``, ``first_derivative``, ``second_derivative``, ``RHS``) of the affine pressure operator ``SM_press.source``, as printable sympy expressions.
+    """Explicit coefficient fields (`A0`, `first_derivative`, `second_derivative`, `RHS`) of the affine pressure operator `SM_press.source`, as printable sympy expressions.
 
-    Produced lazily by :meth:`SystemModel.pressure_operator` by differentiating the already-split ``source`` (no re-derivation); ``Ax``/``Ay``/``Az`` and ``Axx``/``Ayy``/``Azz``/``Axy``/``Axz``/``Ayz`` are accessors (``None`` when the axis is absent).
+    Produced lazily by `SystemModel.pressure_operator` by differentiating the already-split `source` (no re-derivation); `Ax`/`Ay`/`Az` and `Axx`/`Ayy`/`Azz`/`Axy`/`Axz`/`Ayz` are accessors (`None` when the axis is absent).
     """
     P_modes: list
     A0: list
@@ -466,18 +466,18 @@ class PressureLinearOperator:
 
 def build_pressure_linear_operator(sm_press):
     """Extract the explicit affine pressure operator from a Chorin
-    ``SM_press`` (see :class:`PressureLinearOperator`).
+    `SM_press` (see `PressureLinearOperator`).
 
-    Mechanical — no re-derivation.  ``SM_press.source`` is differentiated
-    w.r.t. the bare pressure symbols (→ ``A0``) and w.r.t. the
+    Mechanical — no re-derivation.  `SM_press.source` is differentiated
+    w.r.t. the bare pressure symbols (→ `A0`) and w.r.t. the
     pressure-derivative aux symbols, which the existing aux metadata
-    (``aux_registry`` / ``aux_input_registry`` entries whose ``state_index``
+    (`aux_registry` / `aux_input_registry` entries whose `state_index`
     is a pressure slot) sorts into first / second-derivative coefficient
-    matrices by their ``multi_index``.  Asserts ``source`` is affine in
-    ``P`` and its pressure derivatives (raises clearly otherwise).
+    matrices by their `multi_index`.  Asserts `source` is affine in
+    `P` and its pressure derivatives (raises clearly otherwise).
 
     General over any chorin-split model (VAM any level, ML_VAM), any number
-    of pressure modes ``NP``, and any dimension (2-D / 3-D).
+    of pressure modes `NP`, and any dimension (2-D / 3-D).
     """
     state = list(sm_press.state)
     e2s = list(getattr(sm_press, "equation_to_state_index", None) or [])
@@ -583,8 +583,8 @@ def build_pressure_linear_operator(sm_press):
 
 
 def _attach_pressure_operator(sm_press):
-    """Attach the lazy, cached ``pressure_operator()`` method to an
-    ``SM_press`` instance (non-breaking; ``source`` is untouched)."""
+    """Attach the lazy, cached `pressure_operator()` method to an
+    `SM_press` instance (non-breaking; `source` is untouched)."""
     import types
 
     def _pressure_operator(self):
@@ -602,18 +602,18 @@ class Stage(NamedTuple):
     """One stage of a split solver's march (REQ-173).
 
     A split solver is supplied a *list* of stages and marches over it; a
-    backend supplies one executor per stage ``kind``.
+    backend supplies one executor per stage `kind`.
 
-    * ``label`` — a STABLE, deterministic per-stage identifier
-      (``"predictor"`` / ``"pressure"`` / ``"corrector"`` for the Chorin
+    * `label` — a STABLE, deterministic per-stage identifier
+      (`"predictor"` / `"pressure"` / `"corrector"` for the Chorin
       split).  Code-generating backends key generated names off it
-      (amrex emits ``Model_<label>.H``); it MUST NOT be derived from the
+      (amrex emits `Model_<label>.H`); it MUST NOT be derived from the
       list position, or any reordering silently renames every header and
       invalidates every build cache.
-    * ``kind`` — the executor kind: ``"hyperbolic" | "elliptic" |
+    * `kind` — the executor kind: ``"hyperbolic" | "elliptic" |
       "pointwise"`` (extensible).  It selects which per-kind executor the
       backend runs for this stage.
-    * ``sm`` — the :class:`SystemModel` for the stage.
+    * `sm` — the `SystemModel` for the stage.
     """
     label: str
     kind: str
@@ -622,17 +622,17 @@ class Stage(NamedTuple):
 
 @dataclass
 class SplitForPressureResult:
-    """Three sub-SystemModels produced by :func:`split_for_pressure`.
+    """Three sub-SystemModels produced by `split_for_pressure`.
 
-    For VAM(1, 2, 2) on ``Q = [h, U_0, U_1, W_0, W_1, P_0, P_1]``:
+    For VAM(1, 2, 2) on `Q = [h, U_0, U_1, W_0, W_1, P_0, P_1]`:
 
-    * ``SM_pred`` — predictor: 5 evolution rows
-      (``mass`` + 2 ``xmom`` + 2 ``zmom``) updating
-      ``Q[0..4] = h, U_k, W_k`` with ``P_k`` frozen at ``P_k^n``.
-    * ``SM_press`` — pressure stage: 2 algebraic rows (the elliptic
-      block in ``(P_0, P_1)``) updating ``Q[5..6]``.  Mass matrix
+    * `SM_pred` — predictor: 5 evolution rows
+      (`mass` + 2 `xmom` + 2 `zmom`) updating
+      `Q[0..4] = h, U_k, W_k` with `P_k` frozen at `P_k^n`.
+    * `SM_press` — pressure stage: 2 algebraic rows (the elliptic
+      block in `(P_0, P_1)`) updating `Q[5..6]`.  Mass matrix
       all-zero.
-    * ``SM_corr`` — corrector: 4 algebraic update rows.
+    * `SM_corr` — corrector: 4 algebraic update rows.
     """
     SM_pred: object
     SM_press: object
@@ -643,10 +643,10 @@ class SplitForPressureResult:
         """The split as a canonical stage list (REQ-173).
 
         A split solver marches over this list; a backend supplies one
-        executor per :class:`Stage` ``kind``.  The Chorin split is exactly
-        this data — predictor (``hyperbolic``) → pressure (``elliptic``)
-        → corrector (``pointwise``).  ``.SM_pred`` / ``.SM_press`` /
-        ``.SM_corr`` remain the primary attributes; this is a view of the
+        executor per `Stage` `kind`.  The Chorin split is exactly
+        this data — predictor (`hyperbolic`) → pressure (`elliptic`)
+        → corrector (`pointwise`).  `.SM_pred` / `.SM_press` /
+        `.SM_corr` remain the primary attributes; this is a view of the
         same three objects with their stable labels and kinds attached.
         """
         return [
@@ -657,12 +657,12 @@ class SplitForPressureResult:
 
 
 def _assert_subsystem_symbols_declared(sm):
-    """Raise if any free symbol of ``sm``'s hyperbolic operators is not a
-    declared state / aux / parameter / coordinate / time / ``dt`` (REQ-151).
+    """Raise if any free symbol of `sm`'s hyperbolic operators is not a
+    declared state / aux / parameter / coordinate / time / `dt` (REQ-151).
 
     A sub-system referencing an aux it does not declare is the failure the
     prefix fix prevents; this guard turns a would-be silent wrong-row read (or
-    a lambdify ``NameError`` three layers down) into a loud split-time error.
+    a lambdify `NameError` three layers down) into a loud split-time error.
     """
     allowed = {str(s) for s in sm.state}
     allowed |= {str(a) for a in sm.aux_state}
@@ -692,13 +692,13 @@ def _assert_subsystem_symbols_declared(sm):
 def _inherit_parent_aux(sm, sm_parent):
     """REQ-151: keep the PARENT's aux layout a PREFIX of every sub-system's.
 
-    ``expose_aux_atoms`` only routes Function / Derivative atoms, so a
-    plain-Symbol aux the parent owns — e.g. the KP-desingularized ``hinv``
-    that every velocity ``u = q·hinv`` depends on — is SILENTLY dropped from
+    `expose_aux_atoms` only routes Function / Derivative atoms, so a
+    plain-Symbol aux the parent owns — e.g. the KP-desingularized `hinv`
+    that every velocity `u = q·hinv` depends on — is SILENTLY dropped from
     the sub-system.  Then two things break: (A) the sub-system's own flux /
-    eigenvalues reference an aux row that is absent (``NameError: hinv`` on
+    eigenvalues reference an aux row that is absent (`NameError: hinv` on
     jax, an out-of-range aux index on numpy, or a sympy expression that
-    survives into ``np.asarray`` → ``TypeError: Cannot convert expression to
+    survives into `np.asarray` → ``TypeError: Cannot convert expression to
     float``); (B) the parent's BC kernel, forwarded verbatim, indexes aux by
     the PARENT's row numbers against the sub-system's DIFFERENT layout (an
     out-of-range crash, or worse a silent wrong-row read).  In 1-D the parent
@@ -707,8 +707,8 @@ def _inherit_parent_aux(sm, sm_parent):
     the registries to the new layout.
 
     Applies to EVERY sub-system, including the hand-built corrector — that one
-    bypassed ``_build_subsystem`` and so missed this, which is exactly why
-    ``desingularize_hinv`` before ``chorin_split`` used to kill the corrector
+    bypassed `_build_subsystem` and so missed this, which is exactly why
+    `desingularize_hinv` before `chorin_split` used to kill the corrector
     with failure mode (A).
     """
     parent_aux = list(sm_parent.aux_state)
@@ -746,20 +746,20 @@ def _inherit_parent_aux(sm, sm_parent):
 
 
 def _inherit_equilibrium_reconstruction(sm_pred, sm_parent):
-    """Carry the parent's ``equilibrium_reconstruction`` onto the PREDICTOR.
+    """Carry the parent's `equilibrium_reconstruction` onto the PREDICTOR.
 
-    ``ChorinSplitVAMSolver`` inherits :class:`HyperbolicSolver` precisely so the
+    `ChorinSplitVAMSolver` inherits `HyperbolicSolver` precisely so the
     predictor substep reuses the same well-balanced reconstruction machinery as
     every other hyperbolic solver.  That hook reads the flag off the sub-system
-    it is handed (``getattr(self.sm, "equilibrium_reconstruction", "none")``) —
+    it is handed (`getattr(self.sm, "equilibrium_reconstruction", "none")`) —
     but the sub-systems are built FRESH here and default the field to
-    ``"none"``, so a model declaring ``equilibrium_reconstruction='audusse'``
+    `"none"`, so a model declaring `equilibrium_reconstruction='audusse'`
     silently lost it at the split and the inherited hook never fired.  The
     inheritance was real; the flag just never arrived.
 
     Only the predictor gets it: it is the hyperbolic flux step, and it is the
     only substep the reconstruction is defined for.  The pressure and corrector
-    substeps are not flux steps and must stay ``"none"``.
+    substeps are not flux steps and must stay `"none"`.
     """
     eqr = getattr(sm_parent, "equilibrium_reconstruction", "none")
     if eqr and eqr != "none":
@@ -802,11 +802,11 @@ def _build_subsystem(*, eq_names, eq_residuals, sm_parent, state,
         integral framework (predictor, corrector).  Set True for sub-
         systems that should use **central discretisation through the
         aux-derivative stencil**: the entire non-time-derivative
-        residual is packed into ``source`` (sign-flipped to SystemModel
-        ``... − S = 0`` convention), ``F = P_hydro = B = 0``, and any
+        residual is packed into `source` (sign-flipped to SystemModel
+        `... − S = 0` convention), `F = P_hydro = B = 0`, and any
         spatial derivatives become aux entries registered by
-        ``expose_aux_atoms``.  Use this for elliptic / Poisson-type
-        sub-systems (e.g. SM_press from :func:`split_simple`) where
+        `expose_aux_atoms`.  Use this for elliptic / Poisson-type
+        sub-systems (e.g. SM_press from `split_simple`) where
         a centrally-differenced stencil — not Roe / path-integral
         upwinding — is the natural numerics.
     """
@@ -1074,11 +1074,11 @@ def _build_subsystem(*, eq_names, eq_residuals, sm_parent, state,
 
 
 def split_for_pressure(sm, pressure_vars, dt, *, bottom=None):
-    """DEPRECATED — use :func:`split_for_pressure_structural` (via
-    ``model.chorin_split(dt)``).
+    """DEPRECATED — use `split_for_pressure_structural` (via
+    `model.chorin_split(dt)`).
 
-    Old chain-DAE splitter that dispatches rows by the ``equation_names``
-    convention (``mass`` / ``xmom_j*`` / ``zmom_j*`` / ``cont_j*``); a
+    Old chain-DAE splitter that dispatches rows by the `equation_names`
+    convention (`mass` / `xmom_j*` / `zmom_j*` / `cont_j*`); a
     declarative SystemModel carries no such names.  The structural splitter
     discovers the same roles from the operators (zero mass-matrix rows ⇒
     constraints) and is the only supported path for new models.
@@ -1114,9 +1114,9 @@ def split_for_pressure(sm, pressure_vars, dt, *, bottom=None):
     pred_e2s_index = []
     def _state_for_equation(eq_name):
         """Resolve the state slot updated by an equation row.  Tries
-        primitive-form names first (``U_k`` / ``W_k`` / ``h``), then
-        conservative-form (``q_Uk`` / ``q_Wk`` / ``h``).  Returns the
-        first match in ``state_names`` or ``None``."""
+        primitive-form names first (`U_k` / `W_k` / `h`), then
+        conservative-form (`q_Uk` / `q_Wk` / `h`).  Returns the
+        first match in `state_names` or `None`."""
         if eq_name == "mass":
             return "h"
         if eq_name == "bathymetry":
@@ -1279,37 +1279,37 @@ def split_for_pressure_structural(sm, pressure_vars, dt):
     """Structural predictor / pressure / corrector splitter — no
     equation-name conventions.
 
-    The chain-DAE :func:`split_for_pressure` dispatches rows by the legacy
-    naming scheme (``xmom_j*``, ``cont_j*``, ``U_k``/``q_Uk``).  SystemModels
+    The chain-DAE `split_for_pressure` dispatches rows by the legacy
+    naming scheme (`xmom_j*`, `cont_j*`, `U_k`/`q_Uk`).  SystemModels
     extracted from a DECLARATIVE derivation carry no such names, but the row
     roles are fully visible in the operators:
 
-    * **constraint rows** — identically-zero mass-matrix row (no ``∂_t``):
+    * **constraint rows** — identically-zero mass-matrix row (no `∂_t`):
       these are the divergence/incompressibility projections → the elliptic
       block determining the pressure modes;
     * **evolution rows** — everything else; rows whose residual carries a
       pressure variable get the corrector update
-      ``Q[s] ← Q[s] − dt·(pressure part)/M[row, s]``;
-    * ``equation_to_state_index`` supplies the row→slot map (identity for a
-      square ``from_model`` extraction).
+      `Q[s] ← Q[s] − dt·(pressure part)/M[row, s]`;
+    * `equation_to_state_index` supplies the row→slot map (identity for a
+      square `from_model` extraction).
 
     The predictor is the PRESSURE-FREE hydrostatic system (the evolution
     residuals with every pressure mode set to zero) — Escalante et al. 2024
     eq (12a): the hyperbolic step carries no non-hydrostatic terms; the FULL
-    pressure impulse ``−dt·T(P^{n+1})`` is applied by the corrector.
-    (Keeping the pressure force at ``P^n`` in the predictor double-applies
+    pressure impulse `−dt·T(P^{n+1})` is applied by the corrector.
+    (Keeping the pressure force at `P^n` in the predictor double-applies
     it and turns the pressure into an undamped alternating iteration
-    ``P^{n+1} + P^n ≈ P_phys`` that diverges at shocks — the historic VAM
+    `P^{n+1} + P^n ≈ P_phys` that diverges at shocks — the historic VAM
     dam-break NaN.)  The elliptic rows are the constraint residuals with
     every corrected velocity substituted; the corrector applies the
-    closed-form update via ``update_variables``.
+    closed-form update via `update_variables`.
 
     Parameters
     ----------
     sm : SystemModel
-        Square (or rectangular) extraction with ``equation_to_state_index``.
+        Square (or rectangular) extraction with `equation_to_state_index`.
     pressure_vars : Sequence
-        Pressure-mode state Symbols (must be entries of ``sm.state``).
+        Pressure-mode state Symbols (must be entries of `sm.state`).
     dt : sp.Symbol
         Symbolic time-step.
     """
@@ -1536,12 +1536,12 @@ def split_for_pressure_structural(sm, pressure_vars, dt):
 
 
 def split_simple(sm, pressure_vars, dt, *, bottom=None):
-    """DEPRECATED — use :func:`split_for_pressure_structural` (via
-    ``model.chorin_split(dt)``).
+    """DEPRECATED — use `split_for_pressure_structural` (via
+    `model.chorin_split(dt)`).
 
     Minimal hand-rolled splitter retained ONLY for the hand-built
-    ``escalante_vam_bump/run.py`` reference oracle; it dispatches rows by the
-    ``equation_names`` convention (``cont_j*`` ⇒ constraint).  New models /
+    `escalante_vam_bump/run.py` reference oracle; it dispatches rows by the
+    `equation_names` convention (`cont_j*` ⇒ constraint).  New models /
     agents must use the structural splitter, which discovers the same roles
     from the operators (zero mass-matrix rows ⇒ constraints).
 
@@ -1552,44 +1552,44 @@ def split_simple(sm, pressure_vars, dt, *, bottom=None):
     1. **Copy** the parent SystemModel three times → ``(SM_pred,
        SM_press, SM_corr)``.
 
-    2. **SM_pred**: keep only the rows whose ``equation_name`` does
-       NOT start with ``cont_j`` (evolution rows including any
-       trivial ones like ``b_eq`` for bathymetry-as-state).  Then
+    2. **SM_pred**: keep only the rows whose `equation_name` does
+       NOT start with `cont_j` (evolution rows including any
+       trivial ones like `b_eq` for bathymetry-as-state).  Then
        ZERO out every pressure-state-dependent term:
-       ``F.xreplace({P_k: 0})``, same for ``P``, ``B``, ``S``.
+       `F.xreplace({P_k: 0})`, same for `P`, `B`, `S`.
        The predictor thus advances with kinetic + gravity + NCP
        and ANY non-pressure source — exactly like the OLD
-       ``PredictorCorrectorSolver`` did with its flux-only step.
+       `PredictorCorrectorSolver` did with its flux-only step.
 
-    3. **SM_press**: keep only the ``cont_j*`` rows, with the
-       ``dt``-baked ``U_corr`` substitution applied (reuses
-       :func:`build_pressure_elliptic_block` for the substitution
+    3. **SM_press**: keep only the `cont_j*` rows, with the
+       `dt`-baked `U_corr` substitution applied (reuses
+       `build_pressure_elliptic_block` for the substitution
        machinery).  This is the elliptic block in
-       ``(P_0, P_1)`` that the implicit Newton-Krylov solver
+       `(P_0, P_1)` that the implicit Newton-Krylov solver
        targets.
 
-    4. **SM_corr**: the closed-form ``update_variables`` formula
-       ``Q[k] ← Q[k] − (dt/h)·T_u_k(P)`` (also from
-       :func:`build_pressure_elliptic_block`).  This is the
+    4. **SM_corr**: the closed-form `update_variables` formula
+       `Q[k] ← Q[k] − (dt/h)·T_u_k(P)` (also from
+       `build_pressure_elliptic_block`).  This is the
        projection-corrector that applies the freshly-solved
        pressure to the momentum modes.
 
     Parameters
     ----------
     sm : SystemModel
-        Parent system.  Must carry ``equation_names`` whose values
-        flag algebraic rows by the ``cont_j`` prefix.
+        Parent system.  Must carry `equation_names` whose values
+        flag algebraic rows by the `cont_j` prefix.
     pressure_vars : Sequence[sp.Symbol]
-        Pressure state symbols (e.g. ``[P_0, P_1]``).
+        Pressure state symbols (e.g. `[P_0, P_1]`).
     dt : sp.Symbol
-        Symbolic time-step (gets baked into ``SM_press`` /
-        ``SM_corr`` operators).
+        Symbolic time-step (gets baked into `SM_press` /
+        `SM_corr` operators).
     bottom : optional
-        Forwarded to :func:`build_pressure_elliptic_block`.
+        Forwarded to `build_pressure_elliptic_block`.
 
     Returns
     -------
-    :class:`SplitForPressureResult`
+    `SplitForPressureResult`
     """
     warnings.warn(
         "split_simple is deprecated; use split_for_pressure_structural "

@@ -1,5 +1,5 @@
 """Shallow water equations with bed (SWE), 1D or 2D, as a Model with state [b, h, hu(, hv)].
-Level-0 member of the moment hierarchy; lifted to a SystemModel via ``SystemModel.from_model``.
+Level-0 member of the moment hierarchy; lifted to a SystemModel via `SystemModel.from_model`.
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ __all__ = ["SWE"]
 class SWE(StructuredDerivativeModel):
     """Shallow water + bed + optional Manning friction, written directly as depth-averaged
     operators. Declares the function groups interpolate / project / reconstruction and the
-    boundaries ``wall`` (free slip) and ``inflow``.
+    boundaries `wall` (free slip) and `inflow`.
     """
 
     dimension = param.Integer(default=1, bounds=(1, 2))
@@ -48,7 +48,7 @@ class SWE(StructuredDerivativeModel):
     }
 
     def __init__(self, **kw):
-        """Build the model; ``dimension=2`` adds ``hv``, and ``parameters`` overrides defaults
+        """Build the model; `dimension=2` adds `hv`, and `parameters` overrides defaults
         one by one.
         """
         if int(kw.get("dimension", 1)) == 2:
@@ -67,7 +67,7 @@ class SWE(StructuredDerivativeModel):
 
     # ── well-balanced reconstruction (model owns it) ───────────────────
     def reconstruction_variables(self):
-        """Well-balanced reconstruction map: replace ``h`` by the free surface ``b + h``, other
+        """Well-balanced reconstruction map: replace `h` by the free surface `b + h`, other
         fields unchanged.
         """
         v = self.variables
@@ -76,7 +76,7 @@ class SWE(StructuredDerivativeModel):
 
     # ── operators ─────────────────────────────────────────────────────
     def flux(self):
-        """Conservative flux of mass and momentum, ``hu^2/h + g h^2/2`` on the diagonal."""
+        """Conservative flux of mass and momentum, `hu^2/h + g h^2/2` on the diagonal."""
         h, hu = self.Q.h, self.Q.hu
         g = self.parameters.g
         F = sp.Matrix.zeros(self.n_variables, self.dimension)
@@ -91,7 +91,7 @@ class SWE(StructuredDerivativeModel):
         return ZArray(F)
 
     def nonconservative_matrix(self):
-        """Bed-slope product: the momentum rows pick up ``g h d_d b``."""
+        """Bed-slope product: the momentum rows pick up `g h d_d b`."""
         h = self.Q.h
         g = self.parameters.g
         B = [[[0] * self.dimension for _ in range(self.n_variables)]
@@ -102,8 +102,8 @@ class SWE(StructuredDerivativeModel):
         return ZArray(B)
 
     def source(self):
-        """Manning friction on the momentum rows (zero for ``n_m = 0``), with ``vel_eps``
-        regularizing ``|u|`` so the source Jacobian stays finite at rest.
+        """Manning friction on the momentum rows (zero for `n_m = 0`), with `vel_eps`
+        regularizing `|u|` so the source Jacobian stays finite at rest.
         """
         h, hu = self.Q.h, self.Q.hu
         g, n_m, eps = (self.parameters.g, self.parameters.n_m,
@@ -121,8 +121,8 @@ class SWE(StructuredDerivativeModel):
 
     # ── state hygiene: wet/dry momentum cap (DG(1) dry-bed dt-collapse) ──
     def update_variables(self):
-        """Cap each momentum component to ``h_wet * 4 sqrt(g h)``
-        (``h_wet = max(h - wet_dry_eps, 0)``) at the wet/dry front; ``h`` and ``b`` are never
+        """Cap each momentum component to `h_wet * 4 sqrt(g h)`
+        (`h_wet = max(h - wet_dry_eps, 0)`) at the wet/dry front; `h` and `b` are never
         modified.
         """
         v = self.variables
@@ -132,7 +132,7 @@ class SWE(StructuredDerivativeModel):
         max_hu = h_wet * 4 * sp.sqrt(g * sp.Max(h, sp.S.Zero))
 
         def cap(c):
-            """Clip ``c`` to ``[-max_hu, max_hu]``."""
+            """Clip `c` to `[-max_hu, max_hu]`."""
             return sp.Max(-max_hu, sp.Min(c, max_hu))
 
         momenta = {"hu", "hv"}
@@ -140,7 +140,7 @@ class SWE(StructuredDerivativeModel):
                        for s in v.get_list()])
 
     def update_variables_jacobian_wrt_variables(self):
-        """Zero Jacobian of ``update_variables`` (only the IMEX Newton consumes it, and it does
+        """Zero Jacobian of `update_variables` (only the IMEX Newton consumes it, and it does
         not apply the cap).
         """
         # The Min/Max cap differentiates to non-serialisable Piecewise/sign;
@@ -210,8 +210,8 @@ class SWE(StructuredDerivativeModel):
 
     # ── declared roles (free-surface specialisation) ─────────────────
     def declare_system_roles(self, sm):
-        """Declare the free-surface roles (depth ``h``, bed ``b``, gravity ``g``, momentum
-        ``hu``/``hv``) on the SystemModel ``sm``.
+        """Declare the free-surface roles (depth `h`, bed `b`, gravity `g`, momentum
+        `hu`/`hv`) on the SystemModel `sm`.
         """
         from zoomy_core.systemmodel.roles import declare_free_surface_roles
         momentum = [["hu"]] + ([["hv"]] if int(self.dimension) == 2 else [])

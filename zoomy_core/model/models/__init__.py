@@ -1,15 +1,15 @@
 """Canonical model derivation classes (lazy-imported to avoid cycles).
 
 After the Model-class rewrite, primitives moved out of this package
-into ``zoomy_core/model/{basemodel,equation,state,operations}.py``.
+into `zoomy_core/model/{basemodel,equation,state,operations}.py`.
 This package retains only the derivation subclasses
-(``SME``, ``VAM``, …).
+(`SME`, `VAM`, …).
 
 Lazy import (PEP 562) is used so that importing
-``zoomy_core.model.derivation.basisfunctions`` (e.g. from
-``zoomy_core.model.operations``) does not trigger eager loading of
+`zoomy_core.model.derivation.basisfunctions` (e.g. from
+`zoomy_core.model.operations`) does not trigger eager loading of
 the derivation classes — which themselves depend on
-``zoomy_core.model.operations`` and would create a cycle.
+`zoomy_core.model.operations` and would create a cycle.
 
 Users get the eager-looking surface (``from zoomy_core.model.models
 import SME``) without the cycle.

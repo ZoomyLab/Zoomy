@@ -2,7 +2,7 @@
 
 A primitive is a single, well-defined mathematical operation.  When the
 caller invokes one whose preconditions don't match the input, the
-primitive raises :class:`PrimitiveDoesNotMatch` rather than silently
+primitive raises `PrimitiveDoesNotMatch` rather than silently
 no-op'ing or — worse — guessing.  This is the explicit failure mode
 the redesign is built around: the caller must compose primitives with
 matching preconditions, and any mistake becomes a loud exception

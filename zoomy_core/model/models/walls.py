@@ -1,6 +1,6 @@
 """Model-derived wall boundary definitions: the free-slip wall as a reflection of the momentum
 vector about the face normal.
-Registered on the derivation Model and substituted per face by ``FromModel`` in the boundary
+Registered on the derivation Model and substituted per face by `FromModel` in the boundary
 layer.
 """
 from __future__ import annotations
@@ -11,14 +11,14 @@ __all__ = ["free_slip_wall_rows", "register_free_slip_wall"]
 
 
 def free_slip_wall_rows(vectors):
-    """Return the ghost value ``q - 2 n (n.q)`` for every momentum component of a free-slip
+    """Return the ghost value `q - 2 n (n.q)` for every momentum component of a free-slip
     wall.
 
     Args:
         vectors: iterable of momentum vectors, each a sequence of per-direction fields (one
             entry per mesh direction).
     Returns:
-        ``{state field: ghost value}`` in the canonical face-normal symbols.
+        `{state field: ghost value}` in the canonical face-normal symbols.
     """
     rows = {}
     for vec in vectors:
@@ -31,8 +31,8 @@ def free_slip_wall_rows(vectors):
 
 
 def register_free_slip_wall(m, vectors, *, name="wall"):
-    """Register ``free_slip_wall_rows`` as ``boundary:<name>`` on the derivation model ``m``;
-    ``h`` and ``b`` stay unprescribed (extrapolated).
+    """Register `free_slip_wall_rows` as `boundary:<name>` on the derivation model `m`;
+    `h` and `b` stay unprescribed (extrapolated).
     """
     for field, value in free_slip_wall_rows(vectors).items():
         m.register_group(f"boundary:{name}", field, value)

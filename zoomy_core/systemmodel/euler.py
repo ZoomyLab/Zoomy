@@ -1,6 +1,6 @@
-"""Compressible Euler equations of an ideal gas, built directly as a ``SystemModel`` (no ``Model``
+"""Compressible Euler equations of an ideal gas, built directly as a `SystemModel` (no `Model`
 derivation).
-Declares eigenvalues, momentum roles, admissibility ``[rho, p]`` and the reconstruction pair ``W =
+Declares eigenvalues, momentum roles, admissibility `[rho, p]` and the reconstruction pair ``W =
 (rho, u, p)``.
 """
 from __future__ import annotations
@@ -17,15 +17,15 @@ _MOMENTUM = ("rho_u", "rho_v", "rho_w")
 def compressible_euler(dimension: int = 3, gamma: float = 1.4,
                        boundary_conditions=None,
                        initial_conditions=None) -> SystemModel:
-    """Ideal-gas Euler ``SystemModel`` in ``dimension`` = 1, 2 or 3 space dimensions.
+    """Ideal-gas Euler `SystemModel` in `dimension` = 1, 2 or 3 space dimensions.
 
     Args:
         gamma: heat-capacity ratio.
-        boundary_conditions: a ``BoundaryConditions`` (or list) of the existing BC classes.
-        initial_conditions: an ``initial_conditions`` object, e.g. ``IC.UserFunction``.
+        boundary_conditions: a `BoundaryConditions` (or list) of the existing BC classes.
+        initial_conditions: an `initial_conditions` object, e.g. `IC.UserFunction`.
 
     Returns:
-        The ``SystemModel`` with state ``(rho, rho_u[, rho_v[, rho_w]], E)``.
+        The `SystemModel` with state `(rho, rho_u[, rho_v[, rho_w]], E)`.
 
     References:
         Toro 2009, https://doi.org/10.1007/b79761
@@ -85,7 +85,7 @@ def compressible_euler(dimension: int = 3, gamma: float = 1.4,
 
 
 def pressure(sm: SystemModel):
-    """Pressure ``p(Q)`` (sympy) of a ``compressible_euler`` system."""
+    """Pressure `p(Q)` (sympy) of a `compressible_euler` system."""
     return sm.admissible[1]
 
 

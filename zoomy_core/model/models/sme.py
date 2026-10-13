@@ -1,5 +1,5 @@
-"""Shallow Moment Equations (``SME``): the declaratively derived depth-resolved moment Model,
-for one or two horizontal directions. ``SystemModel.from_model(SME(level=2))`` lifts it to the
+"""Shallow Moment Equations (`SME`): the declaratively derived depth-resolved moment Model,
+for one or two horizontal directions. `SystemModel.from_model(SME(level=2))` lifts it to the
 runtime system.
 """
 from __future__ import annotations
@@ -28,11 +28,11 @@ zeta = sp.Symbol("zeta", real=True)
 
 
 class SME(BaseModel):
-    """Shallow Moment Equations of modal order ``level`` (``level=2`` gives h, q_0, q_1, q_2
-    plus the bed ``b``), derived symbolically by Galerkin projection.
+    """Shallow Moment Equations of modal order `level` (`level=2` gives h, q_0, q_1, q_2
+    plus the bed `b`), derived symbolically by Galerkin projection.
 
-    Lifted to a SystemModel by ``SystemModel.from_model``; stress closures are injected through
-    ``closures``.
+    Lifted to a SystemModel by `SystemModel.from_model`; stress closures are injected through
+    `closures`.
 
     References:
         Kowalski & Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
@@ -70,7 +70,7 @@ class SME(BaseModel):
 
     def derive_model(self):
         """Build the declarative SME model (h-equation, projected horizontal momenta, closures)
-        and register the vertical reconstruction; called by the base ``__init__``.
+        and register the vertical reconstruction; called by the base `__init__`.
         """
         Nu = int(self.level)
         # nu (kinematic viscosity) and lambda_s (Navier slip) are MODEL
@@ -141,7 +141,7 @@ class SME(BaseModel):
         self._declare_turbulence_fields(m, t, horiz)
 
         def _kbc(interface):
-            """Kinematic boundary condition of the vertical velocity at ``interface``."""
+            """Kinematic boundary condition of the vertical velocity at `interface`."""
             kw = dict(w=w, u=uvel[0], interface=interface)
             if dim == 3:
                 kw["v"] = uvel[1]
@@ -230,8 +230,8 @@ class SME(BaseModel):
 
         # 5 — project EACH horizontal momentum component, then close the stress.
         def _state(at, *, alias=None, btag=None):
-            """``ClosureState`` for the bulk (``at=None``) or the bed/surface trace
-            (``at=0/1``).
+            """`ClosureState` for the bulk (`at=None`) or the bed/surface trace
+            (`at=0/1`).
             """
             return ClosureState(m.functions, params=m.parameters, h=h, x=x,
                                 zeta=zeta, at=at, alias=alias,
@@ -404,12 +404,12 @@ class SME(BaseModel):
     # ── turbulence hooks (no-op on plain SME; KESME overrides) ──────────────
     def _declare_turbulence_fields(self, m, t, horiz):
         """Hook: declare extra depth-averaged transported state (e.g. k, epsilon) before the
-        bulk closure; no-op on ``SME``.
+        bulk closure; no-op on `SME`.
         """
 
     def _add_turbulence_transport(self, m, t, horiz, h, q_heads):
         """Hook: add the transported-scalar balances after the moment system is assembled; no-op
-        on ``SME``.
+        on `SME`.
         """
 
     # The runtime operator-form system is built via
@@ -420,8 +420,8 @@ class SME(BaseModel):
     _system_model_kind = "sme"
 
     def _register_hswme_spectrum(self, sm):
-        """Publish the closed-form beta-HSWME spectrum as ``sm.eigenvalues``; valid only where
-        the truncation drops nothing (level <= 1), otherwise defers to ``_wave_speed_cone``.
+        """Publish the closed-form beta-HSWME spectrum as `sm.eigenvalues`; valid only where
+        the truncation drops nothing (level <= 1), otherwise defers to `_wave_speed_cone`.
 
         References:
             Koellermeier, Rominger 2020, https://doi.org/10.4208/cicp.oa-2019-0065
@@ -509,8 +509,8 @@ class SME(BaseModel):
             self._wave_speed_cone(sm)
 
     def _wave_speed_cone(self, sm):
-        """Set ``eigenvalues = None`` and publish a strict spectral-radius-bound cone as
-        ``eigenvalues_cfl``, so the CFL needs no per-face eigensolve and HLL falls back to local
+        """Set `eigenvalues = None` and publish a strict spectral-radius-bound cone as
+        `eigenvalues_cfl`, so the CFL needs no per-face eigensolve and HLL falls back to local
         Lax-Friedrichs.
         """
         import warnings

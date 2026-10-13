@@ -1,17 +1,17 @@
 """Walker (a): the C-family Procedure printer.
 
-Emits a :class:`~zoomy_core.solver.ir.Procedure` as C++ statements for the
+Emits a `Procedure` as C++ statements for the
 dmplex / amrex / openfoam backends.  It REUSES the existing machinery rather
-than reinventing it — :class:`~zoomy_core.transformation.generic_c.GenericCppBase`
-supplies expression printing (including the ``c_functions`` print-map, the
-``_NON_RESOLVABLE`` shield, the REQ-66 literal caster and the Min/Max typing),
-``convert_expression_body``'s CSE emission shape, the Piecewise if/else
-lowering, ``get_array_declaration`` / ``format_assignment`` and
-``_sm_signature`` / ``_sm_arg_decl`` for the parameter list.
+than reinventing it — `GenericCppBase`
+supplies expression printing (including the `c_functions` print-map, the
+`_NON_RESOLVABLE` shield, the REQ-66 literal caster and the Min/Max typing),
+`convert_expression_body`'s CSE emission shape, the Piecewise if/else
+lowering, `get_array_declaration` / `format_assignment` and
+`_sm_signature` / `_sm_arg_decl` for the parameter list.
 
 What this printer adds is only the STATEMENT layer: the five IR node kinds
-lowered to C++ text.  ``IfStatic`` never reaches it — the entry guard
-:func:`~zoomy_core.solver.ir.require_resolved` rejects an unresolved procedure,
+lowered to C++ text.  `IfStatic` never reaches it — the entry guard
+`require_resolved` rejects an unresolved procedure,
 so a build-time decision cannot become a runtime branch.
 """
 from __future__ import annotations
@@ -39,9 +39,9 @@ class CProcedurePrinter(GenericCppBase):
 
     Constructed WITHOUT a SystemModel: solver blocks speak the march-level
     argument vocabulary, not a model's operator signature.  A backend that
-    wants its own spellings subclasses this exactly as ``FoamPrinter``
-    subclasses ``GenericCppBase`` (override ``ARG_MAPPING`` / ``real_type`` /
-    ``_sm_arg_decl``).
+    wants its own spellings subclasses this exactly as `FoamPrinter`
+    subclasses `GenericCppBase` (override `ARG_MAPPING` / `real_type` /
+    `_sm_arg_decl`).
     """
 
     #: Emitted return type of a procedure.  Solver blocks communicate through
@@ -81,9 +81,9 @@ class CProcedurePrinter(GenericCppBase):
         """One parameter declaration, const-correct FOR THIS PROCEDURE.
 
         The slot's declared kind states the array's nature; whether *this*
-        block writes it decides the ``const``.  So ``lam_lo_f`` is ``T*`` in
-        ``solver_dt_pass`` (which fills it) and ``const T*`` in
-        ``solver_reduce_dt`` (which only reduces over it) — from ONE
+        block writes it decides the `const`.  So `lam_lo_f` is `T*` in
+        `solver_dt_pass` (which fills it) and `const T*` in
+        `solver_reduce_dt` (which only reduces over it) — from ONE
         declaration table, with no per-block hand-spelling.
         """
         kind = SOLVER_ARG_KINDS[slot]
@@ -142,7 +142,7 @@ class CProcedurePrinter(GenericCppBase):
 
     def _assign(self, stmt: Assign) -> list:
         """One assignment, CSE'd through the same shape
-        ``convert_expression_body`` uses (``T t0 = …;`` temporaries first,
+        `convert_expression_body` uses (`T t0 = …;` temporaries first,
         then the target writes)."""
         if isinstance(stmt.expr, sp.Piecewise):
             return self._assign_piecewise(stmt)
@@ -180,7 +180,7 @@ class CProcedurePrinter(GenericCppBase):
 
     def _assign_piecewise(self, stmt: Assign) -> list:
         """Piecewise lowered to the same if/else-if/else ladder the kernel
-        emitter builds (``_print_piecewise_structure``), but assigning instead
+        emitter builds (`_print_piecewise_structure`), but assigning instead
         of returning — the statement-position form."""
         lines = []
         if stmt.declare:
@@ -229,8 +229,8 @@ class CProcedurePrinter(GenericCppBase):
 
     def _print_Symbol(self, s):
         """Bare identifier for anything the procedure's own argument list or
-        an ``Assign`` bound; otherwise fall back to the base printer (which
-        consults the pushed ``symbol_maps``)."""
+        an `Assign` bound; otherwise fall back to the base printer (which
+        consults the pushed `symbol_maps`)."""
         name = str(s)
         if name in self._locals or name in self.ARG_MAPPING.values():
             return name

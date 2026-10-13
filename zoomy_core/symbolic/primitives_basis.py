@@ -1,22 +1,22 @@
 """Basis-projection primitives: the only place we evaluate
-``∫ kernel(ζ̂) dζ̂`` for ζ̂ ∈ [0, 1] with kernel containing
-opaque ``phi_*`` calls.
+`∫ kernel(ζ̂) dζ̂` for ζ̂ ∈ [0, 1] with kernel containing
+opaque `phi_*` calls.
 
-Decomposes the legacy ``ProjectBasisIntegrals`` (ins_generator.py:2188)
+Decomposes the legacy `ProjectBasisIntegrals` (ins_generator.py:2188)
 3-pass operation into separable primitives:
 
-* :func:`canonicalize_phi_derivative_subs` — rewrite
-  ``Subs(Derivative(phi(ξ), ξ), ξ, val) → Derivative(phi(val), val)``.
-  Pure ``xreplace``; no math change, just normalisation of the
+* `canonicalize_phi_derivative_subs` — rewrite
+  `Subs(Derivative(phi(ξ), ξ), ξ, val) → Derivative(phi(val), val)`.
+  Pure `xreplace`; no math change, just normalisation of the
   chain-rule artifact sympy emits when basis arguments substitute.
-* :func:`project_basis_integrand` — for each
-  ``Integral(kernel, (ζ̂, 0, 1))`` whose kernel contains a ``phi_*``
-  call, look up via :class:`BasisIntegralCache` and substitute the
+* `project_basis_integrand` — for each
+  `Integral(kernel, (ζ̂, 0, 1))` whose kernel contains a `phi_*`
+  call, look up via `BasisIntegralCache` and substitute the
   polynomial result.
 
 The legacy operation also bundled
-:func:`zoomy_core.symbolic.primitives_canonical.split_integral_over_add`
-between Pass 1 and Pass 3, plus an end-of-pipeline ``Subs.doit()``
+`zoomy_core.symbolic.primitives_canonical.split_integral_over_add`
+between Pass 1 and Pass 3, plus an end-of-pipeline `Subs.doit()`
 walk (ins_generator.py:2319).  The redesigned recipe asks the caller
 to invoke those primitives explicitly.
 """
@@ -34,7 +34,7 @@ __all__ = [
 
 
 def has_phi_call(e):
-    """True iff ``e`` contains any ``phi_*`` function call."""
+    """True iff `e` contains any `phi_*` function call."""
     if (isinstance(e, sp.Function)
             and getattr(e.func, "__name__", "").startswith("phi_")):
         return True
@@ -44,15 +44,15 @@ def has_phi_call(e):
 
 
 def canonicalize_phi_derivative_subs(expr):
-    """``Subs(Derivative(phi_k(ξ), ξ), ξ, val) → Derivative(phi_k(val), val)``.
+    """`Subs(Derivative(phi_k(ξ), ξ), ξ, val) → Derivative(phi_k(val), val)`.
 
-    The chain-rule artefact sympy creates when a ``phi_k(arg)`` is
-    substituted into a ``Derivative`` context.  Recanonicalising as a
-    plain ``Derivative(phi_k(val), val)`` makes the pattern visible to
+    The chain-rule artefact sympy creates when a `phi_k(arg)` is
+    substituted into a `Derivative` context.  Recanonicalising as a
+    plain `Derivative(phi_k(val), val)` makes the pattern visible to
     downstream basis-cache lookups.
 
-    Lifted verbatim from ``ProjectBasisIntegrals._canon``
-    (ins_generator.py:2236).  Pure ``xreplace`` — no math change.
+    Lifted verbatim from `ProjectBasisIntegrals._canon`
+    (ins_generator.py:2236).  Pure `xreplace` — no math change.
     """
     if not isinstance(expr, sp.Basic):
         return expr
@@ -86,8 +86,8 @@ def canonicalize_phi_derivative_subs(expr):
 
 
 def project_basis_integrand(expr, basis_cache):
-    """Look up every ``Integral(kernel, (ζ̂, 0, 1))`` whose kernel
-    contains a ``phi_*`` call in the given ``basis_cache`` and
+    """Look up every `Integral(kernel, (ζ̂, 0, 1))` whose kernel
+    contains a `phi_*` call in the given `basis_cache` and
     substitute the polynomial result.
 
     Single-pass: walks the expression once, replacing each matching
@@ -96,11 +96,11 @@ def project_basis_integrand(expr, basis_cache):
     become an outer coefficient; the rest is the kernel handed to the
     cache.
 
-    Lifted from the Pass-3 ``_map`` of ``ProjectBasisIntegrals``
+    Lifted from the Pass-3 `_map` of `ProjectBasisIntegrals`
     (ins_generator.py:2282), with the surrounding fixpoint loop
     (lines 2339-2344) removed — the caller is expected to compose
-    this primitive with :func:`canonicalize_phi_derivative_subs` and
-    :func:`zoomy_core.symbolic.primitives_canonical.un_subs` for any
+    this primitive with `canonicalize_phi_derivative_subs` and
+    `zoomy_core.symbolic.primitives_canonical.un_subs` for any
     boundary-Subs resolution.
     """
     if not isinstance(expr, sp.Basic):

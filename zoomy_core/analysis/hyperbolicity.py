@@ -1,6 +1,6 @@
 """Sample-based hyperbolicity test.
 
-Given a linearised :class:`SystemModel` (or pencil matrices already in
+Given a linearised `SystemModel` (or pencil matrices already in
 hand), evaluate the generalised eigenvalues at a grid / random sample
 of base states and check the imaginary parts.  Reports the fraction of
 samples that are hyperbolic (all eigenvalues real to within tolerance)
@@ -28,10 +28,10 @@ from .pencil import (
 def is_hyperbolic_at(M_x: sp.Matrix, M_t: sp.Matrix, sample: Dict, *,
                      tol: float = 1e-9, drop_infinite: bool = True
                      ) -> Tuple[bool, np.ndarray]:
-    """Evaluate ``(M_x, M_t)`` at ``sample`` and check eigenvalues.
+    """Evaluate `(M_x, M_t)` at `sample` and check eigenvalues.
 
-    Returns ``(hyperbolic, eigenvalues)``.  ``hyperbolic`` is ``True``
-    iff every finite eigenvalue has ``|imag| < tol``.
+    Returns `(hyperbolic, eigenvalues)`.  `hyperbolic` is `True`
+    iff every finite eigenvalue has `|imag| < tol`.
     """
     eigs = sample_generalised_eigenvalues(M_x, M_t, [sample],
                                           drop_infinite=drop_infinite)[0]
@@ -98,23 +98,23 @@ def sample_hyperbolicity(M_x: sp.Matrix, M_t: sp.Matrix,
 
     Args:
         M_x, M_t       : the pencil matrices (sympy).
-        parameter_ranges: dict ``{sympy_symbol: (lo, hi)}`` for the
+        parameter_ranges: dict `{sympy_symbol: (lo, hi)}` for the
                           variables you want to sample.  Symbols not in
                           this dict must already be substituted-out in
                           the pencil (e.g. fixed at chosen values).
         n_samples      : number of *accepted* samples to draw.
-        rng            : optional ``np.random.Generator``.
+        rng            : optional `np.random.Generator`.
         tol            : imaginary-part threshold for "real".
         drop_infinite  : drop infinite generalised eigenvalues (typical
                           for systems with constraints).
-        constraint_filter: optional callable ``sample_dict → bool``.  A
+        constraint_filter: optional callable `sample_dict → bool`.  A
                           sample is rejected (and another drawn) if this
                           returns False — useful for excluding e.g.
                           h ≤ 0.
         max_attempts   : per accepted sample, how many draws before
                           giving up.
 
-    Returns ``HyperbolicityReport``.
+    Returns `HyperbolicityReport`.
     """
     if rng is None:
         rng = np.random.default_rng()

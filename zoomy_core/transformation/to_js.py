@@ -3,17 +3,19 @@
 SymPy → JavaScript code printer for generating Model2D-compatible
 kernels from any Zoomy symbolic model.
 
-Subclasses :class:`OutParamCodePrinter` — generated kernels write their
-result through a trailing ``res`` array parameter the caller owns,
-instead of returning a freshly-allocated ``Float64Array``.  That keeps
+Subclasses `OutParamCodePrinter` — generated kernels write their
+result through a trailing `res` array parameter the caller owns,
+instead of returning a freshly-allocated `Float64Array`.  That keeps
 the browser solver's hot loop allocation-free; the body generation,
 Piecewise handling and kernel/BC wrapping are shared with the GLSL
 printer.  Only the JS-specific output formatting lives here.
 
-Usage::
+Usage:
 
+```
     from zoomy_core.transformation.to_js import JsModel
     print(JsModel(model).generate())
+```
 """
 
 import sympy as sp
@@ -31,7 +33,7 @@ class GenericJsBase(OutParamCodePrinter):
 
     Inherits the out-parameter body generation, Piecewise handling and
     kernel / boundary-condition wrapping from
-    :class:`OutParamCodePrinter`; overrides only the JS-specific output
+    `OutParamCodePrinter`; overrides only the JS-specific output
     formatting.
     """
 
@@ -52,7 +54,7 @@ class GenericJsBase(OutParamCodePrinter):
 
     def _generate_args(self, func_obj, shape):
         """JS parameter list for a Function object, with the trailing
-        ``res`` out-parameter appended.  JS imposes no type or
+        `res` out-parameter appended.  JS imposes no type or
         zero-length-array restrictions, so every argument is kept."""
         parts = []
         for key, val in func_obj.args.items():
@@ -112,9 +114,9 @@ class GenericJsBase(OutParamCodePrinter):
 class JsModel(GenericJsBase):
     """Generate JavaScript Model2D kernels from a Zoomy symbolic model.
 
-    Produces standalone JS functions for ``flux``, ``source``,
-    ``eigenvalues``, etc.  Each takes the model's flat argument arrays
-    plus a trailing ``res`` out-parameter the caller owns.
+    Produces standalone JS functions for `flux`, `source`,
+    `eigenvalues`, etc.  Each takes the model's flat argument arrays
+    plus a trailing `res` out-parameter the caller owns.
     """
 
     # Functions to generate (in order). Skipped if definition is None/zero.
@@ -192,13 +194,13 @@ class JsModel(GenericJsBase):
 
 
 class JsNumerics(GenericJsBase):
-    """Generate JavaScript kernels from a Zoomy symbolic ``Numerics``.
+    """Generate JavaScript kernels from a Zoomy symbolic `Numerics`.
 
-    Produces ``numerical_flux`` (and ``numerical_fluctuations`` /
-    ``local_max_abs_eigenvalue``) as standalone JS functions taking the
-    per-face ``Q_minus`` / ``Q_plus`` states plus a trailing ``res``
+    Produces `numerical_flux` (and `numerical_fluctuations` /
+    `local_max_abs_eigenvalue`) as standalone JS functions taking the
+    per-face `Q_minus` / `Q_plus` states plus a trailing `res`
     out-parameter.  Mirrors
-    :class:`zoomy_core.transformation.generic_c.GenericCppNumerics`.
+    `zoomy_core.transformation.generic_c.GenericCppNumerics`.
     """
 
     def __init__(self, numerics):

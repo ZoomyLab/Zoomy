@@ -1,22 +1,26 @@
-"""Render a cell field from a triangular ``.vtu`` as a colored 2D map.
+"""Render a cell field from a triangular `.vtu` as a colored 2D map.
 
 General-purpose VTU field plotter (a symmetric diverging colorbar makes
 it well suited to signed fields such as sensitivities, but any cell
 field works).  Two modes:
 
-* **single** — one .vtu → one map::
+* **single** — one .vtu → one map:
 
+```
       python -m zoomy_core.postprocessing.plot_field_map \\
           path/to/snapshot.vtu --field <name> --out map.png --clip 99
+```
 
 * **panels** — several .vtu side-by-side with a shared symmetric
-  colorbar (e.g. a parameter / resolution sweep)::
+  colorbar (e.g. a parameter / resolution sweep):
 
+  ```
       python -m zoomy_core.postprocessing.plot_field_map \\
           --inputs run0/snapshot.vtu run1/snapshot.vtu run2/snapshot.vtu \\
           --field <name> --out compare.png --title "sweep"
+  ```
 
-``--clip P`` symmetrically clips the colorbar to the P-th percentile
+`--clip P` symmetrically clips the colorbar to the P-th percentile
 of |field|, so the dynamic range isn't blown out by outliers (e.g.
 wet/dry artefacts).
 """
@@ -33,7 +37,7 @@ from . import style
 
 
 def _read_field(vtu_path, field_name):
-    """Return ``(points2d, triangle_conn, cell_data, h_field)`` for a .vtu."""
+    """Return `(points2d, triangle_conn, cell_data, h_field)` for a .vtu."""
     m = meshio.read(vtu_path)
     pts = m.points[:, :2]
     tri = next(cb for cb in m.cells if cb.type == "triangle")
@@ -99,7 +103,7 @@ def plot_panels(inputs, field_name, out_path, clip=99.0,
                 cmap=None, suptitle=None):
     """Several .vtu side-by-side with one shared symmetric colorbar.
 
-    Each panel is titled by its parent dirname (e.g. ``smt_lvl0_...``).
+    Each panel is titled by its parent dirname (e.g. `smt_lvl0_...`).
     The colorbar limit is the max of the per-panel P{clip} percentiles
     so all maps are directly comparable.
     """

@@ -17,8 +17,8 @@ __all__ = ["PDETransformation"]
 
 
 class PDETransformation(Operation):
-    """Sigma map ``z = b + h*zeta`` that rewrites every field ``f(t, x, z)`` to a decorated ``f~(t,
-    x, zeta)`` via the chain rule on Derivative nodes. Model-level only (``model.apply(...)``); it
+    """Sigma map `z = b + h*zeta` that rewrites every field `f(t, x, z)` to a decorated ``f~(t,
+    x, zeta)`` via the chain rule on Derivative nodes. Model-level only (`model.apply(...)`); it
     also sigma-maps stored boundary conditions and records the map on the model.
     """
 
@@ -36,7 +36,7 @@ class PDETransformation(Operation):
 
     def __init__(self, coord_map, *, decorate="tilde",
                  name="pde_transformation", description=None):
-        """Build the map from ``{z: (zeta, Eq(z, b + h*zeta))}``; ``decorate`` picks the accent
+        """Build the map from `{z: (zeta, Eq(z, b + h*zeta))}`; `decorate` picks the accent
         (tilde, hat, bar, check).
         """
         if len(coord_map) != 1:
@@ -77,7 +77,7 @@ class PDETransformation(Operation):
         )
 
     def _parse_spec(self, spec):
-        """Read ``(zeta, b, h)`` from the coord-map spec, with ``b = z|_{zeta=0}`` and ``h =
+        """Read `(zeta, b, h)` from the coord-map spec, with `b = z|_{zeta=0}` and ``h =
         dz/dzeta``.
         """
         zeta, relation = spec
@@ -104,13 +104,13 @@ class PDETransformation(Operation):
     # ── geometry accessors ────────────────────────────────────────────
     @property
     def jacobian(self):
-        """Vertical Jacobian ``dz/dzeta = h``."""
+        """Vertical Jacobian `dz/dzeta = h`."""
         return self._h
 
     # ── decorated head minting ────────────────────────────────────────
     def _decorate_head(self, head):
-        """Mint (and cache) a distinct Function subclass for the accented head, so ``u~`` never
-        cross-substitutes with ``u``.
+        """Mint (and cache) a distinct Function subclass for the accented head, so `u~` never
+        cross-substitutes with `u`.
         """
         if head in self._decorated:
             return self._decorated[head]
@@ -139,7 +139,7 @@ class PDETransformation(Operation):
 
     # ── decorated-field accessor (post-transform) ─────────────────────
     def decorated(self, field):
-        """Return the decorated counterpart ``u~(t, x, zeta)`` of a physical field application, or
+        """Return the decorated counterpart `u~(t, x, zeta)` of a physical field application, or
         the field itself if its head was never decorated.
         """
         head = self._decorated.get(field.func)
@@ -150,7 +150,7 @@ class PDETransformation(Operation):
 
     # ── leaf guard (model-only) ───────────────────────────────────────
     def _leaf_sp(self, sp_expr):
-        """Leaf hook: rewrite only when reached through ``apply_to_model``, else raise TypeError."""
+        """Leaf hook: rewrite only when reached through `apply_to_model`, else raise TypeError."""
         if not self._via_model:
             raise TypeError(
                 "PDETransformation is a model-level operation — it rewrites "
@@ -217,8 +217,8 @@ class PDETransformation(Operation):
         return model
 
     def _rewrite_model_coords(self, model):
-        """Replace ``z`` by ``zeta`` in the model coordinates and record ``z = b + h*zeta`` in
-        ``coord_relations``.
+        """Replace `z` by `zeta` in the model coordinates and record `z = b + h*zeta` in
+        `coord_relations`.
         """
         coords = getattr(model, "_coords", None)
         if coords is None or self._z not in coords:
@@ -288,7 +288,7 @@ class PDETransformation(Operation):
         return e
 
     def _apply_one_derivative(self, inner_expr, var):
-        """Chain rule for one derivative: ``d_z -> (1/h) d_zeta`` and ``d_s -> d_s - (d_s(zeta h +
+        """Chain rule for one derivative: `d_z -> (1/h) d_zeta` and ``d_s -> d_s - (d_s(zeta h +
         b)/h) d_zeta``.
         """
         zeta, h, b = self._zeta, self._h, self._b
@@ -319,14 +319,14 @@ class PDETransformation(Operation):
                 rf"{self._accent}{{u}}$")
 
 class ParametrizedGeometry(Operation):
-    """Orthogonal map ``X(s, n) = r(s) + n N(s)`` of a Cartesian pair (x, y) onto coordinates fitted
-    to a planar centreline ``r(s)``. Curvature, metric ``m = 1 - kappa n`` and the chain rule on
-    Derivative nodes are all derived from the curve; ``kappa = 0`` is the identity.
+    """Orthogonal map `X(s, n) = r(s) + n N(s)` of a Cartesian pair (x, y) onto coordinates fitted
+    to a planar centreline `r(s)`. Curvature, metric `m = 1 - kappa n` and the chain rule on
+    Derivative nodes are all derived from the curve; `kappa = 0` is the identity.
     """
 
     def __init__(self, centreline, coords, new_coords, *, decorate="tilde",
                  name="parametrized_geometry", description=None):
-        """Derive speed, curvature, tangent, normal and metric from ``centreline`` (2-vector in the
+        """Derive speed, curvature, tangent, normal and metric from `centreline` (2-vector in the
         new parameter) and the old/new coordinate pairs.
         """
         self._r = sp.Matrix(centreline)
@@ -357,20 +357,20 @@ class ParametrizedGeometry(Operation):
 
     @property
     def metric(self):
-        """Streamwise scale factor ``m = 1 - kappa n``."""
+        """Streamwise scale factor `m = 1 - kappa n`."""
         return self._m
 
     @property
     def jacobian(self):
-        """Area element factor ``m`` (``dA = m dn ds``)."""
+        """Area element factor `m` (`dA = m dn ds`)."""
         return self._m
 
     def admissible(self, half_width):
-        """Condition ``m > 0`` across a section of the given half width."""
+        """Condition `m > 0` across a section of the given half width."""
         return sp.simplify(sp.Abs(self._kappa) * 2 * half_width < 2)
 
     def _apply_one_derivative(self, inner, var):
-        """Chain rule ``d_x -> (T_x/m) d_s + N_x d_n`` (likewise ``d_y``); other variables are
+        """Chain rule `d_x -> (T_x/m) d_s + N_x d_n` (likewise `d_y`); other variables are
         unchanged.
         """
         if var == self._x:

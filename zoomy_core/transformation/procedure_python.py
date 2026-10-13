@@ -1,24 +1,24 @@
-"""Walker (b): the python ``ProcedureBuilder``.
+"""Walker (b): the python `ProcedureBuilder`.
 
 numpy and jax have no text printer — their emission target is a CALLABLE
-(``to_numpy.py`` lambdifies straight into ``runtime_functions``).  So the
+(`to_numpy.py` lambdifies straight into `runtime_functions`).  So the
 second walker over the Procedure/Statement IR builds callables instead of
 source:
 
     fn = ProcedureBuilder("numpy").build(proc)
     env = fn(**{... argument slot -> array/scalar ...})
 
-``fn`` returns the environment dict after execution, so a block's written
-outputs (the stored face arrays, ``Q_cand``, ``troubled``, ``dt``) are read
+`fn` returns the environment dict after execution, so a block's written
+outputs (the stored face arrays, `Q_cand`, `troubled`, `dt`) are read
 off by name — the same "written arguments" contract the C walker emits.
 
 Backend differences, and only these:
 
-* **numpy** — ``ForEachFace`` / ``While`` are plain python loops, indexed
+* **numpy** — `ForEachFace` / `While` are plain python loops, indexed
   assignment mutates in place.
-* **jax** — ``While`` lowers to :func:`jax.lax.while_loop` and ``ForEachFace``
-  to :func:`jax.lax.fori_loop`, both over the explicit carry (functional
-  update via ``.at[idx].set``), so a built procedure is ``jit``-safe.
+* **jax** — `While` lowers to `jax.lax.while_loop` and `ForEachFace`
+  to `jax.lax.fori_loop`, both over the explicit carry (functional
+  update via `.at[idx].set`), so a built procedure is `jit`-safe.
 
 Expressions are lambdified ONCE at build time (that is the "builder" in the
 name); statements are interpreted, which keeps the walker small and keeps all
@@ -46,9 +46,9 @@ from zoomy_core.solver.ir import (
 class ProcedureBuilder:
     """Build python callables from solver Procedures.
 
-    ``backend`` is ``"numpy"`` or ``"jax"``.  ``externals`` maps
-    :class:`~zoomy_core.solver.external.ExternalProcedure` names to the
-    backend's body — a ``Call`` to a name absent from the table RAISES at
+    `backend` is `"numpy"` or `"jax"`.  `externals` maps
+    `ExternalProcedure` names to the
+    backend's body — a `Call` to a name absent from the table RAISES at
     BUILD time (missing body = red test, never a NameError mid-march).
     """
 
@@ -69,7 +69,7 @@ class ProcedureBuilder:
     # ── entry point ────────────────────────────────────────────────────────
 
     def build(self, proc: Procedure):
-        """Compile ``proc`` to ``fn(**args) -> env`` (dict)."""
+        """Compile `proc` to `fn(**args) -> env` (dict)."""
         require_resolved(proc)
         arg_names = tuple(SOLVER_ARG_MAPPING[a] for a in proc.args)
         body = self._compile_block(proc.stmts)
@@ -120,7 +120,7 @@ class ProcedureBuilder:
 
     def _lambdify(self, expr):
         """Lambdify one expression against its free NAMES; returns
-        ``(names, callable)`` so the interpreter can pull them from env."""
+        `(names, callable)` so the interpreter can pull them from env."""
         expr = sp.sympify(expr)
         names = expression_names(expr)
         syms = [sp.Symbol(n) for n in names]

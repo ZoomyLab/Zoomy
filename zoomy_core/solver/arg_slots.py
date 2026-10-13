@@ -1,31 +1,31 @@
 """Solver-level argument vocabulary — the march-scale extension of
-``OPERATOR_ARG_SLOTS`` / ``GenericCppBase.ARG_MAPPING``.
+`OPERATOR_ARG_SLOTS` / `GenericCppBase.ARG_MAPPING`.
 
-``OPERATOR_ARG_SLOTS`` (``system_model.py``) declares the argument groups of
-the per-cell/per-face MODEL kernels (``flux`` / ``source`` / …).  The solver
+`OPERATOR_ARG_SLOTS` (`system_model.py`) declares the argument groups of
+the per-cell/per-face MODEL kernels (`flux` / `source` / …).  The solver
 blocks of the unification design live one level up and speak about
 march-scale objects the model kernels never see: the MeshRT connectivity, the
-stored face arrays, the stage base ``Q0``, the Butcher weight ``a_stage``, the
-MOOD ``troubled`` mask, the io counter ``i_snapshot`` and the two dt clamps
-``dt_max`` / ``dt_window``.
+stored face arrays, the stage base `Q0`, the Butcher weight `a_stage`, the
+MOOD `troubled` mask, the io counter `i_snapshot` and the two dt clamps
+`dt_max` / `dt_window`.
 
 This module is the SINGLE declaration of those slots — exactly as
-``OPERATOR_ARG_SLOTS`` is for kernels.  Every walker translates SYNTAX only:
+`OPERATOR_ARG_SLOTS` is for kernels.  Every walker translates SYNTAX only:
 
-* :data:`SOLVER_ARG_KINDS`   slot -> storage kind (drives the C declaration)
-* :data:`SOLVER_ARG_MAPPING` slot -> C-family spelling (merged into
-  ``GenericCppBase.ARG_MAPPING``; the existing kernel keys are untouched)
-* :data:`SOLVER_ARG_SLOTS`   procedure name -> ordered slot tuple, for the
+* `SOLVER_ARG_KINDS`   slot -> storage kind (drives the C declaration)
+* `SOLVER_ARG_MAPPING` slot -> C-family spelling (merged into
+  `GenericCppBase.ARG_MAPPING`; the existing kernel keys are untouched)
+* `SOLVER_ARG_SLOTS`   procedure name -> ordered slot tuple, for the
   blocks the design names in §2 / §v6.
 
 Storage kinds
 -------------
-``scalar_real``     by-value ``const T``            (dt, dt_max, a_stage, time)
-``scalar_int``      by-value ``const int``          (n_faces, i_snapshot)
-``const_real_ptr``  read-only array ``const T*``    (Q, cell_volumes, …)
-``real_ptr``        written array ``T*``            (Fface, Dp, Dm, lam_*, …)
-``const_int_ptr``   read-only index array ``const int*`` (face_cells)
-``int_ptr``         written index array ``int*``    (troubled)
+`scalar_real`     by-value `const T`            (dt, dt_max, a_stage, time)
+`scalar_int`      by-value `const int`          (n_faces, i_snapshot)
+`const_real_ptr`  read-only array `const T*`    (Q, cell_volumes, …)
+`real_ptr`        written array `T*`            (Fface, Dp, Dm, lam_*, …)
+`const_int_ptr`   read-only index array `const int*` (face_cells)
+`int_ptr`         written index array `int*`    (troubled)
 """
 from __future__ import annotations
 
@@ -154,7 +154,7 @@ del _slot, _spelling, _kind
 
 
 def solver_arg_kind(slot: str) -> str:
-    """Storage kind of ``slot``; RAISES on an undeclared slot (no default)."""
+    """Storage kind of `slot`; RAISES on an undeclared slot (no default)."""
     try:
         return SOLVER_ARG_KINDS[slot]
     except KeyError:

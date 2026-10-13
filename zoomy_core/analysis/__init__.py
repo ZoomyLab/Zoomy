@@ -1,13 +1,13 @@
 """Generic linear-analysis tools for shallow-water-family PDE systems.
 
-The unified analysis entry point is :class:`SystemModel` (in
-:mod:`zoomy_core.systemmodel.system_model`).  Every analysis routine
+The unified analysis entry point is `SystemModel` (in
+`zoomy_core.systemmodel.system_model`).  Every analysis routine
 in this package consumes a SystemModel and never inspects
 model-specific attributes.
 
 Package contents:
 
-* Linearisation around a base state (:func:`linearise`) — operates on a
+* Linearisation around a base state (`linearise`) — operates on a
   SystemModel, returns a SystemModel of perturbation fields.
 * Plane-wave dispersion analysis (`ω(k)` solutions).
 * Generalised-eigenvalue ("pencil") form for systems with constraints.

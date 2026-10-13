@@ -1,17 +1,17 @@
-"""Plotting helpers for ``zoomy_core.analysis``.
+"""Plotting helpers for `zoomy_core.analysis`.
 
 Lightweight wrappers around matplotlib.  Lazy-imported so the package
 stays usable without matplotlib installed.
 
 Two main entry points:
 
-  ``plot_dispersion(result, k_range, ...)`` —
-       line plot of phase velocity ``C(k) = ω/k`` (or ω(k)) for each
-       propagating mode in a ``plane_wave_dispersion`` result.  Accepts
-       reference curves (e.g. Airy ``tanh(kH)/(kH)``) for overlay
+  `plot_dispersion(result, k_range, ...)` —
+       line plot of phase velocity `C(k) = ω/k` (or ω(k)) for each
+       propagating mode in a `plane_wave_dispersion` result.  Accepts
+       reference curves (e.g. Airy `tanh(kH)/(kH)`) for overlay
        comparison.
 
-  ``plot_hyperbolic_region_2d(M_x, M_t, axis_a, axis_b, fixed_subs, ...)`` —
+  `plot_hyperbolic_region_2d(M_x, M_t, axis_a, axis_b, fixed_subs, ...)` —
        2D color map of the hyperbolic region over a chosen parameter
        pair, with all other parameters held at user-specified values.
        Mirrors the Koellermeier–Torrilhon-style figures used to
@@ -81,31 +81,31 @@ def plot_dispersion(result: Dict, k_range: Tuple[float, float], *,
                     mode_labels: Optional[List[str]] = None,
                     drop_zero_modes: bool = True,
                     **plot_kwargs):
-    """Plot dispersion curves from a ``plane_wave_dispersion`` result.
+    """Plot dispersion curves from a `plane_wave_dispersion` result.
 
     Args:
-        result:    dict from :func:`plane_wave_dispersion`.
-        k_range:   ``(k_lo, k_hi)`` numeric range over which to evaluate.
-        k_var:     wavenumber symbol; auto-detected as ``Symbol('k')``
+        result:    dict from `plane_wave_dispersion`.
+        k_range:   `(k_lo, k_hi)` numeric range over which to evaluate.
+        k_var:     wavenumber symbol; auto-detected as `Symbol('k')`
                    if absent.
         ax:        matplotlib axis to draw on; new figure created if None.
         n_points:  grid resolution along k.
-        mode:      ``'phase_velocity'`` (C = ω/k) or ``'omega'``.
-        fixed_subs: dict ``{Symbol: number}`` for the non-k free symbols.
-        references: dict ``{label: callable(k_arr)}`` for overlay curves
-                    (e.g. ``{'Airy': lambda k: np.sqrt(np.tanh(k*H)/(k*H))}``).
-        nondimensionalise_by: tuple ``(label, expr)``; if given, the y-axis
-                              becomes ``y / expr`` and the label includes
-                              ``label`` (e.g. ``('gH', g*H)``).
-        squared:   if True, plot ``y**2`` instead of ``y`` (for ``C²/(gH)``).
+        mode:      `'phase_velocity'` (C = ω/k) or `'omega'`.
+        fixed_subs: dict `{Symbol: number}` for the non-k free symbols.
+        references: dict `{label: callable(k_arr)}` for overlay curves
+                    (e.g. `{'Airy': lambda k: np.sqrt(np.tanh(k*H)/(k*H))}`).
+        nondimensionalise_by: tuple `(label, expr)`; if given, the y-axis
+                              becomes `y / expr` and the label includes
+                              `label` (e.g. `('gH', g*H)`).
+        squared:   if True, plot `y**2` instead of `y` (for `C²/(gH)`).
         title:     optional plot title.
-        mode_labels: if given, list of length ``len(solutions)`` for the
-                     legend; otherwise ``mode 0, mode 1, …``.
+        mode_labels: if given, list of length `len(solutions)` for the
+                     legend; otherwise `mode 0, mode 1, …`.
         drop_zero_modes: if True (default), skip ω-solutions that are
                          identically zero (trivial constraint modes).
 
     Returns:
-        ``{'k', 'curves', 'figure', 'axis'}``.
+        `{'k', 'curves', 'figure', 'axis'}`.
     """
     plt = _pyplot()
     if ax is None:
@@ -198,30 +198,30 @@ def plot_hyperbolic_region_2d(M_x, M_t,
                               ):
     """2D color map of hyperbolicity over a chosen parameter pair.
 
-    Each ``(a_val, b_val)`` grid point is evaluated by:
+    Each `(a_val, b_val)` grid point is evaluated by:
 
-      1. Substituting all of ``fixed_subs`` plus ``{axis_a[0]: a_val,
-         axis_b[0]: b_val}`` into ``M_x`` and ``M_t``.
+      1. Substituting all of `fixed_subs` plus ``{axis_a[0]: a_val,
+         axis_b[0]: b_val}`` into `M_x` and `M_t`.
       2. Computing the generalised eigenvalues of the pencil
-         ``(M_x_num, M_t_num)`` via ``scipy.linalg.eig``.
+         `(M_x_num, M_t_num)` via `scipy.linalg.eig`.
       3. Filtering infinite eigenvalues (constraint modes); the state
          is **hyperbolic** iff every remaining eigenvalue has
-         ``|imag| < tol``.
+         `|imag| < tol`.
 
     Args:
         M_x, M_t: pencil matrices (sympy).
-        axis_a:   ``(symbol_a, lo, hi)`` for the x-axis parameter.
-        axis_b:   ``(symbol_b, lo, hi)`` for the y-axis parameter.
+        axis_a:   `(symbol_a, lo, hi)` for the x-axis parameter.
+        axis_b:   `(symbol_b, lo, hi)` for the y-axis parameter.
         fixed_subs: dict of values for every other free symbol in
-                    ``M_x`` and ``M_t``.
+                    `M_x` and `M_t`.
         n_a, n_b: grid resolution.
-        show:     ``'binary'`` (default — green=hyperbolic, red=non) or
-                  ``'imag_max'`` (color by ``max |Im λ|``).
+        show:     `'binary'` (default — green=hyperbolic, red=non) or
+                  `'imag_max'` (color by `max |Im λ|`).
         cmap:     optional matplotlib colormap name.
 
     Returns:
-        dict with ``a_grid``, ``b_grid``, ``is_hyperbolic`` (bool 2D
-        array), ``imag_max`` (float 2D array), ``figure``, ``axis``.
+        dict with `a_grid`, `b_grid`, `is_hyperbolic` (bool 2D
+        array), `imag_max` (float 2D array), `figure`, `axis`.
     """
     plt = _pyplot()
     if ax is None:

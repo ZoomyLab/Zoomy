@@ -1,17 +1,17 @@
 """vtk_to_gif — bundle a VTK snapshot series into an mp4 / gif.
 
-Reads either a ``.pvd`` index, a ``.vtk.series`` file, or a directory
-of ``snap_*.vtu`` snapshots; renders each frame with matplotlib via
-``zoomy_core.postprocessing.plotting.plot_2d_mesh`` (so the look stays
+Reads either a `.pvd` index, a `.vtk.series` file, or a directory
+of `snap_*.vtu` snapshots; renders each frame with matplotlib via
+`zoomy_core.postprocessing.plotting.plot_2d_mesh` (so the look stays
 in sync with the rest of the codebase); then bundles the PNG frames
-with ``ffmpeg`` into an mp4 (default) and optionally a gif.
+with `ffmpeg` into an mp4 (default) and optionally a gif.
 
-Default field is ``h``.  The color limits are computed once across
+Default field is `h`.  The color limits are computed once across
 all frames so the colorbar is stable through the animation.
 
-Pass ``--right`` to render two series **side-by-side** in each frame
+Pass `--right` to render two series **side-by-side** in each frame
 (O1 vs O2 η-MUSCL, two solvers, …) — both must share the same
-``cells``/``points`` layout and ideally the same frame count.
+`cells`/`points` layout and ideally the same frame count.
 
 Examples
 --------
@@ -63,7 +63,7 @@ from zoomy_core.postprocessing.plotting import (  # noqa: E402
 
 
 def _resolve_inputs(in_path):
-    """Resolve a --in / --right path to ``(frame_meshio_paths, times, base_dir)``."""
+    """Resolve a --in / --right path to `(frame_meshio_paths, times, base_dir)`."""
     in_path = os.path.abspath(in_path)
     if os.path.isdir(in_path):
         # Sorted .vtu files; times unknown -> use frame index.
@@ -82,7 +82,7 @@ def _resolve_inputs(in_path):
 
 
 def _scan_field_range(frame_paths, field):
-    """One-pass min/max of ``field`` across every frame."""
+    """One-pass min/max of `field` across every frame."""
     fmin, fmax = np.inf, -np.inf
     for p in frame_paths:
         m = meshio.read(p)
@@ -111,7 +111,7 @@ def _render_frame(
     right_path=None, right_t=None, right_label=None,
 ):
     """Render one PNG frame — single panel, or side-by-side if
-    ``right_path`` is given."""
+    `right_path` is given."""
     mL = read_vtk_or_series(frame_path, verbose=False)
     if right_path is None:
         fig, ax = plt.subplots(figsize=figsize)

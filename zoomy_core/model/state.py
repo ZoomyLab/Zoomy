@@ -2,13 +2,13 @@
 
 Per the new design:
 
-* :class:`StateSpace` declares **only coordinates** — `t, x, y (if
+* `StateSpace` declares **only coordinates** — `t, x, y (if
   dim >= 2), z`.  Parameters (`g`, `rho`, `nu`, `lambda`) live on
   the `Model`, not here.  σ-frame coordinates (`zeta`, `zeta_ref`)
   are registered later by `SigmaTransform` when it is applied; the
   pristine StateSpace knows nothing about σ-frame.
-* :class:`MassMomentum` owns ALL physics state (flow fields ``u, v,
-  w, p``; stress tensor ``tau``; free-surface geometry ``h, b, eta``)
+* `MassMomentum` owns ALL physics state (flow fields ``u, v,
+  w, p``; stress tensor `tau`; free-surface geometry `h, b, eta`)
   and builds the continuity / momentum.x / momentum.z balance
   equations.  Its constructor takes the Model's `parameters` Zstruct
   so the gravity / density Symbols are the *same* Symbol identity as
@@ -31,15 +31,15 @@ __all__ = ["StateSpace", "MassMomentum"]
 
 
 class _MomentumProxy:
-    """Vector-of-equations view over a :class:`Model`'s flat
-    ``momentum_x`` / ``momentum_y`` / ``momentum_z`` equation entries.
+    """Vector-of-equations view over a `Model`'s flat
+    `momentum_x` / `momentum_y` / `momentum_z` equation entries.
 
-    Restores the legacy ``model.momentum.x`` access from the old
-    ``System`` API without changing how the Model stores equations
-    internally (which remains flat under ``_equations``).  Exposes
-    ``.remove(axis)`` so a caller can drop a single component — e.g.
-    ``model.momentum.remove("z")`` after the hydrostatic pressure
-    elimination, where ``momentum_z`` has served its purpose.
+    Restores the legacy `model.momentum.x` access from the old
+    `System` API without changing how the Model stores equations
+    internally (which remains flat under `_equations`).  Exposes
+    `.remove(axis)` so a caller can drop a single component — e.g.
+    `model.momentum.remove("z")` after the hydrostatic pressure
+    elimination, where `momentum_z` has served its purpose.
     """
 
     __slots__ = ("_m", "_axes")
@@ -81,12 +81,12 @@ class _MomentumProxy:
         return self._get("z")
 
     def remove(self, axis):
-        """Drop the ``momentum_{axis}`` equation from the model.
+        """Drop the `momentum_{axis}` equation from the model.
 
-        Calls through to :meth:`Model.remove_equation` — the legacy
+        Calls through to `Model.remove_equation` — the legacy
         feature is preserved on the basemodel; this proxy just spells
         the axis-component lookup so callers can write
-        ``m.momentum.remove("z")``.
+        `m.momentum.remove("z")`.
         """
         self._m.remove_equation(f"momentum_{axis}")
         return self
@@ -96,8 +96,8 @@ class StateSpace:
     """Coordinate scaffold — t, x, [y,] z.
 
     Carries only the spatial / temporal coordinate Symbols.  No flow
-    fields, no parameters, no σ-frame.  σ-frame coordinates (``zeta``,
-    ``zeta_ref``) get attached by :class:`SigmaTransform` when applied.
+    fields, no parameters, no σ-frame.  σ-frame coordinates (`zeta`,
+    `zeta_ref`) get attached by `SigmaTransform` when applied.
     """
 
     def __init__(self, dimension=2):
@@ -137,8 +137,8 @@ class MassMomentum:
     """The free-surface incompressible mass + momentum balance: owns the flow, depth, bathymetry, free-surface and stress-tensor fields and builds the continuity and momentum equations.
 
     Args:
-        state: :class:`StateSpace` coordinate scaffold, read-only here.
-        parameters: The Model's parameter ``Zstruct``; must contain ``g`` and ``rho``.
+        state: `StateSpace` coordinate scaffold, read-only here.
+        parameters: The Model's parameter `Zstruct`; must contain `g` and `rho`.
     """
 
     def __init__(self, state, parameters):
@@ -181,25 +181,25 @@ class MassMomentum:
 
     # ── Model attachment helper ────────────────────────────────────
     def register_on(self, model):
-        """Register continuity, ``momentum.x`` (and ``.y`` if 3D),
-        ``momentum.z``, and the trivial ``∂_t b = 0`` bottom equation
-        on ``model`` — and expose ``model.momentum`` as a vector-of-
-        equations proxy so the legacy ``model.momentum.x`` /
-        ``model.momentum.z`` access pattern (from the old
-        :class:`System` API in ``models/legacy/derived_system.py``)
+        """Register continuity, `momentum.x` (and `.y` if 3D),
+        `momentum.z`, and the trivial `∂_t b = 0` bottom equation
+        on `model` — and expose `model.momentum` as a vector-of-
+        equations proxy so the legacy `model.momentum.x` /
+        `model.momentum.z` access pattern (from the old
+        `System` API in `models/legacy/derived_system.py`)
         keeps working.
 
-        After ``register_on(model)``:
+        After `register_on(model)`:
 
-        * ``model.continuity`` — :class:`Equation` for the continuity
+        * `model.continuity` — `Equation` for the continuity
           balance.
-        * ``model.momentum.x`` / ``model.momentum.z`` (and ``.y`` in
-          3D) — :class:`Equation` per axis.
-        * ``model.momentum.remove("z")`` — drop a single axis (calls
-          through to :meth:`Model.remove_equation`).
-        * ``model.bottom`` — trivial ``∂_t b = 0`` leaf.
+        * `model.momentum.x` / `model.momentum.z` (and `.y` in
+          3D) — `Equation` per axis.
+        * `model.momentum.remove("z")` — drop a single axis (calls
+          through to `Model.remove_equation`).
+        * `model.bottom` — trivial `∂_t b = 0` leaf.
 
-        Returns ``self`` so the construction chains:
+        Returns `self` so the construction chains:
 
             m.src = MassMomentum(state, params, h_positive=True).register_on(m)
         """

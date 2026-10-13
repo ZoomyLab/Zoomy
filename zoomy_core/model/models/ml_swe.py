@@ -1,6 +1,6 @@
-"""Multilayer shallow water with mass exchange (ML-SWE), state ``[b, h, q_1 ... q_N]`` with
+"""Multilayer shallow water with mass exchange (ML-SWE), state `[b, h, q_1 ... q_N]` with
 layer heights fixed as fractions of the total depth. The interface mass fluxes follow from the
-layer-fraction constraint; the model is lifted to a SystemModel via ``SystemModel.from_model``.
+layer-fraction constraint; the model is lifted to a SystemModel via `SystemModel.from_model`.
 """
 from __future__ import annotations
 
@@ -26,9 +26,9 @@ zeta = sp.Symbol("zeta", real=True)
 
 
 class MLSWE(BaseModel):
-    """Multilayer SWE with ``n_layers`` layers that move with the free surface, derived layer by
+    """Multilayer SWE with `n_layers` layers that move with the free surface, derived layer by
     layer with kinematic interface conditions. The interface transfer velocity is upwinded or
-    averaged through the ``closures`` (``UpwindInterface`` / ``MeanInterface``).
+    averaged through the `closures` (`UpwindInterface` / `MeanInterface`).
 
     References:
         Audusse et al. 2011, https://doi.org/10.1051/m2an/2010036
@@ -50,7 +50,7 @@ class MLSWE(BaseModel):
             "Transfer velocity u* at internal interfaces.")
 
     def derive_model(self):
-        """Derive the per-layer balances, close the interface mass fluxes ``G`` from the
+        """Derive the per-layer balances, close the interface mass fluxes `G` from the
         fraction constraint, and assemble the model. Returns the derivation model with
         continuity and one momentum equation per layer and direction.
         """
@@ -60,14 +60,14 @@ class MLSWE(BaseModel):
         horiz = (x,) if dim == 2 else (x, y)
         HNAME = {x: "u", y: "v"}; DERIV = {x: d.x, y: d.y}; CN = {x: "x", y: "y"}
         def qname(xd, ell):
-            """Name of the discharge of layer ``ell`` in direction ``xd``."""
+            """Name of the discharge of layer `ell` in direction `xd`."""
             return f"q_{ell}" if dim == 2 else f"q_{CN[xd]}_{ell}"
         def shat(xd, ell):
-            """Name of the velocity coefficient of layer ``ell`` in direction ``xd``."""
+            """Name of the velocity coefficient of layer `ell` in direction `xd`."""
             return (rf"\hat{{u}}_{ell}" if dim == 2
                     else rf"\hat{{{HNAME[xd]}}}_{ell}")
         def sname(xd, ell):
-            """Name of the shear-stress field of layer ``ell`` in direction ``xd``."""
+            """Name of the shear-stress field of layer `ell` in direction `xd`."""
             return f"tau_{ell}" if dim == 2 else f"tau_{CN[xd]}z_{ell}"
         values = {"g": 9.81, "rho": 1.0, "nu": 0.0, "lambda_s": 0.0}
         for j in range(1, N):
@@ -93,8 +93,8 @@ class MLSWE(BaseModel):
         from zoomy_core.model.models.closures import apply_layer_stress_closures
 
         def derive_layer(ell):
-            """Return the depth-averaged continuity and per-direction momentum of layer ``ell``
-            as ``(cont, {direction: momentum})``.
+            """Return the depth-averaged continuity and per-direction momentum of layer `ell`
+            as `(cont, {direction: momentum})`.
             """
             z_bot, z_top, h_l = ifaces[ell - 1], ifaces[ell], hl[ell - 1]
             G_bot, G_top = Gf[ell - 1], Gf[ell]
@@ -115,8 +115,8 @@ class MLSWE(BaseModel):
                     + gl * DERIV[xd](b + H) - d.z(tau[xd]) / rl)
 
             def _kbc(iface, G):
-                """Kinematic boundary condition of layer ``ell`` at ``iface`` with interface
-                mass flux ``G``.
+                """Kinematic boundary condition of layer `ell` at `iface` with interface
+                mass flux `G`.
                 """
                 kw = dict(w=wl, u=uvel[0], interface=iface, rho=rl,
                           mass_flux=(G if G != 0 else None))
@@ -141,7 +141,7 @@ class MLSWE(BaseModel):
             par_ns = SimpleNamespace(rho=rl, nu=nu_s, lambda_s=lam_s)
 
             def _state(at, *, alias=None, btag=None):
-                """Closure state of layer ``ell`` evaluated at the vertical location ``at``."""
+                """Closure state of layer `ell` evaluated at the vertical location `at`."""
                 fields = {"u": getattr(ml.functions, f"u_{ell}"),
                           "w": getattr(ml.functions, f"w_{ell}")}
                 if dim == 3:
@@ -231,8 +231,8 @@ class MLSWE(BaseModel):
         iface = interface_closure(self.closures)
 
         def _ustar(a, xd):
-            """Transfer velocity ``u*`` shared by the layers adjacent to internal interface
-            ``a`` in direction ``xd``.
+            """Transfer velocity `u*` shared by the layers adjacent to internal interface
+            `a` in direction `xd`.
             """
             below, above = u_lc[a][xd], u_lc[a + 1][xd]
             if iface is not None:

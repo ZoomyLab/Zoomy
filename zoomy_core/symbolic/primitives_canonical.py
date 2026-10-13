@@ -2,17 +2,17 @@
 
 These primitives implement structural rewrites that preserve
 mathematical equality without firing any calculus rule.  They use only
-:meth:`sympy.Basic.xreplace` and explicit pattern matching on the
-expression tree — never ``.doit()``, ``sp.simplify``, or
-``sp.expand`` outside of carefully-scoped Mul-over-Add distribution.
+`sympy.Basic.xreplace` and explicit pattern matching on the
+expression tree — never `.doit()`, `sp.simplify`, or
+`sp.expand` outside of carefully-scoped Mul-over-Add distribution.
 
-Each primitive is a callable ``primitive(expr) -> expr``.  Composition
-with :class:`zoomy_core.model.models.ins_generator.Operation`-style
+Each primitive is a callable `primitive(expr) -> expr`.  Composition
+with `zoomy_core.model.models.ins_generator.Operation`-style
 wrappers happens elsewhere; here we keep the pure-function
 implementations so they can be unit-tested in isolation.
 
 Functions in this module are lifted verbatim from
-``zoomy_core.model.models.ins_generator`` (see file header for the
+`zoomy_core.model.models.ins_generator` (see file header for the
 specific source-line range each one came from).  No logic changes —
 just relocation behind a documented primitive interface.
 """
@@ -43,16 +43,16 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 def protect_integrals(expr, *, also_derivative_of_integral=False):
-    """Replace every ``Integral`` (and optionally
-    ``Derivative(Integral(...), ...)``) atom with a fresh ``Dummy``
-    and return ``(protected_expr, restore_map)``.
+    """Replace every `Integral` (and optionally
+    `Derivative(Integral(...), ...)`) atom with a fresh `Dummy`
+    and return `(protected_expr, restore_map)`.
 
-    Restore via ``protected_expr.xreplace(restore_map)``.  Used to run
-    arithmetic (``sp.expand`` Mul-over-Add) on the expression's outer
+    Restore via `protected_expr.xreplace(restore_map)`.  Used to run
+    arithmetic (`sp.expand` Mul-over-Add) on the expression's outer
     structure without sympy fragmenting the integrand.
 
-    Lifted from ``_expand_preserve_integrals`` (ins_generator.py:4124)
-    and the protect-helper inside ``_simplify_preserve_integrals``
+    Lifted from `_expand_preserve_integrals` (ins_generator.py:4124)
+    and the protect-helper inside `_simplify_preserve_integrals`
     (ins_generator.py:4434).
     """
     if not isinstance(expr, sp.Basic):
@@ -85,11 +85,11 @@ def protect_integrals(expr, *, also_derivative_of_integral=False):
 # ---------------------------------------------------------------------------
 
 def alpha_rename(expr):
-    """Rename every ``Integral`` 's bound variable to a depth-keyed
+    """Rename every `Integral` 's bound variable to a depth-keyed
     canonical Dummy.
 
-    Lifted verbatim from ``_canonicalize_integral_dummies``
-    (ins_generator.py:4154).  Pure ``xreplace``; no math change —
+    Lifted verbatim from `_canonicalize_integral_dummies`
+    (ins_generator.py:4154).  Pure `xreplace`; no math change —
     alpha-equivalence of bound variables is a definitional property
     of the integral.
     """
@@ -153,16 +153,16 @@ def alpha_rename(expr):
 # ---------------------------------------------------------------------------
 
 def distribute_mul_over_add(expr):
-    """``c·(a+b) → c·a + c·b`` — ring-axiom distribution.
+    """`c·(a+b) → c·a + c·b` — ring-axiom distribution.
 
-    Uses ``sp.expand`` with all non-Mul branches disabled so the only
+    Uses `sp.expand` with all non-Mul branches disabled so the only
     rewrite that fires is Mul-over-Add distribution.  Integrals are
     protected during the expansion so their integrands stay intact
-    (sympy's ``expand`` would otherwise fragment ``Integral(f+g, lim)``
-    into ``Integral(f, lim) + Integral(g, lim)`` — that's a separate
-    primitive, ``split_integral_over_add``).
+    (sympy's `expand` would otherwise fragment `Integral(f+g, lim)`
+    into `Integral(f, lim) + Integral(g, lim)` — that's a separate
+    primitive, `split_integral_over_add`).
 
-    Lifted from ``_expand_preserve_integrals`` (ins_generator.py:4124).
+    Lifted from `_expand_preserve_integrals` (ins_generator.py:4124).
     """
     if not isinstance(expr, sp.Basic):
         return expr
@@ -186,12 +186,12 @@ def distribute_mul_over_add(expr):
 # ---------------------------------------------------------------------------
 
 def split_integral_over_add(expr):
-    """``∫(f+g) dv → ∫f dv + ∫g dv`` — linearity of the integral.
+    """`∫(f+g) dv → ∫f dv + ∫g dv` — linearity of the integral.
 
-    Distributes through ``Derivative(Integral(...), v)`` by linearity
+    Distributes through `Derivative(Integral(...), v)` by linearity
     of the derivative.  Outer multiplicative factors stay attached.
 
-    Lifted from ``_split_integrals_expr`` (ins_generator.py:4217).
+    Lifted from `_split_integrals_expr` (ins_generator.py:4217).
     """
     if not isinstance(expr, sp.Basic):
         return expr
@@ -229,15 +229,15 @@ def split_integral_over_add(expr):
 # ---------------------------------------------------------------------------
 
 def merge_integrals_over_add(expr):
-    """Combine sibling Integrals with matching ``(limits, deriv-wrapper)``
-    signature into a single ``Integral(Σ c_i · f_i, lim)``.
+    """Combine sibling Integrals with matching `(limits, deriv-wrapper)`
+    signature into a single `Integral(Σ c_i · f_i, lim)`.
 
-    Inverse of :func:`split_integral_over_add`.  An outer factor moves
+    Inverse of `split_integral_over_add`.  An outer factor moves
     inside the integral only if it doesn't depend on the integration
     variable — otherwise the factor stays out (passthrough); moving it
     inside would change the math.
 
-    Lifted from ``_merge_integrals_expr`` (ins_generator.py:4263).
+    Lifted from `_merge_integrals_expr` (ins_generator.py:4263).
     """
     if not isinstance(expr, sp.Basic):
         return expr
@@ -326,17 +326,17 @@ def merge_integrals_over_add(expr):
 # ---------------------------------------------------------------------------
 
 def kill_zero_length_integral(expr):
-    """``Integral(_, (var, a, a)) → 0`` — structural equality only.
+    """`Integral(_, (var, a, a)) → 0` — structural equality only.
 
     This is a tightened version of the legacy
-    ``_kill_zero_length_integrals`` (ins_generator.py:4366) which fell
-    back to ``sp.simplify(lo - hi) == 0``.  ``sp.simplify`` can fire
+    `_kill_zero_length_integrals` (ins_generator.py:4366) which fell
+    back to `sp.simplify(lo - hi) == 0`.  `sp.simplify` can fire
     arbitrary rules on the bounds — for the redesign we accept only
-    structural equality (``lo == hi`` or ``lo - hi`` reduces to
-    ``S.Zero`` via sympy's ``Add`` canonicalisation alone, no
+    structural equality (`lo == hi` or `lo - hi` reduces to
+    `S.Zero` via sympy's `Add` canonicalisation alone, no
     further-simplification pass).
 
-    Callers who want a deeper bound match must apply a ``Subst`` rule
+    Callers who want a deeper bound match must apply a `Subst` rule
     that makes the bounds structurally equal first.
     """
     if not isinstance(expr, sp.Basic):
@@ -362,13 +362,13 @@ def kill_zero_length_integral(expr):
 # ---------------------------------------------------------------------------
 
 def zero_derivative_of_free_symbol(expr):
-    """``∂_v sym → 0`` when ``sym`` is a free ``Symbol`` distinct from
+    """`∂_v sym → 0` when `sym` is a free `Symbol` distinct from
     every differentiation variable.
 
-    These appear as Leibniz boundary residuals (``∂_x z`` when ``z``
+    These appear as Leibniz boundary residuals (`∂_x z` when `z`
     is a coordinate, not a function).  Sympy doesn't auto-reduce.
 
-    Lifted verbatim from ``_kill_free_derivatives`` (ins_generator.py:4387).
+    Lifted verbatim from `_kill_free_derivatives` (ins_generator.py:4387).
     """
     if not isinstance(expr, sp.Basic):
         return expr
@@ -396,22 +396,22 @@ def zero_derivative_of_free_symbol(expr):
 # ---------------------------------------------------------------------------
 
 def un_subs(expr):
-    """Unwrap every ``Subs(f, var, val)`` whose inner is safe to
-    ``xreplace(var → val)``.
+    """Unwrap every `Subs(f, var, val)` whose inner is safe to
+    `xreplace(var → val)`.
 
     Safety = none of:
 
-    * ``var`` appears as a ``Derivative`` differentiation variable in
-      ``f`` (would commit to chain-rule-through-``val`` ambiguity).
-    * ``var`` is the integration variable of a nested ``Integral`` in
-      ``f`` (would shadow the binder and produce nonsense limits).
-    * ``var`` is the binding variable of a nested ``Subs`` in ``f``
+    * `var` appears as a `Derivative` differentiation variable in
+      `f` (would commit to chain-rule-through-`val` ambiguity).
+    * `var` is the integration variable of a nested `Integral` in
+      `f` (would shadow the binder and produce nonsense limits).
+    * `var` is the binding variable of a nested `Subs` in `f`
       (same shadowing concern).
 
-    Lifted verbatim from ``_resolve_subs_safe`` (ins_generator.py:4539).
+    Lifted verbatim from `_resolve_subs_safe` (ins_generator.py:4539).
     The redesign promotes this to a primitive — the previously
-    implicit calls (inside ``Expression.apply``, ``EvaluateIntegrals``,
-    ``ProjectBasisIntegrals``) all become explicit user steps.
+    implicit calls (inside `Expression.apply`, `EvaluateIntegrals`,
+    `ProjectBasisIntegrals`) all become explicit user steps.
     """
     if not isinstance(expr, sp.Basic) or not expr.has(sp.Subs):
         return expr
@@ -443,10 +443,10 @@ def un_subs(expr):
 # ---------------------------------------------------------------------------
 
 def drop_zero_integrand(expr):
-    """``Integral(0, …) → 0`` — structural.
+    """`Integral(0, …) → 0` — structural.
 
-    Lifted from the ``∫0`` branch of ``SimplifyIntegrals._leaf_sp``
-    (ins_generator.py:2371) and ``IsolateBasisIntegrand``
+    Lifted from the `∫0` branch of `SimplifyIntegrals._leaf_sp`
+    (ins_generator.py:2371) and `IsolateBasisIntegrand`
     (ins_generator.py:2698).
     """
     if not isinstance(expr, sp.Basic):
@@ -459,9 +459,9 @@ def drop_zero_integrand(expr):
 
 
 def drop_zero_derivative_inner(expr):
-    """``Derivative(0, …) → 0`` — structural.
+    """`Derivative(0, …) → 0` — structural.
 
-    Lifted from the ``∂(0)`` branch of ``_evaluate_linear_derivatives``
+    Lifted from the `∂(0)` branch of `_evaluate_linear_derivatives`
     (ins_generator.py:4621).
     """
     if not isinstance(expr, sp.Basic):
@@ -474,11 +474,11 @@ def drop_zero_derivative_inner(expr):
 
 
 def constant_integrand(expr):
-    """``∫_a^b c dvar → c·(b − a)`` when integrand has no ``var``.
+    """`∫_a^b c dvar → c·(b − a)` when integrand has no `var`.
 
     Lifted from the constant-integrand branch of
-    ``SimplifyIntegrals._leaf_sp`` (ins_generator.py:2373) and
-    ``IsolateBasisIntegrand`` (ins_generator.py:2698).
+    `SimplifyIntegrals._leaf_sp` (ins_generator.py:2373) and
+    `IsolateBasisIntegrand` (ins_generator.py:2698).
     """
     if not isinstance(expr, sp.Basic):
         return expr

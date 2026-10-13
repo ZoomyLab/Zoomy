@@ -2,21 +2,23 @@
 
 Used in tests + the slim walkthrough to verify the primitive layer
 never silently fires a math rule.  When the guard is active, calling
-``.doit()`` on any sympy ``Basic`` object raises
-``AutoEvalForbidden`` with a stack trace pointing at the offender.
+`.doit()` on any sympy `Basic` object raises
+`AutoEvalForbidden` with a stack trace pointing at the offender.
 
-Usage::
+Usage:
 
+```
     from zoomy_core.symbolic.auto_eval_guard import AutoEvalGuard
 
     with AutoEvalGuard():
         # Any .doit() call here will raise.
         ...
+```
 
-The guard also bans ``sp.simplify``, ``sp.cancel``, ``sp.together``,
-``sp.factor``, ``sp.collect``, ``sp.diff``, ``sp.integrate`` — the
+The guard also bans `sp.simplify`, `sp.cancel`, `sp.together`,
+`sp.factor`, `sp.collect`, `sp.diff`, `sp.integrate` — the
 non-structural calls the redesign forbids inside the symbolic
-package.  ``sp.expand`` is permitted (Canonicalise uses it) — restrict
+package.  `sp.expand` is permitted (Canonicalise uses it) — restrict
 its kwargs at call sites instead.
 """
 
@@ -30,7 +32,7 @@ class AutoEvalForbidden(RuntimeError):
 
     The redesign's invariant is: every math rule is invoked by an
     explicit primitive.  Sympy's auto-evaluation calls
-    (``.doit()``, ``sp.simplify``, etc.) bypass that surface and
+    (`.doit()`, `sp.simplify`, etc.) bypass that surface and
     cause subtle order-of-operations bugs.  The guard makes any such
     call a hard failure.
     """
@@ -46,7 +48,7 @@ def _make_banned(name: str):
 
 
 class AutoEvalGuard:
-    """Monkeypatch ``sympy.Basic.doit`` and the eval-style sympy
+    """Monkeypatch `sympy.Basic.doit` and the eval-style sympy
     helpers to raise.  Restored on exit.
     """
 

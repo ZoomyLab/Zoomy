@@ -1,6 +1,6 @@
-"""Regenerate the shipped ``SystemModel`` cache (``python -m
+"""Regenerate the shipped `SystemModel` cache (``python -m
 zoomy_core.systemmodel.build_prebuilt_cache``).
-Writes the pickled default models into ``zoomy_core/systemmodel/_prebuilt/`` so a fresh install
+Writes the pickled default models into `zoomy_core/systemmodel/_prebuilt/` so a fresh install
 builds instantly.
 """
 from __future__ import annotations
@@ -11,7 +11,7 @@ import time
 
 
 def default_models():
-    """Yield ``(label, factory)`` for the default model configurations that ship prebuilt."""
+    """Yield `(label, factory)` for the default model configurations that ship prebuilt."""
     from zoomy_core.model.models.swe import SWE
     from zoomy_core.model.models.sme import SME
     from zoomy_core.model.models.vam import VAM

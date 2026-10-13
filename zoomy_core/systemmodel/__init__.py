@@ -1,5 +1,5 @@
-"""Runtime operator-form PDE system (``SystemModel``), built from a declarative ``Model`` via
-``SystemModel.from_model``.
+"""Runtime operator-form PDE system (`SystemModel`), built from a declarative `Model` via
+`SystemModel.from_model`.
 """
 from zoomy_core.systemmodel.system_model import (
     SystemModel,

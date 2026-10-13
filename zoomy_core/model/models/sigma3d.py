@@ -3,13 +3,14 @@ with the divergence constraint integrated against the kinematic BCs to give the
 EXACT height-evolution equation, but WITHOUT any velocity ansatz / moment
 projection.  The flow stays 3-D; the single unclosed object — the vertical
 integral — is substituted into an auxiliary variable whose per-step value is
-supplied by a backend "integrate over z" (the same machinery ``project_from_3d``
+supplied by a backend "integrate over z" (the same machinery `project_from_3d`
 uses).
 
-Verified derivation (``diff = 0`` against the framework, 2026-06-13):
+Verified derivation (`diff = 0` against the framework, 2026-06-13):
 
-* height equation (φ₀-moment of continuity against the two KBCs)::
+* height equation (φ₀-moment of continuity against the two KBCs):
 
+```
       ∂_t h + ∂_x(h·U) = 0 ,        U = ∫₀¹ ũ dζ           (depth-mean velocity)
 
   IMPORTANT: ``U`` is the depth-MEAN (the ζ-independent ``h`` factors out of the
@@ -17,32 +18,37 @@ Verified derivation (``diff = 0`` against the framework, 2026-06-13):
   MUST be substituted into ``U`` BEFORE ``Simplify`` — otherwise a spurious
   ``+U·∂_x h`` term survives (``Simplify`` illegally pulls ``h`` inside
   ``∂_x(∫ũ dζ)``).
+```
 
 * the full system, in CONSERVATIVE σ-form, is a clean conservation law over
-  ``(x, ζ)`` with the contravariant (σ-relative) vertical velocity
-  ``h·ω = w̃ − ∂_t z − ũ ∂_x z``, ``z = b + h ζ``::
+  `(x, ζ)` with the contravariant (σ-relative) vertical velocity
+  `h·ω = w̃ − ∂_t z − ũ ∂_x z`, `z = b + h ζ`:
 
+  ```
       ∂_t h     + ∂_x(h u)            + ∂_ζ(h ω)                            = 0
       ∂_t(h u)  + ∂_x(h u² + g h²/2)  + ∂_ζ(h u ω) + g h ∂_x b − e_x g h
                                                     − (1/ρ) ∂_ζ τ̃_xz       = 0
+  ```
 
-  ``ω(0)=ω(1)=0`` ⟺ the bed / free-surface KBCs, so the σ metric terms are
-  ABSORBED into ``∂_ζ(h q ω)`` (zero boundary flux) — ζ is simply a third FLUX
-  direction, no ALE/metric source class is needed.  ``U = ∫₀¹ u dζ`` (full
-  column) drives the height flux; ``ω`` is a RUNNING column integral diagnosed
+  `ω(0)=ω(1)=0` ⟺ the bed / free-surface KBCs, so the σ metric terms are
+  ABSORBED into `∂_ζ(h q ω)` (zero boundary flux) — ζ is simply a third FLUX
+  direction, no ALE/metric source class is needed.  `U = ∫₀¹ u dζ` (full
+  column) drives the height flux; `ω` is a RUNNING column integral diagnosed
   from continuity — both are the same per-backend integrate-over-z (full vs
   running).
 
-The aux is introduced with EXISTING machinery — no ``promote_to_aux`` op::
+The aux is introduced with EXISTING machinery — no `promote_to_aux` op:
 
+```
     m.add_equation("U", sp.Eq(U, ∫ũ dζ), group="aux")   # records the definition
     m.mass.apply({∫ũ dζ: U})                            # U auto-lands in Qaux
+```
 
-``Sigma3D(...).derive_model()`` builds the declarative model;
-``SystemModel.from_model(Sigma3D(...))`` returns the height-reduced
-``[b, h] + U`` SystemModel (the
-3-D momentum is stashed on ``self`` for the forthcoming 3-D extraction, which
-needs the vertical added to the extractor's ``space``).
+`Sigma3D(...).derive_model()` builds the declarative model;
+`SystemModel.from_model(Sigma3D(...))` returns the height-reduced
+`[b, h] + U` SystemModel (the
+3-D momentum is stashed on `self` for the forthcoming 3-D extraction, which
+needs the vertical added to the extractor's `space`).
 """
 from __future__ import annotations
 
@@ -67,11 +73,11 @@ class Sigma3D(BaseModel):
     """3-D mass+momentum → σ-map → column-integrated height equation, keeping the
     velocity profile UNCLOSED as a per-backend vertical integral.
 
-    State handed to the SystemModel (v1): ``[b, h]``, with the depth-mean
-    velocity ``U`` exposed as an auxiliary defined by ``U = ∫₀¹ ũ dζ`` (and the
-    3-D field ``ũ`` carried as the aux it is integrated from).  The 3-D momentum
+    State handed to the SystemModel (v1): `[b, h]`, with the depth-mean
+    velocity `U` exposed as an auxiliary defined by `U = ∫₀¹ ũ dζ` (and the
+    3-D field `ũ` carried as the aux it is integrated from).  The 3-D momentum
     advance becomes SystemModel state once the extractor treats ζ as a flux
-    direction (attached to the derivation as ``m.momentum_sigma_x`` / ``m.omega_def``).
+    direction (attached to the derivation as `m.momentum_sigma_x` / `m.omega_def`).
     """
 
     _finalize_lazy = True
@@ -285,10 +291,10 @@ class Sigma3D(BaseModel):
         """Translate the bed/surface CLOSURES into ζ-face solver BCs (the user
         never writes σ-specific strings).  Newtonian bulk ⇒ ζζ viscous diffusion
         (already in the PDE); NavierSlip bed ⇒ a Robin viscous-flux BC
-        ``∂_ζ mom = (h²/ν)·λ_s·u_t`` (small-slope/flat: ``u_t = mom/h`` →
-        ``λ_s·h·mom/ν``; the slope-aware ``u_t`` comes from
-        ``ClosureState.get_normal_tangential``); StressFree surface ⇒ zero viscous
-        flux (``gradient=0``).  Delivered through the generalized :class:`Flux`."""
+        `∂_ζ mom = (h²/ν)·λ_s·u_t` (small-slope/flat: `u_t = mom/h` →
+        `λ_s·h·mom/ν`; the slope-aware `u_t` comes from
+        `ClosureState.get_normal_tangential`); StressFree surface ⇒ zero viscous
+        flux (`gradient=0`).  Delivered through the generalized `Flux`."""
         from zoomy_core.model.models.closures import (
             NavierSlip, RoughWall, StressFree)
         from zoomy_core.model.boundary_conditions import Flux

@@ -65,8 +65,8 @@ ELLIPTIC_RESTART_CAP = 1000
 
 
 def elliptic_restart(n_unknowns: int) -> int:
-    """GMRES restart for an elliptic block of ``n_unknowns``: the full Krylov space
-    ``min(n, CAP)``, bounded below by ``MIN``, so it moves with the problem size.
+    """GMRES restart for an elliptic block of `n_unknowns`: the full Krylov space
+    `min(n, CAP)`, bounded below by `MIN`, so it moves with the problem size.
 
     References:
         Saad, Schultz 1986, https://doi.org/10.1137/0907058
@@ -83,13 +83,13 @@ class ConstantResolutionError(ValueError):
 
 
 def _depth_symbol(nsm):
-    """The depth state symbol ``h`` of ``nsm``, or None."""
+    """The depth state symbol `h` of `nsm`, or None."""
     return next((s for s in getattr(nsm, "state", ()) if str(s) == "h"), None)
 
 
 def eigen_wave_speed_floor(nsm):
-    """Read ``eps_h`` back from the ``Max(eps_h, h)`` floor that ``regularize_pow``
-    wrote into ``nsm.eigenvalues``; returns ``(value, provenance)`` and raises on
+    """Read `eps_h` back from the `Max(eps_h, h)` floor that `regularize_pow`
+    wrote into `nsm.eigenvalues`; returns `(value, provenance)` and raises on
     several different floors.
     """
     ev = getattr(nsm, "eigenvalues", None)
@@ -119,8 +119,8 @@ def eigen_wave_speed_floor(nsm):
 
 
 def kp_eps(nsm):
-    """The Kurganov-Petrova desingularization ``eps``, resolved as
-    ``desingularize_hinv`` resolves it; returns ``(value, provenance)``.
+    """The Kurganov-Petrova desingularization `eps`, resolved as
+    `desingularize_hinv` resolves it; returns `(value, provenance)`.
 
     References:
         Kurganov, Petrova 2007, https://doi.org/10.4310/CMS.2007.v5.n1.a6
@@ -141,8 +141,8 @@ def kp_eps(nsm):
 
 @dataclasses.dataclass(frozen=True)
 class MarchConstants:
-    """The emitted named values and where each came from: ``values`` maps name to number
-    (``None``: inactive, its comparison is not emitted) and ``provenance`` maps the
+    """The emitted named values and where each came from: `values` maps name to number
+    (`None`: inactive, its comparison is not emitted) and `provenance` maps the
     same names to a source string.
     """
 
@@ -160,7 +160,7 @@ class MarchConstants:
                 f"unpaired: {sorted(missing)}")
 
     def symbol(self, name: str) -> sp.Symbol:
-        """The sympy symbol a comparison site uses for ``name``; raises if the name is
+        """The sympy symbol a comparison site uses for `name`; raises if the name is
         unknown or inactive.
         """
         if name not in self.values:
@@ -175,11 +175,11 @@ class MarchConstants:
         return sp.Symbol(name)
 
     def active(self, name: str) -> bool:
-        """Whether ``name`` has a value."""
+        """Whether `name` has a value."""
         return self.values.get(name) is not None
 
     def assigns(self, *names) -> tuple:
-        """``Assign`` statements defining the named constants, in order; the only float
+        """`Assign` statements defining the named constants, in order; the only float
         literals in the emitted procedure.
         """
         from zoomy_core.solver.ir import Assign
@@ -214,13 +214,13 @@ def march_constants(nsm, *, cfl: float, dimension: int, degree: int = 0,
                     dt_floor: Optional[float] = None,
                     require_finite: bool = True,
                     dt_max: Any = None) -> MarchConstants:
-    """Resolve every emitted march constant from ``nsm`` and the caller's settings.
+    """Resolve every emitted march constant from `nsm` and the caller's settings.
 
     Args:
         cfl: safety factor in (0, 1], never adjusted by the march.
         dimension: mesh dimension of the CFL step.
-        degree: reconstruction degree ``k`` of the factor ``2k + 1``.
-        dt_floor: ``None``: off (the guard is a fatal abort on ``dt <= 0``, not a
+        degree: reconstruction degree `k` of the factor `2k + 1`.
+        dt_floor: `None`: off (the guard is a fatal abort on `dt <= 0`, not a
             floor).
     """
     if not (0.0 < float(cfl) <= 1.0):
@@ -270,11 +270,11 @@ def elliptic_constants(*, n_unknowns: int,
                        tol: Optional[float] = None,
                        restart: Optional[int] = None) -> MarchConstants:
     """Resolve the emitted constants of an elliptic (projection) solve; the restart
-    scales with the block size ``n_unknowns``, so it is required.
+    scales with the block size `n_unknowns`, so it is required.
 
     Args:
         tol: caller override, reported as such in the provenance.
-        restart: caller override, clamped to ``n_unknowns``.
+        restart: caller override, clamped to `n_unknowns`.
     References:
         Saad, Schultz 1986, https://doi.org/10.1137/0907058
     """

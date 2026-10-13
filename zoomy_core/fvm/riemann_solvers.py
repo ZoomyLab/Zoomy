@@ -1,7 +1,7 @@
 """Symbolic Riemann solvers over a SystemModel (Rusanov, HLL, HLLC, positive and
 path-conservative variants) whose face kernels feed the NumericalSystemModel and the
-solver templates. Classes needing the depth ``h``, bed ``b`` or ``hinv`` find them in
-``Q`` or ``Qaux`` through :class:`FieldHandle`.
+solver templates. Classes needing the depth `h`, bed `b` or `hinv` find them in
+`Q` or `Qaux` through `FieldHandle`.
 """
 
 import numpy as np
@@ -21,15 +21,15 @@ from zoomy_core.transformation.to_numpy import (
 
 
 class FieldHandle:
-    """A named field resolved to a slot of ``Q`` or ``Qaux``, exposing its face symbols
-    ``minus`` / ``plus`` and cell symbol ``state``. Built by
-    :meth:`Numerics.find_field`.
+    """A named field resolved to a slot of `Q` or `Qaux`, exposing its face symbols
+    `minus` / `plus` and cell symbol `state`. Built by
+    `Numerics.find_field`.
     """
 
     __slots__ = ("name", "container", "index", "minus", "plus", "state")
 
     def __init__(self, name, container, index, minus, plus, state):
-        """Store the field's name, container (``"q"`` or ``"qaux"``), index and symbols.
+        """Store the field's name, container (`"q"` or `"qaux"`), index and symbols.
         """
         if container not in {"q", "qaux"}:
             raise ValueError(
@@ -44,27 +44,27 @@ class FieldHandle:
         self.state = state
 
     def access(self, q_array, qaux_array):
-        """``q_array[index]`` or ``qaux_array[index]``, whichever container holds the
+        """`q_array[index]` or `qaux_array[index]`, whichever container holds the
         field.
         """
         return (q_array[self.index] if self.container == "q"
                 else qaux_array[self.index])
 
     def assign(self, q_array, qaux_array, value):
-        """Write ``value`` in place into the field's container."""
+        """Write `value` in place into the field's container."""
         if self.container == "q":
             q_array[self.index] = value
         else:
             qaux_array[self.index] = value
 
     def __repr__(self):
-        """``FieldHandle('h': q[0])``."""
+        """`FieldHandle('h': q[0])`."""
         return (f"FieldHandle({self.name!r}: "
                 f"{self.container}[{self.index}])")
 
 
 class Numerics(param.Parameterized, SymbolicRegistrar):
-    """Symbolic numerics over a :class:`SystemModel`: the base class holds the field
+    """Symbolic numerics over a `SystemModel`: the base class holds the field
     handles, registers the face kernels and on its own is the zero scheme. The
     Riemann solvers below subclass it.
     """
@@ -79,12 +79,12 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
     scaled_q_indices = param.List(default=None, allow_None=True)
 
     def __init__(self, model, **params):
-        """Build the numerics for ``model`` and register its kernels (flux,
+        """Build the numerics for `model` and register its kernels (flux,
         fluctuations, face sides, star state, ...).
 
         Args:
             model: a SystemModel, or a Model normalised once via
-                ``SystemModel.from_model``.
+                `SystemModel.from_model`.
         """
         sm = (model if isinstance(model, SystemModel)
               else SystemModel.from_model(model))
@@ -148,11 +148,11 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
     # ── Field-search API ──────────────────────────────────────────
 
     def find_field(self, name, *, required=True):
-        """The :class:`FieldHandle` of ``name``, searching ``model.state`` then
-        ``model.aux_state`` (cached).
+        """The `FieldHandle` of `name`, searching `model.state` then
+        `model.aux_state` (cached).
 
         Args:
-            required: raise ``KeyError`` if the field is absent; else return ``None``.
+            required: raise `KeyError` if the field is absent; else return `None`.
         """
         cache = getattr(self, "_field_handles", None) or {}
         if name in cache:
@@ -185,7 +185,7 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         return None
 
     def has_field(self, name):
-        """Whether the model has a field ``name``."""
+        """Whether the model has a field `name`."""
         return self.find_field(name, required=False) is not None
 
     def _declared_depth_handle(self):
@@ -196,14 +196,14 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         return self._field_handles.get("h")
 
     def _create_v(self, name, size):
-        """Symbol vector ``name_i`` of the given size."""
+        """Symbol vector `name_i` of the given size."""
         v = ZArray([sp.Symbol(f"{name}_{i}", real=True) for i in range(size)])
         v._symbolic_name = name
         return v
 
     def _resolve_scaled_q_indices(self, scaled_q_indices):
         """Depth-scaled state rows: the explicit argument, else the model's own
-        ``depth_scaled_state_indices``.
+        `depth_scaled_state_indices`.
         """
         if scaled_q_indices is not None:
             cleaned = [int(i) for i in scaled_q_indices]
@@ -216,8 +216,8 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         return list(self.model.depth_scaled_state_indices)
 
     def _eps_symbol(self):
-        """The wet/dry threshold ``wet_dry_eps`` if the model declares it, else the
-        floor ``1e-12``.
+        """The wet/dry threshold `wet_dry_eps` if the model declares it, else the
+        floor `1e-12`.
         """
         if self.model.parameters.contains("wet_dry_eps"):
             return self.model.parameters.wet_dry_eps
@@ -315,9 +315,9 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         self.register_symbolic_function("star_state", self.star_state, sig)
 
     def face_sides(self, flux, fluctuations):
-        """The face's contribution to each adjacent cell, shape ``(2, n)``: row 0
-        ``F + D_minus`` into the owner and row 1 ``-F + D_plus`` into the neighbour,
-        each scaled by ``|f|/|V|`` and subtracted. It recombines the flux and
+        """The face's contribution to each adjacent cell, shape `(2, n)`: row 0
+        `F + D_minus` into the owner and row 1 `-F + D_plus` into the neighbour,
+        each scaled by `|f|/|V|` and subtracted. It recombines the flux and
         fluctuation expressions exactly, so one printed silo shares the Riemann
         problem.
 
@@ -335,7 +335,7 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
                        [-F[i] + D[i] for i in range(n)]])
 
     def face_wave_speed(self):
-        """The fastest signal speed ``max(|s_L|, |s_R|)`` of the scheme's own Riemann
+        """The fastest signal speed `max(|s_L|, |s_R|)` of the scheme's own Riemann
         solver, at the states its dissipation is built on (the reconstructed ones
         where it has them). It uses the same expressions as the flux, so a printed
         silo computes them once.
@@ -356,8 +356,8 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
                       evaluate=False)
 
     def face_sides_speed(self, flux, fluctuations):
-        """:meth:`face_sides` plus a third row carrying :meth:`face_wave_speed`, shape
-        ``(3, n)``, so a solver can take its CFL step from the Riemann problem it
+        """`face_sides` plus a third row carrying `face_wave_speed`, shape
+        `(3, n)`, so a solver can take its CFL step from the Riemann problem it
         already solves.
         """
         sides = self.face_sides(flux, fluctuations)
@@ -369,13 +369,13 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
 
     def pack_face(self, flux, fluctuations):
         """Pack one face's Riemann answer as
-        ``[flux(n) | D_plus(n) | D_minus(n) | lambda_max(1)]``, shape
-        ``(3n + 1, 1)``. The flux row alone is not a scheme for the nonconservative
-        variants, whose dissipation lives in ``D_plus`` / ``D_minus``.
+        `[flux(n) | D_plus(n) | D_minus(n) | lambda_max(1)]`, shape
+        `(3n + 1, 1)`. The flux row alone is not a scheme for the nonconservative
+        variants, whose dissipation lives in `D_plus` / `D_minus`.
 
         Args:
-            flux: the built ``numerical_flux``, shape ``(n,)``.
-            fluctuations: the built ``numerical_fluctuations``, shape ``(2, n)``.
+            flux: the built `numerical_flux`, shape `(n,)`.
+            fluctuations: the built `numerical_fluctuations`, shape `(2, n)`.
         """
         lambda_max = self.face_max_abs_eigenvalue(
             self.variables_minus,
@@ -400,8 +400,8 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         return ZArray(rows).reshape(expected, 1)
 
     def face_max_abs_eigenvalue(self, qL, qR, auxL, auxR, p, n):
-        """Face wave speed ``max(rho(A_n)|_L, rho(A_n)|_R)``, the Rusanov (local
-        Lax-Friedrichs) dissipation speed; the outer ``Max`` is unevaluated, a
+        """Face wave speed `max(rho(A_n)|_L, rho(A_n)|_R)`, the Rusanov (local
+        Lax-Friedrichs) dissipation speed; the outer `Max` is unevaluated, a
         run-time reduction.
         """
         return sp.Max(
@@ -412,7 +412,7 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
 
     def local_max_eigenvalue_definition(self):
         """Spectral radius of the normal-projected system at the numerics' own
-        ``Q/Qaux/p/n`` symbols, the kernel body the printers emit.
+        `Q/Qaux/p/n` symbols, the kernel body the printers emit.
         """
         return self.local_max_abs_eigenvalue(
             self.variables, self.aux_variables,
@@ -420,8 +420,8 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         )
 
     def local_max_abs_eigenvalue(self, Q=None, Qaux=None, p=None, n=None):
-        """Spectral radius at ``(Q, Qaux, p, n)``: ``Max(|lambda_i|)`` over the model's
-        closed-form eigenvalues, else per ``spectral_radius_method`` an ``eig``, a
+        """Spectral radius at `(Q, Qaux, p, n)`: `Max(|lambda_i|)` over the model's
+        closed-form eigenvalues, else per `spectral_radius_method` an `eig`, a
         power iteration (the symbolic solvers' default) or the Perron bound. It sets
         the Rusanov / HLL dissipation and the CFL step.
 
@@ -484,8 +484,8 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
                        SystemModel.spectral_bound_iterations))
 
     def _model_eval(self, operator_name, Q, Qaux, p, n=None):
-        """Evaluate the SystemModel operator ``operator_name`` (``flux``,
-        ``eigenvalues``, ...) at the given state by substituting its symbols.
+        """Evaluate the SystemModel operator `operator_name` (`flux`,
+        `eigenvalues`, ...) at the given state by substituting its symbols.
         """
         definition = getattr(self.model, operator_name)
         sub_map = {}
@@ -518,7 +518,7 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         return out
 
     def to_runtime(self, backend="numpy"):
-        """Lambdify the registered functions for ``backend`` (``"numpy"`` or ``"ufl"``).
+        """Lambdify the registered functions for `backend` (`"numpy"` or `"ufl"`).
         """
         backend = backend.lower()
         if backend == "numpy":
@@ -537,12 +537,12 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         return self.to_runtime("ufl")
 
     def numerical_flux(self):
-        """The conservative numerical flux, shape ``(n,)``; zero on the base class."""
+        """The conservative numerical flux, shape `(n,)`; zero on the base class."""
         zeros = [sp.Integer(0)] * self.n_variables
         return ZArray(zeros)
 
     def numerical_fluctuations(self):
-        """The fluctuations ``(D_plus, D_minus)``, shape ``(2, n)``; zero on the base
+        """The fluctuations `(D_plus, D_minus)`, shape `(2, n)`; zero on the base
         class.
         """
         zeros = ZArray.zeros(self.n_variables)
@@ -571,16 +571,16 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
     # ``_clamp_star_depth`` and the guarantee stated on ``star_state``.
 
     def _star_face_states(self):
-        """The ``(qL, qR, auxL, auxR)`` the star construction runs on: the raw face
-        states, or the reconstructed pair in the ``Positive*`` classes so
-        ``star_state`` describes the problem the flux solves.
+        """The `(qL, qR, auxL, auxR)` the star construction runs on: the raw face
+        states, or the reconstructed pair in the `Positive*` classes so
+        `star_state` describes the problem the flux solves.
         """
         return (self.variables_minus, self.variables_plus,
                 self.aux_variables_minus, self.aux_variables_plus)
 
     def _momentum_indices(self):
         """The momentum block, one discharge row per direction, read from the model's
-        ``discharge_state_indices``.
+        `discharge_state_indices`.
         """
         idx = list(self.model.discharge_state_indices)
         if any(k < 0 for k in idx):
@@ -592,23 +592,23 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         return idx
 
     def _normal_velocity(self, q, aux, n, mom_idx):
-        """Depth-averaged velocity ``u.n`` on the face normal, desingularized by the
-        wet/dry ``eps``.
+        """Depth-averaged velocity `u.n` on the face normal, desingularized by the
+        wet/dry `eps`.
         """
         h = self.find_field("h").access(q, aux)
         eps = self._eps_symbol()
         return sum(q[k] * n[d] for d, k in enumerate(mom_idx)) / (h + eps)
 
     def _physical_flux_n(self, q, aux, p, n):
-        """Normal-projected physical flux ``(F + P) n`` of one state."""
+        """Normal-projected physical flux `(F + P) n` of one state."""
         F = self._model_eval("flux", q, aux, p)
         P = self._model_eval("hydrostatic_pressure", q, aux, p)
         return (F + P) @ n
 
     def wave_speed_bounds(self, qL, qR, auxL, auxR, p, n):
-        """``(s_L, s_R)``, the slowest and fastest signal speeds at the face: here the
-        local Lax-Friedrichs pair ``(-a, +a)`` with ``a`` the Rusanov dissipation
-        speed. :class:`HLL` overrides it with the Davis estimates.
+        """`(s_L, s_R)`, the slowest and fastest signal speeds at the face: here the
+        local Lax-Friedrichs pair `(-a, +a)` with `a` the Rusanov dissipation
+        speed. `HLL` overrides it with the Davis estimates.
 
         References:
             Rusanov 1962, https://doi.org/10.1016/0041-5553(62)90062-9
@@ -617,7 +617,7 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         return -a, a
 
     def _clamp_star_depth(self, q_star, hL, hR):
-        """Project the star depth onto ``[0, max(h_L, 0) + max(h_R, 0)]``, inactive
+        """Project the star depth onto `[0, max(h_L, 0) + max(h_R, 0)]`, inactive
         under the classical HLL wave-speed ordering but needed in floating point.
         """
         h = self._declared_depth_handle()
@@ -638,10 +638,10 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         return out
 
     def star_state(self):
-        """The interface (star) state ``q*``, shape ``(n_variables, 1)``: the HLL
-        two-wave average ``(s_R q_R - s_L q_L - (F_R - F_L)) / (s_R - s_L)`` from the
-        solver's own wave speeds, its depth projected onto ``[0, h_L + h_R]``. It has
-        no supersonic upwind branch, and a model with ``h`` in ``Qaux`` gets no depth
+        """The interface (star) state `q*`, shape `(n_variables, 1)`: the HLL
+        two-wave average `(s_R q_R - s_L q_L - (F_R - F_L)) / (s_R - s_L)` from the
+        solver's own wave speeds, its depth projected onto `[0, h_L + h_R]`. It has
+        no supersonic upwind branch, and a model with `h` in `Qaux` gets no depth
         row and no positivity claim.
 
         References:
@@ -668,7 +668,7 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
 
     def numerical_cell_edge_source(self):
         """The in-cell nonconservative term per (cell, edge) pair, the part of
-        ``int A(W) grad W dx`` that a reconstruction puts inside the cells (zero on
+        `int A(W) grad W dx` that a reconstruction puts inside the cells (zero on
         piecewise-constant data and on this conservative base class). It is needed
         for every live entry of the nonconservative matrix and is a consistency term,
         not a well-balancing device.
@@ -682,7 +682,7 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
 
 class Rusanov(Numerics):
     """Rusanov (local Lax-Friedrichs) flux: the central average minus
-    ``s_max/2 (Q_R - Q_L)``, ``s_max`` the larger spectral radius of the two states.
+    `s_max/2 (Q_R - Q_L)`, `s_max` the larger spectral radius of the two states.
 
     References:
         Rusanov 1962, https://doi.org/10.1016/0041-5553(62)90062-9
@@ -692,7 +692,7 @@ class Rusanov(Numerics):
 
     def get_viscosity_identity_flux(self):
         """Identity on the dissipated rows (stationary rows zeroed), applied to
-        ``Q_R - Q_L`` in the flux.
+        `Q_R - Q_L` in the flux.
         """
         n = self.n_variables
         Id = ZArray.zeros(n, n)
@@ -722,7 +722,7 @@ class Rusanov(Numerics):
         )
 
     def _compute_flux(self, qL, qR, auxL, auxR, p, n):
-        """Rusanov flux of the states ``(qL, qR)``."""
+        """Rusanov flux of the states `(qL, qR)`."""
         FL = self._model_eval("flux", qL, auxL, p)
         FR = self._model_eval("flux", qR, auxR, p)
         PL = self._model_eval("hydrostatic_pressure", qL, auxL, p)
@@ -736,7 +736,7 @@ class HLL(Numerics):
     """HLL approximate Riemann solver, model-agnostic: it needs the flux, hydrostatic
     pressure and eigenvalues, and without a closed-form spectrum reduces to local
     Lax-Friedrichs. The flux is one branch-free expression (wave speeds clamped by
-    ``Min(s_L, 0)`` / ``Max(s_R, 0)``), so it codegens to every backend.
+    `Min(s_L, 0)` / `Max(s_R, 0)`), so it codegens to every backend.
 
     References:
         Harten, Lax, van Leer 1983, https://doi.org/10.1137/1025002
@@ -774,15 +774,15 @@ class HLL(Numerics):
         return sp.Min(*eig, evaluate=False), sp.Max(*eig, evaluate=False)
 
     def _state_jump(self, qL, qR):
-        """``qR - qL`` with the stationary rows (a bed in the state) zeroed."""
+        """`qR - qL` with the stationary rows (a bed in the state) zeroed."""
         dq = ZArray(qR) - ZArray(qL)
         for r in self._stationary_rows:
             dq[r] = sp.Integer(0)
         return dq
 
     def _compute_flux(self, qL, qR, auxL, auxR, p, n):
-        """HLL flux of the states ``(qL, qR)``, the fan width floored in floating point
-        (not at the wet/dry ``eps``) so lake-at-rest stays exact.
+        """HLL flux of the states `(qL, qR)`, the fan width floored in floating point
+        (not at the wet/dry `eps`) so lake-at-rest stays exact.
         """
         FLn = self._physical_flux_n(qL, auxL, p, n)
         FRn = self._physical_flux_n(qR, auxR, p, n)
@@ -809,9 +809,9 @@ class HLL(Numerics):
 
 class HLLC(HLL):
     """HLLC solver for the free-surface family: it restores the contact / shear wave
-    that HLL smears, needs a depth field ``h``, and advects tangential momentum and
+    that HLL smears, needs a depth field `h`, and advects tangential momentum and
     higher moments with the contact. Region selection uses the opaque
-    ``conditional``, so it codegens to every backend.
+    `conditional`, so it codegens to every backend.
 
     References:
         Toro 2009, https://doi.org/10.1007/b79761
@@ -822,14 +822,14 @@ class HLLC(HLL):
 
     @property
     def h_field(self):
-        """Depth :class:`FieldHandle`; raises ``KeyError`` if the model has no ``h``
-        (use :class:`HLL`).
+        """Depth `FieldHandle`; raises `KeyError` if the model has no `h`
+        (use `HLL`).
         """
         return self.find_field("h")
 
     def _star_state(self, q, aux, h, un, s_side, s_star, n, mom_idx, den=None):
-        """HLLC star state on one side of the contact wave; ``den`` overrides the
-        contact denominator (the flux path's ``+eps`` is sign-blind, ``star_state``
+        """HLLC star state on one side of the contact wave; `den` overrides the
+        contact denominator (the flux path's `+eps` is sign-blind, `star_state`
         passes a sign-correct floor).
         """
         eps = self._eps_symbol()
@@ -852,8 +852,8 @@ class HLLC(HLL):
         return out
 
     def _star_pair(self, qL, qR, auxL, auxR, p, n, *, sign_safe=False):
-        """Build the three-wave data once, ``(QLs, QRs, sL, sR, s_star, hL, hR)``,
-        shared by the flux and ``star_state``; ``sign_safe`` selects the sign-correct
+        """Build the three-wave data once, `(QLs, QRs, sL, sR, s_star, hL, hR)`,
+        shared by the flux and `star_state`; `sign_safe` selects the sign-correct
         denominator floor.
         """
         sL, sR = self.wave_speed_bounds(qL, qR, auxL, auxR, p, n)
@@ -884,7 +884,7 @@ class HLLC(HLL):
         return QLs, QRs, sL, sR, s_star, hL, hR
 
     def _compute_flux(self, qL, qR, auxL, auxR, p, n):
-        """HLLC flux of the states ``(qL, qR)``, selecting ``F_L | F_L* | F_R* | F_R``
+        """HLLC flux of the states `(qL, qR)`, selecting `F_L | F_L* | F_R* | F_R`
         by the wave speeds.
         """
         FLn = self._physical_flux_n(qL, auxL, p, n)
@@ -908,8 +908,8 @@ class HLLC(HLL):
 
     def star_state(self):
         """The contact-resolved interface state: the side of the contact selected by
-        ``s*``, built from the star the flux uses and with the same depth projection
-        as :meth:`Numerics.star_state`. Its depth equals HLL's; the contact shows
+        `s*`, built from the star the flux uses and with the same depth projection
+        as `Numerics.star_state`. Its depth equals HLL's; the contact shows
         only in the momentum and higher-moment rows.
         """
         qL, qR, auxL, auxR = self._star_face_states()
@@ -922,9 +922,9 @@ class HLLC(HLL):
 
 
 class PositiveRusanov(Rusanov):
-    """Rusanov with the Audusse hydrostatic reconstruction ``h* = max(0, h + b - b*)``,
-    ``b* = max(b_L, b_R)``; ``h``, ``b`` and ``hinv`` are found through
-    :meth:`Numerics.find_field`, in ``Q`` or ``Qaux``.
+    """Rusanov with the Audusse hydrostatic reconstruction `h* = max(0, h + b - b*)`,
+    `b* = max(b_L, b_R)`; `h`, `b` and `hinv` are found through
+    `Numerics.find_field`, in `Q` or `Qaux`.
 
     References:
         Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090
@@ -942,23 +942,23 @@ class PositiveRusanov(Rusanov):
 
     @property
     def h_field(self):
-        """Depth :class:`FieldHandle`."""
+        """Depth `FieldHandle`."""
         return self.find_field("h")
 
     @property
     def b_field(self):
-        """Bathymetry :class:`FieldHandle`."""
+        """Bathymetry `FieldHandle`."""
         return self.find_field("b")
 
     @property
     def hinv_field(self):
-        """Optional ``1/h`` :class:`FieldHandle` (``None`` if absent)."""
+        """Optional `1/h` `FieldHandle` (`None` if absent)."""
         return self.find_field("hinv", required=False)
 
     def hydrostatic_reconstruction(self, qL, qR, auxL, auxR):
-        """Reconstructed face states with ``h* = max(0, h + b - b*)``, the depth-scaled
-        rows rescaled by ``h*/h`` and ``hinv`` rebuilt in the model's KP form;
-        returns ``(qL, qR, auxL, auxR)``.
+        """Reconstructed face states with `h* = max(0, h + b - b*)`, the depth-scaled
+        rows rescaled by `h*/h` and `hinv` rebuilt in the model's KP form;
+        returns `(qL, qR, auxL, auxR)`.
 
         References:
             Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090
@@ -1018,7 +1018,7 @@ class PositiveRusanov(Rusanov):
 
     def _star_face_states(self):
         """The Audusse-reconstructed pair, the Riemann problem this scheme's own flux
-        solves; the star depth is measured from ``b* = max(b_L, b_R)``.
+        solves; the star depth is measured from `b* = max(b_L, b_R)`.
         """
         return self.hydrostatic_reconstruction(
             self.variables_minus,
@@ -1038,7 +1038,7 @@ class PositiveRusanov(Rusanov):
         return self._compute_flux(qLs, qRs, qauxL, qauxR, self.parameters, self.normal)
 
     def numerical_fluctuations(self):
-        """The base fluctuations plus Audusse's consistency source ``S~ = P_raw - P*``,
+        """The base fluctuations plus Audusse's consistency source `S~ = P_raw - P*`,
         which restores well-balancing.
         """
         qLs, qRs, qauxL, qauxR = self.hydrostatic_reconstruction(
@@ -1096,7 +1096,7 @@ class NonconservativeRusanov(Rusanov):
     supports_batched_faces = True
 
     def get_path_integral_states(self):
-        """The path-integral endpoints ``(qL, qR, auxL, auxR)``: the raw face states.
+        """The path-integral endpoints `(qL, qR, auxL, auxR)`: the raw face states.
         """
         return (
             self.variables_minus,
@@ -1140,8 +1140,8 @@ class NonconservativeRusanov(Rusanov):
         return lambda Q, Qaux, p: self._model_eval("nonconservative_matrix", Q, Qaux, p)
 
     def _path_integral_matrix(self, qL, qR, auxL, auxR, p, n):
-        """``int_0^1 A(Psi(s)) n ds`` along ``Psi(s) = qL + s (qR - qL)`` by
-        Gauss-Legendre of ``integration_order``; shared by the fluctuations and the
+        """`int_0^1 A(Psi(s)) n ds` along `Psi(s) = qL + s (qR - qL)` by
+        Gauss-Legendre of `integration_order`; shared by the fluctuations and the
         in-cell source, so their well-balancing cancellation stays exact.
         """
         xi_np, wi_np = np.polynomial.legendre.leggauss(self.integration_order)
@@ -1184,7 +1184,7 @@ class NonconservativeRusanov(Rusanov):
         return A_int @ (qe - qc)
 
     def _compute_fluctuations(self, qL, qR, auxL, auxR, p, n):
-        """``(D_plus, D_minus)`` = half of the path-integral advection plus / minus the
+        """`(D_plus, D_minus)` = half of the path-integral advection plus / minus the
         Rusanov dissipation.
         """
         dQ = qR - qL
@@ -1204,8 +1204,8 @@ class NonconservativeRusanov(Rusanov):
 
 class WellBalancedNonconservativeRusanov(NonconservativeRusanov):
     """Path-conservative Rusanov whose dissipation acts on the free-surface jump
-    ``dh + db``: the depth row couples to the bed column, which makes lake-at-rest
-    exact. Applied only when ``h`` and ``b`` are both conservative-state fields.
+    `dh + db`: the depth row couples to the bed column, which makes lake-at-rest
+    exact. Applied only when `h` and `b` are both conservative-state fields.
     """
 
     name = param.String(default="WellBalancedNonconservativeRusanovV2")
@@ -1223,7 +1223,7 @@ class WellBalancedNonconservativeRusanov(NonconservativeRusanov):
 
 class PositiveHLL(HLL):
     """HLL on the Audusse hydrostatically reconstructed states plus the consistency
-    source ``S~``: positivity-preserving and well-balanced, recommended for dam-break
+    source `S~`: positivity-preserving and well-balanced, recommended for dam-break
     and wet/dry runs.
 
     References:
@@ -1235,17 +1235,17 @@ class PositiveHLL(HLL):
 
     @property
     def h_field(self):
-        """Depth :class:`FieldHandle`."""
+        """Depth `FieldHandle`."""
         return self.find_field("h")
 
     @property
     def b_field(self):
-        """Bathymetry :class:`FieldHandle`."""
+        """Bathymetry `FieldHandle`."""
         return self.find_field("b")
 
     @property
     def hinv_field(self):
-        """Optional ``1/h`` :class:`FieldHandle` (``None`` if absent)."""
+        """Optional `1/h` `FieldHandle` (`None` if absent)."""
         return self.find_field("hinv", required=False)
 
     # Reuse the hydrostatic reconstruction from PositiveRusanov by
@@ -1269,7 +1269,7 @@ class PositiveHLL(HLL):
 
     def numerical_fluctuations(self):
         """The next fluctuations on the MRO plus Audusse's consistency source
-        ``S~ = P_raw - P*``, independent of the Riemann solver.
+        `S~ = P_raw - P*`, independent of the Riemann solver.
         """
         qLs, qRs, qauxL, qauxR = self.hydrostatic_reconstruction(
             self.variables_minus,
@@ -1309,15 +1309,15 @@ class PositiveHLL(HLL):
 
 class PositiveNonconservativeRusanov(PositiveRusanov, NonconservativeRusanov):
     """Hydrostatic reconstruction with the path-conservative fluctuations of
-    :class:`NonconservativeRusanov`.
+    `NonconservativeRusanov`.
     """
     name = param.String(default="PositiveNonconservativeRusanovV2")
     # HR kernels not yet batch-validated — keep the per-face loop.
     supports_batched_faces = False
 
     def get_path_integral_states(self):
-        """The reconstructed states when the model has a ``hydrostatic_pressure`` for
-        ``S~`` to compensate, else the raw states (reconstructed endpoints would then
+        """The reconstructed states when the model has a `hydrostatic_pressure` for
+        `S~` to compensate, else the raw states (reconstructed endpoints would then
         change the mass flux).
         """
         if getattr(self.model, "hydrostatic_pressure_is_zero", False):
@@ -1333,10 +1333,10 @@ class PositiveNonconservativeRusanov(PositiveRusanov, NonconservativeRusanov):
 
 class NonconservativeRoe(NonconservativeRusanov):
     """Path-conservative Roe: the path-integral advection of
-    :class:`NonconservativeRusanov` with the scalar dissipation replaced by the Roe
-    matrix ``|A(Q*)| dQ = R|Lambda|L dQ`` at the midpoint state, taken from the
-    model's ``eigensystem``. It is well-balanced without reconstruction, since the
-    bed mode has ``lambda = 0``.
+    `NonconservativeRusanov` with the scalar dissipation replaced by the Roe
+    matrix `|A(Q*)| dQ = R|Lambda|L dQ` at the midpoint state, taken from the
+    model's `eigensystem`. It is well-balanced without reconstruction, since the
+    bed mode has `lambda = 0`.
 
     References:
         Pares 2006, https://doi.org/10.1137/050628052
@@ -1346,8 +1346,8 @@ class NonconservativeRoe(NonconservativeRusanov):
     name = param.String(default="NonconservativeRoe")
 
     def _abs_quasilinear(self, q_state, aux_state, p, n):
-        """``|A_n| = R|Lambda|L`` of the normal-projected quasilinear matrix at
-        ``q_state``, from the model's ``eigensystem`` operator.
+        """`|A_n| = R|Lambda|L` of the normal-projected quasilinear matrix at
+        `q_state`, from the model's `eigensystem` operator.
         """
         n_vars = self.n_variables
         es = self._model_eval("eigensystem", q_state, aux_state, p, n)
@@ -1358,7 +1358,7 @@ class NonconservativeRoe(NonconservativeRusanov):
         return R @ abs_lam @ L
 
     def _compute_fluctuations(self, qL, qR, auxL, auxR, p, n):
-        """``(D_plus, D_minus)`` = half of the path-integral advection plus / minus the
+        """`(D_plus, D_minus)` = half of the path-integral advection plus / minus the
         Roe dissipation.
         """
         xi_np, wi_np = np.polynomial.legendre.leggauss(self.integration_order)
@@ -1422,7 +1422,7 @@ class PositiveNonconservativeHLL(PositiveHLL, NonconservativeRusanov):
 
 
 class QuasilinearRusanov(NonconservativeRusanov):
-    """Path-conservative Rusanov on the full quasilinear matrix ``A = dF/dQ + B``: zero
+    """Path-conservative Rusanov on the full quasilinear matrix `A = dF/dQ + B`: zero
     flux, everything in the path integral.
     """
     name = param.String(default="QuasilinearRusanovV2")
@@ -1438,7 +1438,7 @@ class QuasilinearRusanov(NonconservativeRusanov):
 
 
 class PositiveQuasilinearRusanov(PositiveRusanov, QuasilinearRusanov):
-    """:class:`QuasilinearRusanov` on the hydrostatically reconstructed states."""
+    """`QuasilinearRusanov` on the hydrostatically reconstructed states."""
     name = param.String(default="PositiveQuasilinearRusanovV2")
 
     def numerical_flux(self):
@@ -1458,8 +1458,8 @@ class PositiveQuasilinearRusanov(PositiveRusanov, QuasilinearRusanov):
 
 class QuasilinearRoe(NonconservativeRoe):
     """Path-conservative Roe on the full quasilinear matrix, so a characteristic
-    coupling interface and the flux transmit the same ``A``: ``D^- + D^+ = A_int dQ``
-    with Roe dissipation ``R|Lambda|L``. It is unguarded by design, with no
+    coupling interface and the flux transmit the same `A`: `D^- + D^+ = A_int dQ`
+    with Roe dissipation `R|Lambda|L`. It is unguarded by design, with no
     reconstruction and no entropy fix.
 
     References:

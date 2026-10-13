@@ -1,21 +1,21 @@
 """Chorin projection split for the VAM chain DAE (numpy backend).
 
 Consumes the three sub-system models produced by
-:func:`zoomy_core.model.splitter.split_for_pressure`:
+`zoomy_core.model.splitter.split_for_pressure`:
 
-* ``SM_pred``  — explicit predictor.  Evolution rows (mass + xmom_jk +
+* `SM_pred`  — explicit predictor.  Evolution rows (mass + xmom_jk +
   zmom_jk) of the PRESSURE-FREE hydrostatic system (Escalante eq 12a;
   the splitter zeroes every pressure mode in the predictor residuals —
   the full pressure impulse belongs to the corrector).  Solved with
-  :class:`HyperbolicSolver`'s Rusanov + non-conservative path-integral
+  `HyperbolicSolver`'s Rusanov + non-conservative path-integral
   + indexed-BC flux machinery — same path the SWE/SME solvers use.
   Mass-conservative by construction.
-* ``SM_press`` — algebraic elliptic block on the pressure modes.
-  Linear in ``(P_k, ∂_x P_k, ∂_xx P_k)``; solved via
-  ``scipy.optimize.fsolve`` on the lambdified residual (converges in
+* `SM_press` — algebraic elliptic block on the pressure modes.
+  Linear in `(P_k, ∂_x P_k, ∂_xx P_k)`; solved via
+  `scipy.optimize.fsolve` on the lambdified residual (converges in
   1–2 Newton iterations).  Matrix-free GMRES is the next refinement.
-* ``SM_corr``  — closed-form algebraic corrector on the velocity modes
-  via the ``update_variables(Q, Qaux, p, dt)`` field.  Single lambdify
+* `SM_corr`  — closed-form algebraic corrector on the velocity modes
+  via the `update_variables(Q, Qaux, p, dt)` field.  Single lambdify
   call + in-place assignment, no solve.
 """
 from __future__ import annotations
@@ -49,21 +49,21 @@ def _apply_cell_limiter(u, grad, multi_index, scheme, mesh):
 
     Parameters
     ----------
-    u : ndarray, shape ``(nc,)``
+    u : ndarray, shape `(nc,)`
         Cell-centre values of the field being differentiated.
-    grad : ndarray, shape ``(nc,)``
+    grad : ndarray, shape `(nc,)`
         Unlimited LSQ-computed gradient at cell centres.
     multi_index : tuple
-        Derivative order (only first-order — ``(1,)`` in 1D — is
+        Derivative order (only first-order — `(1,)` in 1D — is
         limited; higher orders pass through unchanged).
     scheme : str
-        One of ``"minmod"``, ``"venkatakrishnan"``, ``"barth_jespersen"``.
-    mesh : object with ``cell_centers`` attribute.
+        One of `"minmod"`, `"venkatakrishnan"`, `"barth_jespersen"`.
+    mesh : object with `cell_centers` attribute.
 
     Returns
     -------
-    ndarray, shape ``(nc,)``
-        Limited gradient: ``φ · grad`` where ``φ ∈ [0, 1]`` is
+    ndarray, shape `(nc,)`
+        Limited gradient: `φ · grad` where `φ ∈ [0, 1]` is
         cell-wise.
 
     Convention follows MUSCL slope limiting (LeVeque, *Finite Volume
@@ -71,7 +71,7 @@ def _apply_cell_limiter(u, grad, multi_index, scheme, mesh):
     LSQ-extrapolated face value against the upwind neighbour bound and
     clips the slope so the reconstruction stays monotone.
 
-    Higher-order derivatives (e.g. ``∂_xx``) are NOT limited here —
+    Higher-order derivatives (e.g. `∂_xx`) are NOT limited here —
     they live in the elliptic block's principal part and need their
     own (e.g. compact-FD) discretisation if shock-robustness is
     required.  Limiting them with this routine would zero them at
@@ -173,12 +173,12 @@ def _apply_cell_limiter(u, grad, multi_index, scheme, mesh):
 
 
 def _pad_to_square(sm: SystemModel) -> SystemModel:
-    """Return a square SystemModel whose operators have ``n_state`` rows.
+    """Return a square SystemModel whose operators have `n_state` rows.
 
-    Used by :class:`ChorinSplitVAMSolver` to make a rectangular sub-
-    system consumable by :class:`HyperbolicSolver`'s flux machinery
-    (which assumes ``n_equations == n_state``).  Rows at state indices
-    *not* in ``sm.equation_to_state_index`` get all-zero operators
+    Used by `ChorinSplitVAMSolver` to make a rectangular sub-
+    system consumable by `HyperbolicSolver`'s flux machinery
+    (which assumes `n_equations == n_state`).  Rows at state indices
+    *not* in `sm.equation_to_state_index` get all-zero operators
     (flux / source / NCP / etc.) — they contribute zero RHS to the RK,
     so the corresponding state slots stay frozen through the predictor
     substep.  This is precisely the Chorin semantics: predictor doesn't
@@ -196,8 +196,8 @@ def _pad_to_square(sm: SystemModel) -> SystemModel:
     src_of_dest = {state_i: src_i for src_i, state_i in enumerate(e2s)}
 
     def _pad_rank2(arr, n_cols):
-        """``(n_eq, n_cols)`` → ``(n_st, n_cols)`` ZArray with zero rows
-        at missing dest indices.  ``arr`` may be ZArray or sp.Matrix."""
+        """`(n_eq, n_cols)` → `(n_st, n_cols)` ZArray with zero rows
+        at missing dest indices.  `arr` may be ZArray or sp.Matrix."""
         if arr is None:
             return None
         out_rows = []
@@ -211,7 +211,7 @@ def _pad_to_square(sm: SystemModel) -> SystemModel:
         return ZArray(out_rows, shape=(n_st, n_cols))
 
     def _pad_rank1(arr):
-        """``(n_eq,)`` → ``(n_st,)`` ZArray with zeros at missing indices."""
+        """`(n_eq,)` → `(n_st,)` ZArray with zeros at missing indices."""
         if arr is None:
             return None
         out = []
@@ -228,7 +228,7 @@ def _pad_to_square(sm: SystemModel) -> SystemModel:
         return ZArray(out, shape=(n_st,))
 
     def _pad_rank3(arr):
-        """``(n_eq, n_st_cols, n_dim)`` → ``(n_st, n_st_cols, n_dim)``."""
+        """`(n_eq, n_st_cols, n_dim)` → `(n_st, n_st_cols, n_dim)`."""
         if arr is None:
             return None
         n_st_cols = arr.shape[1]
@@ -353,15 +353,15 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
     """Chorin projection split for the VAM chain DAE.
 
     Consumes three pre-built sub-system models from
-    :func:`split_for_pressure`.  Inherits :class:`HyperbolicSolver` so
+    `split_for_pressure`.  Inherits `HyperbolicSolver` so
     the predictor substep uses the same Rusanov flux + indexed-BC +
     well-balanced reconstruction machinery as every other hyperbolic
     solver in the codebase — mass-conservative by construction.
 
     The pressure projection and corrector substeps are Chorin-specific
     and don't duplicate any existing infrastructure (the corrector reuses
-    the SystemModel ``update_variables(Q, Qaux, p, dt)`` field scattered
-    via ``equation_to_state_index``; the matrix-free linear solve is the
+    the SystemModel `update_variables(Q, Qaux, p, dt)` field scattered
+    via `equation_to_state_index`; the matrix-free linear solve is the
     one new primitive this class introduces).
     """
 
@@ -449,10 +449,10 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
         """Bind a canonical stage list to the ``(sm_pred, sm_press,
         sm_corr)`` triple BY KIND (REQ-173).
 
-        Accepts :class:`~zoomy_core.model.splitter.Stage` NamedTuples or
-        bare ``(label, kind, sm)`` tuples — e.g. ``split.stages``.  The
-        binding is by ``kind``, never by position: ``hyperbolic`` →
-        predictor, ``elliptic`` → pressure, ``pointwise`` → corrector.
+        Accepts `Stage` NamedTuples or
+        bare `(label, kind, sm)` tuples — e.g. `split.stages`.  The
+        binding is by `kind`, never by position: `hyperbolic` →
+        predictor, `elliptic` → pressure, `pointwise` → corrector.
         Validates that exactly one stage of each supported kind is present.
         """
         by_kind = {}
@@ -550,34 +550,34 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
 
     def _build_numerics(self, symbolic_model):
         """Predictor Riemann numerics.  Two routes, selected by
-        :attr:`riemann_solver`:
+        `riemann_solver`:
 
-        * ``"hr"`` (default) — Audusse–Bristeau–Klein hydrostatic
-          reconstruction Rusanov (:class:`PositiveNonconservativeRusanov`).
-          The plain ``NonconservativeRusanov`` fails lake-at-rest on a
+        * `"hr"` (default) — Audusse–Bristeau–Klein hydrostatic
+          reconstruction Rusanov (`PositiveNonconservativeRusanov`).
+          The plain `NonconservativeRusanov` fails lake-at-rest on a
           varying bathymetry: Rusanov's wavespeed-based dissipation
-          breaks the discrete cancellation of ``g·h·∂_x η`` against
+          breaks the discrete cancellation of `g·h·∂_x η` against
           the bottom-slope source.  Audusse HR restores well-balancing
-          and handles wet/dry fronts via the ``h*`` clamp.
-          ``scaled_q_indices`` are the momentum-density state indices
-          (auto-detected — excludes ``h``, ``b`` and the pressure-mode
-          state indices); these get rescaled by ``h*/h`` during the
-          reconstruction so the velocity stays constant when ``h`` is
-          clipped.  Pressure modes ``P_k`` are NOT rescaled — they are
+          and handles wet/dry fronts via the `h*` clamp.
+          `scaled_q_indices` are the momentum-density state indices
+          (auto-detected — excludes `h`, `b` and the pressure-mode
+          state indices); these get rescaled by `h*/h` during the
+          reconstruction so the velocity stays constant when `h` is
+          clipped.  Pressure modes `P_k` are NOT rescaled — they are
           pressure amplitudes, not momentum densities.
-        * ``"ncp"`` — plain :class:`NonconservativeRusanov` with an
+        * `"ncp"` — plain `NonconservativeRusanov` with an
           inline subclass that overrides
-          :meth:`get_viscosity_identity_fluctuations` to add the
-          LAR-balance entry ``Id[h, b] = 1``.  For lake-at-rest
-          (``η = h + b = const`` ⇒ ``dh = -db``) the resulting h-row
-          fluctuation dissipation ``s_max · (dh + db) = 0`` cancels
+          `get_viscosity_identity_fluctuations` to add the
+          LAR-balance entry `Id[h, b] = 1`.  For lake-at-rest
+          (`η = h + b = const` ⇒ `dh = -db`) the resulting h-row
+          fluctuation dissipation `s_max · (dh + db) = 0` cancels
           exactly, the path-integral NCP fluctuation supplies the
           bed-slope force, and no Audusse face-state reconstruction is
-          needed.  Requires ``h`` and ``b`` both in the conservative
+          needed.  Requires `h` and `b` both in the conservative
           state — and the SystemModel must NOT have had
-          ``HydrostaticReconstruction`` applied (the gravity term must
-          still be symbolically in NCP, not split into ``g·h²/2`` flux
-          + ``g·h·∂_x b`` NCP).
+          `HydrostaticReconstruction` applied (the gravity term must
+          still be symbolically in NCP, not split into `g·h²/2` flux
+          + `g·h·∂_x b` NCP).
         """
         state_names = [str(s) for s in symbolic_model.state]
 
@@ -615,11 +615,11 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
         b_idx = state_names.index("b")
 
         class _NCPRusanovLARBalanced(NonconservativeRusanov):
-            """``NonconservativeRusanov`` with LAR-balance entry
-            ``Id[h, b] = 1`` added to the fluctuation dissipation.
-            Parent already sets ``Id[b, b] = 0``; we add the off-
+            """`NonconservativeRusanov` with LAR-balance entry
+            `Id[h, b] = 1` added to the fluctuation dissipation.
+            Parent already sets `Id[b, b] = 0`; we add the off-
             diagonal coupling that cancels the h-row dissipation for
-            ``dh = -db`` (lake-at-rest on varying bathymetry).
+            `dh = -db` (lake-at-rest on varying bathymetry).
             """
             name = param.String(default="NCPRusanovLARBalancedV2")
 
@@ -633,15 +633,15 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
     def _build_reconstruction(self, mesh, symbolic_model):
         """Primitive-variable MUSCL reconstruction on the predictor.
 
-        At ``reconstruction_order >= 2``: wrap :class:`FreeSurfaceLSQMUSCL`
-        with :class:`PrimitiveReconstruction` so the slope limiter runs
+        At `reconstruction_order >= 2`: wrap `FreeSurfaceLSQMUSCL`
+        with `PrimitiveReconstruction` so the slope limiter runs
         on the model's well-balanced primitives
-        (``sm.reconstruction_variables``: ``η = h+b``, ``u_k = q_Uk/h``,
+        (`sm.reconstruction_variables`: `η = h+b`, `u_k = q_Uk/h`,
         …) — physically bounded quantities — instead of the conservative
         state.  This kills the momentum overshoot at the wet/dry front
         that breaks every smooth limiter (Venkatakrishnan,
         Van Albada) on dam-break-style shocks.  See
-        ``thesis/chapters/30_numerics.md`` "Primitive-variable MUSCL
+        `thesis/chapters/30_numerics.md` "Primitive-variable MUSCL
         reconstruction".
         """
         if self.nsm.reconstruction.order >= 2:
@@ -707,15 +707,15 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
     def setup_simulation(self, mesh, write_output=True):
         """Set up the Chorin solver:
 
-        1. Pad ``SM_pred`` to square so :class:`HyperbolicSolver` can
-           drive it (the parent assumes ``n_equations == n_state``).
+        1. Pad `SM_pred` to square so `HyperbolicSolver` can
+           drive it (the parent assumes `n_equations == n_state`).
         2. Hand the padded predictor to the parent's
-           ``setup_simulation`` — this builds the proper Rusanov flux
+           `setup_simulation` — this builds the proper Rusanov flux
            operator, indexed-BC kernel, source operator, max-eigenvalue
            callable on the predictor SystemModel.
-        3. Rename ``\\Delta t`` → ``dt`` in ``SM_press`` / ``SM_corr``
+        3. Rename `\\Delta t` → `dt` in `SM_press` / `SM_corr`
            (Python-safe Symbol), register as a parameter, build their
-           runtimes via ``NumpyRuntimeModel.from_system_model``.
+           runtimes via `NumpyRuntimeModel.from_system_model`.
         """
         t0 = _time.time()
 
@@ -857,8 +857,8 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
     def _aux_pool_for(self, sm):
         """Return the (Qaux array, registry) for a given sub-system.
 
-        ``registry`` is the FULL aux list (live + frozen inputs) so a
-        ``function``-aux injection (e.g. bathymetry ``b``) finds its row
+        `registry` is the FULL aux list (live + frozen inputs) so a
+        `function`-aux injection (e.g. bathymetry `b`) finds its row
         whether it was classified live or input by the splitter."""
         full = (sm.aux_registry or []) + (
             getattr(sm, "aux_input_registry", None) or [])
@@ -872,12 +872,12 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
 
     def _compute_boundary_face_state(self):
         """Apply the SystemModel's indexed BC kernel to every boundary
-        face; return ``(n_state, n_boundary_faces)`` face-state array.
+        face; return `(n_state, n_boundary_faces)` face-state array.
 
-        Used by :meth:`update_aux_variables` to give the LSQ derivative
+        Used by `update_aux_variables` to give the LSQ derivative
         stencil at boundary cells the BC-correct face values — so a
-        prescribed-Lambda BC (e.g. ``q_U0_face = 0.11197``) flows into
-        the cell-centered ``∂_x q_U0`` estimate via the boundary-face
+        prescribed-Lambda BC (e.g. `q_U0_face = 0.11197`) flows into
+        the cell-centered `∂_x q_U0` estimate via the boundary-face
         virtual neighbor.  Without this, the LSQ at boundary cells
         falls back to extrapolation (Neumann-zero) which silently
         violates prescribed-value inflow BCs.
@@ -905,20 +905,20 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
         return Q_face
 
     def update_aux_variables(self):
-        """Refresh derivative-aux rows by LSQ in each sub-system's ``Qaux``
-        pool, via the shared :meth:`Solver._walk_derivative_aux` — one call per
+        """Refresh derivative-aux rows by LSQ in each sub-system's `Qaux`
+        pool, via the shared `Solver._walk_derivative_aux` — one call per
         pool (predictor / pressure / corrector), the same single source the
-        canonical ``update_qaux`` uses.
+        canonical `update_qaux` uses.
 
-        Each sub-system has its own ``aux_state`` ordering, so each registry is
-        walked against its own pool.  Function-aux rows (``b`` topography, set
-        once via :meth:`set_function_aux`) are left untouched.
-        ``limited_derivative`` rows (model-declared via
-        ``zoomy_core.model.numerics.limit``) get the TVD limiter via
-        :func:`_apply_cell_limiter`.  Boundary faces use extrapolation
+        Each sub-system has its own `aux_state` ordering, so each registry is
+        walked against its own pool.  Function-aux rows (`b` topography, set
+        once via `set_function_aux`) are left untouched.
+        `limited_derivative` rows (model-declared via
+        `zoomy_core.model.numerics.limit`) get the TVD limiter via
+        `_apply_cell_limiter`.  Boundary faces use extrapolation
         (Neumann-zero) — matching the previous chain behaviour;
         prescribed-Dirichlet inflow is handled in the predictor flux only.
-        ``copy=False`` refreshes each pool array in place (no stale refs)."""
+        `copy=False` refreshes each pool array in place (no stale refs)."""
         kw = dict(kinds=("derivative", "limited_derivative"),
                   limiter_fn=_apply_cell_limiter, copy=False)
         Q, mesh = self._sim_Q, self._sim_mesh
@@ -958,10 +958,10 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
                 self._params_corr_base, _t, _cc)
 
     def set_function_aux(self, name, values):
-        """Set a function-aux row (e.g. static topography ``b``) on
+        """Set a function-aux row (e.g. static topography `b`) on
         every sub-system's Qaux pool at its own row index.  Use this
-        once at IC time to inject bathymetry; ``update_aux_variables``
-        then refreshes the derived rows (``b_x``, ``b_xx``, …) from it.
+        once at IC time to inject bathymetry; `update_aux_variables`
+        then refreshes the derived rows (`b_x`, `b_xx`, …) from it.
         """
         for sm in (self.sm_pred, self.sm_press, self.sm_corr):
             Qaux, registry = self._aux_pool_for(sm)
@@ -973,20 +973,20 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
     def step(self, dt):
         """One Chorin step.
 
-        ``time_order == 1`` (default): single ``predictor → pressure →
+        `time_order == 1` (default): single ``predictor → pressure →
         corrector`` cycle (forward-Euler-style Chorin step).
-            - Predictor: inherited :class:`HyperbolicSolver.step` —
+            - Predictor: inherited `HyperbolicSolver.step` —
               proper Rusanov + NCP + indexed-BC; mass-conservative.
             - Pressure: matrix-free GMRES on the lambdified elliptic
               residual (linear in P ⇒ 1–2 iters from warm start).
-            - Corrector: one lambdify call to ``update_variables`` +
+            - Corrector: one lambdify call to `update_variables` +
               atomic in-place assignment.
 
-        ``time_order == 2``: SSPRK2 / Heun wrap on the full cycle.
-        Two cycles of length ``dt`` are applied sequentially, then
-        Heun-averaged: ``Q^{n+1} = 0.5·(Q^n + Q^(2))``.  The
+        `time_order == 2`: SSPRK2 / Heun wrap on the full cycle.
+        Two cycles of length `dt` are applied sequentially, then
+        Heun-averaged: `Q^{n+1} = 0.5·(Q^n + Q^(2))`.  The
         cont_jk constraints are satisfied exactly at each cycle
-        output; the Heun average carries a small ``O(dt²)`` drift
+        output; the Heun average carries a small `O(dt²)` drift
         the next step's pressure solve corrects.
         """
         if self.time_order == 2:
@@ -1009,8 +1009,8 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
             self._chorin_cycle(dt)
 
     def _chorin_cycle(self, dt):
-        """One ``predictor → pressure → corrector`` cycle — the
-        innermost building block.  Advances ``_sim_time`` by ``dt``."""
+        """One `predictor → pressure → corrector` cycle — the
+        innermost building block.  Advances `_sim_time` by `dt`."""
         super().step(dt)              # predictor: parent's RK + flux + source
         self.update_aux_variables()
         self._step_pressure(dt)
@@ -1024,34 +1024,34 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
 
     def _params_with_dt(self, base, dt):
         """Splice numeric dt into the last slot of a parameter array
-        (where ``dt`` lives by our setup_simulation convention)."""
+        (where `dt` lives by our setup_simulation convention)."""
         out = base.copy()
         out[-1] = float(dt)
         return out
 
     def _build_pressure_dirichlet(self, mesh):
-        """Read ``SM_press``'s declared per-field boundary conditions and record,
+        """Read `SM_press`'s declared per-field boundary conditions and record,
         for each pressure mode, where a Dirichlet VALUE is pinned at a boundary
         face (REQ-174).
 
         The elliptic executor must consume the stage's declared BCs; today it
-        hardcoded ``u_boundary_face="extrapolation"`` (homogeneous Neumann) and
-        never read ``SM_press.boundary_conditions``, so a user-declared Dirichlet
-        P pin at a boundary was silently replaced by ``zeroGradient`` — a
+        hardcoded `u_boundary_face="extrapolation"` (homogeneous Neumann) and
+        never read `SM_press.boundary_conditions`, so a user-declared Dirichlet
+        P pin at a boundary was silently replaced by `zeroGradient` — a
         well-posed solve of the WRONG problem (the operator is full-rank without
         the pin; this is not a singularity).
 
-        Returns ``None`` when NO pressure mode carries a Dirichlet BC — the
+        Returns `None` when NO pressure mode carries a Dirichlet BC — the
         elliptic stage then keeps homogeneous Neumann (the standard Chorin
         pressure BC), bit-identical to the pre-REQ-174 path.  Otherwise a dict:
 
-        * ``face_mask``  ``(nP, n_bf)`` bool — a Dirichlet on mode ``k`` applies
-          at boundary face ``i_bf`` (drives the LSQ derivative-aux stencil);
-        * ``face_value`` ``(nP, n_bf)`` float — the prescribed face value there;
-        * ``bf_cells``   ``(n_bf,)`` int — inner cell adjacent to each face;
-        * ``cell_mask``  ``(nP, nc)`` bool — mode ``k``'s boundary cell is pinned
+        * `face_mask`  `(nP, n_bf)` bool — a Dirichlet on mode `k` applies
+          at boundary face `i_bf` (drives the LSQ derivative-aux stencil);
+        * `face_value` `(nP, n_bf)` float — the prescribed face value there;
+        * `bf_cells`   `(n_bf,)` int — inner cell adjacent to each face;
+        * `cell_mask`  `(nP, nc)` bool — mode `k`'s boundary cell is pinned
           (drives the REAL Dirichlet row in the operator/residual);
-        * ``cell_value`` ``(nP, nc)`` float — the value each pinned cell carries.
+        * `cell_value` `(nP, nc)` float — the value each pinned cell carries.
         """
         from zoomy_core.model.boundary_conditions import Dirichlet
         src = getattr(self.sm_press, "_bc_source", None)
@@ -1067,9 +1067,9 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
         bf_cells = np.asarray(mesh.boundary_face_cells[:n_bf], dtype=int)
 
         def _dirichlet_value(bc, slot):
-            """The declared Dirichlet value for state ``slot`` at this tag, or
-            ``None`` (a per-field :class:`PerFieldBoundary` delegates per slot;
-            a bare BC uses its resolved ``on=`` mask)."""
+            """The declared Dirichlet value for state `slot` at this tag, or
+            `None` (a per-field `PerFieldBoundary` delegates per slot;
+            a bare BC uses its resolved `on=` mask)."""
             slot_bc = getattr(bc, "_slot_bc", None)
             if slot_bc is not None:                        # PerFieldBoundary
                 sub = slot_bc.get(slot)
@@ -1118,24 +1118,24 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
         }
 
     def _step_pressure(self, dt):
-        """Solve the linear elliptic block for ``Q[press_e2s]``.
+        """Solve the linear elliptic block for `Q[press_e2s]`.
 
-        Matrix-free GMRES.  The operator ``A·P`` is evaluated per
+        Matrix-free GMRES.  The operator `A·P` is evaluated per
         Krylov iteration by:
 
-        1. Stuffing the iterate ``p_vec`` into ``Q_try[press_e2s]``.
-        2. **Recomputing the P-dependent aux entries** (``P_0_x``,
-           ``P_1_x``, ``P_0_xx``, ``P_1_xx``) via LSQ stencils on
-           ``p_vec`` — the bug fix vs. fsolve-with-frozen-aux.  The
-           non-P-dependent aux entries (``h``, ``b``, ``h_x``, etc.)
+        1. Stuffing the iterate `p_vec` into `Q_try[press_e2s]`.
+        2. **Recomputing the P-dependent aux entries** (`P_0_x`,
+           `P_1_x`, `P_0_xx`, `P_1_xx`) via LSQ stencils on
+           `p_vec` — the bug fix vs. fsolve-with-frozen-aux.  The
+           non-P-dependent aux entries (`h`, `b`, `h_x`, etc.)
            stay frozen at the start-of-step values.
-        3. Evaluating ``rt.source(Q_try, Qaux_try, p_full)`` — the
+        3. Evaluating `rt.source(Q_try, Qaux_try, p_full)` — the
            lambdified elliptic residual.
 
-        ``b = R(P=0)`` once per step gives the data forcing; then
-        ``A·P = R(P) − b`` is the linear operator.  GMRES warm-starts
+        `b = R(P=0)` once per step gives the data forcing; then
+        `A·P = R(P) − b` is the linear operator.  GMRES warm-starts
         from the previous-step pressure.  No matrix assembled — same
-        pattern jax-jits cleanly via ``jax.scipy.sparse.linalg.gmres``.
+        pattern jax-jits cleanly via `jax.scipy.sparse.linalg.gmres`.
         """
         from scipy.sparse.linalg import LinearOperator, gmres
         rt    = self.rt_press
@@ -1154,16 +1154,16 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
         local_of_state = {int(s): k for k, s in enumerate(e2s)}
 
         def _u_boundary_face(k, p_mat):
-            """Boundary-face samples for mode ``k``'s derivative-aux stencil.
+            """Boundary-face samples for mode `k`'s derivative-aux stencil.
 
             REQ-174: honour the DECLARED per-field BC instead of hardcoding
-            ``'extrapolation'``.  When mode ``k`` carries no declared Dirichlet,
-            return the literal ``'extrapolation'`` (Neumann-zero / ``∂_n P = 0``)
+            `'extrapolation'`.  When mode `k` carries no declared Dirichlet,
+            return the literal `'extrapolation'` (Neumann-zero / `∂_n P = 0`)
             — the standard Chorin pressure BC and bit-identical to the pre-fix
-            path.  Where a Dirichlet IS declared, pass an ``(n_bf,)`` array of
+            path.  Where a Dirichlet IS declared, pass an `(n_bf,)` array of
             face values: the prescribed value on Dirichlet faces, the inner-cell
-            value elsewhere (which reproduces ``'extrapolation'`` exactly, since
-            ``2·u_face − u_cell = u_cell`` when ``u_face = u_cell``)."""
+            value elsewhere (which reproduces `'extrapolation'` exactly, since
+            `2·u_face − u_cell = u_cell` when `u_face = u_cell`)."""
             if press_dir is None:
                 return "extrapolation"
             mask = press_dir["face_mask"][k]
@@ -1176,13 +1176,13 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
 
         def _refresh_pressure_aux(p_mat, Qaux_work):
             """LSQ-recompute the P-dependent derivative-aux rows from
-            the current iterate ``p_mat`` (shape ``(nP, nc)``).  In-
-            place on ``Qaux_work``.
+            the current iterate `p_mat` (shape `(nP, nc)`).  In-
+            place on `Qaux_work`.
 
             Boundary faces use the mode's DECLARED BC (REQ-174):
-            homogeneous Neumann (``∂_n P = 0``) by default — the standard
+            homogeneous Neumann (`∂_n P = 0`) by default — the standard
             Chorin / projection-method pressure BC — and the prescribed value
-            wherever a Dirichlet P is declared on ``SM_press``.
+            wherever a Dirichlet P is declared on `SM_press`.
             """
             u_full = np.zeros(n_cells)
             for entry in self._press_aux_recompute:
@@ -1311,7 +1311,7 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
         _refresh_pressure_aux(p_new.reshape(nP, nc), self.Qaux_press)
 
     def _step_corrector(self, dt):
-        """``Q[corr_e2s] ← update_variables(Q, Qaux_corr, p, dt)`` in place."""
+        """`Q[corr_e2s] ← update_variables(Q, Qaux_corr, p, dt)` in place."""
         rt = self.rt_corr
         Q = self._sim_Q
         Qaux = self.Qaux_corr           # SM_corr's own aux pool
@@ -1348,8 +1348,8 @@ class ChorinSplitVAMSolver(HyperbolicSolver):
 def _substitute_dt(sm, old_sym, new_sym):
     """Rename a Symbol throughout a sub-system's operator tensors.
 
-    Used to convert the splitter's ``\\Delta t`` placeholder into the
-    Python-safe ``dt`` Symbol before lambdify (the backslash is a line
+    Used to convert the splitter's `\\Delta t` placeholder into the
+    Python-safe `dt` Symbol before lambdify (the backslash is a line
     continuation in Python source).  Element-wise xreplace via ZArray.
     """
     sub = {old_sym: new_sym}

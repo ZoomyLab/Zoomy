@@ -2,14 +2,14 @@
 
 Covers the model/unknown spine:
 
-(a) build the 3 SME balances, set ``model.Q=[h,u,w,p]``, assert ``Qaux``
-    auto-contains ``b``/``tau`` and excludes coords/params;
-(b) hydrostatic elimination drops ``p`` from Q;
-(c) vector access ``model.momentum.x`` / ``.z``;
-(d) term selection ``eq.term[i]`` / ``eq.term[[i, j]].apply(...)`` restricts to
-    additive terms; bare ``eq[i]`` is no longer term-indexing (``[l]`` is
+(a) build the 3 SME balances, set `model.Q=[h,u,w,p]`, assert `Qaux`
+    auto-contains `b`/`tau` and excludes coords/params;
+(b) hydrostatic elimination drops `p` from Q;
+(c) vector access `model.momentum.x` / `.z`;
+(d) term selection `eq.term[i]` / `eq.term[[i, j]].apply(...)` restricts to
+    additive terms; bare `eq[i]` is no longer term-indexing (`[l]` is
     reserved for moment rows);
-(e) ``describe()`` renders.
+(e) `describe()` renders.
 """
 
 import sympy as sp
@@ -199,8 +199,8 @@ def test_single_term_only_op_raises_on_multiterm():
 
 
 def test_term_accessor_single_and_group():
-    """``eq.term[i]`` is one additive term; ``eq.term[[i, j]]`` /
-    ``eq.term[i, j]`` is a term group — both write rewrites back."""
+    """`eq.term[i]` is one additive term; `eq.term[[i, j]]` /
+    `eq.term[i, j]` is a term group — both write rewrites back."""
     model, s = _build_sme()
     u, w = s["u"], s["w"]
     # mass = ∂_x u + ∂_z w.
@@ -215,8 +215,8 @@ def test_term_accessor_single_and_group():
 
 
 def test_bare_equation_indexing_no_longer_returns_a_term():
-    """A scalar ``Equation`` is no longer term-indexable via bare ``eq[i]`` —
-    ``[l]`` is reserved for moment rows.  ``eq[0]`` must raise, NOT return a
+    """A scalar `Equation` is no longer term-indexable via bare `eq[i]` —
+    `[l]` is reserved for moment rows.  `eq[0]` must raise, NOT return a
     term."""
     model, s = _build_sme()
     with pytest.raises(TypeError):
@@ -249,7 +249,7 @@ def test_equation_describe_renders():
 
 
 def test_change_of_variables_swaps_unknown_family():
-    """``ChangeOfVariables`` swaps the unknown family in Q; a bare
+    """`ChangeOfVariables` swaps the unknown family in Q; a bare
     A bare substitution must NOT touch Q."""
     model = Model(coords=(t, x), parameters={})
     a0 = sp.Function("a")(0, t, x)

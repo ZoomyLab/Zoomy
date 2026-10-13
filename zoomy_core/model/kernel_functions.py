@@ -9,12 +9,12 @@ from zoomy_core.misc.misc import ZArray
 
 
 class eigensystem(sp.Function):
-    """Opaque full eigendecomposition ``[lambda, R, L=R^-1]`` of the row-major ``n*n`` matrix
-    ``A_flat``, packed in one vector. Components are read through
-    ``pick(eigensystem(*a), idx)``; used by the Roe scheme.
+    """Opaque full eigendecomposition `[lambda, R, L=R^-1]` of the row-major `n*n` matrix
+    `A_flat`, packed in one vector. Components are read through
+    `pick(eigensystem(*a), idx)`; used by the Roe scheme.
 
     Args:
-        A_flat: the ``n*n`` matrix entries, row-major.
+        A_flat: the `n*n` matrix entries, row-major.
     """
 
     is_commutative = True
@@ -27,14 +27,14 @@ class eigensystem(sp.Function):
 
 
 class spectral_radius(sp.Function):
-    """Opaque estimate of ``rho(A)`` by ``k`` power-iteration steps on ``A^2`` (no
+    """Opaque estimate of `rho(A)` by `k` power-iteration steps on `A^2` (no
     eigendecomposition, runs on any device). Used as the wave-speed bound of the symbolic
     solvers.
 
     Args:
         k: number of power-iteration steps.
         safety: multiplicative safety factor on the estimate.
-        A_flat: the ``n*n`` matrix entries, row-major.
+        A_flat: the `n*n` matrix entries, row-major.
     References:
         Golub & Van Loan 2013, https://doi.org/10.56021/9781421407944
     """
@@ -49,8 +49,8 @@ class spectral_radius(sp.Function):
 
 
 class eigenvalues(sp.Function):
-    """Opaque eigenvalue-only spectrum of the row-major ``n*n`` matrix ``A_flat``, read through
-    ``pick(eigenvalues(*a), idx)``. Cheaper companion of :class:`eigensystem` for wave-speed
+    """Opaque eigenvalue-only spectrum of the row-major `n*n` matrix `A_flat`, read through
+    `pick(eigenvalues(*a), idx)`. Cheaper companion of `eigensystem` for wave-speed
     bounds when no closed-form spectrum exists.
     """
 
@@ -64,8 +64,8 @@ class eigenvalues(sp.Function):
 
 
 class solve(sp.Function):
-    """Opaque per-cell linear solve ``A^-1 b``, called as ``solve(*A_flat, *b_flat)`` and read
-    through ``pick(solve(*a), idx)``. Used by the point-implicit source treatment of the
+    """Opaque per-cell linear solve `A^-1 b`, called as `solve(*A_flat, *b_flat)` and read
+    through `pick(solve(*a), idx)`. Used by the point-implicit source treatment of the
     NumericalSystemModel.
     """
 
@@ -79,9 +79,9 @@ class solve(sp.Function):
 
 
 class pick(sp.Function):
-    """Component ``idx`` of a packed opaque-kernel result (:class:`eigensystem`,
-    :class:`eigenvalues`, :class:`solve`). Per-component backends restore ``K(idx, *a)`` through
-    :func:`lower_pick_to_component`.
+    """Component `idx` of a packed opaque-kernel result (`eigensystem`,
+    `eigenvalues`, `solve`). Per-component backends restore `K(idx, *a)` through
+    `lower_pick_to_component`.
     """
 
     is_commutative = True
@@ -99,11 +99,11 @@ _PER_COMPONENT_KERNELS = frozenset({"eigensystem", "eigenvalues", "solve"})
 
 
 def lower_pick_to_component(expr):
-    """Rewrite ``pick(K(*a), idx)`` into the per-component form ``K(idx, *a)`` required by the
+    """Rewrite `pick(K(*a), idx)` into the per-component form `K(idx, *a)` required by the
     C/C++ and UFL printers.
 
     Returns:
-        The expression (or array/matrix) with every ``pick`` of a per-component kernel swapped
+        The expression (or array/matrix) with every `pick` of a per-component kernel swapped
         structurally.
     """
     def _rw(e):
@@ -135,9 +135,9 @@ def lower_pick_to_component(expr):
 
 
 class compute_derivative(sp.Function):
-    """Opaque non-local spatial derivative ``compute_derivative(field, *multi_index)``;
-    ``(h, 1, 0)`` is d h / d x. The solver injects the backend's LSQ-gradient implementation; it
-    is emitted by ``expose_aux`` into ``update_aux_variables``.
+    """Opaque non-local spatial derivative `compute_derivative(field, *multi_index)`;
+    `(h, 1, 0)` is d h / d x. The solver injects the backend's LSQ-gradient implementation; it
+    is emitted by `expose_aux` into `update_aux_variables`.
     """
     is_commutative = True
     is_real = True
@@ -149,8 +149,8 @@ class compute_derivative(sp.Function):
 
 
 class conditional(sp.Function):
-    """Vector-aware differentiable ``conditional(c, t, f)``: a symbolic node for scalars, a
-    ``ZArray`` of nodes for vector branches. Differentiation follows the active branch and
+    """Vector-aware differentiable `conditional(c, t, f)`: a symbolic node for scalars, a
+    `ZArray` of nodes for vector branches. Differentiation follows the active branch and
     ignores the jump at the condition.
     """
 
@@ -161,7 +161,7 @@ class conditional(sp.Function):
 
     def __new__(cls, condition, true_val, false_val, **kwargs):
         # 1. Helper to check for array-like inputs (excluding Symbols)
-        """Build the scalar node, or broadcast over array-valued branches into a ``ZArray``."""
+        """Build the scalar node, or broadcast over array-valued branches into a `ZArray`."""
         def is_vec(x):
             """True for array-like (non-symbol) inputs."""
             return hasattr(x, "__getitem__") and not isinstance(

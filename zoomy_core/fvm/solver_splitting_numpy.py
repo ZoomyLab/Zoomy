@@ -1,6 +1,6 @@
 """Pressure-splitting solver: IMEX + Poisson constraint (numpy backend).
 
-Extends ``IMEXSolver`` with a pressure Poisson correction step (Chorin
+Extends `IMEXSolver` with a pressure Poisson correction step (Chorin
 projection). Uses face-based divergence and gradient, and GMRES for the
 Poisson solve.
 
@@ -39,10 +39,10 @@ class SplittingSolver(IMEXSolver):
     The model state Q holds velocity components.  Pressure is a separate
     field solved at each timestep via the incompressibility constraint.
 
-    Subclasses for free-surface flow override ``_velocity_indices`` to
-    point at the actual velocity slots (e.g. ``[2, 3, ...]`` past the
+    Subclasses for free-surface flow override `_velocity_indices` to
+    point at the actual velocity slots (e.g. `[2, 3, ...]` past the
     bathymetry/depth pair) — by default we assume INS-style layout
-    where the velocity components are at indices ``0..dim-1``.
+    where the velocity components are at indices `0..dim-1`.
     """
 
     pressure_gmres_tol = param.Number(default=1e-6, doc="GMRES tolerance for Poisson")
@@ -52,20 +52,20 @@ class SplittingSolver(IMEXSolver):
     def _velocity_indices(self, model):
         """State indices subject to viscous diffusion + pressure projection.
 
-        Default (INS-style state ``[u, v[, w]]``): ``[0, ..., dim-1]``.
-        Subclasses override for layouts like ``[b, h, hu, hv, ...]``.
+        Default (INS-style state `[u, v[, w]]`): `[0, ..., dim-1]`.
+        Subclasses override for layouts like `[b, h, hu, hv, ...]`.
         """
         return list(range(model.dimension))
 
     def setup_simulation(self, mesh, model, write_output=False):
         """Build all operators including Poisson infrastructure.
 
-        ``model`` may be a :class:`Model`, a :class:`SystemModel`, or an
-        already-built :class:`NumericalSystemModel`.  It is coerced to an NSM
-        (via :meth:`HyperbolicSolver._coerce_to_nsm`) and stored on
-        ``self.nsm`` — the base ``get_flux_operator`` /
-        ``get_compute_max_abs_eigenvalue`` read ``self.nsm.reconstruction`` and
-        ``self.nsm.eigenvalue_eps``, so WITHOUT this assignment the solver
+        `model` may be a `Model`, a `SystemModel`, or an
+        already-built `NumericalSystemModel`.  It is coerced to an NSM
+        (via `HyperbolicSolver._coerce_to_nsm`) and stored on
+        `self.nsm` — the base `get_flux_operator` /
+        `get_compute_max_abs_eigenvalue` read `self.nsm.reconstruction` and
+        `self.nsm.eigenvalue_eps`, so WITHOUT this assignment the solver
         raised ``AttributeError: 'SplittingSolver' object has no attribute
         'nsm'`` for every model (REQ-148).
         """
@@ -211,7 +211,7 @@ class SplittingSolver(IMEXSolver):
         """One splitting timestep: flux -> viscous diffusion -> pressure correction.
 
         Ghost-cell-free: BCs are evaluated inline inside each substep at
-        boundary faces (via ``self._bc_objects[i_bf].face_value(...)``).
+        boundary faces (via `self._bc_objects[i_bf].face_value(...)`).
         No separate ghost-cell fill between substeps.
         """
         Q = self._sim_Q
@@ -258,8 +258,8 @@ class SplittingSolver(IMEXSolver):
         """Explicit viscous diffusion for velocity components, ghost-cell-free.
 
         Interior faces use both adjacent inner cells; boundary faces evaluate
-        the BC inline (``bc.face_value(...)``) to obtain ``u_face``, then form
-        the gradient against the inner cell center over distance ``d_face``.
+        the BC inline (`bc.face_value(...)`) to obtain `u_face`, then form
+        the gradient against the inner cell center over distance `d_face`.
         """
         dim = self._sim_dim
         n_vars = self._sim_n_vars
@@ -323,10 +323,10 @@ class SplittingSolver(IMEXSolver):
     def _pressure_correction(self, Q_star, Qaux, parameters, time_now, dt):
         """Compute divergence, solve Poisson, correct velocity. Ghost-cell-free.
 
-        Divergence of ``u*``: interior faces use the average of the two cell
-        values; boundary faces evaluate the BC inline to obtain ``u_face``.
-        Pressure has Neumann BCs at boundaries (``p_face = p_inner``) — this
-        matches the Poisson Laplacian assembly in ``_build_poisson_solver``,
+        Divergence of `u*`: interior faces use the average of the two cell
+        values; boundary faces evaluate the BC inline to obtain `u_face`.
+        Pressure has Neumann BCs at boundaries (`p_face = p_inner`) — this
+        matches the Poisson Laplacian assembly in `_build_poisson_solver`,
         which skips boundary-face entries.
         """
         dim = self._sim_dim
@@ -449,7 +449,7 @@ class FSFSplittingSolver(SplittingSolver):
 
     Requires model variables 'b' and 'h' at state indices 0 and 1.
     Velocity components (subject to viscous diffusion + Chorin pressure
-    projection) start at index 2 and span ``dim`` slots.
+    projection) start at index 2 and span `dim` slots.
     """
 
     def _build_numerics(self, symbolic_model):

@@ -1,12 +1,12 @@
 """Symbolic inverse of the reconstruction-variables map.
 
-Given a forward map ``wb_k = f_k(state)`` (one entry per state slot,
-as ZArray), :func:`invert_reconstruction` returns the closed-form
-inverse ``state_k = g_k(WB)``, where ``WB`` is a vector of fresh
-``WB_<state_name>`` symbols.  The inverse is auto-derived via
-``sympy.solve``; topological ordering between slots (e.g. depth-first,
+Given a forward map `wb_k = f_k(state)` (one entry per state slot,
+as ZArray), `invert_reconstruction` returns the closed-form
+inverse `state_k = g_k(WB)`, where `WB` is a vector of fresh
+`WB_<state_name>` symbols.  The inverse is auto-derived via
+`sympy.solve`; topological ordering between slots (e.g. depth-first,
 then momentum) is left to sympy.  Used by both
-:meth:`zoomy_core.model.basemodel.Model.state_from_reconstruction`
+`zoomy_core.model.basemodel.Model.state_from_reconstruction`
 and the corresponding SystemModel-level derived field, so the same
 inverse logic is shared symbol-by-symbol whether invoked on the
 model's primitive state or on the SystemModel's post-CoV state.
@@ -19,9 +19,9 @@ from zoomy_core.misc.misc import ZArray
 
 
 def reconstruction_symbols(state_syms):
-    """Return the fresh ``WB_<name>`` symbols paired with ``state_syms``.
+    """Return the fresh `WB_<name>` symbols paired with `state_syms`.
 
-    One ``WB_<state_name>`` Symbol per state slot, in slot order.  The
+    One `WB_<state_name>` Symbol per state slot, in slot order.  The
     inverse is expressed in terms of these — at lambdification time the
     runtime feeds them with the limiter's primitive face values.
     """
@@ -29,26 +29,26 @@ def reconstruction_symbols(state_syms):
 
 
 def invert_reconstruction(forward, state_syms):
-    """Return the symbolic inverse of ``forward`` as a ZArray of length
-    ``len(state_syms)``.
+    """Return the symbolic inverse of `forward` as a ZArray of length
+    `len(state_syms)`.
 
     Parameters
     ----------
     forward : ZArray | sequence
-        Reconstruction-variables map — entry ``k`` is the symbolic
-        expression for the WB primitive in slot ``k``, in terms of
-        ``state_syms``.
+        Reconstruction-variables map — entry `k` is the symbolic
+        expression for the WB primitive in slot `k`, in terms of
+        `state_syms`.
     state_syms : sequence of sympy.Symbol
         State symbols, in slot order.
 
     Returns
     -------
     ZArray
-        Inverse map — entry ``k`` is ``state_syms[k]`` expressed as a
-        sympy expression in ``WB_<state_name>`` symbols.  For slots
-        where the forward is the identity (``forward[k] == state[k]``)
-        the inverse is also the identity (``WB_<state_name>``), no
-        ``solve`` call.
+        Inverse map — entry `k` is `state_syms[k]` expressed as a
+        sympy expression in `WB_<state_name>` symbols.  For slots
+        where the forward is the identity (`forward[k] == state[k]`)
+        the inverse is also the identity (`WB_<state_name>`), no
+        `solve` call.
     """
     n = len(state_syms)
     wb_syms = reconstruction_symbols(state_syms)

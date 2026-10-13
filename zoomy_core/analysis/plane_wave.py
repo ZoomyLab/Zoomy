@@ -1,9 +1,9 @@
 """Plane-wave dispersion analysis.
 
-Inserts the 1D plane-wave ansatz ``δq(t, x) = q̂ exp(i(k x − ω t))``
-into a linearised :class:`SystemModel`'s operator-form residual and
-reduces to an algebraic system in the amplitudes ``q̂``.  Solves
-``det M(ω, k) = 0`` for ``ω(k)`` (or ``k(ω)``).
+Inserts the 1D plane-wave ansatz `δq(t, x) = q̂ exp(i(k x − ω t))`
+into a linearised `SystemModel`'s operator-form residual and
+reduces to an algebraic system in the amplitudes `q̂`.  Solves
+`det M(ω, k) = 0` for `ω(k)` (or `k(ω)`).
 """
 from __future__ import annotations
 
@@ -24,17 +24,17 @@ def plane_wave_matrix(linear_sm, *,
                       k: Optional[sp.Symbol] = None,
                       omega: Optional[sp.Symbol] = None,
                       axis: int = 0):
-    """Insert ``δq → q̂ exp(i(k x_axis − ω t))`` and reduce to a matrix.
+    """Insert `δq → q̂ exp(i(k x_axis − ω t))` and reduce to a matrix.
 
-    ``linear_sm`` must be a SystemModel returned by :func:`linearise`
-    (state entries are the perturbation symbols ``δq``).
+    `linear_sm` must be a SystemModel returned by `linearise`
+    (state entries are the perturbation symbols `δq`).
 
     Returns
     -------
     M : sp.Matrix
-        Coefficient matrix such that ``M · q̂_vector = 0``.
+        Coefficient matrix such that `M · q̂_vector = 0`.
     amplitudes : list[sp.Symbol]
-        Amplitude symbols, in the same order as ``linear_sm.state``.
+        Amplitude symbols, in the same order as `linear_sm.state`.
     """
     if k is None:
         k = sp.Symbol("k", real=True)
@@ -86,13 +86,15 @@ def plane_wave_dispersion(linear_sm, *,
                           factor_in_target: bool = True):
     """Full dispersion solve.
 
-    Returns a dict with::
+    Returns a dict with:
 
+    ```
         matrix       — sp.Matrix M(ω, k)
         amplitudes   — list of q̂ symbols
         determinant  — det M(ω, k)
         solutions    — list of ω(k) (or k(ω)) solutions
         phase_velocity_solutions — [ω/k for ω in solutions] (omega-mode only)
+    ```
     """
     if k is None:
         k = sp.Symbol("k", real=True)

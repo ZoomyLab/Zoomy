@@ -1,13 +1,13 @@
 """Stages: what one RK stage does, as template statements.
 
-Every stage is a :class:`~.ir.Procedure` with the common signature
+Every stage is a `Procedure` with the common signature
 
     (Q, Qaux, p, geom, time, dt, o1) -> (Q_cand, troubled)
 
-``time`` is the stage time ``t + c_k dt`` (D3), ``dt`` the stage step,
-``o1`` the MOOD order-1 cell mask, ``Q_cand`` the stage candidate and
-``troubled`` its not-admissible / non-finite cell mask.  The step builder
-calls it once per Shu-Osher stage (and again inside the MOOD ``Select``).
+`time` is the stage time `t + c_k dt` (D3), `dt` the stage step,
+`o1` the MOOD order-1 cell mask, `Q_cand` the stage candidate and
+`troubled` its not-admissible / non-finite cell mask.  The step builder
+calls it once per Shu-Osher stage (and again inside the MOOD `Select`).
 
 Stages only REFERENCE blocks by name; the bodies are per backend.
 """
@@ -46,10 +46,10 @@ class BuildContext:
 
 
 class Stage:
-    """Base class: subclasses implement :meth:`build`.
+    """Base class: subclasses implement `build`.
 
-    ``supports_o1``: the stage's result depends on the ``o1`` mask (it has a
-    higher-order reconstruction that MOOD can demote).  ``name``: procedure
+    `supports_o1`: the stage's result depends on the `o1` mask (it has a
+    higher-order reconstruction that MOOD can demote).  `name`: procedure
     name."""
 
     name = "stage"
@@ -71,11 +71,11 @@ class Stage:
 
 
 class Hyperbolic(Stage):
-    """Explicit FV stage: ``Q_cand = Q + dt L(Q; t_stage)``.
+    """Explicit FV stage: `Q_cand = Q + dt L(Q; t_stage)`.
 
     halo/BC ghosts -> reconstruction (o1-aware) -> face_equilibrium hook ->
     numerical flux + fluctuations -> face_fixup hook (coupling) -> interior
-    NCP (build flag ``cell_ncp``) -> gather with the admissibility mask."""
+    NCP (build flag `cell_ncp`) -> gather with the admissibility mask."""
 
     name = "explicit_stage"
     supports_o1 = True
@@ -111,9 +111,9 @@ class Hyperbolic(Stage):
 
 
 class CompositeStage(Stage):
-    """Sub-stages chained within ONE RK stage: ``Q -> S_1 -> S_2 -> ...``
+    """Sub-stages chained within ONE RK stage: `Q -> S_1 -> S_2 -> ...`
     (D8: Chorin's [hyperbolic(Euler) -> elliptic -> pointwise]).  The troubled
-    masks are OR-combined; ``refresh_aux`` refreshes the aux between
+    masks are OR-combined; `refresh_aux` refreshes the aux between
     sub-stages at the stage time."""
 
     def __init__(self, stages, *, name: Optional[str] = None,

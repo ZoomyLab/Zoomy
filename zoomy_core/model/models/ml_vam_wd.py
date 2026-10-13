@@ -1,82 +1,84 @@
 """ML-VAM-WD — ML-VAM with the **wet/dry (discharge-form) divergence
-constraint** of 86BQYCRP Eq. 19.  EXPERIMENTAL sibling of ``ml_vam.py``.
+constraint** of 86BQYCRP Eq. 19.  EXPERIMENTAL sibling of `ml_vam.py`.
 
-Byte-identical to ``ml_vam.py`` except for ONE block — the per-layer
-divergence-constraint emission in :meth:`MLVAMWD.derive_model` (search
-``86BQYCRP Eq. 19``).  The stock model keeps the σ-mass-flux compound
-``(1/h)·∂_x(h·q_k)`` folded, which leaves a ``1/h`` INSIDE the emitted elliptic
-operator and makes it SINGULAR as ``h→0`` at a thinning front.  Here the row is
-distributed and multiplied by ``l_ℓ·h²`` so the ``1/h`` cancels analytically and
-the pressure block stays invertible (``P→0`` automatically at wet/dry fronts,
-no threshold).  Same constraint manifold wherever ``h>0``.
+Byte-identical to `ml_vam.py` except for ONE block — the per-layer
+divergence-constraint emission in `MLVAMWD.derive_model` (search
+`86BQYCRP Eq. 19`).  The stock model keeps the σ-mass-flux compound
+`(1/h)·∂_x(h·q_k)` folded, which leaves a `1/h` INSIDE the emitted elliptic
+operator and makes it SINGULAR as `h→0` at a thinning front.  Here the row is
+distributed and multiplied by `l_ℓ·h²` so the `1/h` cancels analytically and
+the pressure block stays invertible (`P→0` automatically at wet/dry fronts,
+no threshold).  Same constraint manifold wherever `h>0`.
 
-Kept separate so the validated :class:`~.ml_vam.MLVAM` is untouched; fold back
+Kept separate so the validated `MLVAM` is untouched; fold back
 once the 2-layer Escalante bump survives the front (cid 182).
 
 Second departure: the **LDNH constraint structure** (Fernández-Nieto/Parisot/
 Penel/Sainte-Marie 2018; Escalante–Morales de Luna 2021 eq. 8/10; the
 multilayer version 32K4N2P5 §3.1).  ml_vam.py SPENDS the bottom/interface
-kinematic condition to eliminate the top ``ŵ`` mode; here ``ŵ_top`` stays a
-STATE (with its own ``momentum_z`` row) and the kinematic residual is re-added
+kinematic condition to eliminate the top `ŵ` mode; here `ŵ_top` stays a
+STATE (with its own `momentum_z` row) and the kinematic residual is re-added
 as an INDEPENDENT constraint row, paired with the extra pressure unknown that
-the ``N^q = N^w + 1`` degree pairing prescribes.  Spaces per layer::
+the `N^q = N^w + 1` degree pairing prescribes.  Spaces per layer:
 
+```
     u ∈ P_Nu   (Nu+1 free modes, q_ℓ_k)
     w ∈ P_{Nu+1}  (Nu+2 free modes, r_ℓ_k — NO closed top mode)
     p ∈ P_{Nu+2}  (Nu+2 free modes, P_ℓ_j — top mode closed by the trace)
 
     constraints per layer = mass[1 … Nu+1]  +  R_kbc      = Nu+2
     free pressure modes   = P_ℓ_0 … P_ℓ_{Nu+1}           = Nu+2   ✔ square
+```
 
 MEASURED (STEP-1 rank study, symbolic Jacobian on atomised modal columns, at
 (N,Nu) = (1,1), (2,1), (1,2)): the per-layer relation set
-``{mass[0…Nu+1], R_kbc, R_top}`` has Nu+4 rows of rank Nu+3 — EXACTLY ONE
-dependency, ``mass[Nu+1] = ∓R_kbc − R_top``, i.e. the top mass mode is pure
+`{mass[0…Nu+1], R_kbc, R_top}` has Nu+4 rows of rank Nu+3 — EXACTLY ONE
+dependency, `mass[Nu+1] = ∓R_kbc − R_top`, i.e. the top mass mode is pure
 boundary data.  Consequences, both honoured below:
 
-* ``R_top`` (surface/interface KBC) is REDUNDANT — do not add it;
-* ``mass[0]`` is NOT free — it is the only relation supplying ``∂_t h_ℓ``/``G``
+* `R_top` (surface/interface KBC) is REDUNDANT — do not add it;
+* `mass[0]` is NOT free — it is the only relation supplying `∂_t h_ℓ`/`G`
   and stays the layer depth equation (measured gain from freeing it: **0**);
-* freeing ``ŵ_top`` and adding ``R_kbc`` buys **+1** independent constraint —
-  which is precisely the one extra pressure degree of ``N^q = N^w + 1``.
+* freeing `ŵ_top` and adding `R_kbc` buys **+1** independent constraint —
+  which is precisely the one extra pressure degree of `N^q = N^w + 1`.
 
-⚠ HISTORY: an earlier pass widened p to ``P_{Nu+2}`` and matched it with the
-mode-``Nu+2`` LAYER-MASS projection.  That row is non-zero but DEPENDENT (it
-differs from mode ``Nu+1`` by twice the bottom KBC, which was then substituted
-away), so the pressure block was rank ``Nu+1`` for ``Nu+2`` unknowns.  The
+⚠ HISTORY: an earlier pass widened p to `P_{Nu+2}` and matched it with the
+mode-`Nu+2` LAYER-MASS projection.  That row is non-zero but DEPENDENT (it
+differs from mode `Nu+1` by twice the bottom KBC, which was then substituted
+away), so the pressure block was rank `Nu+1` for `Nu+2` unknowns.  The
 extra pressure degree needs the KINEMATIC row, never another mass mode.
 
-Layers are coupled by ``KinematicBC(mass_flux=G_ℓ)`` with the Hörnschemeyer
-fraction-multiplier closure (``h_ℓ = l_ℓ·h``).
+Layers are coupled by `KinematicBC(mass_flux=G_ℓ)` with the Hörnschemeyer
+fraction-multiplier closure (`h_ℓ = l_ℓ·h`).
 
 The N pressure top-mode closures cascade DOWNWARD through the stack: surface
-``p_N(1) = 0``; every lower layer's top trace equals the layer-above's bottom
+`p_N(1) = 0`; every lower layer's top trace equals the layer-above's bottom
 trace (downward convention — the upward one makes the elliptic block singular,
 see the ml_vam thesis notebook).  The traces are FULL modal traces including
 the closed top modes, so the chain resolves from the surface to the bed.
 
 The N kinematic conditions are NO LONGER closures.  ``w_ℓ(0) = ∂t z_{ℓ-½} +
-u_ℓ(0)·∂x z_{ℓ-½} + G_{ℓ-½}/ρ`` (bottom KBC ``w_1(0) = u_1(0)·∂x b`` on the
-bed) is emitted as the constraint row ``constraint_kbc_{ℓ}``, whose Lagrange
+u_ℓ(0)·∂x z_{ℓ-½} + G_{ℓ-½}/ρ`` (bottom KBC `w_1(0) = u_1(0)·∂x b` on the
+bed) is emitted as the constraint row `constraint_kbc_{ℓ}`, whose Lagrange
 multiplier is the extra per-layer pressure unknown — the bottom/interface
-pressure ``q_b`` of Escalante 2021 eq. (10).
+pressure `q_b` of Escalante 2021 eq. (10).
 
 Per layer the advective σ-mass flux ω̃ is resolved to its CLOSED form
-``ω̃(ζ) = G_{ℓ-½}/ρ − ∫₀^ζ (∂t h_ℓ + ∂x(h_ℓ ũ_ℓ))`` (Escalante's
+`ω̃(ζ) = G_{ℓ-½}/ρ − ∫₀^ζ (∂t h_ℓ + ∂x(h_ℓ ũ_ℓ))` (Escalante's
 eq(3)→(4) step with the interface mass-flux offset) — the definition form
 differs by {layer-mass, constraint} combinations, equivalent ON the
 constraint manifold but not in the off-manifold predictor.
 
-Interface momentum transfer: ``u*`` is the surgical mean-trace swap on the
+Interface momentum transfer: `u*` is the surgical mean-trace swap on the
 x-momentum rows (u-traces are genuinely one-sided).  The w-rows get NO
 swap — the kinematic closures make the w-traces of adjacent layers exactly
 continuous, so a w* transfer correction is identically zero.
 
-``SystemModel.from_model(MLVAMWD(...))`` is the square DAE (state
-``[b, h, q_ℓk, r_ℓk, P_ℓj]``; the per-layer divergence constraints are the
-zero-mass-matrix rows); ``MLVAMWD.chorin_split(dt)`` returns the structural
+`SystemModel.from_model(MLVAMWD(...))` is the square DAE (state
+`[b, h, q_ℓk, r_ℓk, P_ℓj]`; the per-layer divergence constraints are the
+zero-mass-matrix rows); `MLVAMWD.chorin_split(dt)` returns the structural
 predictor / pressure / corrector sub-systems for
-:class:`~zoomy_core.fvm.solver_chorin_vam_numpy.ChorinSplitVAMSolver`.
+`ChorinSplitVAMSolver`.
 """
 from __future__ import annotations
 
@@ -109,21 +111,21 @@ class MLVAMWD(BaseModel):
     """ML-VAM in the **LDNH constraint structure** with the **wet/dry
     (discharge-form) constraint scaling** of 86BQYCRP Eq. 19.
 
-    Two departures from :class:`~.ml_vam.MLVAM`:
+    Two departures from `MLVAM`:
 
-    * the per-layer divergence constraints are emitted multiplied by ``l_ℓ·h²``
-      (the kinematic row by ``l_ℓ·h``) with the ``1/h`` cancelled ANALYTICALLY,
-      so the elliptic block stays invertible as ``h→0``;
-    * ``ŵ_top`` is a STATE, not a closure.  ``w ∈ P_{Nu+1}`` keeps all ``Nu+2``
-      modes (each with its own ``momentum_z`` row) and the bottom/interface
-      kinematic condition returns as the constraint ``constraint_kbc_{ℓ}``.
+    * the per-layer divergence constraints are emitted multiplied by `l_ℓ·h²`
+      (the kinematic row by `l_ℓ·h`) with the `1/h` cancelled ANALYTICALLY,
+      so the elliptic block stays invertible as `h→0`;
+    * `ŵ_top` is a STATE, not a closure.  `w ∈ P_{Nu+1}` keeps all `Nu+2`
+      modes (each with its own `momentum_z` row) and the bottom/interface
+      kinematic condition returns as the constraint `constraint_kbc_{ℓ}`.
       That buys the +1 independent constraint (measured, see
-      :meth:`derive_model`) which pairs with ``p ∈ P_{Nu+2}``'s extra unknown:
-      ``Nu+2`` constraints ↔ ``Nu+2`` free pressure modes per layer.
+      `derive_model`) which pairs with `p ∈ P_{Nu+2}`'s extra unknown:
+      `Nu+2` constraints ↔ `Nu+2` free pressure modes per layer.
 
     EXPERIMENTAL sibling, not a replacement: kept as its own model so the
-    validated ``MLVAM`` is untouched while this is proven.  Fold back into
-    ``ml_vam.py`` only once the 2-layer Escalante bump survives the thinning
+    validated `MLVAM` is untouched while this is proven.  Fold back into
+    `ml_vam.py` only once the 2-layer Escalante bump survives the thinning
     front (cid 182)."""
 
     _finalize_lazy = True

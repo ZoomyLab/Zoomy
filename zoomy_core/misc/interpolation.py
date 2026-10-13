@@ -1,4 +1,4 @@
-"""Element-wise remapping of discrete fields between two ``Mesh`` objects."""
+"""Element-wise remapping of discrete fields between two `Mesh` objects."""
 
 import numpy as np
 from sympy import integrate, diff
@@ -41,7 +41,7 @@ def _is_point_inside_bounding_faces(outward_face_normals, vectors_OP):
 
 
 def to_new_mesh(fields, mesh_old, mesh_new, interp="const", map_fields=None):
-    """Copy cell data from ``mesh_old`` to ``mesh_new`` using piecewise-constant injection."""
+    """Copy cell data from `mesh_old` to `mesh_new` using piecewise-constant injection."""
     assert interp == "const"
 
     fields_new = np.zeros_like(fields)

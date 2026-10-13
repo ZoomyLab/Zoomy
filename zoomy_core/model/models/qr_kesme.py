@@ -1,7 +1,7 @@
-"""k-epsilon Shallow Moment Equations in the q-r variables ``sk = sqrt(k)``,
-``se = sqrt(epsilon)`` (QRKESME), positive by construction. A separate variant of
-:class:`~zoomy_core.model.models.ke_sme.KESME`; lifted to a SystemModel via
-``SystemModel.from_model``.
+"""k-epsilon Shallow Moment Equations in the q-r variables `sk = sqrt(k)`,
+`se = sqrt(epsilon)` (QRKESME), positive by construction. A separate variant of
+`KESME`; lifted to a SystemModel via
+`SystemModel.from_model`.
 """
 from __future__ import annotations
 
@@ -33,10 +33,10 @@ zeta = sp.Symbol("zeta", real=True)
 
 
 class QRKESME(SME):
-    """SME with ``sk`` and ``se`` transported at their own modal order ``turbulence_level``, so
-    ``k = sk^2 >= 0`` and ``epsilon = se^2 >= 0`` hold identically. Default closures are
-    ``QRViscosity``, ``RoughWall`` and ``StressFree``; build with ``quadrature_order>0`` because
-    ``nu_t = C_mu sk^4/se^2`` is rational.
+    """SME with `sk` and `se` transported at their own modal order `turbulence_level`, so
+    `k = sk^2 >= 0` and `epsilon = se^2 >= 0` hold identically. Default closures are
+    `QRViscosity`, `RoughWall` and `StressFree`; build with `quadrature_order>0` because
+    `nu_t = C_mu sk^4/se^2` is rational.
 
     References:
         Kowalski & Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
@@ -50,7 +50,7 @@ class QRKESME(SME):
         "the velocity order ``level`` (N_u)."))
 
     def __init__(self, **params):
-        """Build the model with the q-r default closures and ``quadrature_order=6`` unless
+        """Build the model with the q-r default closures and `quadrature_order=6` unless
         overridden.
         """
         params.setdefault("closures",
@@ -59,7 +59,7 @@ class QRKESME(SME):
         super().__init__(**params)
 
     def derive_model(self):
-        """Derive the model: a copy of ``SME.derive_model`` with the ``sk`` and ``se`` transport
+        """Derive the model: a copy of `SME.derive_model` with the `sk` and `se` transport
         equations added and projected through the same pipeline. Returns the derivation model
         with interpolate / project / reconstruction rows and the free-slip wall registered.
         """
@@ -152,7 +152,7 @@ class QRKESME(SME):
                        + C_2 * se ** 3 * inv_sk2 / 2)
 
         def _kbc(interface):
-            """Kinematic boundary condition of the vertical velocity at ``interface``."""
+            """Kinematic boundary condition of the vertical velocity at `interface`."""
             kw = dict(w=w, u=uvel[0], interface=interface)
             if dim == 3:
                 kw["v"] = uvel[1]
@@ -191,7 +191,7 @@ class QRKESME(SME):
 
         # 5 — project each horizontal momentum, then close the stress
         def _state(at, *, alias=None, btag=None):
-            """Closure state evaluated at the vertical location ``at`` (optionally for a
+            """Closure state evaluated at the vertical location `at` (optionally for a
             boundary tag).
             """
             return ClosureState(m.functions, params=m.parameters, h=h, x=x,
@@ -437,7 +437,7 @@ class QRKESME(SME):
     _system_model_kind = "qrkesme"
 
     def _register_hswme_spectrum(self, sm):
-        """Set the SystemModel spectrum from the plain ``SME`` twin and pad the sk, se slots
+        """Set the SystemModel spectrum from the plain `SME` twin and pad the sk, se slots
         with the depth-mean normal velocity. The turbulence fields travel inside the gravity
         cone, so they never set the CFL bound.
         """

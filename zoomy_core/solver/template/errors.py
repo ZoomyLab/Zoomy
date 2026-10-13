@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 class GuardError(RuntimeError):
-    """A template ``Guard`` failed (D9: fatal, never a silent retry)."""
+    """A template `Guard` failed (D9: fatal, never a silent retry)."""
 
 
 def format_guard(msg, names, values) -> str:

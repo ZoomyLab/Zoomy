@@ -15,8 +15,8 @@ WAVE_SPEED = SpectralRadius.power
 
 
 def default_wave_speed(nsm):
-    """Give ``nsm`` the wave speed :data:`WAVE_SPEED` before its kernels are built,
-    unless it sets ``spectral_radius_method`` itself; returns ``nsm``.
+    """Give `nsm` the wave speed `WAVE_SPEED` before its kernels are built,
+    unless it sets `spectral_radius_method` itself; returns `nsm`.
     """
     if "spectral_radius_method" not in vars(nsm):
         nsm.spectral_radius_method = WAVE_SPEED

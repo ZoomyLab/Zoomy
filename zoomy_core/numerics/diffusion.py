@@ -1,7 +1,7 @@
-"""Structure of a system's diffusion tensor ``A`` in ``div(A : grad Q)``, read off
-``diffusion_matrix`` only.
+"""Structure of a system's diffusion tensor `A` in `div(A : grad Q)`, read off
+`diffusion_matrix` only.
 Tells the solver templates which discretisation (none, isotropic, diagonal, dense) the
-``NumericalSystemModel`` needs.
+`NumericalSystemModel` needs.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import sympy as sp
 
 @dataclass(frozen=True)
 class DiffusionStructure:
-    """Classification of the diffusion tensor: ``kind`` (none | isotropic | diagonal | dense),
+    """Classification of the diffusion tensor: `kind` (none | isotropic | diagonal | dense),
     whether it is state dependent, and its coefficients.
     """
     kind: str                                   # none|isotropic|diagonal|dense
@@ -23,11 +23,11 @@ class DiffusionStructure:
 
 
 def classify_diffusion(sm, slot: str = "diffusion_matrix") -> DiffusionStructure:
-    """Classify ``sm.<slot>`` as none, isotropic (one scalar per row), diagonal (direction
+    """Classify `sm.<slot>` as none, isotropic (one scalar per row), diagonal (direction
     dependent) or dense (cross-row or cross-derivative entries).
 
     Returns:
-        A ``DiffusionStructure``; coefficients are the tensor's own entries, never looked up by
+        A `DiffusionStructure`; coefficients are the tensor's own entries, never looked up by
             parameter name.
     """
     A = getattr(sm, slot, None)

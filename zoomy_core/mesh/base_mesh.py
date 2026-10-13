@@ -1,4 +1,4 @@
-"""BaseMesh: topology-only mesh (cells, faces, one ghost cell per boundary face) read from ``.msh``
+"""BaseMesh: topology-only mesh (cells, faces, one ghost cell per boundary face) read from `.msh`
 via meshio or built from arrays, with geometry computed on the fly.  The root of the BaseMesh ->
 FVMMesh -> LSQMesh hierarchy that every backend shares.
 """
@@ -59,7 +59,7 @@ _DIM_OF_TYPE = {
 # ── topology builder: extract faces from cell-vertex connectivity ───────────
 
 def _local_faces_for_type(mesh_type: str):
-    """Local vertex indices of each face of a cell of ``mesh_type``, e.g. ``[(0, 1), (1, 2), (2,
+    """Local vertex indices of each face of a cell of `mesh_type`, e.g. ``[(0, 1), (1, 2), (2,
     0)]`` for a triangle.
     """
     if mesh_type == "line":
@@ -86,7 +86,7 @@ def _local_faces_for_type(mesh_type: str):
 
 def _build_face_topology(cell_vertices: np.ndarray, mesh_type: str):
     """Face-cell connectivity from the cell-vertex table (vectorised), faces numbered by first
-    visit; returns ``(cell_faces, face_cells, face_vertex_tuples)`` with -1 in ``face_cells[1]``
+    visit; returns `(cell_faces, face_cells, face_vertex_tuples)` with -1 in `face_cells[1]`
     on boundary faces.
     """
     local_faces = _local_faces_for_type(mesh_type)
@@ -123,8 +123,8 @@ def _build_face_topology(cell_vertices: np.ndarray, mesh_type: str):
 
 def _build_cell_neighbors(face_cells: np.ndarray, cell_faces: np.ndarray,
                           n_cells: int, n_inner_cells: int):
-    """Inner-cell neighbours from ``face_cells`` (vectorised); boundary cells get the sentinel
-    ``n_cells + 1`` instead of ghost indices, so LSQ stencils grow from interior data only.
+    """Inner-cell neighbours from `face_cells` (vectorised); boundary cells get the sentinel
+    `n_cells + 1` instead of ghost indices, so LSQ stencils grow from interior data only.
     """
     sentinel = n_cells + 1
     n_faces_per_cell = cell_faces.shape[0]
@@ -253,7 +253,7 @@ class BaseMesh(param.Parameterized):
 
     def __init__(self, **kwargs):
         """Create the mesh from its topology arrays and normalise boundary faces so
-        ``face_cells[0]`` is the inner cell.
+        `face_cells[0]` is the inner cell.
         """
         super().__init__(**kwargs)
         # Guarantee: face_cells[0] is always the inner cell at boundary faces.
@@ -264,7 +264,7 @@ class BaseMesh(param.Parameterized):
             self._normalize_boundary_face_order()
 
     def _normalize_boundary_face_order(self):
-        """Swap ``face_cells`` columns so ``face_cells[0]`` is the inner cell at every boundary
+        """Swap `face_cells` columns so `face_cells[0]` is the inner cell at every boundary
         face.
         """
         fc = self.face_cells
@@ -277,7 +277,7 @@ class BaseMesh(param.Parameterized):
     # ── on-the-fly geometry ─────────────────────────────────────────────
 
     def cell_centers_computed(self) -> np.ndarray:
-        """Cell centres ``(3, n_cells)``; ghost centres are the inner centres mirrored across the
+        """Cell centres `(3, n_cells)`; ghost centres are the inner centres mirrored across the
         boundary face.
         """
         dim = self.dimension
@@ -313,7 +313,7 @@ class BaseMesh(param.Parameterized):
         return centers
 
     def cell_volumes_computed(self) -> np.ndarray:
-        """Cell volumes ``(n_cells,)``; a ghost takes its inner cell's volume."""
+        """Cell volumes `(n_cells,)`; a ghost takes its inner cell's volume."""
         n_inner = self.n_inner_cells
         n_cells = self.n_cells
         dim = self.dimension
@@ -334,7 +334,7 @@ class BaseMesh(param.Parameterized):
         return volumes
 
     def cell_inradius_computed(self) -> np.ndarray:
-        """Cell inradii ``(n_cells,)``: the minimum distance from the centre to the face planes
+        """Cell inradii `(n_cells,)`: the minimum distance from the centre to the face planes
         (half the length in 1D).
         """
         from zoomy_core.mesh.lsq_reconstruction import compute_inradius_generic as _compute_inradius_generic
@@ -372,7 +372,7 @@ class BaseMesh(param.Parameterized):
         return inradii
 
     def face_normals_computed(self) -> np.ndarray:
-        """Unit face normals ``(3, n_faces)`` pointing from ``face_cells[0]`` to ``face_cells[1]``
+        """Unit face normals `(3, n_faces)` pointing from `face_cells[0]` to `face_cells[1]`
         (a sign in 1D).
         """
         dim = self.dimension
@@ -420,7 +420,7 @@ class BaseMesh(param.Parameterized):
         return normals
 
     def face_volumes_computed(self) -> np.ndarray:
-        """Face areas (lengths in 2D) ``(n_faces,)``; 1.0 in 1D."""
+        """Face areas (lengths in 2D) `(n_faces,)`; 1.0 in 1D."""
         dim = self.dimension
         n_faces = self.n_faces
 
@@ -442,7 +442,7 @@ class BaseMesh(param.Parameterized):
         return fvols
 
     def face_centers_computed(self) -> np.ndarray:
-        """Face centres ``(n_faces, 3)``."""
+        """Face centres `(n_faces, 3)`."""
         dim = self.dimension
         n_faces = self.n_faces
         fcenters = np.zeros((n_faces, 3), dtype=float)
@@ -465,7 +465,7 @@ class BaseMesh(param.Parameterized):
 
     def face_subvolumes_computed(self) -> np.ndarray:
         """Per face and side, the simplex (2D) or pyramid (3D) volume between the face and the cell
-        centre, ``(n_faces, 2)``; a boundary face carries its inner side twice.
+        centre, `(n_faces, 2)`; a boundary face carries its inner side twice.
         """
         dim = self.dimension
         n_faces = self.n_faces
@@ -491,7 +491,7 @@ class BaseMesh(param.Parameterized):
                              a[0] * b[1] - a[1] * b[0]])
 
         def tet(v0, v1, v2):
-            """Volume of the tetrahedron spanned by ``v0, v1, v2`` and the cell centre ``cc``."""
+            """Volume of the tetrahedron spanned by `v0, v1, v2` and the cell centre `cc`."""
             return np.abs((cross(v1 - v0, v2 - v0) * (cc - v0)).sum(axis=0)) / 6.0
 
         for lf_idx, lf in enumerate(_local_faces_for_type(self.type)):
@@ -555,7 +555,7 @@ class BaseMesh(param.Parameterized):
         raise ValueError(f"Face {fidx} not found")
 
     def _face_vertex_ids(self, fidx: int, ic: int, lf_idx: int) -> list:
-        """Global vertex ids of local face ``lf_idx`` of cell ``ic``."""
+        """Global vertex ids of local face `lf_idx` of cell `ic`."""
         local_faces = _local_faces_for_type(self.type)
         verts = self.cell_vertices[:, ic]
         return list(verts[list(local_faces[lf_idx])])
@@ -565,11 +565,11 @@ class BaseMesh(param.Parameterized):
     def compute_derivatives(self, u: np.ndarray, degree: int = 1,
                             derivatives_multi_index=None, *,
                             u_boundary_face) -> np.ndarray:
-        """Derivatives of ``u`` from an LSQ stencil built on the fly (the cached variant lives on
-        ``LSQMesh``).
+        """Derivatives of `u` from an LSQ stencil built on the fly (the cached variant lives on
+        `LSQMesh`).
 
         Args:
-            u_boundary_face: ``(n_boundary_faces,)`` face values, or ``'extrapolation'`` for
+            u_boundary_face: `(n_boundary_faces,)` face values, or `'extrapolation'` for
                 Neumann-zero.
         References:
             Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
@@ -609,7 +609,7 @@ class BaseMesh(param.Parameterized):
         # Build a lightweight namespace that looks like a mesh to _compute_derivs
         class _Stencil:
             """Namespace holding the LSQ arrays in the layout
-            ``lsq_reconstruction.compute_derivatives`` expects.
+            `lsq_reconstruction.compute_derivatives` expects.
             """
             pass
         s = _Stencil()
@@ -626,8 +626,8 @@ class BaseMesh(param.Parameterized):
 
     @classmethod
     def from_msh(cls, filepath: str) -> "BaseMesh":
-        """Load a gmsh ``.msh`` file via meshio and build the topology, keeping node and cell data
-        for ``mesh_ic``.
+        """Load a gmsh `.msh` file via meshio and build the topology, keeping node and cell data
+        for `mesh_ic`.
         """
         try:   # at call time: the GUI's Pyodide installs meshio after zoomy_core is imported
             import meshio
@@ -690,12 +690,12 @@ class BaseMesh(param.Parameterized):
         """Build a mesh from raw arrays of one cell type.
 
         Args:
-            vertex_coordinates: ``(dim, n_vertices)``.
-            cell_vertices: ``(verts_per_cell, n_cells)``.
+            vertex_coordinates: `(dim, n_vertices)`.
+            cell_vertices: `(verts_per_cell, n_cells)`.
             face_tags: maps a boundary face (sorted vertex tuple) to its physical tag.
-            cell_face_tags: ``(faces_per_cell, n_cells)`` tag per local face (< 0: none),
-                instead of ``face_tags``.
-            tag_names: ``{tag: name}``, default ``tag_<t>``.
+            cell_face_tags: `(faces_per_cell, n_cells)` tag per local face (< 0: none),
+                instead of `face_tags`.
+            tag_names: `{tag: name}`, default `tag_<t>`.
             default_tag: tag of boundary faces without one.
         """
         face_verts_to_tag = face_tags or {}
@@ -793,8 +793,8 @@ class BaseMesh(param.Parameterized):
 
     @classmethod
     def create_1d(cls, domain: tuple, n_inner_cells: int) -> "BaseMesh":
-        """Uniform 1D interval mesh on ``domain`` with two ghost cells; boundaries ``left`` and
-        ``right``.
+        """Uniform 1D interval mesh on `domain` with two ghost cells; boundaries `left` and
+        `right`.
         """
         xL, xR = domain
         n_cells = n_inner_cells + 2
@@ -864,11 +864,11 @@ class BaseMesh(param.Parameterized):
 
     @classmethod
     def create_2d(cls, domain: tuple, nx: int, ny: int) -> "BaseMesh":
-        """Uniform quad mesh with boundaries ``left``, ``right``, ``bottom``, ``top``.
+        """Uniform quad mesh with boundaries `left`, `right`, `bottom`, `top`.
 
         Args:
-            domain: ``(x_min, x_max, y_min, y_max)``.
-            nx: inner cells in x; ``ny`` in y.
+            domain: `(x_min, x_max, y_min, y_max)`.
+            nx: inner cells in x; `ny` in y.
         """
         x_min, x_max, y_min, y_max = domain
         n_inner_cells = nx * ny
@@ -884,7 +884,7 @@ class BaseMesh(param.Parameterized):
         vertex_coordinates[1] = gy.ravel()
 
         def vid(ix, iy):
-            """Vertex id at grid node ``(ix, iy)``."""
+            """Vertex id at grid node `(ix, iy)`."""
             return ix * (ny + 1) + iy
 
         # ── cell-vertex connectivity: (4, n_inner_cells) ──
@@ -983,12 +983,12 @@ class BaseMesh(param.Parameterized):
 
     @classmethod
     def create_3d(cls, domain: tuple, nx: int, ny: int, nz: int) -> "BaseMesh":
-        """Uniform hexahedral mesh with boundaries ``left``, ``right``, ``front``, ``back``,
-        ``bottom``, ``top``.
+        """Uniform hexahedral mesh with boundaries `left`, `right`, `front`, `back`,
+        `bottom`, `top`.
 
         Args:
-            domain: ``(x_min, x_max, y_min, y_max, z_min, z_max)``.
-            nx: inner cells in x; ``ny``, ``nz`` likewise.
+            domain: `(x_min, x_max, y_min, y_max, z_min, z_max)`.
+            nx: inner cells in x; `ny`, `nz` likewise.
         """
         x_min, x_max, y_min, y_max, z_min, z_max = domain
         n_inner_cells = nx * ny * nz
@@ -1005,7 +1005,7 @@ class BaseMesh(param.Parameterized):
         vertex_coordinates[2] = gz.ravel()
 
         def vid(ix, iy, iz):
-            """Vertex id at grid node ``(ix, iy, iz)``."""
+            """Vertex id at grid node `(ix, iy, iz)`."""
             return ix * (ny + 1) * (nz + 1) + iy * (nz + 1) + iz
 
         # ── cell-vertex connectivity: (8, n_inner_cells) ──
@@ -1117,7 +1117,7 @@ class BaseMesh(param.Parameterized):
 
     @classmethod
     def extrude_2d(cls, mesh2d, n_layers: int, height: float = 1.0) -> "BaseMesh":
-        """Extrude a 2D quad mesh into 3D hexahedra; shadowed by the later ``extrude_2d`` of this
+        """Extrude a 2D quad mesh into 3D hexahedra; shadowed by the later `extrude_2d` of this
         class, which is the one called.
         """
         if mesh2d.dimension != 2:
@@ -1276,7 +1276,7 @@ class BaseMesh(param.Parameterized):
 
     @classmethod
     def from_hdf5(cls, filepath: str) -> "BaseMesh":
-        """Load a mesh written by ``write_to_hdf5``."""
+        """Load a mesh written by `write_to_hdf5`."""
         if not _HAVE_H5PY:
             raise RuntimeError("from_hdf5 requires h5py")
         with h5py.File(filepath, "r") as f:
@@ -1310,14 +1310,14 @@ class BaseMesh(param.Parameterized):
     @classmethod
     def extrude_2d(cls, mesh_2d: "BaseMesh", n_layers: int,
                    height: float | list | np.ndarray) -> "BaseMesh":
-        """Extrude a 2D quad or triangle mesh into hexahedra or wedges (``wface``) by stacking
-        layers in z; 2D ``bottom`` / ``top`` become ``front`` / ``back``, new ``bottom`` /
-        ``top`` are added.
+        """Extrude a 2D quad or triangle mesh into hexahedra or wedges (`wface`) by stacking
+        layers in z; 2D `bottom` / `top` become `front` / `back`, new `bottom` /
+        `top` are added.
 
         Args:
-            mesh_2d: 2D mesh of type ``"quad"`` or ``"triangle"``.
+            mesh_2d: 2D mesh of type `"quad"` or `"triangle"`.
             n_layers: number of layers.
-            height: total height (uniform layers) or ``n_layers`` layer heights.
+            height: total height (uniform layers) or `n_layers` layer heights.
         """
         if mesh_2d.dimension != 2:
             raise ValueError(
@@ -1527,8 +1527,8 @@ class BaseMesh(param.Parameterized):
         )
 
     def resolve_periodic_bcs(self, bcs):
-        """Patch ``boundary_face_cells`` so ``Periodic`` boundaries read their partner's cells.
-        Idempotent: the remap source is ``face_cells[0]`` (never modified), not the possibly
+        """Patch `boundary_face_cells` so `Periodic` boundaries read their partner's cells.
+        Idempotent: the remap source is `face_cells[0]` (never modified), not the possibly
         already patched array.
         """
         from zoomy_core.model.boundary_conditions import Periodic

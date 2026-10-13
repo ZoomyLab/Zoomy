@@ -1,5 +1,5 @@
-"""Base class ``Model`` of the Model layer, where the user writes the physics as symbolic
-equations or operator methods. A Model is lifted to a SystemModel by ``SystemModel.from_model``.
+"""Base class `Model` of the Model layer, where the user writes the physics as symbolic
+equations or operator methods. A Model is lifted to a SystemModel by `SystemModel.from_model`.
 """
 
 import sympy as sp
@@ -31,7 +31,7 @@ def clear_derivation_model_cache():
 
 def _derivation_byproduct(model, on_derivation, legacy_attr):
     """Fetch a derivation byproduct (interpolate/project/reconstruction rows) from the
-    derivation object, else from the legacy ``self.<legacy_attr>`` stash, else ``None``.
+    derivation object, else from the legacy `self.<legacy_attr>` stash, else `None`.
     """
     deriv = getattr(model, "derivation", None)
     val = getattr(deriv, on_derivation, None) if deriv is not None else None
@@ -41,8 +41,8 @@ def _derivation_byproduct(model, on_derivation, legacy_attr):
 
 
 def register_sympy_attribute(definition, prefix="q"):
-    """Turn an int or list field spec into a ``Zstruct`` of sympy Symbols (legacy; prefer
-    :func:`parse_definition_to_zstruct`).
+    """Turn an int or list field spec into a `Zstruct` of sympy Symbols (legacy; prefer
+    `parse_definition_to_zstruct`).
     """
     if isinstance(definition, Zstruct):
         return definition
@@ -58,7 +58,7 @@ def register_sympy_attribute(definition, prefix="q"):
 
 
 def eigenvalue_dict_to_matrix(eigenvals_dict):
-    """Flatten a sympy ``eigenvals()`` dict ``{eigenvalue: multiplicity}`` into a ``ZArray``."""
+    """Flatten a sympy `eigenvals()` dict `{eigenvalue: multiplicity}` into a `ZArray`."""
     result = []
     for ev, mult in eigenvals_dict.items():
         result.extend([ev] * int(mult))
@@ -66,7 +66,7 @@ def eigenvalue_dict_to_matrix(eigenvals_dict):
 
 
 def default_simplify(expr):
-    """Default simplifier, ``powsimp`` with ``combine='all'``."""
+    """Default simplifier, `powsimp` with `combine='all'`."""
     return sp.powsimp(expr, combine="all", force=False, deep=True)
 
 
@@ -85,7 +85,7 @@ SYMBOL_CONSTRAINTS = {
 
 
 def _constrained_symbol(name, constraint):
-    """Real ``sp.Symbol`` carrying the sign assumption of the declared constraint; an unknown
+    """Real `sp.Symbol` carrying the sign assumption of the declared constraint; an unknown
     constraint raises.
     """
     if constraint not in SYMBOL_CONSTRAINTS:
@@ -96,8 +96,8 @@ def _constrained_symbol(name, constraint):
 
 
 def _split_declaration(entry):
-    """Split a declaration entry into ``(payload, constraint)``; a bare entry gets the
-    constraint ``"real"``.
+    """Split a declaration entry into `(payload, constraint)`; a bare entry gets the
+    constraint `"real"`.
     """
     if isinstance(entry, (list, tuple)) and len(entry) > 1:
         return entry[0], entry[1]
@@ -105,9 +105,9 @@ def _split_declaration(entry):
 
 
 def parse_definition_to_zstruct(definition, prefix="q_"):
-    """Turn an int, list, dict or ``Zstruct`` spec into a ``Zstruct`` of constrained sympy
-    Symbols. List entries are ``name`` or ``(name, constraint)``, dict entries ``name: default``
-    or ``name: (default, constraint)``; see :data:`SYMBOL_CONSTRAINTS`.
+    """Turn an int, list, dict or `Zstruct` spec into a `Zstruct` of constrained sympy
+    Symbols. List entries are `name` or `(name, constraint)`, dict entries `name: default`
+    or `name: (default, constraint)`; see `SYMBOL_CONSTRAINTS`.
     """
     attributes = {}
     if isinstance(definition, int):
@@ -129,8 +129,8 @@ def parse_definition_to_zstruct(definition, prefix="q_"):
 
 
 def merge_parameter_overrides(declared, overrides):
-    """Merge user ``parameters=`` over the declared parameter dict, keeping the declared
-    constraint unless the override carries its own ``(value, constraint)`` pair.
+    """Merge user `parameters=` over the declared parameter dict, keeping the declared
+    constraint unless the override carries its own `(value, constraint)` pair.
     """
     merged = dict(declared)
     for name, value in (overrides or {}).items():
@@ -143,7 +143,7 @@ def merge_parameter_overrides(declared, overrides):
 
 
 def extract_parameter_defaults(definition):
-    """Numeric defaults of a parameter declaration (feeds ``model.parameter_values``)."""
+    """Numeric defaults of a parameter declaration (feeds `model.parameter_values`)."""
     defaults = {}
     if isinstance(definition, dict):
         for name, val in definition.items():
@@ -163,9 +163,9 @@ def extract_parameter_defaults(definition):
 
 class Model(Configurable, SymbolicRegistrar):
     """Base class of the Model layer: named equations plus variables, parameters, boundary and
-    initial conditions, lifted to a SystemModel by ``SystemModel.from_model``. Subclasses
-    populate equations in ``derive_model`` or override the operator methods (``flux``,
-    ``source``, ...).
+    initial conditions, lifted to a SystemModel by `SystemModel.from_model`. Subclasses
+    populate equations in `derive_model` or override the operator methods (`flux`,
+    `source`, ...).
     """
     name = param.String(default="Model")
     dimension = param.Integer(default=1)
@@ -251,7 +251,7 @@ class Model(Configurable, SymbolicRegistrar):
     section = "model"
 
     def __init__(self, init_functions=True, settings=None, **params):
-        """Declare variables and parameters, run the derivation, and (unless ``_finalize_lazy``)
+        """Declare variables and parameters, run the derivation, and (unless `_finalize_lazy`)
         finalize for the SystemModel.
 
         Args:
@@ -330,7 +330,7 @@ class Model(Configurable, SymbolicRegistrar):
 
     def _run_derive_model(self):
         """Run the derivation, or restore it from the spec-keyed cache for
-        ``_cacheable_derivation`` models.
+        `_cacheable_derivation` models.
         """
         if not self._cacheable_derivation:
             self.derive_model()
@@ -368,17 +368,17 @@ class Model(Configurable, SymbolicRegistrar):
     # NO public `.equations` collection on Model.
 
     def derive_model(self):
-        """Subclass hook that populates equations via ``add_equation`` and ``apply``; no-op on
+        """Subclass hook that populates equations via `add_equation` and `apply`; no-op on
         the base class.
         """
         return None
 
     def add_equation(self, name, expression=None, shape=None):
-        """Insert an equation under ``name``, accessible as ``self.<name>``.
+        """Insert an equation under `name`, accessible as `self.<name>`.
 
         Args:
-            shape: ``None`` for a scalar equation, else a shape or list of component labels
-                giving one sub-equation ``name_i_j`` per index.
+            shape: `None` for a scalar equation, else a shape or list of component labels
+                giving one sub-equation `name_i_j` per index.
         """
         from zoomy_core.model.equation import Equation
         if shape is None:
@@ -399,7 +399,7 @@ class Model(Configurable, SymbolicRegistrar):
         return self
 
     def remove_equation(self, name):
-        """Remove the equation ``name``."""
+        """Remove the equation `name`."""
         del self._equations[name]
         self._history("remove_equation", name)
         return self
@@ -409,7 +409,7 @@ class Model(Configurable, SymbolicRegistrar):
         (whole-model operations are applied once).
 
         Args:
-            level: history level, ``"major"`` or ``"minor"``.
+            level: history level, `"major"` or `"minor"`.
             description: free text recorded in the history.
         """
         # Whole-model dispatch: e.g. ResolveDummy([v1, v2]) needs
@@ -427,7 +427,7 @@ class Model(Configurable, SymbolicRegistrar):
         return self
 
     def describe(self, *, show_history=False, include_minor=False):
-        """Return a :class:`ModelDescription` that renders the equation set (LaTeX in Jupyter,
+        """Return a `ModelDescription` that renders the equation set (LaTeX in Jupyter,
         plain text otherwise).
         """
         return ModelDescription(
@@ -448,7 +448,7 @@ class Model(Configurable, SymbolicRegistrar):
     # ── Dunders ──────────────────────────────────────────────────
     def __getattr__(self, name):
         """Named-attribute access to equations; also raises the migration message for the
-        removed ``Model.system_model``.
+        removed `Model.system_model`.
         """
         # Avoid infinite recursion during `__init__` when
         # `self._equations` itself doesn't yet exist.
@@ -487,7 +487,7 @@ class Model(Configurable, SymbolicRegistrar):
 
     def _assert_parameter_values_supplied(self):
         """Raise if an equation contains a free Symbol that is neither a coordinate or state
-        symbol nor has a numeric default in ``parameter_values``.
+        symbol nor has a numeric default in `parameter_values`.
         """
         if not self._equations:
             return
@@ -551,7 +551,7 @@ class Model(Configurable, SymbolicRegistrar):
             )
 
     def _auto_tag_equations(self):
-        """Tag every untagged equation with solver tags via ``auto_solver_tag`` so the default
+        """Tag every untagged equation with solver tags via `auto_solver_tag` so the default
         operator extractors can pull tagged terms.
         """
         if not self._equations:
@@ -603,7 +603,7 @@ class Model(Configurable, SymbolicRegistrar):
             eq._solver_groups = getattr(tagged, "_solver_groups", {})
 
     def _resolve_input(self, val):
-        """Resolve a declaration given as a ``param.Parameter``, a callable (of the model) or a
+        """Resolve a declaration given as a `param.Parameter`, a callable (of the model) or a
         plain value.
         """
         if isinstance(val, param.Parameter):
@@ -867,7 +867,7 @@ class Model(Configurable, SymbolicRegistrar):
         """Collect all terms carrying the canonical solver tag into an operator matrix.
 
         Returns:
-            The matrix, or ``None`` if the model has no equations or variable map.
+            The matrix, or `None` if the model has no equations or variable map.
         """
         if not self._equations or not self._variable_map:
             return None
@@ -886,8 +886,8 @@ class Model(Configurable, SymbolicRegistrar):
         # expected `.equations` dict-attr — Model exposes `_equations`
         # now).
         class _EqAdapter:
-            """Exposes the equation dict under the ``equations`` attribute expected by
-            ``collect_solver_tag``.
+            """Exposes the equation dict under the `equations` attribute expected by
+            `collect_solver_tag`.
             """
             equations = self._equations
         return collect_solver_tag(
@@ -901,7 +901,7 @@ class Model(Configurable, SymbolicRegistrar):
         )
 
     def flux(self):
-        """Flux ``F(Q, Qaux, p)``, rank-2 ``ZArray`` ``(n_eq, n_dim)``; by default tag-extracted
+        """Flux `F(Q, Qaux, p)`, rank-2 `ZArray` `(n_eq, n_dim)`; by default tag-extracted
         from the equations, else zeros.
         """
         raw = self._extract_via_tag("flux")
@@ -910,9 +910,9 @@ class Model(Configurable, SymbolicRegistrar):
         return ZArray(raw)
 
     def diffusion_matrix(self):
-        """Implicitly treated diffusion tensor ``A(Q, Qaux, p)`` of shape
-        ``(n_var, n_var, dim, dim)`` with ``F_diff[i, d] = sum_{j,e} A[i,j,d,e] d_e Q[j]``.
-        Default is zero; see :meth:`diffusion_matrix_explicit` for the explicit slot.
+        """Implicitly treated diffusion tensor `A(Q, Qaux, p)` of shape
+        `(n_var, n_var, dim, dim)` with `F_diff[i, d] = sum_{j,e} A[i,j,d,e] d_e Q[j]`.
+        Default is zero; see `diffusion_matrix_explicit` for the explicit slot.
         """
         return ZArray.zeros(
             self.n_variables, self.n_variables,
@@ -921,7 +921,7 @@ class Model(Configurable, SymbolicRegistrar):
 
     def diffusion_matrix_explicit(self):
         """Explicitly treated diffusion tensor with the same shape and contract as
-        :meth:`diffusion_matrix` (subject to the parabolic CFL); default zero.
+        `diffusion_matrix` (subject to the parabolic CFL); default zero.
         """
         return ZArray.zeros(
             self.n_variables, self.n_variables,
@@ -933,7 +933,7 @@ class Model(Configurable, SymbolicRegistrar):
         return ZArray.zeros(self.n_variables, self.dimension)
     
     def hydrostatic_pressure(self):
-        """Hydrostatic pressure flux ``P(Q, Qaux, p)``, rank-2 ``(n_eq, n_dim)``; tag-extracted,
+        """Hydrostatic pressure flux `P(Q, Qaux, p)`, rank-2 `(n_eq, n_dim)`; tag-extracted,
         else zeros.
         """
         raw = self._extract_via_tag("hydrostatic_pressure")
@@ -942,7 +942,7 @@ class Model(Configurable, SymbolicRegistrar):
         return ZArray(raw)
 
     def nonconservative_matrix(self):
-        """Nonconservative matrix ``B(Q, Qaux, p)``, rank-3 ``(n_eq, n_state, n_dim)``;
+        """Nonconservative matrix `B(Q, Qaux, p)`, rank-3 `(n_eq, n_state, n_dim)`;
         tag-extracted, else zeros.
         """
         raw = self._extract_via_tag("nonconservative_flux")
@@ -951,7 +951,7 @@ class Model(Configurable, SymbolicRegistrar):
         return ZArray(raw)
 
     def source(self):
-        """Implicitly treated source (friction, stiff terms), length ``n_variables``;
+        """Implicitly treated source (friction, stiff terms), length `n_variables`;
         tag-extracted, else zeros.
         """
         raw = self._extract_via_tag("implicit_source")
@@ -960,7 +960,7 @@ class Model(Configurable, SymbolicRegistrar):
         return ZArray(raw)
 
     def source_explicit(self):
-        """Explicitly treated source (non-stiff body forces), length ``n_variables``;
+        """Explicitly treated source (non-stiff body forces), length `n_variables`;
         tag-extracted, else zeros.
         """
         raw = self._extract_via_tag("explicit_source")
@@ -969,9 +969,9 @@ class Model(Configurable, SymbolicRegistrar):
         return ZArray(raw)
 
     def mass_matrix(self):
-        """Mass matrix ``M[i, j]`` = coefficient of ``d_t Q[j]`` in equation ``i``, extracted
-        from ``time_derivative``-tagged terms. Rows without a time derivative (elliptic
-        constraints) are zero, so ``M`` is singular for such models.
+        """Mass matrix `M[i, j]` = coefficient of `d_t Q[j]` in equation `i`, extracted
+        from `time_derivative`-tagged terms. Rows without a time derivative (elliptic
+        constraints) are zero, so `M` is singular for such models.
         """
         raw = self._extract_via_tag("time_derivative")
         if raw is None:
@@ -1001,7 +1001,7 @@ class Model(Configurable, SymbolicRegistrar):
         return ZArray(self.variables)
 
     def interpolate_to_3d(self):
-        """Vertical reconstruction ``{profile_slot: expr}``, taken from the derivation
+        """Vertical reconstruction `{profile_slot: expr}`, taken from the derivation
         byproduct, else zeros.
         """
         rows = _derivation_byproduct(self, "interpolate_rows", "_interpolate_rows")
@@ -1010,8 +1010,8 @@ class Model(Configurable, SymbolicRegistrar):
         return ZArray.zeros(6)
 
     def project_from_3d(self):
-        """Profile-to-state projection ``{state_field_or_slot: expr}``; see
-        :meth:`interpolate_to_3d`.
+        """Profile-to-state projection `{state_field_or_slot: expr}`; see
+        `interpolate_to_3d`.
         """
         rows = _derivation_byproduct(self, "project_rows", "_project_rows")
         if rows is not None:
@@ -1037,10 +1037,10 @@ class Model(Configurable, SymbolicRegistrar):
     def reconstruction_variables(self):
         """Symbolic map from the state to the (primitive, well-balanced) variables the MUSCL
         reconstruction limits; identity by default. Override to limit primitives such as
-        ``eta = h + b`` and ``u = q/h`` instead of ``(h, q)``.
+        `eta = h + b` and `u = q/h` instead of `(h, q)`.
 
         Returns:
-            ``ZArray`` of length ``n_variables``.
+            `ZArray` of length `n_variables`.
         References:
             Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090
         """
@@ -1051,8 +1051,8 @@ class Model(Configurable, SymbolicRegistrar):
         return ZArray(self.variables)
 
     def state_from_reconstruction(self):
-        """Symbolic inverse of :meth:`reconstruction_variables`, auto-derived by
-        ``invert_reconstruction`` in terms of ``WB_<state>`` symbols; override only if sympy
+        """Symbolic inverse of `reconstruction_variables`, auto-derived by
+        `invert_reconstruction` in terms of `WB_<state>` symbols; override only if sympy
         cannot close the inverse.
         """
         from zoomy_core.model.reconstruction_inverse import invert_reconstruction
@@ -1062,7 +1062,7 @@ class Model(Configurable, SymbolicRegistrar):
         )
 
     def update_variables_jacobian_wrt_variables(self):
-        """Jacobian of ``update_variables`` with respect to the state."""
+        """Jacobian of `update_variables` with respect to the state."""
         if self.disable_differentiation:
             return ZArray.zeros(self.n_variables, self.n_variables)
         return self._simplify(
@@ -1070,7 +1070,7 @@ class Model(Configurable, SymbolicRegistrar):
         )
 
     def update_aux_variables_jacobian_wrt_variables(self):
-        """Jacobian of ``update_aux_variables`` with respect to the state."""
+        """Jacobian of `update_aux_variables` with respect to the state."""
         if self.disable_differentiation:
             return ZArray.zeros(self.n_aux_variables, self.n_variables)
         return self._simplify(
@@ -1078,7 +1078,7 @@ class Model(Configurable, SymbolicRegistrar):
         )
 
     def quasilinear_matrix(self):
-        """Quasilinear matrix ``dF/dQ + dP/dQ + B`` of shape ``(n_var, n_var, dim)``."""
+        """Quasilinear matrix `dF/dQ + dP/dQ + B` of shape `(n_var, n_var, dim)`."""
         if self.disable_differentiation:
             return ZArray.zeros(self.n_variables, self.n_variables, self.dimension)
         JacF = ZArray(sp.derive_by_array(self.flux(), self.variables.get_list()))
@@ -1107,7 +1107,7 @@ class Model(Configurable, SymbolicRegistrar):
 
     def eigenvalues(self):
         """Eigenvalues of the normal-projected quasilinear matrix, from the characteristic
-        polynomial; a placeholder of zeros in ``'numerical'`` mode.
+        polynomial; a placeholder of zeros in `'numerical'` mode.
         """
         if self.eigenvalue_mode == "numerical":
             return ZArray([sp.Integer(0)] * self.n_variables)
@@ -1130,8 +1130,8 @@ class Model(Configurable, SymbolicRegistrar):
         return ZArray.zeros(self.n_variables, self.n_variables)
 
     def eigensystem(self):
-        """Packed eigendecomposition ``[Lambda(n), R(n*n), L(n*n)]`` of the normal-projected
-        quasilinear matrix, as opaque ``eigensystem`` kernel calls evaluated numerically in the
+        """Packed eigendecomposition `[Lambda(n), R(n*n), L(n*n)]` of the normal-projected
+        quasilinear matrix, as opaque `eigensystem` kernel calls evaluated numerically in the
         backends.
         """
         from zoomy_core.model.kernel_functions import (
@@ -1171,7 +1171,7 @@ class Model(Configurable, SymbolicRegistrar):
             print("-" * 80, flush=True)
 
     def summarize_model(self, tex=False):
-        """Model summary with the PDE form, ``Q``, ``Qaux``, ``F``, ``P``, ``B``, ``S``,
+        """Model summary with the PDE form, `Q`, `Qaux`, `F`, `P`, `B`, `S`,
         eigenvalues, parameters and configuration.
 
         Args:
@@ -1267,7 +1267,7 @@ class Model(Configurable, SymbolicRegistrar):
 
 
 class ModelDescription:
-    """Markdown / plain-text rendering of a :class:`Model` returned by :meth:`Model.describe`."""
+    """Markdown / plain-text rendering of a `Model` returned by `Model.describe`."""
 
     def __init__(self, model, *, show_history=False, include_minor=False):
         """Store the model and the history options."""
@@ -1341,6 +1341,6 @@ class ModelDescription:
         return "\n".join(lines)
 
     def __repr__(self):
-        """Same as ``str``."""
+        """Same as `str`."""
         return self.__str__()
 

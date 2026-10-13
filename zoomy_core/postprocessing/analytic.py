@@ -1,6 +1,6 @@
 """Analytic reference solutions used in comparison plots and gifs.
 
-Moved here from ``library/zoomy_foam/tools/compare_stoker.py`` so case
+Moved here from `library/zoomy_foam/tools/compare_stoker.py` so case
 scripts can import them without path hacks (the foam tool re-exports).
 """
 from __future__ import annotations
@@ -15,8 +15,8 @@ def stoker(x: np.ndarray, t: float, h_L: float, h_R: float, x0: float,
     """Stoker (1957) wet-wet shallow-water dam-break solution.
 
     h_L > h_R > 0, u_L = u_R = 0, flat bed.  Closed-form rarefaction
-    (left) + contact + shock (right).  Returns ``(h, u)`` at points
-    ``x``, time ``t > 0``.
+    (left) + contact + shock (right).  Returns `(h, u)` at points
+    `x`, time `t > 0`.
     """
     from scipy.optimize import brentq
 

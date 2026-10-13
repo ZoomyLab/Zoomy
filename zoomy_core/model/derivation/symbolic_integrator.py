@@ -18,19 +18,19 @@ _DEFAULT_INTEGRAL_TIMEOUT = 30
 
 class SymbolicIntegrator:
     """Integrates basis-function expressions symbolically; quadrature only when requested
-    explicitly. A single integral exceeding ``integral_timeout`` seconds raises ``TimeoutError``.
+    explicitly. A single integral exceeding `integral_timeout` seconds raises `TimeoutError`.
     """
 
     def __init__(self, basis, strategy="auto", n_workers=1,
                  integral_timeout=_DEFAULT_INTEGRAL_TIMEOUT):
-        """Select the integration strategy for ``basis``.
+        """Select the integration strategy for `basis`.
 
         Args:
-            basis: Basisfunction providing ``bounds()``, ``weight(z)`` and ``eval(k, z)``.
-            strategy: ``'auto'`` (knot spans, orthogonal or sympy by basis capability), ``'sympy'``,
-                ``'knot_spans'`` or ``'quadrature'``.
+            basis: Basisfunction providing `bounds()`, `weight(z)` and `eval(k, z)`.
+            strategy: `'auto'` (knot spans, orthogonal or sympy by basis capability), `'sympy'`,
+                `'knot_spans'` or `'quadrature'`.
             n_workers: Parallel workers for matrix computation (1 = serial).
-            integral_timeout: Seconds allowed per integral; ``None`` disables the timeout.
+            integral_timeout: Seconds allowed per integral; `None` disables the timeout.
         """
         self.basis = basis
         self.n_workers = n_workers
@@ -38,7 +38,7 @@ class SymbolicIntegrator:
         self._strategy = self._resolve_strategy(strategy)
 
     def _resolve_strategy(self, strategy):
-        """Map ``'auto'`` to the best exact-symbolic strategy; quadrature is never chosen
+        """Map `'auto'` to the best exact-symbolic strategy; quadrature is never chosen
         automatically.
         """
         if strategy != "auto":
@@ -59,8 +59,8 @@ class SymbolicIntegrator:
     # --- Core integration ---
 
     def integrate(self, expr, var, domain=None):
-        """Integrate ``expr`` over ``var`` in ``domain`` (default: the basis bounds), exactly unless
-        the strategy is ``'quadrature'``.
+        """Integrate `expr` over `var` in `domain` (default: the basis bounds), exactly unless
+        the strategy is `'quadrature'`.
 
         Returns:
             Symbolic value of the integral.
@@ -85,14 +85,14 @@ class SymbolicIntegrator:
             return self._integrate_sympy_timed(expr, var, a, b)
 
     def _integrate_sympy_timed(self, expr, var, a, b):
-        """``sympy.integrate`` under a SIGALRM wall-clock timeout."""
+        """`sympy.integrate` under a SIGALRM wall-clock timeout."""
         if self.integral_timeout is None:
             return sp_integrate(expr, (var, a, b))
 
         import signal
 
         def _handler(signum, frame):
-            """SIGALRM handler raising ``TimeoutError``."""
+            """SIGALRM handler raising `TimeoutError`."""
             raise TimeoutError(
                 f"Symbolic integration timed out after {self.integral_timeout}s. "
                 f"The integrand may be too complex for exact symbolic evaluation. "
@@ -112,7 +112,7 @@ class SymbolicIntegrator:
 
     def _integrate_orthogonal(self, expr, var, a, b):
         """Integrate weight times polynomial by delegating the polynomial part to
-        ``basis.analytical_weighted_integral``, falling back to sympy.
+        `basis.analytical_weighted_integral`, falling back to sympy.
         """
         w = self.basis.weight(var)
         # Factor out the weight: expr = w * polynomial_part
@@ -152,7 +152,7 @@ class SymbolicIntegrator:
         return result
 
     def _collapse_piecewise(self, expr, var, point):
-        """Evaluate Piecewise conditions at ``point``, recursively, to get a plain expression."""
+        """Evaluate Piecewise conditions at `point`, recursively, to get a plain expression."""
         if not isinstance(expr, sympy.Basic):
             return expr
         if isinstance(expr, Piecewise):
@@ -188,7 +188,7 @@ class SymbolicIntegrator:
     # --- Basis matrix computation ---
 
     def _precompute_basis(self, level):
-        """Return the lists ``phi_k``, ``dphi_k`` and antiderivatives ``psi_k`` for ``k <= level``."""
+        """Return the lists `phi_k`, `dphi_k` and antiderivatives `psi_k` for `k <= level`."""
         n = level + 1
         phi = [self.basis.eval(k, z) for k in range(n)]
         dphi = [diff(p, z) for p in phi]
@@ -196,7 +196,7 @@ class SymbolicIntegrator:
         return phi, dphi, psi
 
     def mass_matrix(self, level):
-        """``M[k,i] = int(phi_k phi_i w)`` over the domain (symmetric)."""
+        """`M[k,i] = int(phi_k phi_i w)` over the domain (symmetric)."""
         n = level + 1
         M = np.empty((n, n), dtype=object)
         w = self.basis.weight(z)
@@ -210,7 +210,7 @@ class SymbolicIntegrator:
         return M
 
     def triple_product(self, level):
-        """``A[k,i,j] = int(phi_k phi_i phi_j w)`` over the domain, fully symmetric in (k,i,j)."""
+        """`A[k,i,j] = int(phi_k phi_i phi_j w)` over the domain, fully symmetric in (k,i,j)."""
         n = level + 1
         A = np.empty((n, n, n), dtype=object)
         w = self.basis.weight(z)
@@ -226,7 +226,7 @@ class SymbolicIntegrator:
         return A
 
     def derivative_product(self, level):
-        """``D[k,i] = int(phi_k' phi_i' w)`` over the domain (symmetric)."""
+        """`D[k,i] = int(phi_k' phi_i' w)` over the domain (symmetric)."""
         n = level + 1
         D = np.empty((n, n), dtype=object)
         w = self.basis.weight(z)
@@ -240,7 +240,7 @@ class SymbolicIntegrator:
         return D
 
     def boundary_values(self, level):
-        """``phib[k] = phi_k`` at the lower bound."""
+        """`phib[k] = phi_k` at the lower bound."""
         n = level + 1
         phib = np.empty(n, dtype=object)
         z_bot = self.basis.bounds()[0]
@@ -249,11 +249,11 @@ class SymbolicIntegrator:
         return phib
 
     def compute_all_matrices(self, level):
-        """All standard basis matrices (``phib, M, A, B, D, Dxi, Dxi2, DD, D1, DT``) for ``level``,
+        """All standard basis matrices (`phib, M, A, B, D, Dxi, Dxi2, DD, D1, DT`) for `level`,
         exploiting their symmetries.
 
         Returns:
-            Dict of the matrices plus ``_elapsed`` and ``_strategy``.
+            Dict of the matrices plus `_elapsed` and `_strategy`.
         """
         t0 = get_time()
         n = level + 1
@@ -308,7 +308,7 @@ class SymbolicIntegrator:
         }
 
     def project(self, expr, test_index, weight=None):
-        """Galerkin projection of ``expr`` onto ``phi_test_index``: ``int(expr phi_k w) / M[k,k]``."""
+        """Galerkin projection of `expr` onto `phi_test_index`: `int(expr phi_k w) / M[k,k]`."""
         if weight is None:
             weight = self.basis.weight(z)
         phi_k = self.basis.eval(test_index, z)

@@ -1,33 +1,33 @@
 """NumPy backend **UserFunctions** — the concrete implementations of the opaque
-:mod:`zoomy_core.model.kernel_functions` kernels for the numpy runtime.
+`zoomy_core.model.kernel_functions` kernels for the numpy runtime.
 
-This is numpy's ``UserFunctions`` table, the python mirror of the C++ backends'
-``UserFunctions.H`` (REQ-168).  Every backend-supplied kernel named in
-:data:`zoomy_core.model.kernel_functions.REQUIRED_KERNELS` has an entry in
-:data:`KERNELS` here, so a missing kernel is a caught omission (see the contract
-test) rather than a silent ``NameError`` at lambdify time.  ``to_numpy.module``
-is built from these tables via :func:`numpy_module`.
+This is numpy's `UserFunctions` table, the python mirror of the C++ backends'
+`UserFunctions.H` (REQ-168).  Every backend-supplied kernel named in
+`zoomy_core.model.kernel_functions.REQUIRED_KERNELS` has an entry in
+`KERNELS` here, so a missing kernel is a caught omission (see the contract
+test) rather than a silent `NameError` at lambdify time.  `to_numpy.module`
+is built from these tables via `numpy_module`.
 
-Kept a leaf module (imports only numpy) so ``to_numpy`` can import it without a
-``fvm`` ↔ ``transformation`` cycle.
+Kept a leaf module (imports only numpy) so `to_numpy` can import it without a
+`fvm` ↔ `transformation` cycle.
 
 Each kernel returns the WHOLE packed result of ONE decomposition / solve
-(``eigensystem`` → ``[λ, R, L]``, ``eigenvalues`` → ``λ``, ``solve`` → ``A⁻¹b``);
-component access is ``pick(K(*a), idx)``.  The producers emit every component
-read against the SAME ``K(*a)`` node, so lambdify's cse hoists it to a single
+(`eigensystem` → `[λ, R, L]`, `eigenvalues` → `λ`, `solve` → `A⁻¹b`);
+component access is `pick(K(*a), idx)`.  The producers emit every component
+read against the SAME `K(*a)` node, so lambdify's cse hoists it to a single
 call per face — R, |Λ| and L therefore come from ONE eigenbasis by construction
-(``|A| = R|Λ|L`` consistent), with no per-call cache to keep them in sync.
+(`|A| = R|Λ|L` consistent), with no per-call cache to keep them in sync.
 """
 
 import numpy as np
 
 
 def _stack_square(a_flat, n):
-    """Broadcast the flat row-major args into an ``(..., n, n)`` array.
+    """Broadcast the flat row-major args into an `(..., n, n)` array.
 
-    Each arg is a scalar or a ``(n_cells,)`` grid row; ``np.broadcast_arrays``
+    Each arg is a scalar or a `(n_cells,)` grid row; `np.broadcast_arrays`
     lifts scalars to the common grid shape so the eig / solve is batched over
-    every cell at once.  Scalar-only inputs give a ``(n, n)`` matrix (0-d
+    every cell at once.  Scalar-only inputs give a `(n, n)` matrix (0-d
     broadcast), so the scalar paths still work."""
     bcast = np.broadcast_arrays(*[np.asarray(a, dtype=float) for a in a_flat])
     return np.stack(bcast, axis=-1).reshape(bcast[0].shape + (n, n))
@@ -35,22 +35,22 @@ def _stack_square(a_flat, n):
 
 def _scalarize(x):
     """Return a python float for a 0-d result (scalar-input path), else the
-    array — so a scalar evaluation matches the old ``float(...)`` return."""
+    array — so a scalar evaluation matches the old `float(...)` return."""
     return float(x) if np.ndim(x) == 0 else x
 
 
 def eigensystem(*a_flat):
-    """Opaque ``eigensystem`` kernel: the FULL packed stack
-    ``[λ(n), R(n·n), L=R⁻¹(n·n)]`` (row-major, length ``n+2n²``) of the row-major
-    ``n×n`` matrix ``a_flat`` (``n = round(√len)``), batched over the grid.
-    Component access is ``pick(eigensystem(*a), idx)`` — the canonical form the
-    Roe scheme emits; the producers share ONE ``eigensystem(*a)`` node, so
-    lambdify's cse hoists it to a single ``eig`` per face (R, |Λ|, L from ONE
+    """Opaque `eigensystem` kernel: the FULL packed stack
+    `[λ(n), R(n·n), L=R⁻¹(n·n)]` (row-major, length `n+2n²`) of the row-major
+    `n×n` matrix `a_flat` (`n = round(√len)`), batched over the grid.
+    Component access is `pick(eigensystem(*a), idx)` — the canonical form the
+    Roe scheme emits; the producers share ONE `eigensystem(*a)` node, so
+    lambdify's cse hoists it to a single `eig` per face (R, |Λ|, L from ONE
     eigenbasis by construction).
 
     REQ-168 inf-guard: LAPACK raises on non-finite input, so non-finite batch
     members get λ = +inf with an identity eigenbasis (R = L = I) — the +inf wave
-    speed flags the garbage state; the identity basis keeps ``|A| = R|Λ|L``
+    speed flags the garbage state; the identity basis keeps `|A| = R|Λ|L`
     well-defined without inventing an inverse of a garbage matrix."""
     n = int(round(len(a_flat) ** 0.5))
     A = _stack_square(a_flat, n)
@@ -74,8 +74,8 @@ def eigensystem(*a_flat):
 
 
 def spectral_radius(k, safety, *a_flat):
-    """``safety * sqrt(rho(A^2))`` by ``k`` power steps on ``A^2`` from
-    ``x = 1`` (see ``kernel_functions.spectral_radius``), batched."""
+    """`safety * sqrt(rho(A^2))` by `k` power steps on `A^2` from
+    `x = 1` (see `kernel_functions.spectral_radius`), batched."""
     n = int(round(len(a_flat) ** 0.5))
     A = _stack_square(a_flat, n)
     x = np.ones(A.shape[:-1]) / np.sqrt(n)
@@ -88,11 +88,11 @@ def spectral_radius(k, safety, *a_flat):
 
 
 def eigenvalues(*a_flat):
-    """Opaque ``eigenvalues`` kernel (λ-only): the spectrum vector ``(n,)`` of
-    the row-major ``n×n`` matrix ``a_flat`` (``n = round(√len)``), batched over
-    the grid.  The light companion of :func:`eigensystem` (no eigenvectors) for
+    """Opaque `eigenvalues` kernel (λ-only): the spectrum vector `(n,)` of
+    the row-major `n×n` matrix `a_flat` (`n = round(√len)`), batched over
+    the grid.  The light companion of `eigensystem` (no eigenvectors) for
     the wave-speed / CFL bound; component access is ``pick(eigenvalues(*a),
-    idx)`` (cse-hoisted to ONE ``eigvals`` per face).
+    idx)`` (cse-hoisted to ONE `eigvals` per face).
 
     REQ-168 inf-guard: eig the finite batch members, +inf for the rest (order-2
     MOOD / transient BC-ghost feed non-finite candidate face states BY DESIGN —
@@ -109,11 +109,11 @@ def eigenvalues(*a_flat):
 
 
 def solve(*args):
-    """Opaque ``solve`` kernel: the per-cell linear solve ``A⁻¹ b`` ``(ncells,
-    n)``.  ``args`` = row-major ``A`` (n·n) followed by ``b`` (n); ``n``
-    inferred from the count ``n·n + n``.  Batched over the grid — the NSM
-    point-implicit ``source`` lowers to ONE batched ``np.linalg.solve``;
-    component access is ``pick(solve(*a), idx)``."""
+    """Opaque `solve` kernel: the per-cell linear solve `A⁻¹ b` ``(ncells,
+    n)``.  `args` = row-major `A` (n·n) followed by `b` (n); `n`
+    inferred from the count `n·n + n`.  Batched over the grid — the NSM
+    point-implicit `source` lowers to ONE batched `np.linalg.solve`;
+    component access is `pick(solve(*a), idx)`."""
     m = len(args)
     n = int(round((-1.0 + (1.0 + 4.0 * m) ** 0.5) / 2.0))
     arrs = [np.asarray(a, dtype=float) for a in args]
@@ -133,32 +133,32 @@ def solve(*args):
 
 
 def pick(packed, idx):
-    """idx-th component of a packed opaque-kernel result (:func:`eigensystem` /
-    :func:`eigenvalues` / :func:`solve`).  Cheap trailing-axis index read — the
-    producers emit ``pick(K(*a), idx)`` against ONE cse-hoisted ``K(*a)`` node
-    so each face runs ONE decomposition / solve.  ``_scalarize`` keeps the
-    scalar-input path returning a float, matching a scalar ``K`` evaluation."""
+    """idx-th component of a packed opaque-kernel result (`eigensystem` /
+    `eigenvalues` / `solve`).  Cheap trailing-axis index read — the
+    producers emit `pick(K(*a), idx)` against ONE cse-hoisted `K(*a)` node
+    so each face runs ONE decomposition / solve.  `_scalarize` keeps the
+    scalar-input path returning a float, matching a scalar `K` evaluation."""
     return _scalarize(packed[..., int(idx)])
 
 
 def newton_solve(residual, x0, n_iter=60, tol=1e-14):
-    """Batched scalar Newton root-find of ``residual(x) = 0`` from guess ``x0``.
+    """Batched scalar Newton root-find of `residual(x) = 0` from guess `x0`.
 
-    A backend-supplied opaque kernel in the ``eigensystem`` / ``solve`` family,
+    A backend-supplied opaque kernel in the `eigensystem` / `solve` family,
     but a HIGHER-ORDER one: the reconstruction that lives in core builds the
-    ``residual`` closure and the initial guess, and the backend runs the
-    iteration loop (``reconstruction lives in core, backend is a loop``).  Used
+    `residual` closure and the initial guess, and the backend runs the
+    iteration loop (`reconstruction lives in core, backend is a loop`).  Used
     by the moving-equilibrium (Bernoulli) WB reconstruction — at SME level 0 the
     per-face root is the SWE specific-energy relation for the reconstructed
-    surface ``η*``.
+    surface `η*`.
 
     Elementwise over the grid (each lane is an independent scalar Newton), so
     the derivative is the per-lane slope taken by forward finite difference: the
     residual is a black-box callable with no symbolic derivative.  Fixed max
-    ``n_iter`` with an early ‖residual‖∞ exit.  The jax twin
-    (``zoomy_jax.fvm.userfunctions.newton_solve``) is bit-for-bit the same
-    contract, using ``jax.jvp`` for the exact diagonal derivative and
-    ``lax.scan`` for the loop (no data-dependent ``while``, so it stays
+    `n_iter` with an early ‖residual‖∞ exit.  The jax twin
+    (`zoomy_jax.fvm.userfunctions.newton_solve`) is bit-for-bit the same
+    contract, using `jax.jvp` for the exact diagonal derivative and
+    `lax.scan` for the loop (no data-dependent `while`, so it stays
     jit/AD-safe)."""
     x = np.array(x0, dtype=float)
     for _ in range(int(n_iter)):
@@ -172,30 +172,30 @@ def newton_solve(residual, x0, n_iter=60, tol=1e-14):
 
 
 def solve_steady_ode(slope, U0, ds, n_iter=8):
-    """Integrate one collocation step of the local stationary ODE ``U_x = G(U)``.
+    """Integrate one collocation step of the local stationary ODE `U_x = G(U)`.
 
     The higher-order opaque kernel of the FULLY well-balanced moving-equilibrium
     reconstruction (Pimentel-García, *Fully WB Methods for the SW Linearized
-    Moment Model with Friction*, HYP2022): with friction ``R`` there is NO
+    Moment Model with Friction*, HYP2022): with friction `R` there is NO
     closed form for the steady state, so the local stationary solution is
     obtained by numerically integrating
 
         U_x = G(U) = -(J_F(U)+B(U))_VV^{-1} (S(U)·H_x + R(U))
 
-    (the b/topography row dropped, its column carried into ``S·H_x``).  Same
-    contract as :func:`newton_solve`: the reconstruction that lives in core
-    builds the ``slope`` closure ``G`` from the EMITTED operators and the
-    existing ``solve`` linear-solve kernel; the backend runs the RK loop.
+    (the b/topography row dropped, its column carried into `S·H_x`).  Same
+    contract as `newton_solve`: the reconstruction that lives in core
+    builds the `slope` closure `G` from the EMITTED operators and the
+    existing `solve` linear-solve kernel; the backend runs the RK loop.
 
     Reversible / implicit collocation — the 2-stage-equivalent **implicit
-    midpoint** (1-stage Gauss, Butcher ``[1/2|1/2 ; 1]``), the reversible RK the
+    midpoint** (1-stage Gauss, Butcher `[1/2|1/2 ; 1]`), the reversible RK the
     paper requires for the well-balanced property.  Solves the endpoint
 
         U1 = U0 + ds · G((U0+U1)/2)
 
-    by ``n_iter`` fixed-point sweeps (jit-safe fixed length; the jax twin uses
-    ``lax.scan``).  ``U0`` is ``(n_state, nf)``, ``ds`` a scalar or ``(nf,)``
-    signed step; returns the endpoint ``(n_state, nf)``.
+    by `n_iter` fixed-point sweeps (jit-safe fixed length; the jax twin uses
+    `lax.scan`).  `U0` is `(n_state, nf)`, `ds` a scalar or `(nf,)`
+    signed step; returns the endpoint `(n_state, nf)`.
 
     WB-exactness: implicit midpoint is reversible, so the sequence of cell
     averages it produces is a *discrete* stationary solution the scheme
@@ -249,5 +249,5 @@ ARITHMETIC = {
 
 def numpy_module():
     """The full numpy runtime module dict = arithmetic helpers + the
-    UserFunctions kernel table.  ``to_numpy.NumpyRuntimeModel.module`` is this."""
+    UserFunctions kernel table.  `to_numpy.NumpyRuntimeModel.module` is this."""
     return dict(ARITHMETIC, **KERNELS)

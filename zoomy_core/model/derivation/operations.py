@@ -1,5 +1,5 @@
 """Derivation operations that do more than a substitution: SolveFor, SolveLinearSystem,
-ChangeOfVariables. They follow the ``Operation`` protocol of ``zoomy_core.model.operations`` and act
+ChangeOfVariables. They follow the `Operation` protocol of `zoomy_core.model.operations` and act
 on a Model before it is lifted to a SystemModel.
 """
 
@@ -18,8 +18,8 @@ __all__ = ["SolveFor", "SolveLinearSystem", "ChangeOfVariables",
 
 
 class SolveFor(Operation):
-    """Reorient an equation in place into ``variable = solution``. Pipeline counterpart of
-    ``equation.solve_for(var)``, which returns a new equation.
+    """Reorient an equation in place into `variable = solution`. Pipeline counterpart of
+    `equation.solve_for(var)`, which returns a new equation.
     """
 
     def __init__(self, variable, name=None):
@@ -28,14 +28,14 @@ class SolveFor(Operation):
         super().__init__(name=name or f"solve_for[{variable}]")
 
     def apply_to_equation(self, eq):
-        """Replace the equation by the oriented relation ``variable = solution``."""
+        """Replace the equation by the oriented relation `variable = solution`."""
         solved = eq.solve_for(self._var)        # oriented Equation
         eq.expr = solved.expr                   # residual  var - solution
         eq._as_relation = dict(solved._as_relation)
         return eq
 
     def __repr__(self):
-        """Return ``SolveFor(variable)``."""
+        """Return `SolveFor(variable)`."""
         return f"SolveFor({self._var})"
 
 
@@ -43,9 +43,9 @@ class SolveFor(Operation):
 
 
 class SolveLinearSystem:
-    """Solve a coupled linear system ``A v = b`` for a family of variables with ``sympy.linsolve``.
-    ``solve()`` returns an indexable MomentFamily of oriented rows ``v_i = solution_i`` that can be
-    passed to ``.apply``.
+    """Solve a coupled linear system `A v = b` for a family of variables with `sympy.linsolve`.
+    `solve()` returns an indexable MomentFamily of oriented rows `v_i = solution_i` that can be
+    passed to `.apply`.
     """
 
     def __init__(self, equations, variables, name="solve_linear_system"):
@@ -58,7 +58,7 @@ class SolveLinearSystem:
         """Solve the system, hiding opaque Galerkin brackets behind symbols during the solve.
 
         Returns:
-            MomentFamily whose component ``i`` is ``variables[i] = solution_i``.
+            MomentFamily whose component `i` is `variables[i] = solution_i`.
         """
         from zoomy_core.model.derivation.model import MomentFamily
         from zoomy_core.model.equation import Equation
@@ -105,7 +105,7 @@ class SolveLinearSystem:
 
 
 class Granularity:
-    """Structural level an Operation acts on: ``LEAF``, ``TERM``, ``EQUATION`` or ``SYSTEM``."""
+    """Structural level an Operation acts on: `LEAF`, `TERM`, `EQUATION` or `SYSTEM`."""
 
     LEAF = "LEAF"
     TERM = "TERM"
@@ -114,8 +114,8 @@ class Granularity:
 
 
 def granularity_of(op) -> str:
-    """Return the Granularity of an operation from its ``system_level`` / ``whole_model_op`` /
-    ``single_term_only`` flags.
+    """Return the Granularity of an operation from its `system_level` / `whole_model_op` /
+    `single_term_only` flags.
 
     Args:
         op: an Operation instance.
@@ -133,14 +133,14 @@ def granularity_of(op) -> str:
 
 
 class ChangeOfVariables(Operation):
-    """Rename a coefficient family ``a(i, ...) -> relation(q(i, ...))`` across the model and swap
-    ``a`` for ``q`` in the unknowns. The unknown swap (``model.redeclare_unknown``) is what
+    """Rename a coefficient family `a(i, ...) -> relation(q(i, ...))` across the model and swap
+    `a` for `q` in the unknowns. The unknown swap (`model.redeclare_unknown`) is what
     distinguishes it from a plain substitution.
 
     Args:
-        old: name of the family currently in ``Q``.
+        old: name of the family currently in `Q`.
         new: name of the replacing family.
-        relation: callable mapping the applied ``new`` function to the substituted expression.
+        relation: callable mapping the applied `new` function to the substituted expression.
     """
 
     # A change of variables grows / rewrites the whole equation set and swaps
@@ -159,7 +159,7 @@ class ChangeOfVariables(Operation):
         )
 
     def apply_to_model(self, model):
-        """Rewrite every equation and relation, then redeclare the unknowns ``old -> new``."""
+        """Rewrite every equation and relation, then redeclare the unknowns `old -> new`."""
         # Match the old family by NAME — reconstructing ``sp.Function(self._old)``
         # would drop the field's assumptions (``real=True``) and match nothing.
         # The real head (with assumptions) is recovered from the equations and
@@ -177,7 +177,7 @@ class ChangeOfVariables(Operation):
             self._new, **getattr(old_head, "_explicit_class_assumptions", {}))
 
         def _rewrite(expr):
-            """Replace each ``old`` application in ``expr`` by ``relation(new(...))``."""
+            """Replace each `old` application in `expr` by `relation(new(...))`."""
             if not hasattr(expr, "replace"):
                 return expr
             return expr.replace(
@@ -202,6 +202,6 @@ class ChangeOfVariables(Operation):
         return model
 
     def __repr__(self):
-        """Return ``ChangeOfVariables(old -> new, relation)``."""
+        """Return `ChangeOfVariables(old -> new, relation)`."""
         return (f"ChangeOfVariables({self._old!r} -> {self._new!r}, "
                 f"{self._relation!r})")

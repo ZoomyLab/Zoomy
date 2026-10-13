@@ -87,13 +87,13 @@ class LSQMesh(FVMMesh):
     def compute_derivatives(self, u: np.ndarray, degree: int = 1,
                             derivatives_multi_index=None, *,
                             u_boundary_face) -> np.ndarray:
-        """Batched LSQ derivatives of ``u`` over all cells using the cached stencil.
+        """Batched LSQ derivatives of `u` over all cells using the cached stencil.
 
         Args:
-            u_boundary_face: ``(n_boundary_faces,)`` face values from the BC kernel, or
-                ``'extrapolation'`` for Neumann-zero.
+            u_boundary_face: `(n_boundary_faces,)` face values from the BC kernel, or
+                `'extrapolation'` for Neumann-zero.
         Returns:
-            ``(n_cells, n_derivatives)`` array in the order of ``derivatives_multi_index``.
+            `(n_cells, n_derivatives)` array in the order of `derivatives_multi_index`.
         References:
             Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
         """
@@ -146,14 +146,14 @@ class LSQMesh(FVMMesh):
         return np.ascontiguousarray((sf * coeffs)[:, indices], dtype=float)
 
     def derivative_operator(self, multi_index) -> csr_matrix:
-        """Sparse ``(n_inner_cells, n_inner_cells)`` matrix ``D`` with ``D @ u`` equal to the LSQ
-        derivative ``d^multi_index u``.  Used to assemble implicit systems (e.g. the Chorin
+        """Sparse `(n_inner_cells, n_inner_cells)` matrix `D` with `D @ u` equal to the LSQ
+        derivative `d^multi_index u`.  Used to assemble implicit systems (e.g. the Chorin
         pressure matrix) where the field is unknown.
 
         Args:
-            multi_index: derivative order per axis, e.g. ``(2,)`` for d_xx in 1D.
+            multi_index: derivative order per axis, e.g. `(2,)` for d_xx in 1D.
         Returns:
-            CSR matrix; raises ValueError if ``multi_index`` is not in the mesh's monomial set.
+            CSR matrix; raises ValueError if `multi_index` is not in the mesh's monomial set.
         References:
             Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
         """
@@ -182,7 +182,7 @@ class LSQMesh(FVMMesh):
 
     @classmethod
     def from_fvm(cls, fvm: FVMMesh) -> "LSQMesh":
-        """Build an LSQMesh from an FVMMesh with the degree-1 stencil; use ``ensure_lsq_mesh`` to
+        """Build an LSQMesh from an FVMMesh with the degree-1 stencil; use `ensure_lsq_mesh` to
         size the degree from the model.
 
         Args:
@@ -228,8 +228,8 @@ class LSQMesh(FVMMesh):
         return lsq
 
     def _build_lsq_stencil(self, degree: int) -> None:
-        """Rebuild the cached LSQ stencil in place at polynomial ``degree`` (called by ``from_fvm``
-        and ``ensure_lsq_mesh``).
+        """Rebuild the cached LSQ stencil in place at polynomial `degree` (called by `from_fvm`
+        and `ensure_lsq_mesh`).
         """
         from zoomy_core.mesh import geometry_xp
         if str(self.type) in geometry_xp._SUPPORTED:      # vectorised
@@ -278,7 +278,7 @@ class LSQMesh(FVMMesh):
 
     @classmethod
     def from_msh(cls, filepath: str) -> "LSQMesh":
-        """Load a gmsh ``.msh`` file as an LSQMesh."""
+        """Load a gmsh `.msh` file as an LSQMesh."""
         fvm = FVMMesh.from_msh(filepath)
         return cls.from_fvm(fvm)
 
@@ -290,18 +290,18 @@ class LSQMesh(FVMMesh):
 
     @classmethod
     def create_1d(cls, domain: tuple, n_inner_cells: int) -> "LSQMesh":
-        """Structured 1D LSQMesh on ``domain`` with ``n_inner_cells`` cells."""
+        """Structured 1D LSQMesh on `domain` with `n_inner_cells` cells."""
         fvm = FVMMesh.create_1d(domain, n_inner_cells)
         return cls.from_fvm(fvm)
 
     @classmethod
     def create_2d(cls, domain: tuple, nx: int, ny: int) -> "LSQMesh":
-        """Structured 2D LSQMesh on ``domain`` with ``nx`` x ``ny`` cells."""
+        """Structured 2D LSQMesh on `domain` with `nx` x `ny` cells."""
         fvm = FVMMesh.create_2d(domain, nx, ny)
         return cls.from_fvm(fvm)
 
     @classmethod
     def create_3d(cls, domain: tuple, nx: int, ny: int, nz: int) -> "LSQMesh":
-        """Structured 3D LSQMesh on ``domain`` with ``nx`` x ``ny`` x ``nz`` cells."""
+        """Structured 3D LSQMesh on `domain` with `nx` x `ny` x `nz` cells."""
         fvm = FVMMesh.create_3d(domain, nx, ny, nz)
         return cls.from_fvm(fvm)

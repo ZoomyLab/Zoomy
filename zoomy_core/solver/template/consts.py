@@ -3,8 +3,8 @@
 No numerical constant is hard-coded in a backend: CFL factors, tableau
 coefficients, tolerances (D9) and the write-gate epsilon are named values that
 every walker EMITS at the head of the generated code (Python module constants,
-C++ ``constexpr``).  Template expressions reference them by name.  A value of
-``None`` means "not known yet" (template shown before setup); compiling
+C++ `constexpr`).  Template expressions reference them by name.  A value of
+`None` means "not known yet" (template shown before setup); compiling
 requires every referenced constant to be valued.
 """
 from __future__ import annotations
@@ -47,7 +47,7 @@ class Const:
 
 
 class ConstTable:
-    """Ordered ``name -> Const``."""
+    """Ordered `name -> Const`."""
 
     def __init__(self, consts=()):
         self._c: dict = {}

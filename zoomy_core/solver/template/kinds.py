@@ -2,37 +2,37 @@
 and constant is checked against.
 
 A kind names the SHAPE CLASS and the element type of a value.  It is what the
-type checker compares at every ``Call`` (arity + kind), what the C walker turns
-into a declaration, and what decides whether an ``Assign`` is a scalar
+type checker compares at every `Call` (arity + kind), what the C walker turns
+into a declaration, and what decides whether an `Assign` is a scalar
 assignment or a whole-array elementwise one.
 
 Scalars
-    ``real``  floating-point scalar (time, dt, tolerances)
-    ``int``   integer scalar (iteration, i_snapshot, counters)
-    ``bool``  logical scalar (predicates)
+    `real`  floating-point scalar (time, dt, tolerances)
+    `int`   integer scalar (iteration, i_snapshot, counters)
+    `bool`  logical scalar (predicates)
 
-Arrays (element type in brackets; ``nv`` state rows, ``na`` aux rows, ``nc``
-cells, ``nf`` faces, ``nb`` boundary faces, ``d`` horizontal dimension)
-    ``cell_state``  (nv, nc)    [real]  Q, Q0, Q_cand, cell_term
-    ``cell_aux``    (na, nc)    [real]  Qaux
-    ``params``      (np,)       [real]  physical parameters
-    ``face_state``  (nv, nf)    [real]  Q_L, Q_R, F, Dp, Dm
-    ``face_aux``    (na, nf)    [real]  Qaux_L, Qaux_R
-    ``face_scalar`` (nf,)       [real]  per-face wave speeds, inradius
-    ``face_mask``   (nf,)       [bool]
-    ``cell_scalar`` (nc,)       [real]
-    ``cell_mask``   (nc,)       [bool]  troubled, o1
-    ``cell_grad``   (nv, d, nc) [real]  limited gradient
-    ``bc_state``    (nv, nb)    [real]  ghost states (D5 ghost convention)
-    ``bc_aux``      (na, nb)    [real]  ghost aux (D6)
-    ``array``       any shape   [real]  generic (toy procedures, user blocks)
-    ``mask``        any shape   [bool]  generic
+Arrays (element type in brackets; `nv` state rows, `na` aux rows, `nc`
+cells, `nf` faces, `nb` boundary faces, `d` horizontal dimension)
+    `cell_state`  (nv, nc)    [real]  Q, Q0, Q_cand, cell_term
+    `cell_aux`    (na, nc)    [real]  Qaux
+    `params`      (np,)       [real]  physical parameters
+    `face_state`  (nv, nf)    [real]  Q_L, Q_R, F, Dp, Dm
+    `face_aux`    (na, nf)    [real]  Qaux_L, Qaux_R
+    `face_scalar` (nf,)       [real]  per-face wave speeds, inradius
+    `face_mask`   (nf,)       [bool]
+    `cell_scalar` (nc,)       [real]
+    `cell_mask`   (nc,)       [bool]  troubled, o1
+    `cell_grad`   (nv, d, nc) [real]  limited gradient
+    `bc_state`    (nv, nb)    [real]  ghost states (D5 ghost convention)
+    `bc_aux`      (na, nb)    [real]  ghost aux (D6)
+    `array`       any shape   [real]  generic (toy procedures, user blocks)
+    `mask`        any shape   [bool]  generic
 
 Opaque (pytrees / handles; never elementwise)
-    ``geom``    geometry pytree (differentiable node-coordinate products)
-    ``obs``     observer accumulator pytree
-    ``plugin``  plugin carry pytree
-    ``any``     wildcard (setup blocks taking host objects)
+    `geom`    geometry pytree (differentiable node-coordinate products)
+    `obs`     observer accumulator pytree
+    `plugin`  plugin carry pytree
+    `any`     wildcard (setup blocks taking host objects)
 """
 from __future__ import annotations
 
@@ -108,7 +108,7 @@ def is_opaque(kind: str) -> bool:
 
 
 def element_type(kind: str) -> str:
-    """``real`` / ``int`` / ``bool`` of a scalar or array kind."""
+    """`real` / `int` / `bool` of a scalar or array kind."""
     if kind in SCALAR_KINDS:
         return kind
     if kind in ARRAY_KINDS:
@@ -117,10 +117,10 @@ def element_type(kind: str) -> str:
 
 
 def compatible(actual: str, declared: str) -> bool:
-    """May a value of kind ``actual`` be passed where ``declared`` is expected?
+    """May a value of kind `actual` be passed where `declared` is expected?
 
-    Exact match, plus: ``int`` -> ``real`` promotion; ``bool`` -> ``int``;
-    the wildcards ``any`` (anything) and ``array`` / ``mask`` (any array of
+    Exact match, plus: `int` -> `real` promotion; `bool` -> `int`;
+    the wildcards `any` (anything) and `array` / `mask` (any array of
     the same element type)."""
     if actual == declared or declared == "any" or actual == "any":
         return True
@@ -154,8 +154,8 @@ class Port:
 def ports(spec) -> tuple:
     """Normalise a port list.
 
-    Accepts ``Port`` objects, ``(name, kind)`` pairs, ``"name:kind"`` strings
-    or a whitespace-separated ``"a:real b:int"`` string."""
+    Accepts `Port` objects, `(name, kind)` pairs, `"name:kind"` strings
+    or a whitespace-separated `"a:real b:int"` string."""
     if spec is None:
         return ()
     if isinstance(spec, str):

@@ -11,11 +11,13 @@ After code transformation the user gets three compiled artifacts:
     2. Numerics — Riemann solver (numerical flux, fluctuations)
     3. Kernel   — helper functions shared by both
 
-Usage::
+Usage:
 
+```
     kernel = Kernel(model)
     runtime_kernel = NumpyRuntimeSymbolic(kernel)
     # merge kernel functions into the module dict used by model/numerics
+```
 """
 
 from __future__ import annotations
@@ -30,8 +32,8 @@ from zoomy_core.model.basefunction import SymbolicRegistrar
 class Kernel(param.Parameterized, SymbolicRegistrar):
     """Backend-agnostic registry of numerical helper functions.
 
-    Mirrors the Model/Numerics pattern: each function is a ``Function``
-    basefunction registered via ``register_symbolic_function``.  The
+    Mirrors the Model/Numerics pattern: each function is a `Function`
+    basefunction registered via `register_symbolic_function`.  The
     symbolic definitions serve as blueprints; actual implementations
     are provided by the backend during compilation.
     """
@@ -117,9 +119,9 @@ class Kernel(param.Parameterized, SymbolicRegistrar):
     def find_singular_denominators(expr, positive_vars):
         """Find Pow(v, negative_exp) subexpressions for positive variables.
 
-        Walks the expression tree and collects every ``Pow(v, e)`` where
-        ``v`` is a positive variable and ``e < 0``.  These are the terms
-        that produce NaN when ``v → 0`` (e.g. at dry cells).
+        Walks the expression tree and collects every `Pow(v, e)` where
+        `v` is a positive variable and `e < 0`.  These are the terms
+        that produce NaN when `v → 0` (e.g. at dry cells).
 
         This is the detection function — swap this out to try different
         strategies (e.g. numerical probing, limit analysis).
@@ -141,10 +143,10 @@ class Kernel(param.Parameterized, SymbolicRegistrar):
     def regularize(self, obj):
         """Regularize function definitions in-place (targeted).
 
-        Works on any object with a ``functions`` Zstruct (Model, Numerics).
-        For each function definition, finds ``Pow(v, -n)`` where ``v`` is a
-        positive variable and replaces ``v → v + eps`` in that denominator only.
-        Other occurrences of ``v`` (e.g. in ``g*h``) are untouched.
+        Works on any object with a `functions` Zstruct (Model, Numerics).
+        For each function definition, finds `Pow(v, -n)` where `v` is a
+        positive variable and replaces `v → v + eps` in that denominator only.
+        Other occurrences of `v` (e.g. in `g*h`) are untouched.
         """
         eps = self._eps
         positive_vars = self.positive_variables()

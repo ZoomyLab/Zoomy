@@ -5,13 +5,13 @@ ARS232 and ARS343 schemes for systems of the form
 
     M_t · y'  =  f_E(t, y)  +  f_I(t, y),    M_t = diag(dyn_mask),
 
-where ``dyn_mask[i] = True`` for evolution rows and ``False`` for
+where `dyn_mask[i] = True` for evolution rows and `False` for
 algebraic constraint rows.  For algebraic rows the implicit residual is
-the constraint ``f_I(t, y)[i] = 0`` itself; the per-stage Newton
+the constraint `f_I(t, y)[i] = 0` itself; the per-stage Newton
 iteration enforces it exactly.
 
 Verified at order 2 (ARS232) and order 3 (ARS343) on linear and
-nonlinear index-1 toy DAEs in ``tests/unit/zoomy_core/test_imex_ark.py``.
+nonlinear index-1 toy DAEs in `tests/unit/zoomy_core/test_imex_ark.py`.
 Constraint residual stays at floating-point precision.
 """
 from __future__ import annotations
@@ -40,9 +40,9 @@ class IMEXTableau:
 class ExplicitButcherTableau:
     """Butcher tableau for an explicit Runge-Kutta scheme.
 
-    Used by :func:`explicit_rk_step` for predictor / explicit-only
+    Used by `explicit_rk_step` for predictor / explicit-only
     substeps (e.g. the Chorin split's hyperbolic predictor).
-    Lives alongside :class:`IMEXTableau` so the time-stepping zoo is
+    Lives alongside `IMEXTableau` so the time-stepping zoo is
     one module — same construction style, just no implicit half.
     """
     name: str
@@ -111,12 +111,12 @@ def explicit_rk_step(
     table: ExplicitButcherTableau,
     f: Callable[[float, np.ndarray], np.ndarray],
 ) -> np.ndarray:
-    """Advance ``y`` one explicit RK step under any Butcher tableau.
+    """Advance `y` one explicit RK step under any Butcher tableau.
 
-    Shape-agnostic: ``y`` and ``f(t, y)`` can be any array shape (1-D,
+    Shape-agnostic: `y` and `f(t, y)` can be any array shape (1-D,
     2-D state-on-mesh, etc.) so long as they match.  For partial
     updates (e.g. a Chorin predictor that only touches certain state
-    rows) the caller returns zeros for the untouched slots in ``f``.
+    rows) the caller returns zeros for the untouched slots in `f`.
 
     No allocation per stage beyond the stage-state arrays themselves;
     safe to call inside a time loop.
@@ -197,7 +197,7 @@ def imex_ark_step(
     newton_tol: float = 1e-10,
     newton_maxit: int = 40,
 ) -> np.ndarray:
-    """One IMEX-ARK step of ``M_t y' = f_E + f_I`` with ``M_t = diag(dyn_mask)``.
+    """One IMEX-ARK step of `M_t y' = f_E + f_I` with `M_t = diag(dyn_mask)`.
 
     Stage residual:
         R[dyn] = (Y - rhs_explicit)[dyn] - dt·γ_ii·f_I(Y)[dyn]
@@ -291,9 +291,9 @@ def integrate(
     newton_tol: float = 1e-10,
     newton_maxit: int = 40,
 ) -> List[Tuple[float, np.ndarray]]:
-    """Fixed-step IMEX-ARK integration from ``t0`` to ``t_end``.
+    """Fixed-step IMEX-ARK integration from `t0` to `t_end`.
 
-    Returns a list of ``(t, y)`` snapshots including the initial state.
+    Returns a list of `(t, y)` snapshots including the initial state.
     """
     t = t0
     y = y0.copy()

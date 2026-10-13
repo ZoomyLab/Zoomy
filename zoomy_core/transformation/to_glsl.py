@@ -3,27 +3,29 @@
 SymPy → GLSL ES 3.00 (WebGL2) code printer for generating kernels from
 any Zoomy symbolic model.
 
-Subclasses :class:`OutParamCodePrinter` — generated kernels return
-``void`` and write their result through a trailing ``out float res[N]``
+Subclasses `OutParamCodePrinter` — generated kernels return
+`void` and write their result through a trailing `out float res[N]`
 parameter, so the body generation, Piecewise handling and kernel/BC
 wrapping are shared with the JS printer.  Only the GLSL-specific output
 formatting lives here.
 
 Two GLSL ES 3.00 facts shape the output:
 
-* **No array return types.**  Kernels write through ``out float res[N]``.
+* **No array return types.**  Kernels write through `out float res[N]`.
   The result is laid out row-major in the natural shape of the symbolic
-  definition (e.g. ``flux`` is ``(n_variables, dimension)`` →
-  ``res[var * dimension + dim]``).
+  definition (e.g. `flux` is `(n_variables, dimension)` →
+  `res[var * dimension + dim]`).
 * **No implicit int→float conversion.**  Every numeric literal is
-  emitted in float form (``0`` → ``0.0``).  The one exception is
+  emitted in float form (`0` → `0.0`).  The one exception is
   comparisons between integer quantities (e.g. a boundary-condition
   index), which are detected and printed with plain int literals.
 
-Usage::
+Usage:
 
+```
     from zoomy_core.transformation.to_glsl import GlslModel
     print(GlslModel(model).generate())
+```
 """
 
 import sympy as sp
@@ -43,9 +45,9 @@ class GenericGlslBase(OutParamCodePrinter):
 
     Inherits the out-parameter body generation, Piecewise handling and
     kernel / boundary-condition wrapping from
-    :class:`OutParamCodePrinter`; overrides the GLSL-specific output:
+    `OutParamCodePrinter`; overrides the GLSL-specific output:
     static types, a bare math namespace, explicit float literals and
-    ``out float res[N]`` result parameters.
+    `out float res[N]` result parameters.
     """
 
     math_namespace = ""
@@ -69,7 +71,7 @@ class GenericGlslBase(OutParamCodePrinter):
 
     def _temp_decl(self, lhs, rhs):
         """A CSE temp may capture a boolean condition (the predicate of a
-        ``conditional``); GLSL needs it declared ``bool``, not ``float``."""
+        `conditional`); GLSL needs it declared `bool`, not `float`."""
         kw = (
             "bool"
             if isinstance(rhs, (Relational, BooleanFunction))
@@ -157,9 +159,9 @@ class GenericGlslBase(OutParamCodePrinter):
 
     def _generate_args(self, func_obj, shape):
         """GLSL parameter list for a Function object, with the trailing
-        ``out float res[N]`` result parameter appended.
+        `out float res[N]` result parameter appended.
 
-        Zero-length array arguments (e.g. ``Qaux`` for a model with no
+        Zero-length array arguments (e.g. `Qaux` for a model with no
         auxiliary variables) are omitted — GLSL ES 3.00 forbids
         zero-sized arrays, and such a model has no symbols referencing
         the argument anyway.
@@ -181,7 +183,7 @@ class GenericGlslBase(OutParamCodePrinter):
         return ", ".join(parts)
 
     def wrap_function_signature(self, name, args_str, body_str, shape):
-        """Wrap a GLSL body in a ``void`` function declaration."""
+        """Wrap a GLSL body in a `void` function declaration."""
         return f"void {name}({args_str}) {{\n{body_str}\n}}"
 
     # ── No includes / struct wrappers for GLSL ───────────────────────
@@ -203,10 +205,10 @@ class GenericGlslBase(OutParamCodePrinter):
 class GlslModel(GenericGlslBase):
     """Generate GLSL ES 3.00 kernels from a Zoomy symbolic model.
 
-    Produces standalone ``void`` functions for ``flux``, ``source``,
-    ``eigenvalues``, etc.  Each takes the model's flat ``float[]``
-    argument arrays plus an ``out float res[N]`` result parameter.
-    Mirrors :class:`zoomy_core.transformation.to_js.JsModel`.
+    Produces standalone `void` functions for `flux`, `source`,
+    `eigenvalues`, etc.  Each takes the model's flat `float[]`
+    argument arrays plus an `out float res[N]` result parameter.
+    Mirrors `zoomy_core.transformation.to_js.JsModel`.
     """
 
     # Functions to generate (in order).  Skipped if the definition is
@@ -286,13 +288,13 @@ class GlslModel(GenericGlslBase):
 
 
 class GlslNumerics(GenericGlslBase):
-    """Generate GLSL ES 3.00 kernels from a Zoomy symbolic ``Numerics``.
+    """Generate GLSL ES 3.00 kernels from a Zoomy symbolic `Numerics`.
 
-    Produces ``numerical_flux`` (and ``numerical_fluctuations`` /
-    ``local_max_abs_eigenvalue``) as ``void`` functions taking the
-    per-face ``Q_minus`` / ``Q_plus`` states plus an
-    ``out float res[N]`` result.  Mirrors
-    :class:`zoomy_core.transformation.generic_c.GenericCppNumerics`.
+    Produces `numerical_flux` (and `numerical_fluctuations` /
+    `local_max_abs_eigenvalue`) as `void` functions taking the
+    per-face `Q_minus` / `Q_plus` states plus an
+    `out float res[N]` result.  Mirrors
+    `zoomy_core.transformation.generic_c.GenericCppNumerics`.
     """
 
     def __init__(self, numerics):

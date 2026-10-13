@@ -1,6 +1,6 @@
 """VAM: the non-hydrostatic vertically-averaged moment Model, derived with the same Galerkin
-recipe as ``SME`` but with a modal non-hydrostatic pressure.
-``SystemModel.from_model(VAM(level=Nu))`` gives the square DAE; ``chorin_split`` gives the
+recipe as `SME` but with a modal non-hydrostatic pressure.
+`SystemModel.from_model(VAM(level=Nu))` gives the square DAE; `chorin_split` gives the
 predictor/pressure/corrector sub-systems.
 """
 from __future__ import annotations
@@ -29,7 +29,7 @@ zeta = sp.Symbol("zeta", real=True)
 
 
 class VAM(BaseModel):
-    """Non-hydrostatic vertically-averaged moment equations of order ``level``; u, w and the
+    """Non-hydrostatic vertically-averaged moment equations of order `level`; u, w and the
     non-hydrostatic pressure share the modal basis.
 
     The pressure modes are Lagrange multipliers of the divergence constraints; the predictor
@@ -56,7 +56,7 @@ class VAM(BaseModel):
 
     def derive_model(self):
         """Build the declarative VAM model (sigma-map, projected mass, horizontal and vertical
-        momentum, closures) and its 3-D projection rows; called by the base ``__init__``.
+        momentum, closures) and its 3-D projection rows; called by the base `__init__`.
         """
         Nu = int(self.level)
         values = {"g": 9.81, "rho": 1.0, "nu": 0.0, "lambda_s": 0.0}
@@ -98,7 +98,7 @@ class VAM(BaseModel):
         uvel, w, p = momblue.uvel, momblue.w, momblue.p
 
         def _kbc(interface):
-            """Kinematic boundary condition of the vertical velocity at ``interface``."""
+            """Kinematic boundary condition of the vertical velocity at `interface`."""
             kw = dict(w=w, u=uvel[0], interface=interface)
             if dim == 3:
                 kw["v"] = uvel[1]
@@ -128,7 +128,7 @@ class VAM(BaseModel):
         legendre = Legendre_shifted(level=Nu + 2)
 
         def _project(eq):
-            """Galerkin-project the equation ``eq`` onto the test function and apply the
+            """Galerkin-project the equation `eq` onto the test function and apply the
             bed/surface kinematic conditions.
             """
             eq.apply(Multiply(h)); eq.apply(Multiply(c(zeta) * phi_k))
@@ -142,8 +142,8 @@ class VAM(BaseModel):
         pp = m.functions.p
 
         def _state(at, *, alias=None, btag=None):
-            """``ClosureState`` for the bulk (``at=None``) or the bed/surface trace
-            (``at=0/1``).
+            """`ClosureState` for the bulk (`at=None`) or the bed/surface trace
+            (`at=0/1`).
             """
             return ClosureState(m.functions, params=m.parameters, h=h, x=x,
                                 zeta=zeta, at=at, alias=alias,
@@ -262,7 +262,7 @@ class VAM(BaseModel):
         assert sp.simplify(R_om.subs(zeta, 0)) == 0   # vanishes at the bed (KBC)
 
         def _zint01(e):
-            """Integral of the polynomial ``e`` in zeta over [0, 1]."""
+            """Integral of the polynomial `e` in zeta over [0, 1]."""
             poly = sp.Poly(sp.expand(e.doit()), zeta)
             return sum(cc / (nn[0] + 1)
                        for nn, cc in zip(poly.monoms(), poly.coeffs()))
@@ -454,12 +454,12 @@ class VAM(BaseModel):
 
     def chorin_split(self, dt=None, *, system_model=None):
         """Split the lifted system into the Chorin predictor, pressure and corrector sub-systems
-        ``(SM_pred, SM_press, SM_corr)``, with row roles read structurally off the operators.
+        `(SM_pred, SM_press, SM_corr)`, with row roles read structurally off the operators.
 
         Args:
-            dt: time step symbol; defaults to a fresh positive ``dt`` that the solver renames.
+            dt: time step symbol; defaults to a fresh positive `dt` that the solver renames.
             system_model: an already configured SystemModel; attach ICs/BCs before the split and
-                re-attach BCs on ``SM_pred`` after.
+                re-attach BCs on `SM_pred` after.
         References:
             Chorin 1968, https://doi.org/10.1090/S0025-5718-1968-0242392-2
         """

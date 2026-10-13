@@ -1,31 +1,31 @@
 """DAE solver (numpy backend) — index-1 DAE-PDE integrator via
 Ascher-Ruuth-Spiteri IMEX-Runge-Kutta time stepping.
 
-Sits next to :class:`HyperbolicSolver` and :class:`IMEXSolver` in
-``zoomy_core.fvm`` and reuses every shared piece of the framework:
+Sits next to `HyperbolicSolver` and `IMEXSolver` in
+`zoomy_core.fvm` and reuses every shared piece of the framework:
 
-* :class:`SystemModel` is the single symbolic source-of-truth;
-  ``SystemModel.from_model`` auto-scans all non-state Function and
-  Derivative atoms into ``aux_state`` + a structured
-  :attr:`SystemModel.aux_registry`.
-* :class:`NumpyRuntimeModel` lambdifies the operator matrices into
-  ``(Q, Qaux, p) → ndarray`` callables.
-* :func:`ensure_lsq_mesh` promotes the input mesh to
-  :class:`LSQMesh`, exposing ``compute_derivatives`` for the registry-
-  driven ``update_qaux`` walker.
-* Boundary-condition objects (``Extrapolation``, ``Lambda``,
-  ``InflowOutflow``, …) supply face values via ``face_value``.
-* ``Solver.update_q`` / ``Solver.update_qaux`` (registry-aware default)
+* `SystemModel` is the single symbolic source-of-truth;
+  `SystemModel.from_model` auto-scans all non-state Function and
+  Derivative atoms into `aux_state` + a structured
+  `SystemModel.aux_registry`.
+* `NumpyRuntimeModel` lambdifies the operator matrices into
+  `(Q, Qaux, p) → ndarray` callables.
+* `ensure_lsq_mesh` promotes the input mesh to
+  `LSQMesh`, exposing `compute_derivatives` for the registry-
+  driven `update_qaux` walker.
+* Boundary-condition objects (`Extrapolation`, `Lambda`,
+  `InflowOutflow`, …) supply face values via `face_value`.
+* `Solver.update_q` / `Solver.update_qaux` (registry-aware default)
   fire after every step.
 
 Time integration: Ascher-Ruuth-Spiteri IMEX-Runge-Kutta (ARS232 / ARS343)
-on the singular DAE ``M(Q)·∂_t Q = R(Q, Qaux, p)``.  Aux is updated
+on the singular DAE `M(Q)·∂_t Q = R(Q, Qaux, p)`.  Aux is updated
 once per step (lagged through the Newton iteration), keeping the
-Jacobian small and reusing the standard ``Solver.update_qaux`` hook.
+Jacobian small and reusing the standard `Solver.update_qaux` hook.
 
 Spatial scheme: Rusanov flux + non-conservative path-integral
-fluctuations, mirroring :class:`NonconservativeRusanov` but driven by
-the SystemModel runtime (so derivative-aux entries like ``∂_x h`` flow
+fluctuations, mirroring `NonconservativeRusanov` but driven by
+the SystemModel runtime (so derivative-aux entries like `∂_x h` flow
 through as ordinary Qaux components, no special-casing).  Boundary
 faces use ``BC.face_value(Q_inner, Qaux_inner, normal, d_face, time,
 parameters)``.
@@ -57,23 +57,23 @@ class DAESolver(Solver):
 
     Order-2 status (2026-05-14)
     ---------------------------
-    At ``reconstruction_order=1`` this solver is the validated
+    At `reconstruction_order=1` this solver is the validated
     *correctness reference* for the VAM chain: lake-at-rest is
     preserved to machine precision and a perturbation propagates with
     bounded mass loss.
 
-    At ``reconstruction_order=2`` the *spatial scheme* is also correct
+    At `reconstruction_order=2` the *spatial scheme* is also correct
     — lake-at-rest over a bump is well-balanced to ~1e-14 (the η = h+b
-    ``SurfaceReconstruction`` + the cell-interior non-conservative
+    `SurfaceReconstruction` + the cell-interior non-conservative
     integral telescope exactly), and the slope limiter is frozen
-    through the Newton iteration so ``f_I`` is a smooth function of the
+    through the Newton iteration so `f_I` is a smooth function of the
     stage unknown.  But the *time integration* does not converge: the
     monolithic IMEX-ARK stage Jacobian is ill-conditioned (cond ~1e7),
     concentrated in the algebraic pressure-constraint rows.  At that
     conditioning the finite-difference Jacobian (step ~1e-7) is
     unreliable, so the stage Newton degrades from quadratic to slow
-    *linear* convergence and does not reach ``newton_tol`` within
-    ``newton_maxit``.
+    *linear* convergence and does not reach `newton_tol` within
+    `newton_maxit`.
 
     This is structural, not a bug: the monolithic DAE couples a
     well-conditioned hyperbolic evolution block and an ill-conditioned
@@ -417,8 +417,8 @@ class DAESolver(Solver):
         The runtime exposes the indexed BC kernel as
         ``self.rt.boundary_conditions(bc_idx, time, position, distance,
         Q_cell, Qaux_cell, parameters, normal) → q_face``.  Per face the
-        only state needed is its kernel branch ``bc_idx``, matched to the
-        face's tag BY NAME (:func:`boundary_face_branches`); no Python
+        only state needed is its kernel branch `bc_idx`, matched to the
+        face's tag BY NAME (`boundary_face_branches`); no Python
         BC-object list."""
         n_bf = mesh.n_boundary_faces
         self._n_bf = n_bf
@@ -451,9 +451,9 @@ class DAESolver(Solver):
         )
 
     def _find_field_location(self, name):
-        """Return ``("state", idx)`` if ``name`` is a state variable
-        of ``self.sm``, ``("aux", idx)`` if an aux variable, else
-        ``None``.  Numpy analogue of ``Numerics.find_field``.
+        """Return `("state", idx)` if `name` is a state variable
+        of `self.sm`, `("aux", idx)` if an aux variable, else
+        `None`.  Numpy analogue of `Numerics.find_field`.
         """
         state_names = [str(s) for s in self.sm.state]
         if name in state_names:
@@ -469,8 +469,8 @@ class DAESolver(Solver):
 
     def _boundary_face_values(self, Q, Qaux, time, p):
         """BC-provided cell-centre values at every boundary face,
-        shape ``(n_state, n_boundary_faces)`` — feed the reconstruction
-        for limiter bounds and the boundary ``Q_R`` placeholder."""
+        shape `(n_state, n_boundary_faces)` — feed the reconstruction
+        for limiter bounds and the boundary `Q_R` placeholder."""
         mesh = self._sim_mesh
         dim = self.dim
         bc_fn = self.rt.boundary_conditions
@@ -490,12 +490,12 @@ class DAESolver(Solver):
         """Slope-limiter coefficients computed once from a lagged state
         and held fixed through the implicit-Newton iteration.
 
-        The LSQ gradient is linear in ``Q`` (smooth); the limiter φ is
+        The LSQ gradient is linear in `Q` (smooth); the limiter φ is
         the non-smooth part — its kinks (neighbour min/max, sign
         branch, per-cell face-min) otherwise poison the
-        finite-difference Jacobian.  Freezing φ — exactly as ``Qaux``
-        is lagged — makes ``f_I`` a smooth function of the Newton
-        unknown.  Returns ``None`` at first order (no limiter)."""
+        finite-difference Jacobian.  Freezing φ — exactly as `Qaux`
+        is lagged — makes `f_I` a smooth function of the Newton
+        unknown.  Returns `None` at first order (no limiter)."""
         if self.reconstruction_order < 2:
             return None
         p = self._parameters_array()
@@ -509,14 +509,14 @@ class DAESolver(Solver):
     # ------------------------------------------------------------------
 
     def _residual(self, Q, Qaux, time):
-        """Per-cell residual ``R = S − ∇·F − ∇·P − B·∇Q`` via Rusanov
+        """Per-cell residual `R = S − ∇·F − ∇·P − B·∇Q` via Rusanov
         flux + linear-path-integral NC fluctuations.  Shape
-        ``(n_state, nc)``.
+        `(n_state, nc)`.
 
         Aux is passed in (does NOT change inside f_I): this is the
         lagged-aux Newton convention so the Jacobian doesn't have to
         track LSQ-derivative sensitivities.  Qaux is refreshed once
-        per timestep by ``update_qaux``.
+        per timestep by `update_qaux`.
         """
         p = self.sm_parameters_arr if hasattr(self, "sm_parameters_arr") \
             else self._parameters_array()
@@ -663,8 +663,8 @@ class DAESolver(Solver):
         return R
 
     def _build_max_eigenvalue_callable(self):
-        """``(Q, Qaux, parameters) → max|λ|`` callable for adaptive dt:
-        ``|U⃗₀| + √(g·h_max)`` Saint-Venant upper bound, with all
+        """`(Q, Qaux, parameters) → max|λ|` callable for adaptive dt:
+        `|U⃗₀| + √(g·h_max)` Saint-Venant upper bound, with all
         leading-order horizontal velocity components included.
         """
         sm = self.sm
@@ -701,10 +701,10 @@ class DAESolver(Solver):
         return Q.T.ravel()
 
     def f_I(self, t, Y):
-        """Implicit RHS: per-cell ``M_evol⁻¹·R_evol`` on evolution
+        """Implicit RHS: per-cell `M_evol⁻¹·R_evol` on evolution
         rows; constraint residual on algebraic rows.
 
-        Aux is held fixed at ``self._sim_Qaux`` (refreshed once per
+        Aux is held fixed at `self._sim_Qaux` (refreshed once per
         timestep) — the lagged-aux Newton convention.
         """
         Q = self._Y_to_Q(Y)
@@ -779,7 +779,7 @@ class DAESolver(Solver):
         The cone must span the RECONSTRUCTION stencil, not merely the face
         stencil.  At order 2 the face value on the far side of a neighbour
         carries that neighbour's own LSQ gradient, so the residual of cell
-        ``c`` reaches ``c +- 2``.  Colouring the one-ring cone regardless of
+        `c` reaches `c +- 2`.  Colouring the one-ring cone regardless of
         order left, measured against a dense FD assembly on this system,
         14.4 percent of the true Jacobian OUTSIDE the assumed pattern where
         it was never written, and let two cells two apart share a colour so
@@ -837,10 +837,10 @@ class DAESolver(Solver):
     # ------------------------------------------------------------------
 
     def project_to_manifold(self, Q, *, time=0.0, tol=1e-10, maxit=20):
-        """Newton-project ``Q`` onto the algebraic constraint manifold
-        ``f_I[alg] = 0`` by adjusting algebraic state entries.
+        """Newton-project `Q` onto the algebraic constraint manifold
+        `f_I[alg] = 0` by adjusting algebraic state entries.
 
-        Aborts (returns the original ``Q``) if the Newton residual
+        Aborts (returns the original `Q`) if the Newton residual
         does not decrease or if any iterate becomes non-finite — the
         caller can then proceed with the un-projected IC and let the
         IMEX-ARK Newton (which uses a more conservative update) do
@@ -893,11 +893,11 @@ class DAESolver(Solver):
     def step(self, dt):
         """One IMEX-ARK step on the stored state.
 
-        Convention: refresh ``self._sim_Qaux`` via ``update_qaux``
+        Convention: refresh `self._sim_Qaux` via `update_qaux`
         once per step (lagged through the Newton iteration), apply
-        ``update_q`` to the new state after.  The slope-limiter
+        `update_q` to the new state after.  The slope-limiter
         coefficients are frozen the same way — computed once from the
-        lagged state so ``f_I`` stays smooth in the Newton unknown.
+        lagged state so `f_I` stays smooth in the Newton unknown.
         """
         Q_old = self._sim_Q.copy()
         Qaux_old = self._sim_Qaux.copy()
@@ -992,7 +992,7 @@ class DAESolver(Solver):
     def export_vtk(self, *, field_names=None, aux_field_names=None,
                    filename="dae_output", skip_aux=False):
         """Post-process HDF5 snapshots to a VTK time series for
-        Paraview.  Requires ``write_output=True`` at setup time."""
+        Paraview.  Requires `write_output=True` at setup time."""
         if self._output_hdf5_path is None:
             raise RuntimeError(
                 "export_vtk requires write_output=True at setup time"

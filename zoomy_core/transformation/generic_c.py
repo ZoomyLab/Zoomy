@@ -195,22 +195,22 @@ class GenericCppBase(CxxBase):
         self._route_math_funcs_through_caster()
 
     def _operator_arg_keys(self, name):
-        """Ordered C-family argument-key list for operator ``name`` — read off
-        the SystemModel's DECLARED ``Function.args`` (the single signature
+        """Ordered C-family argument-key list for operator `name` — read off
+        the SystemModel's DECLARED `Function.args` (the single signature
         source) and translated to this backend's argument spelling via
-        ``ARG_MAPPING``.  Pure syntax: the printer never routes or invents
-        arguments, it only spells the declared groups (``variables`` → ``Q``,
-        ``position`` → ``X`` …).  Shared by the dmplex/amrex/openfoam printers."""
+        `ARG_MAPPING`.  Pure syntax: the printer never routes or invents
+        arguments, it only spells the declared groups (`variables` → `Q`,
+        `position` → `X` …).  Shared by the dmplex/amrex/openfoam printers."""
         return [self.ARG_MAPPING[k] for k in self.sm.operator(name).args.keys()]
 
     def _route_math_funcs_through_caster(self):
-        """Re-point the sympy ``_print_<mathfunc>`` dispatchers (``log`` /
-        ``exp`` / ``sin`` / …, dynamically bound by ``C99CodePrinter`` to its
-        own ``_print_math_func``) at THIS class's ``_print_math_func`` override,
-        which casts bare integer/float literal arguments to ``real_type``
-        (REQ-66 caster).  Without this rebind ``log(30)`` emits the ambiguous
-        ``log(int)`` overload.  ``_print_Abs`` keeps its dedicated override
-        (Foam ``mag``)."""
+        """Re-point the sympy `_print_<mathfunc>` dispatchers (`log` /
+        `exp` / `sin` / …, dynamically bound by `C99CodePrinter` to its
+        own `_print_math_func`) at THIS class's `_print_math_func` override,
+        which casts bare integer/float literal arguments to `real_type`
+        (REQ-66 caster).  Without this rebind `log(30)` emits the ambiguous
+        `log(int)` overload.  `_print_Abs` keeps its dedicated override
+        (Foam `mag`)."""
         c99_mf = C99CodePrinter._print_math_func
         for attr in dir(type(self)):
             if (attr.startswith("_print_") and attr != "_print_Abs"
@@ -233,7 +233,7 @@ class GenericCppBase(CxxBase):
         return super()._print_Symbol(s)
 
     def _print_Function(self, expr):
-        """A ``c_functions`` print-map entry, else the call of ``CxxBase``."""
+        """A `c_functions` print-map entry, else the call of `CxxBase`."""
         name = expr.func.__name__
         if name in self.c_functions:
             return self.c_functions[name](self, *expr.args)
@@ -250,11 +250,11 @@ class GenericCppBase(CxxBase):
         return f"{base}[{']['.join(indices)}]"
 
     def _print_math_func(self, expr, nest=False, known=None):
-        """Print a known C math function (``log`` / ``exp`` / ``sin`` / …) with
-        bare integer/float literal arguments cast to ``real_type`` — the same
-        REQ-66 caster used for ``Min``/``Max``.  Without it ``log(30)`` emits
-        ``Foam::log(30)`` and OpenFOAM rejects the ``log(int)`` overload as
-        ambiguous.  Multi-arg ``nest`` reductions and callable ``known``
+        """Print a known C math function (`log` / `exp` / `sin` / …) with
+        bare integer/float literal arguments cast to `real_type` — the same
+        REQ-66 caster used for `Min`/`Max`.  Without it `log(30)` emits
+        `Foam::log(30)` and OpenFOAM rejects the `log(int)` overload as
+        ambiguous.  Multi-arg `nest` reductions and callable `known`
         printers fall back to sympy's emitter unchanged."""
         if (not self._typed_numeric_literals) or nest:
             return super()._print_math_func(expr, nest=nest, known=known)
@@ -373,12 +373,12 @@ class GenericCppBase(CxxBase):
     # registered definition in first, so nothing is left to extract.
 
     def _resolve_opaque_registry(self):
-        """``{callable-name: basefunction.Function}`` for every registered
+        """`{callable-name: basefunction.Function}` for every registered
         symbolic function reachable from the object being printed — the
         numerics registrar (bare names, as its proxies emit) and a legacy
-        Model registrar (``Model<T>::``- / ``Model::``-prefixed and bare).
-        External kernel primitives (``_NON_RESOLVABLE``) and every
-        ``c_functions`` print-map entry are excluded: they have no symbolic
+        Model registrar (`Model<T>::`- / `Model::`-prefixed and bare).
+        External kernel primitives (`_NON_RESOLVABLE`) and every
+        `c_functions` print-map entry are excluded: they have no symbolic
         definition and must stay calls."""
         if self._opaque_registry_cache is not None:
             return self._opaque_registry_cache
@@ -406,7 +406,7 @@ class GenericCppBase(CxxBase):
     @staticmethod
     def _flatten_arg_group(group):
         """Flat symbol list of one declared signature group (mirror of the
-        flattening ``proxy_caller`` applies to caller-supplied groups)."""
+        flattening `proxy_caller` applies to caller-supplied groups)."""
         if isinstance(group, sp.Basic) and not isinstance(group, sp.NDimArray):
             return [group]
         if hasattr(group, "values") and callable(getattr(group, "values")):
@@ -419,22 +419,22 @@ class GenericCppBase(CxxBase):
         return [group]
 
     def _match_call_args(self, fobj, call_args):
-        """Map the DECLARED signature of registered function ``fobj`` onto the
-        actual ``call_args`` of a proxy call.
+        """Map the DECLARED signature of registered function `fobj` onto the
+        actual `call_args` of a proxy call.
 
-        Returns a substitution dict ``{declared symbol: call arg}`` (possibly
-        empty — the verbatim case), or ``None`` when the pattern cannot be
+        Returns a substitution dict `{declared symbol: call arg}` (possibly
+        empty — the verbatim case), or `None` when the pattern cannot be
         matched (the call is then left un-resolved, i.e. emitted as today).
 
         Three per-group forms exist, decided positionally exactly like
-        ``proxy_caller`` builds them:
+        `proxy_caller` builds them:
 
         * the caller passed the registrar's OWN array for the group —
-          proxy emitted ONE ``sp.Symbol(group._symbolic_name)``; the declared
+          proxy emitted ONE `sp.Symbol(group._symbolic_name)`; the declared
           element symbols already print correctly through this printer's
-          ``symbol_maps``, so no substitution is needed;
+          `symbol_maps`, so no substitution is needed;
         * the caller passed one ARRAY covering the whole group (a group
-          without ``_symbolic_name``, e.g. ``parameters`` / ``normal``) —
+          without `_symbolic_name`, e.g. `parameters` / `normal`) —
           zip its flat elements against the declared flat symbols;
         * the caller passed explicit scalar elements — proxy flattened
           them; zip them against the declared flat symbols.
@@ -473,13 +473,13 @@ class GenericCppBase(CxxBase):
         return subs
 
     def _resolve_opaque_calls(self, expr, _depth=0, _stack=()):
-        """Inline registered-function calls found in ``expr`` (recursively —
+        """Inline registered-function calls found in `expr` (recursively —
         a spliced body may itself consume registered functions), leaving
         every non-resolvable call untouched.  Structure-preserving: array
         containers are rebuilt element-wise with their shape; replacements
-        run under ``sp.evaluate(False)`` so the splice is a pure structural
-        rewrite (no ``Max``/ordering re-evaluation — same guard as the numpy
-        ``_lower_opaque_kernels`` seam, REQ-189)."""
+        run under `sp.evaluate(False)` so the splice is a pure structural
+        rewrite (no `Max`/ordering re-evaluation — same guard as the numpy
+        `_lower_opaque_kernels` seam, REQ-189)."""
         reg = self._resolve_opaque_registry()
         if not reg or _depth > self._RESOLVE_MAX_DEPTH:
             return expr
@@ -765,26 +765,26 @@ struct SimpleArray {
     _PROFILE_3D_FIELDS = ("b", "h", "u", "v", "w", "p")
 
     def _column_accessor(self, j, slot):
-        """C accessor for the resolved column sample at vertical node ``j``,
-        canonical-profile field ``slot`` — the j-th interface column entry the
-        backend supplies to ``project_from_3d`` (``column[j][slot]``; both the
-        foam ``List<List<scalar>>`` and the generic-C ``T**`` index this way)."""
+        """C accessor for the resolved column sample at vertical node `j`,
+        canonical-profile field `slot` — the j-th interface column entry the
+        backend supplies to `project_from_3d` (`column[j][slot]`; both the
+        foam `List<List<scalar>>` and the generic-C `T**` index this way)."""
         return f"column[{j}][{slot}]"
 
     def _lower_project_from_3d(self, p3):
-        """Lower the model's ``project_from_3d`` rows for emission.
+        """Lower the model's `project_from_3d` rows for emission.
 
         The model rows are now Integral-FREE, fixed-node Galerkin reductions:
-        plain arithmetic in the sampled-profile heads ``P3_<field>`` — either
-        the depth-constant ``P3_b`` / ``P3_h`` symbols, or the per-node values
-        ``P3_<field>(ζ_j)`` at the fixed quadrature nodes.  Bind each to its
+        plain arithmetic in the sampled-profile heads `P3_<field>` — either
+        the depth-constant `P3_b` / `P3_h` symbols, or the per-node values
+        `P3_<field>(ζ_j)` at the fixed quadrature nodes.  Bind each to its
         column slot so the row lowers through the SAME generic path as any other
-        operator — no ``Integral``/``I[]`` quadrature special case.
+        operator — no `Integral`/`I[]` quadrature special case.
 
-        Returns ``(rows, prof_map, at_args)`` (``prof_map`` = sample symbol →
-        column accessor) or ``None`` when there is nothing to emit.  The fixed
-        nodes are recovered from the distinct numeric ``P3_<field>(ζ_j)`` args
-        (sorted ascending = column index ``j``)."""
+        Returns `(rows, prof_map, at_args)` (`prof_map` = sample symbol →
+        column accessor) or `None` when there is nothing to emit.  The fixed
+        nodes are recovered from the distinct numeric `P3_<field>(ζ_j)` args
+        (sorted ascending = column index `j`)."""
         from sympy.core.function import AppliedUndef
         if p3 is None or len(sp.flatten(p3)) == 0:
             return None
@@ -835,13 +835,13 @@ struct SimpleArray {
 
     def _sm_arg_decl(self, key):
         """C++ declaration for one argument, given its already-mapped C
-        spelling (pointer form: ``const T* Q``; ``dt`` is the one scalar
+        spelling (pointer form: `const T* Q`; `dt` is the one scalar
         argument).  Backends with a different calling convention override
         this.
 
-        Lives on the BASE (moved up from ``GenericCppModel``, behaviour
+        Lives on the BASE (moved up from `GenericCppModel`, behaviour
         identical) so the solver-block walker
-        (:mod:`zoomy_core.transformation.procedure_c`) reuses one declaration
+        (`zoomy_core.transformation.procedure_c`) reuses one declaration
         table with the operator-kernel emitters instead of forking a second.
         """
         if key in ("dt", "time"):
@@ -863,9 +863,9 @@ struct SimpleArray {
 
     def _decl_for_kind(self, kind, name):
         """One C++ parameter declaration from a solver storage kind
-        (:mod:`zoomy_core.solver.arg_slots`).  Split out so the solver-block
-        walker can pick the kind per PROCEDURE (a face array is ``T*`` in the
-        block that writes it, ``const T*`` in the blocks that read it) without
+        (`zoomy_core.solver.arg_slots`).  Split out so the solver-block
+        walker can pick the kind per PROCEDURE (a face array is `T*` in the
+        block that writes it, `const T*` in the blocks that read it) without
         forking a second declaration table."""
         return {
             "scalar_real": f"const {self.real_type} {name}",
@@ -944,13 +944,13 @@ struct SimpleArray {
 class OutParamCodePrinter(GenericCppBase):
     """Shared base for the out-parameter code printers (JS, GLSL).
 
-    Generated kernels return ``void`` / nothing and write their result
-    through a trailing ``res`` array parameter the caller owns — no
+    Generated kernels return `void` / nothing and write their result
+    through a trailing `res` array parameter the caller owns — no
     per-call heap allocation, which is what keeps the browser solver
     fast.  The body-generation, Piecewise handling and kernel/BC
     wrapping all live here; subclasses supply the language-specific
-    bits via :meth:`_temp_decl`, :meth:`_generate_args` and
-    :meth:`wrap_function_signature`.
+    bits via `_temp_decl`, `_generate_args` and
+    `wrap_function_signature`.
     """
 
     # ``parameters`` is the BoundaryCondition Function's key for the
@@ -968,21 +968,21 @@ class OutParamCodePrinter(GenericCppBase):
     # ── Language hooks ───────────────────────────────────────────────
 
     def _print_Abs(self, expr):
-        """Route ``sympy.Abs`` through the subclass ``c_functions`` map
-        (``Math.abs`` for JS, ``abs`` for GLSL): the inherited C99
-        ``_print_Abs`` emits ``fabs``, which exists in NEITHER language.
-        Latent until the ``numerical_flux`` face-wavespeed row put a
-        ``max(|λ_i|)`` reduction into an executed JS kernel."""
+        """Route `sympy.Abs` through the subclass `c_functions` map
+        (`Math.abs` for JS, `abs` for GLSL): the inherited C99
+        `_print_Abs` emits `fabs`, which exists in NEITHER language.
+        Latent until the `numerical_flux` face-wavespeed row put a
+        `max(|λ_i|)` reduction into an executed JS kernel."""
         return self.c_functions["Abs"](self, expr.args[0])
 
     def _temp_decl(self, lhs, rhs):
         """Declaration line for one CSE temporary.  Default is a
-        JS-style ``const``; GLSL overrides to pick ``bool`` / ``float``."""
+        JS-style `const`; GLSL overrides to pick `bool` / `float`."""
         return f"const {self.doprint(lhs)} = {self.doprint(rhs)};"
 
     def _generate_args(self, func_obj, shape):
         """Parameter list for a Function object, including the trailing
-        ``res`` out-parameter.  Language-specific — must be overridden."""
+        `res` out-parameter.  Language-specific — must be overridden."""
         raise NotImplementedError
 
     # ── Piecewise ────────────────────────────────────────────────────
@@ -991,7 +991,7 @@ class OutParamCodePrinter(GenericCppBase):
         """Nested *scalar* Piecewise → a chained ternary.
 
         The top-level vector Piecewise (a boundary-condition dispatch)
-        is handled by :meth:`_print_piecewise_structure`; this prints a
+        is handled by `_print_piecewise_structure`; this prints a
         scalar Piecewise appearing *inside* an expression — e.g. a
         piecewise-linear Q(t) interpolation.
         """
@@ -1014,9 +1014,9 @@ class OutParamCodePrinter(GenericCppBase):
     # ── Body generation (out-parameter, no return) ───────────────────
 
     def convert_expression_body(self, expr, shape, target="res"):
-        """Convert an expression into a body that writes ``target`` — the
+        """Convert an expression into a body that writes `target` — the
         function's out-parameter array.  No local declaration, no
-        ``return``."""
+        `return`."""
         # Restore per-component ``K(idx, *a)`` from ``pick(K(*a), idx)`` before
         # cse (see the base ``convert_expression_body``).
         expr = lower_pick_to_component(expr)
@@ -1057,10 +1057,10 @@ class OutParamCodePrinter(GenericCppBase):
         return "\n".join("    " + ln for ln in lines)
 
     def _print_piecewise_structure(self, expr, shape, target):
-        """Emit an if / else-if chain assigning into ``target``.
+        """Emit an if / else-if chain assigning into `target`.
 
-        ``target`` is zero-initialised first so any fall-through (a
-        Piecewise with no final ``True`` branch — e.g. a
+        `target` is zero-initialised first so any fall-through (a
+        Piecewise with no final `True` branch — e.g. a
         boundary-condition dispatch) is well-defined."""
         total = self._shape_size(shape)
         lines = [f"    {target}[{i}] = 0.0;" for i in range(total)]
@@ -1089,7 +1089,7 @@ class OutParamCodePrinter(GenericCppBase):
     def _generate_kernel(self, name, func_obj):
         """Generate one out-parameter kernel from a Function object.
 
-        Returns ``None`` for a zero-size result (a zero-component
+        Returns `None` for a zero-size result (a zero-component
         out-parameter is pointless and GLSL forbids it)."""
         expr = func_obj.definition
         expr = self._expand_vector_conditionals(expr)
@@ -1105,8 +1105,8 @@ class OutParamCodePrinter(GenericCppBase):
 
     def generate_boundary_conditions(self):
         """Generate the model's boundary-condition dispatch kernels —
-        ``boundary_conditions`` and ``aux_boundary_conditions``, each a
-        Piecewise over the integer ``bc_idx``."""
+        `boundary_conditions` and `aux_boundary_conditions`, each a
+        Piecewise over the integer `bc_idx`."""
         blocks = []
         for attr in ("_boundary_conditions", "_aux_boundary_conditions"):
             func_obj = getattr(self.model, attr, None)
@@ -1120,10 +1120,10 @@ class OutParamCodePrinter(GenericCppBase):
     def _generate_bc_kernel(self, func_obj):
         """Generate one boundary-condition kernel.
 
-        Unlike :meth:`_generate_kernel` this does *not* run
-        ``_expand_vector_conditionals`` — the BC definition is already a
-        Piecewise of vector branches.  The scalar BC symbols (``bc_idx``,
-        ``time``, ``distance``) are registered so they print as their
+        Unlike `_generate_kernel` this does *not* run
+        `_expand_vector_conditionals` — the BC definition is already a
+        Piecewise of vector branches.  The scalar BC symbols (`bc_idx`,
+        `time`, `distance`) are registered so they print as their
         parameter names."""
         scalar_map = {}
         for key, param_name in (
@@ -1194,9 +1194,9 @@ class GenericCppModel(GenericCppBase):
 
         Declarative models keep their operator matrices (flux, NCP,
         quasilinear, source, eigenvalues, diffusion) on the SystemModel —
-        emit those when present, mirroring ``FoamSystemModelPrinter``.
-        Legacy hand-written Models (no ``system_model``) fall back to
-        iterating the Model's own ``functions``.
+        emit those when present, mirroring `FoamSystemModelPrinter`.
+        Legacy hand-written Models (no `system_model`) fall back to
+        iterating the Model's own `functions`.
         """
         blocks = [self.get_file_header()]
         if self.sm is not None:
@@ -1253,8 +1253,8 @@ class GenericCppModel(GenericCppBase):
 
     def _sm_symbol_map(self):
         """Map the SystemModel state / aux / parameter / normal symbols to
-        their C interface accessors (``Q[i]`` / ``Qaux[i]`` / ``p[i]`` /
-        ``n[i]``).  Shared by the operator and boundary-condition kernels."""
+        their C interface accessors (`Q[i]` / `Qaux[i]` / `p[i]` /
+        `n[i]`).  Shared by the operator and boundary-condition kernels."""
         sm = self.sm
         smap = {}
         for i, s in enumerate(sm.state):
@@ -1281,8 +1281,8 @@ class GenericCppModel(GenericCppBase):
         return smap
 
     def _kernel_with_symbol_map(self, name, expr, shape, args, smap):
-        """Emit one kernel from a symbolic expression with ``smap`` pushed for
-        the body (the shared lowering path; ``_sm_kernel`` uses the SystemModel
+        """Emit one kernel from a symbolic expression with `smap` pushed for
+        the body (the shared lowering path; `_sm_kernel` uses the SystemModel
         state/aux/parameter/normal map, the IC kernels a position/parameter
         map)."""
         self.symbol_maps.append(smap)
@@ -1304,7 +1304,7 @@ class GenericCppModel(GenericCppBase):
     def _doc_note(self, name, reason):
         """A struct-body comment standing in for a kernel the SystemModel does
         not carry, so the header stays a *documented contract* rather than a
-        broken / zero kernel.  The backend must supply ``name`` solver-side
+        broken / zero kernel.  The backend must supply `name` solver-side
         (case directory / settings).  Mirrors the reconstruction skip but
         leaves a paper trail the dmplex consumer can grep for."""
         wrapped = textwrap.fill(
@@ -1319,9 +1319,9 @@ class GenericCppModel(GenericCppBase):
         )
 
     def _sm_slice(self, tensor, axis_idx, out_shape):
-        """``tensor[..., axis_idx]`` reshaped to ``out_shape`` — the
+        """`tensor[..., axis_idx]` reshaped to `out_shape` — the
         per-direction slice of a direction-indexed operator tensor.  If
-        ``out_shape`` carries a trailing ``1`` padding (the ``flux_x``
+        `out_shape` carries a trailing `1` padding (the `flux_x`
         column convention) walk one fewer axis when collecting values."""
         walk = (
             out_shape[:-1]
@@ -1335,7 +1335,7 @@ class GenericCppModel(GenericCppBase):
         return sp.Array(flat).reshape(*out_shape)
 
     def _sm_per_direction(self, base, tensor, out_shape, args):
-        """Emit ``base_x`` / ``base_y`` / ``base_z`` kernels (one per
+        """Emit `base_x` / `base_y` / `base_z` kernels (one per
         spatial dimension) from a direction-indexed operator tensor."""
         return [
             self._sm_kernel(
@@ -1348,10 +1348,10 @@ class GenericCppModel(GenericCppBase):
         ]
 
     def _emit_operator_kernels(self):
-        """Emit the SystemModel operator kernels into ``Model.H``:
+        """Emit the SystemModel operator kernels into `Model.H`:
         per-direction conservative flux, nonconservative (NCP) matrix,
         quasilinear matrix, the eigenvalue spectrum, the source term, and
-        diffusion when present.  Mirrors ``FoamSystemModelPrinter``."""
+        diffusion when present.  Mirrors `FoamSystemModelPrinter`."""
         sm = self.sm
         n_eq, n_state = sm.n_equations, len(sm.state)
         blocks = []
@@ -1421,16 +1421,16 @@ class GenericCppModel(GenericCppBase):
         return blocks
 
     def _emit_stacked_operators(self):
-        """Emit the *stacked* all-directions ``flux(Q,Qaux,p)`` and
-        ``nonconservative_matrix(Q,Qaux,p)`` the dmplex solver / ``Numerics.H``
-        call directly — in addition to the per-direction ``*_x`` / ``*_y``
-        accessors ``_emit_operator_kernels`` already emits.
+        """Emit the *stacked* all-directions `flux(Q,Qaux,p)` and
+        `nonconservative_matrix(Q,Qaux,p)` the dmplex solver / `Numerics.H`
+        call directly — in addition to the per-direction `*_x` / `*_y`
+        accessors `_emit_operator_kernels` already emits.
 
         Layout is the operator tensor flattened row-major (the convention the
-        solver indexes): ``flux[eq, dim]`` → ``SimpleArray<n_eq*dim>`` and
-        ``NCP[eq, state, dim]`` → ``SimpleArray<n_eq*n_state*dim>`` (see
-        ``Model.H``'s ``flux`` / ``nonconservative_matrix`` and ``Numerics.H``'s
-        ``Model<T>::flux`` / ``::nonconservative_matrix`` calls)."""
+        solver indexes): `flux[eq, dim]` → `SimpleArray<n_eq*dim>` and
+        `NCP[eq, state, dim]` → `SimpleArray<n_eq*n_state*dim>` (see
+        `Model.H`'s `flux` / `nonconservative_matrix` and `Numerics.H`'s
+        `Model<T>::flux` / `::nonconservative_matrix` calls)."""
         sm = self.sm
         n_eq, n_state, dim = sm.n_equations, len(sm.state), sm.dimension
         return [
@@ -1449,14 +1449,14 @@ class GenericCppModel(GenericCppBase):
     def _emit_source_jacobians(self):
         """Emit the symbolic source Jacobians the implicit source step needs:
 
-        * ``source_jacobian_wrt_variables(Q,Qaux,p)`` → ``(n_eq, n_state)`` —
-          ``dS/dQ`` holding aux fixed (``sm.source_jacobian_wrt_variables``).
-        * ``source_jacobian_wrt_aux_variables(Q,Qaux,p)`` → ``(n_eq, n_aux)`` —
-          ``dS/dQaux``; the solver completes the chain rule
-          ``dS/dQ + dS/dQaux . dQaux/dQ`` (see ``ModularSolver.hpp`` ~l.268).
+        * `source_jacobian_wrt_variables(Q,Qaux,p)` → `(n_eq, n_state)` —
+          `dS/dQ` holding aux fixed (`sm.source_jacobian_wrt_variables`).
+        * `source_jacobian_wrt_aux_variables(Q,Qaux,p)` → `(n_eq, n_aux)` —
+          `dS/dQaux`; the solver completes the chain rule
+          `dS/dQ + dS/dQaux . dQaux/dQ` (see `ModularSolver.hpp` ~l.268).
 
-        Row-major layout matches the solver's ``dS_dQ[i*n_dof+j]`` /
-        ``dS_dAux[i*n_aux+k]`` indexing."""
+        Row-major layout matches the solver's `dS_dQ[i*n_dof+j]` /
+        `dS_dAux[i*n_aux+k]` indexing."""
         sm = self.sm
         n_eq, n_state, n_aux = sm.n_equations, len(sm.state), len(sm.aux_state)
         if sm.source is None:
@@ -1483,37 +1483,37 @@ class GenericCppModel(GenericCppBase):
 
     def _emit_update_kernels(self):
         """Emit the per-cell state / aux update kernels (mirrors the dmplex
-        ``Model::update_variables`` / ``update_aux_variables`` /
-        ``update_aux_variables_jacobian_wrt_variables`` the solver calls in
-        ``TransportStep`` / ``ModularSolver``):
+        `Model::update_variables` / `update_aux_variables` /
+        `update_aux_variables_jacobian_wrt_variables` the solver calls in
+        `TransportStep` / `ModularSolver`):
 
-        * ``update_variables(Q,Qaux,p,dt)`` → ``(n_eq,)`` — pointwise state
-          remap (``dt`` ignored by full models; load-bearing in a Chorin
-          corrector sub-system, scattered via ``equation_to_state_index``).
-        * aux recompute, emitted as TWO overloads of ``update_aux_variables``
+        * `update_variables(Q,Qaux,p,dt)` → `(n_eq,)` — pointwise state
+          remap (`dt` ignored by full models; load-bearing in a Chorin
+          corrector sub-system, scattered via `equation_to_state_index`).
+        * aux recompute, emitted as TWO overloads of `update_aux_variables`
           (REQ-65 — a non-local spatial derivative needs the MESH, so it is
           NOT a per-cell scalar kernel):
 
-          - PER-CELL ``update_aux_variables(Q,Qaux,p,dt)`` → ``(n_aux,)`` — the
-            ALGEBRAIC leg only, from the ``update_aux_variables`` SystemModel
-            field (pointwise closures, e.g. the KP-``hinv`` desingularization).
+          - PER-CELL `update_aux_variables(Q,Qaux,p,dt)` → `(n_aux,)` — the
+            ALGEBRAIC leg only, from the `update_aux_variables` SystemModel
+            field (pointwise closures, e.g. the KP-`hinv` desingularization).
             Derivative-kind aux rows pass through unchanged (``res[k] =
             Qaux[k]``) — they are refreshed by the field-level overload, never
             per-cell.  Used at face reconstruction (recompute the local closure
             at the reconstructed state) and by the implicit-source Newton.
-          - FIELD-LEVEL ``update_aux_variables(Q,Qaux,dt,mesh)`` → ``void`` —
+          - FIELD-LEVEL `update_aux_variables(Q,Qaux,dt,mesh)` → `void` —
             the SPATIAL-DERIVATIVE leg, mirroring
-            ``FoamSystemModelPrinter._emit_update_aux_variables``: one
-            ``compute_derivative(Qaux[row], src[idx], dx, dy, dz, mesh)`` call
-            per derivative-kind aux from ``sm.aux_registry``.  ``Q`` / ``Qaux``
+            `FoamSystemModelPrinter._emit_update_aux_variables`: one
+            `compute_derivative(Qaux[row], src[idx], dx, dy, dz, mesh)` call
+            per derivative-kind aux from `sm.aux_registry`.  `Q` / `Qaux`
             are arrays of per-field cell-data handles; the backend's mesh-aware
-            ``compute_derivative`` (dmplex LSQ via ``Gradient.hpp``) writes the
-            ``(dx,dy,dz)``-order derivative of field ``src[idx]`` into the
-            output field ``Qaux[row]`` over the whole mesh.
+            `compute_derivative` (dmplex LSQ via `Gradient.hpp`) writes the
+            `(dx,dy,dz)`-order derivative of field `src[idx]` into the
+            output field `Qaux[row]` over the whole mesh.
 
-          The Jacobian ``(n_aux, n_state)`` is emitted only for the algebraic
+          The Jacobian `(n_aux, n_state)` is emitted only for the algebraic
           leg (the non-local derivative leg has no pointwise local Jacobian;
-          foam emits none either); ``dAux_dQ[k*n_dof+j]``."""
+          foam emits none either); `dAux_dQ[k*n_dof+j]`."""
         sm = self.sm
         n_eq, n_state, n_aux = sm.n_equations, len(sm.state), len(sm.aux_state)
         blocks = []
@@ -1535,23 +1535,23 @@ class GenericCppModel(GenericCppBase):
 
 
     def _aux_field_type(self):
-        """C++ type of a field container argument (``Q`` / ``Qaux``) for the
-        field-level ``update_aux_variables`` overload — an array of per-field
-        cell-data handles.  Backends override ``aux_field_container_type``."""
+        """C++ type of a field container argument (`Q` / `Qaux`) for the
+        field-level `update_aux_variables` overload — an array of per-field
+        cell-data handles.  Backends override `aux_field_container_type`."""
         return self.aux_field_container_type or f"{self.real_type}* const*"
 
     def _aux_mesh_type(self):
         """C++ type of the mesh handle for the field-level
-        ``update_aux_variables`` overload.  Backends override
-        ``aux_mesh_handle_type`` with their concrete mesh type."""
+        `update_aux_variables` overload.  Backends override
+        `aux_mesh_handle_type` with their concrete mesh type."""
         return self.aux_mesh_handle_type or "const ZoomyMesh&"
 
     def _emit_update_aux_variables(self):
-        """Emit the aux recompute as TWO overloads of ``update_aux_variables``:
-        the PER-CELL algebraic closure ``(Q,Qaux,p,dt) -> (n_aux,)`` (+ its
+        """Emit the aux recompute as TWO overloads of `update_aux_variables`:
+        the PER-CELL algebraic closure `(Q,Qaux,p,dt) -> (n_aux,)` (+ its
         Jacobian) and the FIELD-LEVEL, mesh-aware derivative refresh
-        ``(Q,Qaux,dt,mesh) -> void`` (REQ-65).  The latter mirrors
-        ``FoamSystemModelPrinter._emit_update_aux_variables`` — a non-local
+        `(Q,Qaux,dt,mesh) -> void` (REQ-65).  The latter mirrors
+        `FoamSystemModelPrinter._emit_update_aux_variables` — a non-local
         spatial derivative needs the mesh, so it CANNOT be a per-cell scalar
         call.
 
@@ -1621,16 +1621,16 @@ class GenericCppModel(GenericCppBase):
         return blocks
 
     def _emit_field_level_aux_update(self, deriv_entries):
-        """Field-level ``update_aux_variables(Q, Qaux, dt, mesh)`` — one
-        ``compute_derivative(Qaux[row], src[idx], dx, dy, dz, mesh)`` per
+        """Field-level `update_aux_variables(Q, Qaux, dt, mesh)` — one
+        `compute_derivative(Qaux[row], src[idx], dx, dy, dz, mesh)` per
         derivative-kind aux, mirroring ``FoamSystemModelPrinter.
-        _emit_update_aux_variables``.  ``Q`` / ``Qaux`` are arrays of per-field
-        cell-data handles (``src[idx]`` is the whole differentiated field); the
-        backend's mesh-aware ``compute_derivative`` reads its LSQ stencil from
-        ``mesh`` and writes the ``(dx,dy,dz)``-order derivative into the output
-        field.  ``src`` is ``Q`` when the differentiated field is a state
-        variable, ``Qaux`` when it is itself an aux (mirrors foam's
-        ``_resolve_source``)."""
+        _emit_update_aux_variables``.  `Q` / `Qaux` are arrays of per-field
+        cell-data handles (`src[idx]` is the whole differentiated field); the
+        backend's mesh-aware `compute_derivative` reads its LSQ stencil from
+        `mesh` and writes the `(dx,dy,dz)`-order derivative into the output
+        field.  `src` is `Q` when the differentiated field is a state
+        variable, `Qaux` when it is itself an aux (mirrors foam's
+        `_resolve_source`)."""
         sm = self.sm
         state_names = [str(s) for s in sm.state]
         aux_names = [str(s) for s in sm.aux_state]
@@ -1665,13 +1665,13 @@ class GenericCppModel(GenericCppBase):
         return "\n".join(lines)
 
     def _emit_initial_conditions(self):
-        """Emit ``initial_condition(X,p)`` / ``initial_aux_condition(X,p)`` from
-        the SystemModel's ``InitialConditions`` (``get_definition`` lowers them
-        to a symbolic vector in the position symbols ``X[i]`` and parameters
-        ``p[i]``, exactly the old MOOD-era header's IC).
+        """Emit `initial_condition(X,p)` / `initial_aux_condition(X,p)` from
+        the SystemModel's `InitialConditions` (`get_definition` lowers them
+        to a symbolic vector in the position symbols `X[i]` and parameters
+        `p[i]`, exactly the old MOOD-era header's IC).
 
         A SystemModel that carries no symbolic IC (IC is case-side, set from
-        the case directory / ``settings.json``) is documented, not stubbed."""
+        the case directory / `settings.json`) is documented, not stubbed."""
         sm = self.sm
         return [
             self._ic_block(
@@ -1721,15 +1721,15 @@ class GenericCppModel(GenericCppBase):
 
     def _emit_reconstruction_kernels(self):
         """Emit the MUSCL reconstruction variable change, mirroring
-        ``FoamSystemModelPrinter._emit_reconstruction_kernels``:
+        `FoamSystemModelPrinter._emit_reconstruction_kernels`:
 
-        * ``reconstruction_variables(Q, Qaux, p) -> W[n_state]`` — forward
+        * `reconstruction_variables(Q, Qaux, p) -> W[n_state]` — forward
           map from the conservative state to the reconstruction variables
-          (e.g. ``eta = b + h``).  Uses the shared SystemModel symbol scope.
-        * ``state_from_reconstruction(W, Qaux, p) -> Q[n_state]`` — the
-          inverse, parameterised by the fresh ``WB_<state>`` symbols
-          ``invert_reconstruction`` created.  Push a temporary ``WB_* -> W[i]``
-          map so each reads as ``W[i]`` for the matching state slot.
+          (e.g. `eta = b + h`).  Uses the shared SystemModel symbol scope.
+        * `state_from_reconstruction(W, Qaux, p) -> Q[n_state]` — the
+          inverse, parameterised by the fresh `WB_<state>` symbols
+          `invert_reconstruction` created.  Push a temporary `WB_* -> W[i]`
+          map so each reads as `W[i]` for the matching state slot.
 
         A SystemModel that carries no reconstruction maps (default
         conservative reconstruction, e.g. VAM / Chorin sub-systems) emits
@@ -1778,27 +1778,27 @@ class GenericCppModel(GenericCppBase):
 
     def _emit_projection_kernels(self):
         """Emit the 3-D coupling maps from the SystemModel, mirroring
-        ``FoamSystemModelPrinter._emit_projection_kernels`` but in the C++
-        pointer-arg style (``const T*`` / ``res[...]``):
+        `FoamSystemModelPrinter._emit_projection_kernels` but in the C++
+        pointer-arg style (`const T*` / `res[...]`):
 
-        * ``interpolate_to_3d(Q, Qaux, p, X) -> field[6]`` — the canonical
-          3-D field ``[b,h,u,v,w,p]`` evaluated at one vertical position;
-          ``sm.position[2]`` → ``X[2]`` via the position map the constructor
-          already registered (the same ``X`` convention every C++ kernel
-          uses, in place of foam's scalar ``z``).  The backend loops the
+        * `interpolate_to_3d(Q, Qaux, p, X) -> field[6]` — the canonical
+          3-D field `[b,h,u,v,w,p]` evaluated at one vertical position;
+          `sm.position[2]` → `X[2]` via the position map the constructor
+          already registered (the same `X` convention every C++ kernel
+          uses, in place of foam's scalar `z`).  The backend loops the
           column, calling this once per sample point.
-        * ``project_from_3d(column, p) -> Q[n_state]`` — the inverse: reduce
+        * `project_from_3d(column, p) -> Q[n_state]` — the inverse: reduce
           one sampled interface column back to the 2-D state.  The project rows
           are the model's Integral-FREE, fixed-node Galerkin reduction (plain
           arithmetic in the column samples), so this lowers through the SAME
-          generic kernel path as every other operator — no ``Integral``/``I[]``
-          quadrature accumulator.  ``_lower_project_from_3d`` (shared with the
-          foam printer) binds each sampled value ``P3_<field>(ζ_j)`` to its
-          column slot ``column[j][slot]``.
+          generic kernel path as every other operator — no `Integral`/`I[]`
+          quadrature accumulator.  `_lower_project_from_3d` (shared with the
+          foam printer) binds each sampled value `P3_<field>(ζ_j)` to its
+          column slot `column[j][slot]`.
 
         Both maps are read off the SystemModel slots filled by
-        ``register_group("interpolate"/"project", …)``.  A model with the
-        slot ``None`` / absent (default reconstruction, e.g. VAM / Chorin
+        `register_group("interpolate"/"project", …)`.  A model with the
+        slot `None` / absent (default reconstruction, e.g. VAM / Chorin
         sub-systems) emits nothing — exactly like the reconstruction skip.
         """
         sm = self.sm
@@ -1826,17 +1826,17 @@ class GenericCppModel(GenericCppBase):
         return blocks
 
     def _emit_boundary_conditions(self):
-        """Lower the model's ``BoundaryConditions`` into the indexed
-        ``boundary_conditions(bc_idx, …)`` / ``aux_boundary_conditions``
+        """Lower the model's `BoundaryConditions` into the indexed
+        `boundary_conditions(bc_idx, …)` / `aux_boundary_conditions`
         Piecewise kernels.
 
         The indexed Piecewise (one branch per boundary tag, dispatched on
-        ``bc_idx``) is owned by the SystemModel — built from the very
-        ``BoundaryConditions`` the Model carries — and its branches
+        `bc_idx`) is owned by the SystemModel — built from the very
+        `BoundaryConditions` the Model carries — and its branches
         reference the SystemModel state / aux / parameter / normal symbols.
-        This mirrors ``FoamSystemModelPrinter._emit_boundary_conditions``;
-        we read ``sm.boundary_conditions`` instead of the stale
-        ``model._boundary_conditions`` that current models no longer expose.
+        This mirrors `FoamSystemModelPrinter._emit_boundary_conditions`;
+        we read `sm.boundary_conditions` instead of the stale
+        `model._boundary_conditions` that current models no longer expose.
         """
         sm = self.sm
         if sm is None:
@@ -1861,7 +1861,7 @@ class GenericCppModel(GenericCppBase):
 
         Pushes a temporary symbol map binding the SystemModel state /
         aux / parameter / normal symbols (and the BC-specific scalar
-        ``bc_idx`` / ``time`` / ``distance`` / position symbols) to their
+        `bc_idx` / `time` / `distance` / position symbols) to their
         C interface accessors, then prints the Piecewise body.
         """
         sm = self.sm
@@ -2036,9 +2036,9 @@ class GenericCppModel(GenericCppBase):
     def _detect_has_diffusion(self):
         """Check whether the model's diffusion_matrix is non-trivial (not all zeros).
 
-        Declarative models keep ``diffusion_matrix`` on the SystemModel
-        (``None`` when the model has no diffusion); legacy Models expose it
-        as a ``functions`` entry.
+        Declarative models keep `diffusion_matrix` on the SystemModel
+        (`None` when the model has no diffusion); legacy Models expose it
+        as a `functions` entry.
         """
         if self.sm is not None:
             expr = getattr(self.sm, "diffusion_matrix", None)
@@ -2063,7 +2063,7 @@ class GenericCppModel(GenericCppBase):
 
     def _n_dof_gradq(self):
         """Number of gradient-variable dof, or 0 when the model has no
-        ``gradient_variables`` (current declarative models)."""
+        `gradient_variables` (current declarative models)."""
         gv = getattr(self.model, "gradient_variables", None)
         if gv is None:
             return 0
@@ -2104,7 +2104,7 @@ class GenericCppModel(GenericCppBase):
     def get_bc_args(self):
         """Hook to define boundary condition arguments.
 
-        ``p`` (the model parameter vector) is part of the interface so
+        `p` (the model parameter vector) is part of the interface so
         parameter-dependent boundary conditions lower correctly.
         """
         return "const int bc_idx,\n        const T* Q,\n        const T* Qaux,\n        const T* p,\n        const T* n,\n        const T* X,\n        const T time,\n        const T dX"

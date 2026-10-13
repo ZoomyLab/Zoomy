@@ -1,14 +1,14 @@
 """Canonical independent coordinates for the derivation framework.
 
-These are *the* coordinate symbols every :class:`~zoomy_core.model.derivation.Model`
-and the :mod:`zoomy_core.derivatives` helper share, so that ``d.t(f)``
-differentiates with respect to the very same ``t`` the fields depend on.
+These are *the* coordinate symbols every `Model`
+and the `zoomy_core.derivatives` helper share, so that `d.t(f)`
+differentiates with respect to the very same `t` the fields depend on.
 
     from zoomy_core import coords
     t, x, z = coords.t, coords.x, coords.z
 
-Only the independent variables are fixed here — fields (``u``, ``p``, ``h`` …)
-are declared freely by the user as ordinary ``sympy`` Functions.
+Only the independent variables are fixed here — fields (`u`, `p`, `h` …)
+are declared freely by the user as ordinary `sympy` Functions.
 """
 
 import sympy as sp

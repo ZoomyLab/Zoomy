@@ -81,15 +81,15 @@ def _detect_scaled_q_indices(model):
 
 def _nsm_explicit_numerics(solver, symbolic_model):
     """Return the NSM-owned Riemann numerics when the case EXPLICITLY chose
-    one, else ``None`` so each solver keeps its own default (REQ-157).
+    one, else `None` so each solver keeps its own default (REQ-157).
 
-    The Riemann solver is owned by the :class:`NumericalSystemModel`
-    (``nsm.riemann`` + ``nsm.build_numerics()``) — jax and dmplex both honour
+    The Riemann solver is owned by the `NumericalSystemModel`
+    (`nsm.riemann` + `nsm.build_numerics()`) — jax and dmplex both honour
     it.  numpy historically hard-coded its own class and silently ignored the
     NSM's choice, so a case that built the NSM with e.g.
-    ``PositiveNonconservativeHLL`` still ran Rusanov on numpy (a *different*
+    `PositiveNonconservativeHLL` still ran Rusanov on numpy (a *different*
     discretisation than every other backend).  We defer only when the choice
-    was explicit (``nsm.riemann_explicit``), so a defaulted NSM leaves the
+    was explicit (`nsm.riemann_explicit`), so a defaulted NSM leaves the
     solver's own default (plain / positive / Roe) untouched."""
     nsm = getattr(solver, "nsm", None)
     if nsm is None or not getattr(nsm, "riemann_explicit", False):
@@ -112,8 +112,8 @@ def _compute_bf_face_gradients(Q, Qaux, bc_indices, bc_grad_fn, bf_cells,
     indexed ``boundary_gradients(bc_idx, time, position, distance, Q,
     Qaux, p, normal)`` kernel.
 
-    Returns dict ``{var_index: ndarray(n_bf,)}`` for use by
-    ``DiffusionOperatorV2``."""
+    Returns dict `{var_index: ndarray(n_bf,)}` for use by
+    `DiffusionOperatorV2`."""
     bf_grads = {v: np.zeros(n_bf) for v in range(n_vars)}
     for i_bf in range(n_bf):
         q_inner = Q[:, bf_cells[i_bf]]
@@ -133,13 +133,13 @@ def _compute_bf_face_gradients(Q, Qaux, bc_indices, bc_grad_fn, bf_cells,
 # -- Helpers -------------------------------------------------------------------
 
 def _coerce_to_system_model(model):
-    """Return a :class:`SystemModel` view of ``model``.
+    """Return a `SystemModel` view of `model`.
 
-    Accepts a :class:`Model` (calls :meth:`SystemModel.from_model`),
-    a :class:`SystemModel` (returned unchanged), or a
-    :class:`NumericalSystemModel` (returns ``nsm.sm``). This is the
-    canonical source of truth for ``state`` / ``aux_state`` sizing
-    after :meth:`SystemModel.from_model.expose_aux_atoms` has run.
+    Accepts a `Model` (calls `SystemModel.from_model`),
+    a `SystemModel` (returned unchanged), or a
+    `NumericalSystemModel` (returns `nsm.sm`). This is the
+    canonical source of truth for `state` / `aux_state` sizing
+    after `SystemModel.from_model.expose_aux_atoms` has run.
     """
     if isinstance(model, NumericalSystemModel):
         return model.sm
@@ -151,24 +151,24 @@ def _coerce_to_system_model(model):
 # -- Base Solver ---------------------------------------------------------------
 
 def _spectral_bound(A, mode="numerical"):
-    """``max|lambda|`` for a BATCH of matrices ``A`` of shape ``(n, m, m)``.
+    """`max|lambda|` for a BATCH of matrices `A` of shape `(n, m, m)`.
 
-    ``mode``:
+    `mode`:
 
-    * ``"gershgorin"`` — ``||A||_inf = max_i sum_j |A_ij|``.  A RIGOROUS upper
+    * `"gershgorin"` — `||A||_inf = max_i sum_j |A_ij|`.  A RIGOROUS upper
       bound on the spectral radius (union of Gershgorin discs), computed with
       two reductions and NO eigensolver.  Always valid; conservative, so it
       over-estimates the wave speed (safe: more Rusanov dissipation, smaller
       dt).
-    * ``"symmetric"`` — ``rho((A + A^T)/2)`` via the SYMMETRIC eigensolver.
+    * `"symmetric"` — `rho((A + A^T)/2)` via the SYMMETRIC eigensolver.
       Valid when the spectrum is REAL, i.e. while the system is hyperbolic:
-      then ``lambda`` lies in the numerical range, so
-      ``lambda in [lambda_min(A_sym), lambda_max(A_sym)]``.  It bounds only the
+      then `lambda` lies in the numerical range, so
+      `lambda in [lambda_min(A_sym), lambda_max(A_sym)]`.  It bounds only the
       REAL PART in general -- for a matrix with complex eigenvalues (loss of
-      hyperbolicity) it can UNDER-estimate, e.g. ``[[0,1],[-1,0]]`` has
-      ``rho = 1`` but a zero symmetric part.  Tighter than Gershgorin and uses
-      the well-supported ``eigvalsh``.
-    * anything else — the exact non-symmetric spectrum (LAPACK/XLA ``eig``).
+      hyperbolicity) it can UNDER-estimate, e.g. `[[0,1],[-1,0]]` has
+      `rho = 1` but a zero symmetric part.  Tighter than Gershgorin and uses
+      the well-supported `eigvalsh`.
+    * anything else — the exact non-symmetric spectrum (LAPACK/XLA `eig`).
 
     Measured (120 x 14 x 14, one call): numpy eig 8.09 ms, jax-CPU eig 8.55 ms,
     jax-GPU eig 114.8 ms, eigvalsh 0.76-5.3 ms, Gershgorin 0.38-0.48 ms.  The
@@ -198,16 +198,16 @@ class Solver(param.Parameterized):
             self.settings = defaults
 
     def initialize(self, mesh, model):
-        """Allocate (Q, Qaux) of shape ``(n_state, n_inner_cells)``
-        and ``(n_aux_state, n_inner_cells)``.
+        """Allocate (Q, Qaux) of shape `(n_state, n_inner_cells)`
+        and `(n_aux_state, n_inner_cells)`.
 
-        The aux size MUST come from the SystemModel's ``aux_state``,
-        not from the source Model's ``aux_variables``. Canonical
+        The aux size MUST come from the SystemModel's `aux_state`,
+        not from the source Model's `aux_variables`. Canonical
         derivation classes (SME, VAM, MLME, MLVAM) leave
-        ``aux_variables`` empty and rely on
-        :meth:`SystemModel.from_model` ``expose_aux_atoms`` to
+        `aux_variables` empty and rely on
+        `SystemModel.from_model` `expose_aux_atoms` to
         auto-promote bathymetry / derivative / function atoms into
-        ``sm.aux_state``. The Model-side count is therefore wrong
+        `sm.aux_state`. The Model-side count is therefore wrong
         for any model that uses auto-promotion. We normalize to a
         SystemModel here so the allocation matches the runtime's
         view (which is also SystemModel-based).
@@ -224,16 +224,16 @@ class Solver(param.Parameterized):
         return Q, Qaux
 
     def create_runtime(self, Q, Qaux, mesh, model):
-        """Build the numpy runtime from a :class:`SystemModel`.
+        """Build the numpy runtime from a `SystemModel`.
 
-        Contract: ``model`` is a :class:`SystemModel` — the
-        self-contained numerical model.  Every ``setup_simulation``
+        Contract: `model` is a `SystemModel` — the
+        self-contained numerical model.  Every `setup_simulation`
         normalises its input to a SystemModel before reaching here.
         The runtime comes from
-        :meth:`NumpyRuntimeModel.from_system_model`; the numeric
-        parameter array from ``parameter_values``.  Numerical
+        `NumpyRuntimeModel.from_system_model`; the numeric
+        parameter array from `parameter_values`.  Numerical
         regularisation, if wanted, is a separate
-        ``SystemModel → SystemModel`` pass applied *before* this point.
+        `SystemModel → SystemModel` pass applied *before* this point.
         """
         Q, Qaux = np.asarray(Q), np.asarray(Qaux)
         parameters = np.array(
@@ -242,23 +242,23 @@ class Solver(param.Parameterized):
         return Q, Qaux, parameters, mesh, runtime_model
 
     def update_q(self, Q, Qaux, mesh, model, parameters, dt):
-        """Apply ``model.update_variables`` (h-clamp, momentum ramp) at
+        """Apply `model.update_variables` (h-clamp, momentum ramp) at
         each cell — evaluated for all cells in one batched call.
 
-        ``update_variables`` is carried through the SystemModel and
-        exposed on the runtime as ``update_variables(Q, Qaux, p, dt)`` —
-        the identity for models with no per-cell transform (``dt`` then
-        ignored).  It is ``None`` only for SystemModels assembled directly
+        `update_variables` is carried through the SystemModel and
+        exposed on the runtime as `update_variables(Q, Qaux, p, dt)` —
+        the identity for models with no per-cell transform (`dt` then
+        ignored).  It is `None` only for SystemModels assembled directly
         without one (e.g. split sub-systems); then this is a genuine no-op,
         not a legacy fallback.
 
         Batching is exact: the lowered kernel is a lambdified numpy
-        expression evaluated element-wise (Min/Max → ``minimum``/``maximum``,
-        Piecewise → ``select``) and each cell's rows depend only on that
-        cell's own column, so ``(n_vars, n_cells)`` in gives
-        ``(n_rows, n_cells)`` out with no cross-cell accumulation.
-        ``Q[:, :] = vals[:n_vars]`` keeps the per-cell prefix/broadcast
-        semantics of ``.ravel()[:n_vars]``."""
+        expression evaluated element-wise (Min/Max → `minimum`/`maximum`,
+        Piecewise → `select`) and each cell's rows depend only on that
+        cell's own column, so `(n_vars, n_cells)` in gives
+        `(n_rows, n_cells)` out with no cross-cell accumulation.
+        `Q[:, :] = vals[:n_vars]` keeps the per-cell prefix/broadcast
+        semantics of `.ravel()[:n_vars]`."""
         update = getattr(model, "update_variables", None)
         if update is None:
             return Q
@@ -290,23 +290,23 @@ class Solver(param.Parameterized):
 
     def _apply_local_aux_formula(self, model, Qaux, Q, parameters, time,
                                  cell_centers=None, *, copy=False):
-        """Apply the lowered ``update_aux_variables`` per-cell formula (e.g.
-        the KP-desingularized ``hinv``, or a time-dependent rain rate) to
-        ``Qaux``.
+        """Apply the lowered `update_aux_variables` per-cell formula (e.g.
+        the KP-desingularized `hinv`, or a time-dependent rain rate) to
+        `Qaux`.
 
-        REQ-185: ``update_aux_variables`` is lowered as
-        ``(Q, Qaux, p, t, x, y, z)`` — a time-dependent aux (rain rate
-        ``r_o = Piecewise((rate, t<T_rain),(0,True))``) binds ``t``; a spatial
-        aux binds the cell centre.  ``cell_centers`` is the mesh's
-        ``(3, n_cells)`` array; when absent the coordinate origin is used
-        (exact for coordinate-independent aux such as ``hinv``).
+        REQ-185: `update_aux_variables` is lowered as
+        `(Q, Qaux, p, t, x, y, z)` — a time-dependent aux (rain rate
+        `r_o = Piecewise((rate, t<T_rain),(0,True))`) binds `t`; a spatial
+        aux binds the cell centre.  `cell_centers` is the mesh's
+        `(3, n_cells)` array; when absent the coordinate origin is used
+        (exact for coordinate-independent aux such as `hinv`).
 
-        ``callable`` (not merely ``is not None``): a SystemModel used directly
-        (DAE path) carries ``update_aux_variables`` as a symbolic ZArray coerced
-        from ``None`` — non-callable, NOT a per-cell formula.  Only a lowered
+        `callable` (not merely `is not None`): a SystemModel used directly
+        (DAE path) carries `update_aux_variables` as a symbolic ZArray coerced
+        from `None` — non-callable, NOT a per-cell formula.  Only a lowered
         runtime callable is a genuine local-aux leg; the placeholder is skipped
-        (returns ``Qaux`` unchanged).  ``copy=True`` writes into a fresh array
-        (the canonical :meth:`update_qaux` contract); ``copy=False`` refreshes
+        (returns `Qaux` unchanged).  `copy=True` writes into a fresh array
+        (the canonical `update_qaux` contract); `copy=False` refreshes
         in place (the Chorin per-pool refresh)."""
         local_fn = getattr(model, "update_aux_variables", None)
         if not callable(local_fn) or Qaux.shape[0] == 0:
@@ -357,17 +357,17 @@ class Solver(param.Parameterized):
         """Fill the auxiliary vector with BOTH legs the SystemModel gathered:
 
         1. the LOCAL per-cell aux formula — the lowered
-           ``update_aux_variables`` (e.g. KP ``hinv``), applied per cell (one
-           batched call) like :meth:`update_q`.  Absent/``None`` for models
+           `update_aux_variables` (e.g. KP `hinv`), applied per cell (one
+           batched call) like `update_q`.  Absent/`None` for models
            with no aux formula
            (identity), so this leg is then skipped.
-        2. the NON-LOCAL derivative-aux rows — ``kind == 'derivative'`` entries
-           of ``aux_registry`` filled via ``LSQMesh.compute_derivatives`` (state
-           ``Q`` for state derivatives, the WORKING aux for function-aux
+        2. the NON-LOCAL derivative-aux rows — `kind == 'derivative'` entries
+           of `aux_registry` filled via `LSQMesh.compute_derivatives` (state
+           `Q` for state derivatives, the WORKING aux for function-aux
            derivatives).
 
-        Subclasses override to supply the ``kind == 'function'`` rows and call
-        ``super().update_qaux(...)``.  No-op if neither leg is present.
+        Subclasses override to supply the `kind == 'function'` rows and call
+        `super().update_qaux(...)`.  No-op if neither leg is present.
         """
         # (1) LOCAL aux formula leg — per-cell (only present when the model
         # declares a real, non-identity update_aux_variables).  REQ-185: thread
@@ -386,27 +386,27 @@ class Solver(param.Parameterized):
                              kinds=("derivative",),
                              limiter_fn=None,
                              copy=True, registry=None):
-        """Fill ``aux_registry`` derivative rows of ONE SystemModel by LSQ —
-        the single source the canonical :meth:`update_qaux` AND
-        ``ChorinSplitVAMSolver.update_aux_variables`` (per sub-system pool)
+        """Fill `aux_registry` derivative rows of ONE SystemModel by LSQ —
+        the single source the canonical `update_qaux` AND
+        `ChorinSplitVAMSolver.update_aux_variables` (per sub-system pool)
         both call.
 
-        ``kinds`` / ``limiter_fn`` keep each caller's exact scope: the
-        canonical post-step walks plain spatial ``derivative`` rows with no
+        `kinds` / `limiter_fn` keep each caller's exact scope: the
+        canonical post-step walks plain spatial `derivative` rows with no
         limiter (defaults → byte-identical to the old inline leg); the Chorin
-        pools also walk ``limited_derivative`` rows and apply a TVD limiter
-        (``limiter_fn`` resolved from the model-declared
-        ``entry['limiter_scheme']``).  State-derivative targets read ``Q``;
+        pools also walk `limited_derivative` rows and apply a TVD limiter
+        (`limiter_fn` resolved from the model-declared
+        `entry['limiter_scheme']`).  State-derivative targets read `Q`;
         function-aux targets read the working aux; boundary faces use
-        extrapolation (Neumann-zero).  ``copy=True`` returns a fresh array
-        (canonical: don't clobber the caller's Qaux); ``copy=False`` mutates
+        extrapolation (Neumann-zero).  `copy=True` returns a fresh array
+        (canonical: don't clobber the caller's Qaux); `copy=False` mutates
         in place (Chorin: refresh the pool array itself).
 
-        ``registry`` overrides ``sm.aux_registry`` — the Chorin pressure
-        pool passes ``aux_registry + aux_input_registry`` so its private
+        `registry` overrides `sm.aux_registry` — the Chorin pressure
+        pool passes `aux_registry + aux_input_registry` so its private
         Qaux pool gets BOTH the live pressure derivatives and the frozen
         predictor-produced input derivatives filled in one pass (the
-        printer-facing ``aux_registry`` stays minimal)."""
+        printer-facing `aux_registry` stays minimal)."""
         if registry is None:
             registry = (getattr(sm, "aux_registry", None)
                         if sm is not None else None)
@@ -442,8 +442,8 @@ class Solver(param.Parameterized):
         return out
 
     def _sm_from_solver_or_model(self, model):
-        """Look up the SystemModel: prefer ``self.sm`` (when the
-        solver was built that way), else ``model._chain_systemmodel``
+        """Look up the SystemModel: prefer `self.sm` (when the
+        solver was built that way), else `model._chain_systemmodel`
         if present, else None."""
         if hasattr(self, "sm") and self.sm is not None:
             return self.sm
@@ -452,24 +452,24 @@ class Solver(param.Parameterized):
     # -- NSM coercion --------------------------------------------------
 
     def _coerce_to_nsm(self, model):
-        """Normalise ``model`` to a (NumericalSystemModel, source-Model)
+        """Normalise `model` to a (NumericalSystemModel, source-Model)
         pair.  Auto-promotes Model / SystemModel by building an NSM
-        with default specs (``ReconstructionSpec(order=1)``,
-        ``eigenvalue_eps=1e-8``, etc.) — to override
+        with default specs (`ReconstructionSpec(order=1)`,
+        `eigenvalue_eps=1e-8`, etc.) — to override
         defaults, build the NSM explicitly and pass that in.
 
-        Lives on the BASE ``Solver`` because it is the one front door that
+        Lives on the BASE `Solver` because it is the one front door that
         makes a solver's aux/state sizing agree with the kernels
-        ``NumpyRuntimeModel.from_system_model`` compiles (which promotes to
-        an NSM internally, registering e.g. the KP ``hinv`` aux).  Every
+        `NumpyRuntimeModel.from_system_model` compiles (which promotes to
+        an NSM internally, registering e.g. the KP `hinv` aux).  Every
         solver that allocates buffers must go through it.
 
-        ``source_model`` is the *original* :class:`Model` when one was
-        passed (needed for ``resolve_periodic_bcs``, which walks
-        ``boundary_conditions_list`` — a field that lives on the Model
+        `source_model` is the *original* `Model` when one was
+        passed (needed for `resolve_periodic_bcs`, which walks
+        `boundary_conditions_list` — a field that lives on the Model
         object and not on the lambdified SystemModel BC kernel).  When
-        the caller supplied a bare SystemModel or NSM, ``source_model``
-        is ``None``."""
+        the caller supplied a bare SystemModel or NSM, `source_model`
+        is `None`."""
         if isinstance(model, NumericalSystemModel):
             return model, None
         nsm = NumericalSystemModel.from_system_model(model)
@@ -640,12 +640,12 @@ class HyperbolicSolver(Solver):
     def _build_numerics(self, symbolic_model):
         """Build the symbolic Riemann solver. Override for SWE-specific variants.
 
-        Well-balancing (``equilibrium_reconstruction`` in {'audusse','bernoulli'})
+        Well-balancing (`equilibrium_reconstruction` in {'audusse','bernoulli'})
         is applied as an interface reconstruction + well-balancing source in the
-        flux operator (the unified ``reconstruct_equilibrium`` hook), on top of
+        flux operator (the unified `reconstruct_equilibrium` hook), on top of
         the standard non-conservative Rusanov numerics — so both modes go through
         the SAME path (Audusse is the lake-at-rest check on Bernoulli's wiring).
-        The source differs per mode (built in ``bernoulli_wb``): Audusse uses the
+        The source differs per mode (built in `bernoulli_wb`): Audusse uses the
         PRESSURE jump only (momentum-only S̃ — zero mass row, no convective/aux
         dependence, dimension-agnostic), Bernoulli the full conservative-flux
         jump (its discharge-preserving reconstruction zeroes the mass row).
@@ -660,25 +660,25 @@ class HyperbolicSolver(Solver):
 
     def _build_diffusion_operators(self, mesh, symbolic_model, dim, n_vars):
         """Build the diffusion operators from the SystemModel's rank-4
-        ``diffusion_matrix`` ``A(Q, Qaux, p)`` (shape ``(n_eq, n_state,
-        n_dim, n_dim)``) — the constitutive tensor in ``div(A : grad Q)``.
+        `diffusion_matrix` `A(Q, Qaux, p)` (shape ``(n_eq, n_state,
+        n_dim, n_dim)``) — the constitutive tensor in `div(A : grad Q)`.
 
-        Two paths, selected by the STRUCTURE of ``A`` (:meth:`_classify_diffusion`):
+        Two paths, selected by the STRUCTURE of `A` (`_classify_diffusion`):
 
-        * **Scalar path** (constant DIAGONAL ``A[v, v, d, d]``): the per-variable
-          :class:`DiffusionOperatorV2` (``ν × L``), returned as a ``{v: op}`` dict
+        * **Scalar path** (constant DIAGONAL `A[v, v, d, d]`): the per-variable
+          `DiffusionOperatorV2` (`ν × L`), returned as a `{v: op}` dict
           and consumed by the existing per-variable implicit/explicit loops.
-          Gated on ``ν > 0`` (SME source-viscosity / VAM inviscid runs untouched).
-        * **Dense path** (any off-diagonal ``A[i, j]`` ``i≠j``, cross-derivative
-          ``d≠e``, OR state-dependent entry): a single
-          :class:`DenseDiffusionOperator` stored on ``self._dense_diffusion``.
-          It assembles + solves the GENERAL ``∇·(A:∇Q)`` (cross-variable, evaluated
-          at ``Q^{n+1}`` — Newton when ``A`` depends on the state), which the IMEX
-          solver drives in ``_apply_implicit_diffusion``.  No ``ν`` gate (the
+          Gated on `ν > 0` (SME source-viscosity / VAM inviscid runs untouched).
+        * **Dense path** (any off-diagonal `A[i, j]` `i≠j`, cross-derivative
+          `d≠e`, OR state-dependent entry): a single
+          `DenseDiffusionOperator` stored on `self._dense_diffusion`.
+          It assembles + solves the GENERAL `∇·(A:∇Q)` (cross-variable, evaluated
+          at `Q^{n+1}` — Newton when `A` depends on the state), which the IMEX
+          solver drives in `_apply_implicit_diffusion`.  No `ν` gate (the
           diffusivity lives in the tensor, e.g. μ(I) ν-moments carried as aux).
 
-        Returns the scalar ``{v: op}`` dict (or ``None``); the dense operator, when
-        built, is on ``self._dense_diffusion`` (else ``None``)."""
+        Returns the scalar `{v: op}` dict (or `None`); the dense operator, when
+        built, is on `self._dense_diffusion` (else `None`)."""
         self._dense_diffusion = None
         sym_A = getattr(symbolic_model, 'diffusion_matrix', None)
         if sym_A is None:
@@ -716,16 +716,16 @@ class HyperbolicSolver(Solver):
 
     @staticmethod
     def _classify_diffusion(sym_A, symbolic_model):
-        """Classify a rank-4 ``diffusion_matrix`` for path selection.
+        """Classify a rank-4 `diffusion_matrix` for path selection.
 
-        Returns ``(needs_dense, state_dependent, diagonal)``:
+        Returns `(needs_dense, state_dependent, diagonal)`:
 
-        * ``needs_dense`` — any non-zero off-diagonal (``i≠j``) or
-          cross-derivative (``d≠e``) entry (the scalar operator only sums
-          ``A[v,v,d,d]``).
-        * ``state_dependent`` — any entry depends on a state or aux symbol
+        * `needs_dense` — any non-zero off-diagonal (`i≠j`) or
+          cross-derivative (`d≠e`) entry (the scalar operator only sums
+          `A[v,v,d,d]`).
+        * `state_dependent` — any entry depends on a state or aux symbol
           (⇒ the implicit solve is nonlinear ⇒ Newton).
-        * ``diagonal`` — ``{v: Σ_d A[v,v,d,d]}`` (the scalar-path diffusivity
+        * `diagonal` — `{v: Σ_d A[v,v,d,d]}` (the scalar-path diffusivity
           source, only meaningful when neither flag is set)."""
         import itertools
         n_eq, n_st, n_d = sym_A.shape[0], sym_A.shape[1], sym_A.shape[2]
@@ -890,9 +890,9 @@ class HyperbolicSolver(Solver):
         local_aux_fn = getattr(model, "update_aux_variables", None)
 
         def _ghost_aux(q_right, qaux_inner, parameters, time, position=_ORIGIN3):
-            """Aux consistent with the ghost state ``q_right``.  REQ-185:
-            ``update_aux_variables`` is lowered as ``(Q, Qaux, p, t, x)``; pass
-            the current ``time`` and the (boundary-face) position vector."""
+            """Aux consistent with the ghost state `q_right`.  REQ-185:
+            `update_aux_variables` is lowered as `(Q, Qaux, p, t, x)`; pass
+            the current `time` and the (boundary-face) position vector."""
             if local_aux_fn is None or not has_aux:
                 return qaux_inner
             return np.asarray(
@@ -1162,14 +1162,14 @@ class HyperbolicSolver(Solver):
 
     def get_compute_source(self, mesh, model):
         """Compound source operator: evaluates both the implicit
-        ``source`` slot and the explicit ``source_explicit`` slot at
+        `source` slot and the explicit `source_explicit` slot at
         the current state and sums them.
 
         This backend is explicit-only (FE/SSP-RK), so the IMEX split
         a Firedrake backend respects is collapsed here — *all* source
         contributions go to the RHS evaluated at the current state.
         Backends that genuinely support IMEX (e.g. Firedrake) keep
-        ``source`` in the source-step Newton and ``source_explicit``
+        `source` in the source-step Newton and `source_explicit`
         in the convective step.
         """
         has_explicit = hasattr(model, "source_explicit")
@@ -1217,7 +1217,7 @@ class HyperbolicSolver(Solver):
     def _compute_face_inradius(self, mesh):
         """Per-face inradius for the LOCAL CFL: each face carries the min of
         its two adjacent cells' inradii (boundary faces: the inner cell's),
-        so ``compute_dt`` pairs every face's own size with its own local
+        so `compute_dt` pairs every face's own size with its own local
         wave speed — never the global smallest cell with the global fastest
         wave.  Shared by every solver setup (base, IMEX, splitting)."""
         nc = mesh.n_inner_cells
@@ -1235,8 +1235,8 @@ class HyperbolicSolver(Solver):
     def setup_simulation(self, mesh, model, write_output=True):
         """Build all operators once. Stores simulation state on self.
 
-        ``model`` may be a :class:`Model`, a :class:`SystemModel`, or a
-        :class:`NumericalSystemModel`.  Plain models are auto-promoted
+        `model` may be a `Model`, a `SystemModel`, or a
+        `NumericalSystemModel`.  Plain models are auto-promoted
         through Model → SystemModel → NSM internally; when an NSM is
         passed directly its numerical slots (reconstruction order,
         limiter, regularization) seed the solver attributes and its
@@ -1308,10 +1308,10 @@ class HyperbolicSolver(Solver):
 
         Two levels, and no iteration:
 
-        1. flag the inadmissible cells (``h < 0`` or non-finite) and re-step
+        1. flag the inadmissible cells (`h < 0` or non-finite) and re-step
            with those reconstructing at order 1;
         2. if any remain, re-step with the WHOLE domain at order 1.  That is the
-           ``d = 0`` end of the Clain-Diot-Loubère cascade — the monotone
+           `d = 0` end of the Clain-Diot-Loubère cascade — the monotone
            first-order scheme, positivity-preserving under its CFL bound — so it
            terminates the repair by construction rather than by a growth
            argument.
@@ -1331,7 +1331,7 @@ class HyperbolicSolver(Solver):
         Both backends now carry this design, so a numpy/jax comparison measures
         the MODEL rather than two different repair strategies.  numpy RAISES
         where jax commits the first-order state — jax cannot raise from inside
-        ``jit``, and the order-1 march is provably admissible, so committing it
+        `jit`, and the order-1 march is provably admissible, so committing it
         is honest there; here the inadmissible state is kept as evidence and no
         depth is ever clamped.
         """
@@ -1389,7 +1389,7 @@ class HyperbolicSolver(Solver):
         source = self._sim_source_operator
 
         def rhs(t, Q_in, force_o1=None):
-            """Total RHS = flux + source.  ``force_o1`` (a-posteriori MOOD)
+            """Total RHS = flux + source.  `force_o1` (a-posteriori MOOD)
             demotes flagged cells to order 1 inside the *flux* reconstruction
             only; the source is slope-free so it is unaffected."""
             dQ_f = flux(dt, t, Q_in, Qaux, parameters, np.zeros_like(Q_in),
@@ -1502,10 +1502,10 @@ class HyperbolicSolver(Solver):
 # -- Free-surface variant ------------------------------------------------------
 
 def _build_free_surface_numerics(symbolic_model):
-    """Build positive Rusanov for free-surface models.  ``h`` and
-    ``b`` are auto-located in ``model.variables`` or
-    ``model.aux_variables`` via :class:`FieldHandle` — no explicit
-    ``field_map`` is needed."""
+    """Build positive Rusanov for free-surface models.  `h` and
+    `b` are auto-located in `model.variables` or
+    `model.aux_variables` via `FieldHandle` — no explicit
+    `field_map` is needed."""
     scaled_q_indices = _detect_scaled_q_indices(symbolic_model)
     return PositiveNonconservativeRusanov(
         symbolic_model,
@@ -1514,16 +1514,16 @@ def _build_free_surface_numerics(symbolic_model):
 
 
 class _SurfaceReconAdapter:
-    """Adapt :class:`SurfaceReconstruction` to the explicit flux operator's
-    ``reconstruct(Q, bf) → (Q_L, Q_R)`` interface.
+    """Adapt `SurfaceReconstruction` to the explicit flux operator's
+    `reconstruct(Q, bf) → (Q_L, Q_R)` interface.
 
-    ``SurfaceReconstruction`` reconstructs the free-surface elevation
-    ``η = h + b`` (flat at lake-at-rest → zero limited slope) and returns
-    ``(Q_L, Q_R, b_L, b_R)`` with the per-side depth recovered as ``h = η − b``;
-    the explicit flux operator wants only ``(Q_L, Q_R)`` and reads the limited
-    slope of the *actual* state (depth row ``∂η − ∂b``) off ``_limited_grad``
-    for the cell-interior non-conservative integral.  ``b`` lives in the
-    conservative state here, so no ``Qaux`` is needed at reconstruction time.
+    `SurfaceReconstruction` reconstructs the free-surface elevation
+    `η = h + b` (flat at lake-at-rest → zero limited slope) and returns
+    `(Q_L, Q_R, b_L, b_R)` with the per-side depth recovered as `h = η − b`;
+    the explicit flux operator wants only `(Q_L, Q_R)` and reads the limited
+    slope of the *actual* state (depth row `∂η − ∂b`) off `_limited_grad`
+    for the cell-interior non-conservative integral.  `b` lives in the
+    conservative state here, so no `Qaux` is needed at reconstruction time.
     """
 
     def __init__(self, surf):
@@ -1548,7 +1548,7 @@ class FreeSurfaceFlowSolver(HyperbolicSolver):
     Requires model variables 'b' and 'h'.
 
     At reconstruction order ≥ 2 it reconstructs the free-surface elevation
-    ``η = h + b`` (so the limiter is well-balanced) and the base solver adds
+    `η = h + b` (so the limiter is well-balanced) and the base solver adds
     the cell-interior non-conservative integral — together these give exact
     well-balancing at lake-at-rest to machine precision.
     """
@@ -1592,7 +1592,7 @@ class FreeSurfaceFlowSolver(HyperbolicSolver):
 
 def _build_roe_numerics(symbolic_model):
     """Path-conservative Roe (matrix |A| dissipation) for free-surface models;
-    auto-locates ``h``/``b`` and the depth-scaled momentum rows like the
+    auto-locates `h`/`b` and the depth-scaled momentum rows like the
     Rusanov variant."""
     from zoomy_core.fvm.riemann_solvers import NonconservativeRoe
     scaled_q_indices = _detect_scaled_q_indices(symbolic_model)
@@ -1600,8 +1600,8 @@ def _build_roe_numerics(symbolic_model):
 
 
 class RoeFreeSurfaceFlowSolver(FreeSurfaceFlowSolver):
-    """:class:`FreeSurfaceFlowSolver` using the path-conservative Roe scheme
-    (matrix ``|A|`` dissipation via runtime numerical eigendecomposition)
+    """`FreeSurfaceFlowSolver` using the path-conservative Roe scheme
+    (matrix `|A|` dissipation via runtime numerical eigendecomposition)
     instead of scalar Rusanov dissipation — sharper shocks/contacts at the
     same reconstruction order.  Everything else (hydrostatic reconstruction,
     wet/dry handling, time-stepping) is unchanged."""

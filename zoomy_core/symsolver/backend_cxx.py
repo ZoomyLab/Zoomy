@@ -1,6 +1,6 @@
 """The C++ backend of the symbolic solvers, shared by foam and AMReX: it prints a solver
-template as the host program ``Solver.H``. Both runtimes include
-:data:`RUNTIME_HEADER` (``rt_common.H``), and a driver combines with a strategy by
+template as the host program `Solver.H`. Both runtimes include
+`RUNTIME_HEADER` (`rt_common.H`), and a driver combines with a strategy by
 inheritance, driver first.
 """
 from pathlib import Path
@@ -24,8 +24,8 @@ RUNTIME_HEADER = Path(__file__).with_name("rt_common.H")
 
 class CxxBackend(HyperbolicSettings):
     """The settings of a hyperbolic solver on a C++ runtime and the printing of its host
-    program (:meth:`_print`); the driver subclasses implement :meth:`build` and
-    :meth:`run`.
+    program (`_print`); the driver subclasses implement `build` and
+    `run`.
     """
     couple = param.Dict(default=None, allow_None=True,
                         doc="preCICE: dict(participant=, config=, mesh=, "
@@ -37,18 +37,18 @@ class CxxBackend(HyperbolicSettings):
 
     # ── the driver ─────────────────────────────────────────────────────────
     def build(self, nsm, dimension):
-        """Print the host program (``self.source``), write the build tree and compile
+        """Print the host program (`self.source`), write the build tree and compile
         (cached); returns the binary.
         """
         raise NotImplementedError(f"{type(self).__name__}.build")
 
     def run(self, mesh, model, Q0, workdir):
-        """March ``Q0`` to ``time_end`` (write the case into ``workdir``, launch, read
-        back); returns ``(time, Q)`` and keeps the snapshots in ``self.snapshots``.
+        """March `Q0` to `time_end` (write the case into `workdir`, launch, read
+        back); returns `(time, Q)` and keeps the snapshots in `self.snapshots`.
 
         Args:
             Q0: initial state in the mesh's order.
-            model: the SystemModel or NSM (see :meth:`_prepare`).
+            model: the SystemModel or NSM (see `_prepare`).
         """
         raise NotImplementedError(f"{type(self).__name__}.run")
 
@@ -58,16 +58,16 @@ class CxxBackend(HyperbolicSettings):
 
     # ── printing ───────────────────────────────────────────────────────────
     def _systems(self, nsm):
-        """The systems whose kernels the build writes, ``[(name, NSM)]``."""
+        """The systems whose kernels the build writes, `[(name, NSM)]`."""
         return [("nsm", nsm)]
 
     def _prepare(self, mesh, model):
-        """The NumericalSystemModel that ``run`` marches (the template's NSM)."""
+        """The NumericalSystemModel that `run` marches (the template's NSM)."""
         return default_wave_speed(model if isinstance(model, NumericalSystemModel)
                                   else NumericalSystemModel.from_system_model(model))
 
     def _mood(self, nsm):
-        """Whether MOOD is on: ``mood``, order >= 2 and the model declares
+        """Whether MOOD is on: `mood`, order >= 2 and the model declares
         admissibility.
         """
         return bool(self.mood and nsm.reconstruction.order >= 2
@@ -91,13 +91,13 @@ class CxxBackend(HyperbolicSettings):
                     time_order=self.time_order, dt_checkpoint=self.dt_checkpoint)
 
     def _template(self, nsm, dimension):
-        """The :class:`HyperbolicTemplate` of ``nsm``."""
+        """The `HyperbolicTemplate` of `nsm`."""
         return HyperbolicTemplate(nsm, **self._config(nsm, dimension))
 
     def _print(self, nsm, dimension):
-        """The host program of ``nsm``: ``run`` (:meth:`HyperbolicTemplate.march`, or
-        the preCICE march when coupled), ``march``, ``initial_aux`` and
-        ``configure``; with an AMR level loop also its procedures.
+        """The host program of `nsm`: `run` (`HyperbolicTemplate.march`, or
+        the preCICE march when coupled), `march`, `initial_aux` and
+        `configure`; with an AMR level loop also its procedures.
         """
         template = self._template(nsm, dimension)
         Q, Qaux, p, time, time_end, mesh = sp.symbols("Q Qaux p time time_end mesh")
@@ -119,7 +119,7 @@ class CxxBackend(HyperbolicSettings):
         return run + "\n\n" + aux + "\n\n" + self._configure(nsm) + "\n"
 
     def _configure(self, nsm):
-        """``configure()``: LSQ degree, the two-point flux floor and the implicit-solve
+        """`configure()`: LSQ degree, the two-point flux floor and the implicit-solve
         tolerances.
         """
         lin = self._linsolve(nsm)
@@ -135,8 +135,8 @@ class CxxBackend(HyperbolicSettings):
 
 
 class CxxChorinBackend(CxxBackend, ChorinSettings):
-    """The Chorin projection template (:class:`ChorinTemplate`) on a C++ runtime;
-    ``run`` takes ``(pred, press, corr)``, the predictor and the pressure and
+    """The Chorin projection template (`ChorinTemplate`) on a C++ runtime;
+    `run` takes `(pred, press, corr)`, the predictor and the pressure and
     corrector systems of the model's split.
 
     References:
@@ -144,8 +144,8 @@ class CxxChorinBackend(CxxBackend, ChorinSettings):
     """
 
     def _prepare(self, mesh, model):
-        """Name the split's systems as the template prints them (``pred.``, ``press.``,
-        ``corr.``); returns the predictor.
+        """Name the split's systems as the template prints them (`pred.`, `press.`,
+        `corr.`); returns the predictor.
         """
         pred, press, corr = model
         out = []
@@ -159,7 +159,7 @@ class CxxChorinBackend(CxxBackend, ChorinSettings):
         return pred
 
     def _systems(self, nsm):
-        """The three systems of the split, ``[(name, NSM)]``."""
+        """The three systems of the split, `[(name, NSM)]`."""
         return [("pred", nsm), ("press", self.press), ("corr", self.corr)]
 
     def _linsolve(self, nsm):
@@ -177,7 +177,7 @@ class CxxChorinBackend(CxxBackend, ChorinSettings):
         return max(s.resolved_lsq_degree() for s in (nsm, self.press, self.corr))
 
     def _template(self, nsm, dimension):
-        """The :class:`ChorinTemplate` of the split."""
+        """The `ChorinTemplate` of the split."""
         newton = (None if self.pressure_solve == "linear" else
                   (sp.Float(self.pressure_newton_tol), int(self.pressure_newton_maxit)))
         return ChorinTemplate(nsm, self.press, self.corr, pressure_newton=newton,
@@ -185,7 +185,7 @@ class CxxChorinBackend(CxxBackend, ChorinSettings):
                               **self._config(nsm, dimension))
 
     def _print(self, nsm, dimension):
-        """As :meth:`CxxBackend._print`; AMR is not supported."""
+        """As `CxxBackend._print`; AMR is not supported."""
         if self._amr_loop():
             raise NotImplementedError("AMR: the hyperbolic template only")
         return super()._print(nsm, dimension)
@@ -200,9 +200,9 @@ def _conservative_rows(nsm):
 
 
 def _amr_procedures(template):
-    """Print the template pieces an AMR level loop calls: ``step``, ``dt_of``, the
-    reconstruction maps ``amr_w`` / ``amr_q``, ``amr_clean``, the stage weights
-    ``rk_weights`` and the refluxed rows ``reflux_rows``.
+    """Print the template pieces an AMR level loop calls: `step`, `dt_of`, the
+    reconstruction maps `amr_w` / `amr_q`, `amr_clean`, the stage weights
+    `rk_weights` and the refluxed rows `reflux_rows`.
     """
     Q, Qaux, p, time, dt, mesh, W = sp.symbols("Q Qaux p time dt mesh W")
     nsm, order = template.nsm, template.order
@@ -210,7 +210,7 @@ def _amr_procedures(template):
     rows = R.bed_rows(nsm) if to_w is not None else None
 
     def w_of(Q, Qaux, p, mesh):
-        """The reconstruction variables of ``Q`` (the free-surface pair puts h in the
+        """The reconstruction variables of `Q` (the free-surface pair puts h in the
         bed slot).
         """
         W = Q if to_w is None else pointwise(to_w, Q, Qaux, p)
@@ -219,7 +219,7 @@ def _amr_procedures(template):
         return (W,)
 
     def q_of(W, Qaux, p, mesh):
-        """The inverse map back to ``Q`` (``b = eta - h`` for the free-surface pair).
+        """The inverse map back to `Q` (`b = eta - h` for the free-surface pair).
         """
         if rows is not None:                    # b = eta - h
             W = put(W, (rows[0],), take(W, (rows[1],)) - take(W, (rows[0],)))

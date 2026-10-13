@@ -1,36 +1,36 @@
-"""``solver_march`` / ``solver_hyperbolic_step`` — the march, expressed in the
+"""`solver_march` / `solver_hyperbolic_step` — the march, expressed in the
 Procedure IR and EMITTED by core.
 
 This module is the architecture test of the solver-unification program: it
 builds, from an NSM alone, the two Procedures whose lowering must reproduce
-the hand-written reference march (``zoomy_jax.fvm.solver2``) exactly.  Nothing
+the hand-written reference march (`zoomy_jax.fvm.solver2`) exactly.  Nothing
 here is jax-, C- or foam-specific; the backend supplies BODIES.
 
 The STRUCTURE / BODY split
 --------------------------
-Read ``solver2`` and the line falls where the design says it does.
+Read `solver2` and the line falls where the design says it does.
 
-**STRUCTURE — emitted here.**  The march ``While``; the step head ordering
-(dt_pass -> reduce_dt -> the FATAL guard) and the fact that ``dt`` is FROZEN
+**STRUCTURE — emitted here.**  The march `While`; the step head ordering
+(dt_pass -> reduce_dt -> the FATAL guard) and the fact that `dt` is FROZEN
 across stages; the stage loop UNROLLED from the tableau (core DATA, Shu-Osher
-form) with the stage arithmetic ``Q = alpha*Q0 + (1-alpha)*Q_cand`` and the
-stage time ``t + (0 | dt)``; the build-time branches on reconstruction order,
+form) with the stage arithmetic `Q = alpha*Q0 + (1-alpha)*Q_cand` and the
+stage time `t + (0 | dt)`; the build-time branches on reconstruction order,
 MOOD, the interior-NCP term, the two implicit slots, coupling and output; the
 write cadence; the two honesty guards; and every named constant.
 
-**BODY — an :class:`~zoomy_core.solver.external.ExternalProcedure`.**  The
-kernel calls and the face traversals: ``dt_pass``, ``reduce_dt``,
-``halo_bc``, ``reconstruct``, ``flux_pass``, ``gather_update``,
-``mood_resolve``, ``update_variables``, ``update_aux``, the interior-NCP cell
+**BODY — an `ExternalProcedure`.**  The
+kernel calls and the face traversals: `dt_pass`, `reduce_dt`,
+`halo_bc`, `reconstruct`, `flux_pass`, `gather_update`,
+`mood_resolve`, `update_variables`, `update_aux`, the interior-NCP cell
 term, io, and the two guards (host-side aborts).
 
 dt (v6 §1)
 ----------
-``dt`` is computed ONCE per step at the head and then frozen: the stage loop
+`dt` is computed ONCE per step at the head and then frozen: the stage loop
 receives it as a value, no stage recomputes it, and there is no lambda row
-coming back out of ``flux_pass``.  ``solver_reduce_dt`` clamps by ``dt_max``
-and by EITHER the remaining time to ``t_end`` OR the coupling window
-(``dt_window``) — the choice is the ``coupled`` build flag, never a runtime
+coming back out of `flux_pass`.  `solver_reduce_dt` clamps by `dt_max`
+and by EITHER the remaining time to `t_end` OR the coupling window
+(`dt_window`) — the choice is the `coupled` build flag, never a runtime
 branch and never min-combined (D7).
 
 Honesty guards
@@ -38,10 +38,10 @@ Honesty guards
 Both are FATAL and both are external bodies, because both must ABORT with a
 diagnostic:
 
-* ``solver_assert_dt_admissible`` — ``dt <= 0`` or non-finite.
-* ``solver_assert_march_progress`` — the other zero-progress mode: a dt that
+* `solver_assert_dt_admissible` — `dt <= 0` or non-finite.
+* `solver_assert_march_progress` — the other zero-progress mode: a dt that
   collapses towards zero while staying strictly positive.  The dt guard
-  cannot see it; ``max_steps`` can.
+  cannot see it; `max_steps` can.
 
 Neither halves dt, neither retries, neither reduces the CFL.
 """
@@ -72,7 +72,7 @@ TABLEAUS = {1: TABLEAU_EULER, 2: TABLEAU_SSPRK2}
 
 
 def tableau_for(order: int):
-    """Stage tableau for a reconstruction ``order``; RAISES on an unmapped
+    """Stage tableau for a reconstruction `order`; RAISES on an unmapped
     order (no silent fallback to Euler)."""
     try:
         return TABLEAUS[int(order)]
@@ -106,9 +106,9 @@ def flags_from_nsm(nsm, *, mood: bool = False, coupled: bool = False,
                    dt_floor: bool = False) -> dict:
     """Build-flag map derived from the NSM, with the policy knobs passed in.
 
-    ``interior_ncp`` defaults to the design's own condition — order >= 2 AND a
-    nonzero ``nonconservative_matrix`` — which is exactly the guard
-    ``solver2.context.build_operators`` enforces.  ``implicit_*`` follow the
+    `interior_ncp` defaults to the design's own condition — order >= 2 AND a
+    nonzero `nonconservative_matrix` — which is exactly the guard
+    `solver2.context.build_operators` enforces.  `implicit_*` follow the
     NSM's declared slots.
     """
     order = int(getattr(getattr(nsm, "reconstruction", None), "order", 1))
@@ -135,9 +135,9 @@ def flags_from_nsm(nsm, *, mood: bool = False, coupled: bool = False,
 def build_should_write(consts: MarchConstants) -> Procedure:
     """The drift-free write gate (design §2 / foam's gate).
 
-    The next stamp is RECOMPUTED as ``i_snapshot * write_interval`` every call
+    The next stamp is RECOMPUTED as `i_snapshot * write_interval` every call
     rather than accumulated — the accumulate form is the measured double-clamp
-    bug.  The tolerance is the emitted ``c_write_eps``, never a literal.
+    bug.  The tolerance is the emitted `c_write_eps`, never a literal.
     """
     time, wi = sp.symbols("time write_interval")
     i_snap = sp.Symbol("i_snapshot")
@@ -169,7 +169,7 @@ def _stage_block(k: int, alpha: float, beta: float, consts: MarchConstants):
     The tableau is core DATA and its length is known at build time, so the
     stage loop is unrolled rather than lowered to a runtime loop: the stage
     weights become emitted constants and the whole stage sequence is visible
-    in the emitted text.  ``dt`` is read, never written — it is frozen.
+    in the emitted text.  `dt` is read, never written — it is frozen.
     """
     time, dt = sp.symbols("time dt")
     a_k = sp.Symbol(f"c_alpha_{k}")
@@ -234,10 +234,10 @@ def _stage_block(k: int, alpha: float, beta: float, consts: MarchConstants):
 
 def build_hyperbolic_step(nsm, consts: MarchConstants, *,
                           order: Optional[int] = None) -> Procedure:
-    """``solver_hyperbolic_step`` — one step at a FROZEN ``dt``.
+    """`solver_hyperbolic_step` — one step at a FROZEN `dt`.
 
-    ``dt`` is an ARGUMENT: the head computed it and no stage may recompute it
-    (v6 §1).  The stage loop is unrolled from :func:`tableau_for`; MOOD and
+    `dt` is an ARGUMENT: the head computed it and no stage may recompute it
+    (v6 §1).  The stage loop is unrolled from `tableau_for`; MOOD and
     the two implicit slots are build-time branches.
     """
     order = int(getattr(getattr(nsm, "reconstruction", None), "order", 1)) \
@@ -310,7 +310,7 @@ def build_hyperbolic_step(nsm, consts: MarchConstants, *,
 
 
 def build_march(nsm, consts: MarchConstants) -> Procedure:
-    """``solver_march`` — the ONE ``While`` of the design.
+    """`solver_march` — the ONE `While` of the design.
 
     Per step: the head (dt_pass -> reduce_dt -> FATAL guard), the step at a
     frozen dt, the progress guard, then the write cadence.
@@ -402,9 +402,9 @@ def build_march(nsm, consts: MarchConstants) -> Procedure:
 class MarchProgram:
     """Everything a backend needs to lower the emitted march.
 
-    ``march`` / ``step`` / ``should_write`` are RESOLVED Procedures (no
-    ``IfStatic`` survives); ``constants`` carries the emitted named values and
-    their provenance; ``flags`` records the build-time decisions that were
+    `march` / `step` / `should_write` are RESOLVED Procedures (no
+    `IfStatic` survives); `constants` carries the emitted named values and
+    their provenance; `flags` records the build-time decisions that were
     resolved away, so the emitted code can be explained after the fact.
     """
 
@@ -433,14 +433,14 @@ def emit_march(nsm, *, cfl: float, dimension: int, degree: int = 0,
                dt_max: Any = None,
                order: Optional[int] = None,
                **flag_kwargs) -> MarchProgram:
-    """Emit the march for ``nsm`` — the one entry point.
+    """Emit the march for `nsm` — the one entry point.
 
-    ``cfl`` (user law 0.9) and ``dimension`` (the MESH dimension) are rulings
-    and therefore inputs; everything else is read from the NSM.  ``flags``
-    overrides the derived build-flag map; ``**flag_kwargs`` is forwarded to
-    :func:`flags_from_nsm` (``mood=``, ``coupled=``, ``write_output=``).
+    `cfl` (user law 0.9) and `dimension` (the MESH dimension) are rulings
+    and therefore inputs; everything else is read from the NSM.  `flags`
+    overrides the derived build-flag map; `**flag_kwargs` is forwarded to
+    `flags_from_nsm` (`mood=`, `coupled=`, `write_output=`).
 
-    Returns a :class:`MarchProgram` whose Procedures are already RESOLVED, so
+    Returns a `MarchProgram` whose Procedures are already RESOLVED, so
     either walker accepts them directly.
     """
     consts = march_constants(nsm, cfl=cfl, dimension=dimension, degree=degree,

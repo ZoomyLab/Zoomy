@@ -17,23 +17,23 @@ _UFL_AXIS_INDEX = {"x": 0, "y": 1, "z": 2}
 
 
 class _ZdGrad(sp.Function):
-    """Symbolic placeholder for a sympy ``Derivative`` atom.
+    """Symbolic placeholder for a sympy `Derivative` atom.
 
-    Pre-substituted by :meth:`UFLRuntimeModel._lambdify_function` so
+    Pre-substituted by `UFLRuntimeModel._lambdify_function` so
     that lambdify can serialise the expression through the default
-    printer — sympy's ``PythonCodePrinter`` has no ``_print_Derivative``
+    printer — sympy's `PythonCodePrinter` has no `_print_Derivative`
     method and raises on inline derivatives.  At runtime the UFL
-    module dict maps ``_ZdGrad(field, axis_idx0, axis_idx1, ...)`` to
-    ``ufl.grad(field)[axis_idx0][axis_idx1]...`` (chained for higher
+    module dict maps `_ZdGrad(field, axis_idx0, axis_idx1, ...)` to
+    `ufl.grad(field)[axis_idx0][axis_idx1]...` (chained for higher
     orders).
     """
 
     @classmethod
     def from_derivative(cls, deriv):
-        """Build ``_ZdGrad(field, idx0, idx1, ...)`` from a
-        ``sp.Derivative(field, var0, var1, ...)`` atom.  Each
+        """Build `_ZdGrad(field, idx0, idx1, ...)` from a
+        `sp.Derivative(field, var0, var1, ...)` atom.  Each
         coordinate Symbol's name resolves to a fixed-index integer
-        via :data:`_UFL_AXIS_INDEX`."""
+        via `_UFL_AXIS_INDEX`."""
         target = deriv.args[0]
         idxs = []
         for var, n in deriv.variable_count:
@@ -50,8 +50,8 @@ class _ZdGrad(sp.Function):
 
 
 def _zd_grad_resolver(field, *axis_indices):
-    """Runtime resolver: ``ufl.grad(field)[axis_indices...]`` with one
-    ``ufl.grad`` per axis index.  Single-index = first-order
+    """Runtime resolver: `ufl.grad(field)[axis_indices...]` with one
+    `ufl.grad` per axis index.  Single-index = first-order
     derivative; repeated = higher orders / mixed partials."""
     import ufl
 
@@ -76,12 +76,12 @@ def _ufl_conditional(condition, true_val, false_val):
 
 
 class _ZoomyVector(sp.Function):
-    """Symbolic wrapper so lambdify emits ``_ZoomyVector(e0, e1, ...)``
-    which the UFL module maps to ``ufl.as_vector([e0, e1, ...])``.
+    """Symbolic wrapper so lambdify emits `_ZoomyVector(e0, e1, ...)`
+    which the UFL module maps to `ufl.as_vector([e0, e1, ...])`.
 
     This distinguishes 1-D arrays (vectors) from 2-D arrays (tensors) at
     lambdify time, because both would otherwise be serialised as
-    ``ImmutableDenseMatrix(...)`` and be indistinguishable.
+    `ImmutableDenseMatrix(...)` and be indistinguishable.
     """
     pass
 
@@ -191,15 +191,15 @@ class UFLRuntimeModel(NumpyRuntimeModel):
 
     @staticmethod
     def _array_to_matrix(expr):
-        """Convert ``ImmutableDenseNDimArray`` to a lambdify-friendly form.
+        """Convert `ImmutableDenseNDimArray` to a lambdify-friendly form.
 
-        SymPy's ``lambdify`` (without a code printer) cannot serialise
-        ``ImmutableDenseNDimArray`` but *can* handle ``ImmutableDenseMatrix``
-        and custom ``Function`` subclasses.
+        SymPy's `lambdify` (without a code printer) cannot serialise
+        `ImmutableDenseNDimArray` but *can* handle `ImmutableDenseMatrix`
+        and custom `Function` subclasses.
 
         * 0-D  -> bare scalar symbol
-        * 1-D  -> ``_ZoomyVector(e0, e1, ...)``  -> ``ufl.as_vector``
-        * 2-D  -> ``ImmutableDenseMatrix``        -> ``ufl.as_tensor``
+        * 1-D  -> `_ZoomyVector(e0, e1, ...)`  -> `ufl.as_vector`
+        * 2-D  -> `ImmutableDenseMatrix`        -> `ufl.as_tensor`
         * 3-D+ -> reshaped to 2-D Matrix (product-of-leading, last-dim)
         """
         from sympy.tensor.array.dense_ndim_array import ImmutableDenseNDimArray
@@ -224,19 +224,19 @@ class UFLRuntimeModel(NumpyRuntimeModel):
 
     @staticmethod
     def _distribute_piecewise_over_array(expr):
-        """Pull ``Piecewise(NDimArray, …)`` out into an NDimArray of
-        scalar ``Piecewise`` expressions.
+        """Pull `Piecewise(NDimArray, …)` out into an NDimArray of
+        scalar `Piecewise` expressions.
 
-        SymPy's ``PythonCodePrinter`` (which lambdify falls back to when
+        SymPy's `PythonCodePrinter` (which lambdify falls back to when
         no explicit printer is passed) does not know how to serialise an
-        ``ImmutableDenseNDimArray`` *inside* a ``Piecewise`` branch.
+        `ImmutableDenseNDimArray` *inside* a `Piecewise` branch.
         The fix is to swap the nesting: if every branch is an
-        ``NDimArray`` of the same shape, return an ``Array`` of length
-        ``n`` where each entry is the element-wise ``Piecewise``.
+        `NDimArray` of the same shape, return an `Array` of length
+        `n` where each entry is the element-wise `Piecewise`.
 
-        Then :meth:`_array_to_matrix` (called from
-        :meth:`_vectorize_expression`) turns the resulting flat array
-        into the appropriate ``_ZoomyVector`` / ``ImmutableDenseMatrix``
+        Then `_array_to_matrix` (called from
+        `_vectorize_expression`) turns the resulting flat array
+        into the appropriate `_ZoomyVector` / `ImmutableDenseMatrix`
         wrapper for the UFL module dict to lower.
         """
         from sympy.tensor.array.dense_ndim_array import (
@@ -270,8 +270,8 @@ class UFLRuntimeModel(NumpyRuntimeModel):
         return sp.Array(flat, shape)
 
     def _vectorize_expression(self, expr, signature):
-        """Override: distribute any top-level ``Piecewise`` over its
-        ``NDimArray`` branches, vectorise, then convert Array → Matrix
+        """Override: distribute any top-level `Piecewise` over its
+        `NDimArray` branches, vectorise, then convert Array → Matrix
         for lambdify."""
         expr = self._distribute_piecewise_over_array(expr)
         result = super()._vectorize_expression(expr, signature)
@@ -284,13 +284,13 @@ class UFLRuntimeModel(NumpyRuntimeModel):
     def _lambdify_function(self, function_obj, modules):
         """Skip functions with zero-size output (e.g. Jacobian when n_aux=0).
 
-        Otherwise re-derive slot-operator ``args`` from the declaration
+        Otherwise re-derive slot-operator `args` from the declaration
         registry (legacy raw-Model path only — see
-        :meth:`_with_declared_operator_args`), then pre-substitute inline
-        ``sp.Derivative`` atoms with the :class:`_ZdGrad` placeholder
+        `_with_declared_operator_args`), then pre-substitute inline
+        `sp.Derivative` atoms with the `_ZdGrad` placeholder
         Function so lambdify's default printer can serialise the
-        expression.  The UFL module dict binds ``_ZdGrad`` to a resolver
-        that chains ``ufl.grad`` to produce the requested partial.
+        expression.  The UFL module dict binds `_ZdGrad` to a resolver
+        that chains `ufl.grad` to produce the requested partial.
         """
         expr = function_obj.definition
         if hasattr(expr, 'shape') and any(int(s) == 0 for s in expr.shape):
@@ -308,33 +308,33 @@ class UFLRuntimeModel(NumpyRuntimeModel):
         return super()._lambdify_function(function_obj, modules)
 
     def _with_declared_operator_args(self, function_obj):
-        """Re-derive a slot operator's ``args`` from ``OPERATOR_ARG_SLOTS``
-        (the declaration table behind ``sm.operator(name).args`` /
-        ``sm.operator_signature(name)``) on the LEGACY raw-Model path.
+        """Re-derive a slot operator's `args` from `OPERATOR_ARG_SLOTS`
+        (the declaration table behind `sm.operator(name).args` /
+        `sm.operator_signature(name)`) on the LEGACY raw-Model path.
 
-        ``Model._initialize_functions`` still registers the pre-REQ-185
-        signatures (``source(Q, Qaux, p)``, ``update_aux_variables(Q, Qaux,
-        p, dt)``), so a Firedrake runtime built via ``UFLRuntimeModel(model)``
+        `Model._initialize_functions` still registers the pre-REQ-185
+        signatures (`source(Q, Qaux, p)`, ``update_aux_variables(Q, Qaux,
+        p, dt)``), so a Firedrake runtime built via `UFLRuntimeModel(model)`
         would emit them stale.  Materialising the declared groups from the
-        model's own symbols — exactly like ``SystemModel.operator_signature``
+        model's own symbols — exactly like `SystemModel.operator_signature`
         — makes the UFL emit gain the REQ-185 trailing groups:
 
-        * ``source(Q, Qaux, p, time, [dt], X)``
-        * ``update_aux_variables(Q, Qaux, p, time, X)`` (and its jacobian)
+        * `source(Q, Qaux, p, time, [dt], X)`
+        * `update_aux_variables(Q, Qaux, p, time, X)` (and its jacobian)
 
         with everything else unchanged (the other declared slots carry the
         same groups the legacy registry already binds).  Mirrors
-        ``NumpyRuntimeModel.from_system_model._op_sig``'s one
-        lowering-SYNTAX constraint: the ``dt`` group is dropped when ``dt``
+        `NumpyRuntimeModel.from_system_model._op_sig`'s one
+        lowering-SYNTAX constraint: the `dt` group is dropped when `dt`
         is already a model parameter (duplicate lambdify argument —
         Chorin/VAM split sub-systems).
 
         The SystemModel/NSM path already receives the declared args from
-        ``from_system_model`` (which reads ``sm.operator_signature``), so it
-        passes through untouched — only a runtime whose ``model`` carries a
-        ``.functions`` registry (a legacy ``Model``) is rewritten.  Non-slot
-        registry functions (``residual``, ``eigensystem``, the BC kernels,
-        ``interpolate_to_3d``, …) keep their registered signatures.
+        `from_system_model` (which reads `sm.operator_signature`), so it
+        passes through untouched — only a runtime whose `model` carries a
+        `.functions` registry (a legacy `Model`) is rewritten.  Non-slot
+        registry functions (`residual`, `eigensystem`, the BC kernels,
+        `interpolate_to_3d`, …) keep their registered signatures.
         """
         model = getattr(self, "model", None)
         if model is None or not hasattr(model, "functions"):
@@ -363,22 +363,22 @@ class UFLRuntimeModel(NumpyRuntimeModel):
 
     def _lower_opaque_kernels(self, expr):
         """UFL keeps the opaque kernels in the per-component
-        ``eigensystem(idx, …)`` convention: the Firedrake module hooks
-        (``eigensystem_hook(idx, *a)`` / ``eigenvalues_hook(idx, *a)``) are
-        per-component, with no binding for the packed-stack ``K(*a)`` /
-        ``pick``.  The producers emit the canonical ``pick(K(*a), idx)``, so
-        restore the ``K(idx, *a)`` form here before lambdify."""
+        `eigensystem(idx, …)` convention: the Firedrake module hooks
+        (`eigensystem_hook(idx, *a)` / `eigenvalues_hook(idx, *a)`) are
+        per-component, with no binding for the packed-stack `K(*a)` /
+        `pick`.  The producers emit the canonical `pick(K(*a), idx)`, so
+        restore the `K(idx, *a)` form here before lambdify."""
         from zoomy_core.model.kernel_functions import lower_pick_to_component
         return lower_pick_to_component(expr)
 
     @staticmethod
     def _substitute_derivative_atoms(function_obj):
-        """Return a function object with every ``sp.Derivative`` atom in
-        its definition replaced by the corresponding ``_ZdGrad`` placeholder.
+        """Return a function object with every `sp.Derivative` atom in
+        its definition replaced by the corresponding `_ZdGrad` placeholder.
 
-        Inline derivatives of state w.r.t. spatial coordinates (``∂_z T``,
-        ``∂_z U``, ...) are common in eddy-viscosity closures — e.g. the
-        MY-2.5 Galperin G_H argument depends on ``∂_z T``.  Without this
+        Inline derivatives of state w.r.t. spatial coordinates (`∂_z T`,
+        `∂_z U`, ...) are common in eddy-viscosity closures — e.g. the
+        MY-2.5 Galperin G_H argument depends on `∂_z T`.  Without this
         substitution the default lambdify printer raises on the
         Derivative atom.
         """
@@ -427,7 +427,7 @@ class UFLRuntimeModel(NumpyRuntimeModel):
     def _lower_ndarray_operator(self, name, arr, n_cols, n_eq, n_dim,
                                 std_sig, modules):
         """UFL override: emit the full rank-3 operator as ONE lambdified
-        function → ``ufl.as_tensor``.  See the class comment above."""
+        function → `ufl.as_tensor`.  See the class comment above."""
         from zoomy_core.model.basefunction import Function
         fn = Function(name=name, args=std_sig, definition=arr)
         return self._lambdify_function(fn, modules)
@@ -435,7 +435,7 @@ class UFLRuntimeModel(NumpyRuntimeModel):
     def _lower_rank4_operator(self, name, A_arr, n_eq, n_st, n_dim,
                               std_sig, modules):
         """UFL override: emit the full rank-4 diffusion tensor as ONE
-        lambdified function → ``ufl.as_tensor``.  See the class comment
+        lambdified function → `ufl.as_tensor`.  See the class comment
         above."""
         from zoomy_core.model.basefunction import Function
         fn = Function(name=name, args=std_sig, definition=A_arr)
@@ -443,33 +443,33 @@ class UFLRuntimeModel(NumpyRuntimeModel):
 
     @classmethod
     def from_nsm(cls, nsm, *, module=None, printer=None):
-        """Build a UFL runtime from a :class:`NumericalSystemModel`.
+        """Build a UFL runtime from a `NumericalSystemModel`.
 
-        Thin front door mirroring ``JaxRuntime.from_nsm``: the operator set
-        lives on ``nsm.sm`` (a :class:`SystemModel`), so this just delegates
-        to :meth:`from_system_model`, which normalises any Model /
-        SystemModel / NSM through ``to_numerical_system_model``."""
+        Thin front door mirroring `JaxRuntime.from_nsm`: the operator set
+        lives on `nsm.sm` (a `SystemModel`), so this just delegates
+        to `from_system_model`, which normalises any Model /
+        SystemModel / NSM through `to_numerical_system_model`."""
         return cls.from_system_model(nsm, module=module, printer=printer)
 
     module = _UFLModule()
 
 
 class UFLRuntimeSymbolic(UFLRuntimeModel, NumpyRuntimeSymbolic):
-    """UFL runtime for symbolic registrars (e.g. :class:`Numerics`).
+    """UFL runtime for symbolic registrars (e.g. `Numerics`).
 
-    The Firedrake counterpart to :class:`NumpyRuntimeSymbolic`.  It
-    walks ``symbolic_obj.functions`` and lambdifies each registered
-    symbolic function (``numerical_flux``, ``numerical_fluctuations``,
-    ``local_max_abs_eigenvalue``, …) through the UFL module dict, so
-    calling, e.g., ``runtime.numerical_flux(qL, qR, auxL, auxR, p, n)``
+    The Firedrake counterpart to `NumpyRuntimeSymbolic`.  It
+    walks `symbolic_obj.functions` and lambdifies each registered
+    symbolic function (`numerical_flux`, `numerical_fluctuations`,
+    `local_max_abs_eigenvalue`, …) through the UFL module dict, so
+    calling, e.g., `runtime.numerical_flux(qL, qR, auxL, auxR, p, n)`
     returns a UFL expression suitable for direct assembly in a
     Firedrake form.
 
     The MRO is ``UFLRuntimeSymbolic → UFLRuntimeModel →
-    NumpyRuntimeSymbolic → NumpyRuntimeModel``; ``__init__`` is
-    inherited from ``NumpyRuntimeSymbolic`` (no other class defines
-    one), and ``module`` / ``printer`` /
-    ``_vectorize_expression`` / ``_lambdify_function`` come from
-    ``UFLRuntimeModel``.
+    NumpyRuntimeSymbolic → NumpyRuntimeModel``; `__init__` is
+    inherited from `NumpyRuntimeSymbolic` (no other class defines
+    one), and `module` / `printer` /
+    `_vectorize_expression` / `_lambdify_function` come from
+    `UFLRuntimeModel`.
     """
     pass

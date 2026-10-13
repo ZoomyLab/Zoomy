@@ -1,21 +1,21 @@
 """Time schemes: core DATA, unrolled into statements at build time.
 
-``ShuOsher``  explicit SSP schemes in Shu-Osher form
+`ShuOsher`  explicit SSP schemes in Shu-Osher form
 
     Q^(0) = Q^n
     Q^(k) = a_k Q^n + (1 - a_k) [Q^(k-1) + beta_k dt L(Q^(k-1), t + c_k dt)]
     Q^{n+1} = Q^(s)
 
-with stage times ``c_k`` (D3).  ``EULER``, ``SSPRK2`` (Heun) and ``SSPRK3``
+with stage times `c_k` (D3).  `EULER`, `SSPRK2` (Heun) and `SSPRK3`
 (Shu-Osher 1988) are provided; the default for a reconstruction order is
-:func:`ShuOsher.for_order`, but the scheme is independent of the order.
+`ShuOsher.for_order`, but the scheme is independent of the order.
 
-``Imex``  IMEX data: ``kind="lie"`` (D2 default: the implicit stages run after
-the explicit RK step) or ``kind="ark"`` (per-stage implicit solves with an
-IMEX-ARK Butcher pair, ``ARS232`` / ``ARS343``).  Lowered in sub-stage 1b.
+`Imex`  IMEX data: `kind="lie"` (D2 default: the implicit stages run after
+the explicit RK step) or `kind="ark"` (per-stage implicit solves with an
+IMEX-ARK Butcher pair, `ARS232` / `ARS343`).  Lowered in sub-stage 1b.
 
-``Compose``  operator splitting: a sequence of ``(part, dt_fraction)``; each
-part is a scheme + stage list advanced over ``dt_fraction * dt``.
+`Compose`  operator splitting: a sequence of `(part, dt_fraction)`; each
+part is a scheme + stage list advanced over `dt_fraction * dt`.
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ class ShuOsher:
 
     @property
     def stages(self) -> tuple:
-        """``((a_k, c_k), ...)``."""
+        """`((a_k, c_k), ...)`."""
         return tuple(zip(self.a, self.c))
 
     @property
@@ -55,7 +55,7 @@ class ShuOsher:
         return len(self.a)
 
     def butcher(self):
-        """Equivalent explicit Butcher tableau ``(A, b, c)`` (for checks)."""
+        """Equivalent explicit Butcher tableau `(A, b, c)` (for checks)."""
         s = self.n_stages
         # Y_k = sum_j alpha_kj Y_j + beta_k dt L(Y_{k-1}),  Y_0 = Q^n
         # stage values X_k = Q^(k-1) at which L is evaluated (k = 1..s)
@@ -130,7 +130,7 @@ class ImexTableau:
 
     def order_conditions(self) -> dict:
         """Residuals of the classical and coupling order conditions up to
-        ``order`` (all should be ~0)."""
+        `order` (all should be ~0)."""
         Ae, be, ce = self.explicit.as_arrays()
         Ai, bi, ci = self.implicit.as_arrays()
         res = {
@@ -203,9 +203,9 @@ ARS343 = _ars343()
 class Imex:
     """IMEX scheme data (lowered in sub-stage 1b).
 
-    ``kind="lie"`` (D2 default): explicit RK step with ``explicit`` (a
-    :class:`ShuOsher`), then the implicit stages over the full dt.
-    ``kind="ark"``: per-stage implicit solves with the ``tableau`` pair."""
+    `kind="lie"` (D2 default): explicit RK step with `explicit` (a
+    `ShuOsher`), then the implicit stages over the full dt.
+    `kind="ark"`: per-stage implicit solves with the `tableau` pair."""
 
     kind: str = "lie"
     explicit: Any = None
@@ -222,9 +222,9 @@ class Imex:
 
 @dataclasses.dataclass(frozen=True)
 class Compose:
-    """Operator splitting: ``parts = ((part, dt_fraction), ...)``.  A part is
-    any object the step builder accepts (a ``(scheme, stage)`` pair).  Lie
-    splitting is ``((A, 1), (B, 1))``; Strang ``((A, .5), (B, 1), (A, .5))``."""
+    """Operator splitting: `parts = ((part, dt_fraction), ...)`.  A part is
+    any object the step builder accepts (a `(scheme, stage)` pair).  Lie
+    splitting is `((A, 1), (B, 1))`; Strang `((A, .5), (B, 1), (A, .5))`."""
 
     parts: tuple
 

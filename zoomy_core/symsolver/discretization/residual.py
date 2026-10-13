@@ -20,12 +20,12 @@ def residual(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
     them.
 
     Args:
-        demote: MOOD demotion of the reconstruction (see ``reconstruct``).
-        coupled: ``(mask, flux)``, faces carrying a shared answer.
-        dt_rule: ``dt`` is not known yet; the face kernel also returns the wave speed
-            ``S`` and ``dt = dt_rule(S)``.
+        demote: MOOD demotion of the reconstruction (see `reconstruct`).
+        coupled: `(mask, flux)`, faces carrying a shared answer.
+        dt_rule: `dt` is not known yet; the face kernel also returns the wave speed
+            `S` and `dt = dt_rule(S)`.
     Returns:
-        ``dQ``, or ``(dQ, dt)`` with ``dt_rule``.
+        `dQ`, or `(dQ, dt)` with `dt_rule`.
     References:
         LeVeque 2002, https://doi.org/10.1017/CBO9780511791253
         Pares 2006, https://doi.org/10.1137/050628052
@@ -67,7 +67,7 @@ def residual(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
 
 
 def stage_aux(nsm, Q, Qaux, p, time, dt, mesh):
-    """Pointwise aux of a stage state (e.g. ``hinv = 1/h``)."""
+    """Pointwise aux of a stage state (e.g. `hinv = 1/h`)."""
     if nsm.call.update_aux_variables is None:
         return Qaux
     return cells(nsm.call.update_aux_variables, Q, Qaux, p, time, dt, mesh)
@@ -75,13 +75,13 @@ def stage_aux(nsm, Q, Qaux, p, time, dt, mesh):
 
 def explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
                   coupled=None, implicit_terms=True, rk=None, dt_rule=None):
-    """One SSP-RK step of the method of lines, of order ``rk`` (default the
+    """One SSP-RK step of the method of lines, of order `rk` (default the
     reconstruction order).
 
     Args:
-        dt_rule: the first stage picks ``dt`` from its own face wave speeds.
+        dt_rule: the first stage picks `dt` from its own face wave speeds.
     Returns:
-        ``Q``, or ``(Q, dt)`` with ``dt_rule``.
+        `Q`, or `(Q, dt)` with `dt_rule`.
     References:
         Shu, Osher 1988, https://doi.org/10.1016/0021-9991(88)90177-5
         Gottlieb et al. 2001, https://doi.org/10.1137/S003614450036757X
@@ -108,13 +108,13 @@ def mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled=None,
               implicit_terms=True, rk=None, dt_rule=None):
     """A-posteriori MOOD: an order-2 candidate step, inadmissible cells redone at first
     order, and the whole step at first order if that still fails; the repairs keep
-    the candidate's ``dt``.
+    the candidate's `dt`.
 
     References:
         Clain et al. 2011, https://doi.org/10.1016/j.jcp.2011.02.026
     """
     def step(demote, dt):
-        """The explicit step with cells ``demote`` demoted to first order."""
+        """The explicit step with cells `demote` demoted to first order."""
         return explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order, demote,
                              coupled, implicit_terms, rk)
 
@@ -138,7 +138,7 @@ def mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled=None,
 
 def full_aux(nsm, Q, Qaux, p, time, dt, mesh):
     """Pointwise aux, then the derivative (mesh-gradient) aux, whose boundary samples
-    are the BC ghosts at ``time``.
+    are the BC ghosts at `time`.
     """
     Qaux = stage_aux(nsm, Q, Qaux, p, time, dt, mesh)
     spec = nsm.call.aux_derivatives
@@ -155,7 +155,7 @@ def full_aux(nsm, Q, Qaux, p, time, dt, mesh):
 
 
 def derivative_rows(nsm):
-    """``(rows, functions)``: the state rows the derivative aux differentiates (static
+    """`(rows, functions)`: the state rows the derivative aux differentiates (static
     tuple) and whether it differentiates aux functions too.
     """
     spec = [e for e in nsm.aux_derivatives if e["kind"] == "derivative"]
@@ -165,20 +165,20 @@ def derivative_rows(nsm):
 
 
 def post_step(nsm, Q, Qaux, p, time, dt, mesh):
-    """Model hygiene on the new state, then its aux; returns ``(Q, Qaux)``."""
+    """Model hygiene on the new state, then its aux; returns `(Q, Qaux)`."""
     if nsm.call.update_variables is not None:
         Q = cells(nsm.call.update_variables, Q, Qaux, p, time, dt, mesh)
     return Q, full_aux(nsm, Q, Qaux, p, time, dt, mesh)
 
 
 def implicit_source(nsm, Q, Qaux, p, time, dt, mesh):
-    """Implicit Euler on the source at ``time``, ``Y - Q - dt S(Y, aux(Y)) = 0``, by a
-    per-cell root solve with the derivative aux frozen at ``Q``.
+    """Implicit Euler on the source at `time`, `Y - Q - dt S(Y, aux(Y)) = 0`, by a
+    per-cell root solve with the derivative aux frozen at `Q`.
     """
     Qaux_e = full_aux(nsm, Q, Qaux, p, time, dt, mesh)
 
     def aux_of(Y):
-        """Pointwise aux following the iterate ``Y``."""
+        """Pointwise aux following the iterate `Y`."""
         return stage_aux(nsm, Y, Qaux_e, p, time, dt, mesh)
 
     return Root(lambda Y: Y - Q - dt * cells(nsm.call.source, Y, aux_of(Y),
@@ -186,7 +186,7 @@ def implicit_source(nsm, Q, Qaux, p, time, dt, mesh):
 
 
 def implicit_step(nsm, Q, Qaux, p, time, dt, mesh):
-    """The SystemModel's implicit slots over the step ending at ``time``: implicit
+    """The SystemModel's implicit slots over the step ending at `time`: implicit
     diffusion, then implicit Euler on the source.
     """
     if nsm.call.diffusion_matrix is not None:
@@ -200,15 +200,15 @@ def implicit_step(nsm, Q, Qaux, p, time, dt, mesh):
 
 def imex_step(nsm, Q, Qaux, p, time, dt, mesh, order, tableau, mood=False,
               coupled=None, dt_rule=None, project=None):
-    """One step of the IMEX Runge-Kutta ``tableau``: each stage is an explicit
+    """One step of the IMEX Runge-Kutta `tableau`: each stage is an explicit
     (MOOD-guarded) Euler step of the residual without implicit slots plus a per-cell
     Newton solve of the implicit source.
 
     Args:
-        project: Chorin: ``project(Y, time, dt, i) -> (Y', B)`` maps stage ``i`` (the
-            final combination: ``i`` omitted) onto the constraint, ``B = Y' - Y`` on the
+        project: Chorin: `project(Y, time, dt, i) -> (Y', B)` maps stage `i` (the
+            final combination: `i` omitted) onto the constraint, `B = Y' - Y` on the
             corrected rows.
-        dt_rule: ``dt`` from the cell states' wave speeds; returns ``(Q, dt)``.
+        dt_rule: `dt` from the cell states' wave speeds; returns `(Q, dt)`.
     References:
         Pareschi, Russo 2005, https://doi.org/10.1007/s10915-004-4636-4
     """

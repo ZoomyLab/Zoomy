@@ -1,9 +1,9 @@
 """Method of Manufactured Solutions (MMS) for any zoomy SystemModel.
 
 A verification tool with a genuine ANALYTIC reference for models that have no
-closed-form solution (SME, VAM, ML-*): pick a smooth field ``W*(x)``, force the
+closed-form solution (SME, VAM, ML-*): pick a smooth field `W*(x)`, force the
 PDE to admit it exactly by adding a manufactured source, run, and measure the
-error against ``W*`` under mesh refinement.  The observed order is then a
+error against `W*` under mesh refinement.  The observed order is then a
 statement about the SCHEME, not about a self-reference sharing the scheme's own
 truncation error.
 
@@ -13,35 +13,35 @@ is
     ∂_t W + A(W) ∂_x W = S(W),        A = quasilinear_matrix = ∂F/∂Q + ∂P/∂Q + B
 
 (the flux Jacobian + the hydrostatic-pressure Jacobian + the nonconservative
-matrix — exactly ``sm.quasilinear_matrix``).  For a chosen steady ``W*(x)`` to
+matrix — exactly `sm.quasilinear_matrix`).  For a chosen steady `W*(x)` to
 be an EXACT steady solution of the augmented system
 
     ∂_t W + A(W) ∂_x W = S(W) + S_mms,
 
-we need, at ``W = W*``,
+we need, at `W = W*`,
 
     S_mms(x) = A(W*(x)) · dW*/dx − S(W*(x)).                        (MMS)
 
-Every term on the right is symbolic in zoomy: ``A`` and ``S`` are model
-operators, ``W*`` and ``dW*/dx`` are the manufactured expressions.  ``S_mms`` is
+Every term on the right is symbolic in zoomy: `A` and `S` are model
+operators, `W*` and `dW*/dx` are the manufactured expressions.  `S_mms` is
 a pure function of the space coordinate, which the solver already binds to cell
-centres (REQ-185: the source is lowered as ``(Q, Qaux, p, t, x)``).
+centres (REQ-185: the source is lowered as `(Q, Qaux, p, t, x)`).
 
-STATIONARY-STATE ROWS (bed ``b`` with ∂_t b = 0) need no source: their row of
-``A`` is zero, so (MMS) yields ``S_mms = -S`` there, which for a static bed is
-also zero.  ``W*`` for such a row is simply the prescribed geometry (e.g. a
+STATIONARY-STATE ROWS (bed `b` with ∂_t b = 0) need no source: their row of
+`A` is zero, so (MMS) yields `S_mms = -S` there, which for a static bed is
+also zero.  `W*` for such a row is simply the prescribed geometry (e.g. a
 bump), and it is preserved exactly.
 
-Aux resolution.  ``S_mms`` must be a pure function of x, so every aux the
+Aux resolution.  `S_mms` must be a pure function of x, so every aux the
 operators reference has to be reduced to the manufactured field:
 
-* algebraic aux (``hinv``, …) → their ``update_aux_variables`` definition;
-* gradient aux (``dhdx`` = ∂h/∂x, registered ``kind='derivative'`` in
-  ``sm.aux_registry``) → the exact spatial derivative of the target state;
+* algebraic aux (`hinv`, …) → their `update_aux_variables` definition;
+* gradient aux (`dhdx` = ∂h/∂x, registered `kind='derivative'` in
+  `sm.aux_registry`) → the exact spatial derivative of the target state;
 * closure aux that no definition owns (the deviatoric stress moments
-  ``\\hat{σ}_k`` the stress closure leaves open) → declared by the caller via
-  ``closure_aux=`` on :func:`manufactured_source_field`, and matched by the
-  aux initial condition of the run (e.g. ``σ = 0`` for an inviscid run).
+  `\\hat{σ}_k` the stress closure leaves open) → declared by the caller via
+  `closure_aux=` on `manufactured_source_field`, and matched by the
+  aux initial condition of the run (e.g. `σ = 0` for an inviscid run).
 
 Usage
 -----
@@ -106,7 +106,7 @@ def _state_symbol(sm, key):
 
 
 def _resolve_exact(sm, exact):
-    """``{name|Symbol: expr}`` → an ordered list aligned with ``sm.state``.
+    """`{name|Symbol: expr}` → an ordered list aligned with `sm.state`.
 
     Every state variable must be given a manufactured expression (there is no
     sensible default — a missing row would silently manufacture the wrong
@@ -122,12 +122,12 @@ def _resolve_exact(sm, exact):
 
 
 def _aux_substitution(sm, state_subs, coords):
-    """``{aux_symbol: expr(x)}`` — each aux replaced by its
-    ``update_aux_variables`` definition, itself reduced to the manufactured
+    """`{aux_symbol: expr(x)}` — each aux replaced by its
+    `update_aux_variables` definition, itself reduced to the manufactured
     field.  Fixed-point over a few passes so an aux defined in terms of another
-    aux resolves; gradient-aux (``b_x`` = ∂_x b) become the actual derivative of
-    the manufactured field.  This is what makes ``S_mms`` a PURE function of x
-    rather than carrying opaque ``hinv`` / gradient symbols."""
+    aux resolves; gradient-aux (`b_x` = ∂_x b) become the actual derivative of
+    the manufactured field.  This is what makes `S_mms` a PURE function of x
+    rather than carrying opaque `hinv` / gradient symbols."""
     aux = list(getattr(sm, "aux_state", []) or [])
     defs = {}
     # (1) algebraic aux from update_aux_variables (hinv, …), if present.
@@ -175,16 +175,16 @@ def _aux_substitution(sm, state_subs, coords):
 
 
 def manufactured_source(sm, exact):
-    """Return the manufactured source ``S_mms(x)`` (MMS) as a ``ZArray`` of
-    length ``n_eq``, in terms of the space coordinate(s).
+    """Return the manufactured source `S_mms(x)` (MMS) as a `ZArray` of
+    length `n_eq`, in terms of the space coordinate(s).
 
-    ``exact`` maps each state variable (Symbol or name) to a smooth sympy
-    expression in ``sm.space``.  See the module docstring for the formula:
+    `exact` maps each state variable (Symbol or name) to a smooth sympy
+    expression in `sm.space`.  See the module docstring for the formula:
 
         S_mms = ∂_t W*  +  A(W*)·∂_x W*  −  ∂_x( D(W*)·∂_x W* )  −  S(W*)
 
-    The ``∂_t W*`` term vanishes identically for a steady ``W*(x)``, so a
-    steady case is unaffected.  Supply a ``W*(x, t)`` — using ``sm.time`` —
+    The `∂_t W*` term vanishes identically for a steady `W*(x)`, so a
+    steady case is unaffected.  Supply a `W*(x, t)` — using `sm.time` —
     and the manufactured solution becomes genuinely UNSTEADY, which is what
     makes the measured order a statement about the time integrator, the
     flux and the source coupling rather than about how well the scheme
@@ -193,9 +193,9 @@ def manufactured_source(sm, exact):
     EOC 3.01/2.81/2.42 at order 1 and 3.01/2.81/2.41 at order 2, i.e. it
     cannot see the order at all (cid 211).
 
-    The middle term is the DIFFUSIVE flux divergence (``diffusion_matrix`` D,
-    the contract's ``+∂_x(D ∂_x Q)`` on the RHS): SME/VAM carry an intrinsic
-    ``diffusion_matrix`` even without an explicit viscosity, so omitting it
+    The middle term is the DIFFUSIVE flux divergence (`diffusion_matrix` D,
+    the contract's `+∂_x(D ∂_x Q)` on the RHS): SME/VAM carry an intrinsic
+    `diffusion_matrix` even without an explicit viscosity, so omitting it
     would manufacture the wrong balance and the residual would not vanish."""
     W = _resolve_exact(sm, exact)                     # aligned with sm.state
     state_subs = {s: W[i] for i, s in enumerate(sm.state)}
@@ -243,24 +243,24 @@ def manufactured_source(sm, exact):
 
 
 def _normalise(expr):
-    """Tidy a residual row without paying for :func:`sympy.simplify`.
+    """Tidy a residual row without paying for `sympy.simplify`.
 
-    ``simplify`` was the entire cost of building a manufactured source, and it
-    scales appallingly with the richness of ``W*``: a degree-6 bed bump with a
+    `simplify` was the entire cost of building a manufactured source, and it
+    scales appallingly with the richness of `W*`: a degree-6 bed bump with a
     time-dependent depth took **over 32 minutes at full CPU without emitting a
     single row**, where skipping it returns in 0.0 s.  With Manning friction
-    (``q|q|/h^{7/3}``) it does not finish at all.  That cost is why every
-    manufactured case in the suite uses a low-degree monotone ``W*`` over a flat
+    (`q|q|/h^{7/3}`) it does not finish at all.  That cost is why every
+    manufactured case in the suite uses a low-degree monotone `W*` over a flat
     bed -- the interesting solutions were simply unaffordable.
 
     The form DOES matter -- for CONDITIONING, not readability -- and getting
     that backwards silently destroyed a verification result.  This function once
-    read ``sp.cancel(sp.expand(expr))``, justified by "the residual is consumed
-    numerically so its form is irrelevant".  ``expand`` inflated the level-2
-    ``q_0`` row of ``moment_friction_mms`` from 316 to 4246 operations, and
+    read `sp.cancel(sp.expand(expr))`, justified by "the residual is consumed
+    numerically so its form is irrelevant".  `expand` inflated the level-2
+    `q_0` row of `moment_friction_mms` from 316 to 4246 operations, and
     evaluating THAT form in float64 loses 1.0e-2 absolute against a 60-digit
     reference, on a row whose own magnitude is 1.2 -- catastrophic cancellation.
-    A manufactured source is a fixed function of ``x``, so the error does NOT
+    A manufactured source is a fixed function of `x`, so the error does NOT
     shrink with the mesh: the case fell from a clean EOC of 2.00/2.00/2.00 to a
     FLAT -0.07/+0.09/-0.04 with L1 pinned near 2.8e-5 at every refinement, and
     it read as a scheme defect rather than as an algebra defect.
@@ -268,9 +268,9 @@ def _normalise(expr):
     Rule, therefore: normalisation may TIDY an expression but must never INFLATE
     it.  Try the cheap rational normal form, keep it only if the operation count
     did not grow, and otherwise return the structured (nested, well-conditioned)
-    expression untouched.  ``simplify`` is still avoided: it was the entire cost
+    expression untouched.  `simplify` is still avoided: it was the entire cost
     of building a manufactured source and scales appallingly with the richness of
-    ``W*``.
+    `W*`.
     """
     try:
         tidied = sp.cancel(sp.expand(expr))
@@ -282,10 +282,10 @@ def _normalise(expr):
 
 
 def install_manufactured_source(sm, exact):
-    """Add ``S_mms(x)`` to ``sm.source`` IN PLACE and return ``sm``.
+    """Add `S_mms(x)` to `sm.source` IN PLACE and return `sm`.
 
-    After this, ``W*`` is an exact steady solution of the model, so a run
-    started from ``W*`` (or converged to steady state) has an analytic
+    After this, `W*` is an exact steady solution of the model, so a run
+    started from `W*` (or converged to steady state) has an analytic
     reference and its mesh-refinement error measures the scheme order."""
     S_mms = manufactured_source(sm, exact)
     base = sm.source
@@ -302,13 +302,13 @@ def install_manufactured_source(sm, exact):
 
 def manufactured_source_field(sm, exact, cell_centers, parameter_values=None,
                               closure_aux=None):
-    """Evaluate ``S_mms(x)`` at cell centres → array ``(n_eq, n_cells)``.
+    """Evaluate `S_mms(x)` at cell centres → array `(n_eq, n_cells)`.
 
-    A numeric companion to :func:`manufactured_source` for solvers that cannot
+    A numeric companion to `manufactured_source` for solvers that cannot
     take an explicit position-dependent symbolic source (e.g. because the
     symbolic source is evaluated over ghost-padded cells while the manufactured
     term is physical-cells-only).  Inject this as a FIXED additive source on the
-    inner cells each step; ``W*`` is then an exact steady state and the
+    inner cells each step; `W*` is then an exact steady state and the
     steady-state error under refinement is the scheme order."""
     import numpy as np
     S_mms = manufactured_source(sm, exact)
@@ -354,17 +354,17 @@ def manufactured_source_field(sm, exact, cell_centers, parameter_values=None,
 def mms_convergence(setup_run, grids, interior_frac=0.0):
     """Fixed-time / steady MMS convergence rate — the backend-agnostic driver.
 
-    ``setup_run(nx)`` builds the model with ``S_mms`` injected, RUNS it (from
-    ``IC = W*``), and returns ``(Q_end, W_cell)`` as ``(n_rows, nx)`` arrays:
+    `setup_run(nx)` builds the model with `S_mms` injected, RUNS it (from
+    `IC = W*`), and returns `(Q_end, W_cell)` as `(n_rows, nx)` arrays:
     the evolved solution and the analytic field it is compared against.  The
     caller owns the solver, so this works for any backend.
 
-    Returns ``dict(grids, l1, eoc)`` where ``eoc[i] = log2(l1[i-1]/l1[i])``.
-    ``interior_frac`` (e.g. 0.25) drops that fraction of cells at each end before
+    Returns `dict(grids, l1, eoc)` where `eoc[i] = log2(l1[i-1]/l1[i])`.
+    `interior_frac` (e.g. 0.25) drops that fraction of cells at each end before
     averaging — use it to separate an interior rate from boundary effects.
 
-    NOTE this measures an EVOLVED error: ``setup_run`` must actually integrate in
-    time, not just project ``W*``.  A zero (~1e-16) error means nothing ran.
+    NOTE this measures an EVOLVED error: `setup_run` must actually integrate in
+    time, not just project `W*`.  A zero (~1e-16) error means nothing ran.
     Read the module docstring for the extremum/boundary confounds first."""
     import numpy as np
     l1 = []
@@ -378,10 +378,10 @@ def mms_convergence(setup_run, grids, interior_frac=0.0):
 
 
 def exact_cell_field(sm, exact, cell_centers):
-    """Evaluate ``W*`` at cell centres → array ``(n_state, n_cells)``.
+    """Evaluate `W*` at cell centres → array `(n_state, n_cells)`.
 
-    ``cell_centers`` is ``(n_dim, n_cells)`` (mesh convention).  Use as the
-    analytic reference the numerical ``Q`` is compared against."""
+    `cell_centers` is `(n_dim, n_cells)` (mesh convention).  Use as the
+    analytic reference the numerical `Q` is compared against."""
     import numpy as np
     W = _resolve_exact(sm, exact)
     coords = list(sm.space)

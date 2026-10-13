@@ -1,5 +1,5 @@
 """Initial conditions from mesh-carried gmsh node data: node-to-cell interpolation plus a
-``field_map`` from state names to mesh fields, backend-agnostic.
+`field_map` from state names to mesh fields, backend-agnostic.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ FieldSpec = Union[str, Callable[[Mapping[str, np.ndarray]], np.ndarray]]
 
 
 def _as_base_mesh(mesh_or_path):
-    """Return a mesh carrying node/cell data, from a mesh object or a ``.msh`` path."""
+    """Return a mesh carrying node/cell data, from a mesh object or a `.msh` path."""
     if isinstance(mesh_or_path, (str, bytes)) or hasattr(mesh_or_path, "__fspath__"):
         from zoomy_core.mesh.base_mesh import BaseMesh
         return BaseMesh.from_msh(str(mesh_or_path))
@@ -25,15 +25,15 @@ def interpolate_node_data_to_cells(
     method: str = "nearest",
     query_points: Optional[np.ndarray] = None,
 ) -> np.ndarray:
-    """Interpolate a per-vertex field onto cells, by ``"nearest"`` vertex (KD-tree) or
-    ``"cell_average"`` of the cell's vertices.
+    """Interpolate a per-vertex field onto cells, by `"nearest"` vertex (KD-tree) or
+    `"cell_average"` of the cell's vertices.
 
     Args:
-        node_values: ``(n_vertices,)`` or ``(n_vertices, k)``, aligned with
-            ``mesh.vertex_coordinates``.
-        query_points: sample points for ``"nearest"``, ``(n, dim)``; default the inner cell centres.
+        node_values: `(n_vertices,)` or `(n_vertices, k)`, aligned with
+            `mesh.vertex_coordinates`.
+        query_points: sample points for `"nearest"`, `(n, dim)`; default the inner cell centres.
     Returns:
-        ``(n_inner_cells,)`` or ``(n_inner_cells, k)`` array.
+        `(n_inner_cells,)` or `(n_inner_cells, k)` array.
     """
     node_values = np.asarray(node_values, dtype=float)
     dim = mesh.dimension
@@ -68,17 +68,17 @@ def initial_conditions_from_mesh(
     query_points: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """Build the per-cell initial state from mesh node data, mapping state names to mesh fields via
-    ``field_map``.
+    `field_map`.
 
     Args:
-        mesh_or_path: BaseMesh with ``node_data`` or a ``.msh`` path.
-        field_map: ``{state: mesh_field_name}`` or ``{state: callable(node_fields) -> node
+        mesh_or_path: BaseMesh with `node_data` or a `.msh` path.
+        field_map: `{state: mesh_field_name}` or ``{state: callable(node_fields) -> node
             array}``, evaluated at nodes then interpolated.
-        state_names: row order of the result (default ``field_map`` order); rows not in
-            ``field_map`` get ``default``.
-        method: node-to-cell interpolation, see ``interpolate_node_data_to_cells``.
+        state_names: row order of the result (default `field_map` order); rows not in
+            `field_map` get `default`.
+        method: node-to-cell interpolation, see `interpolate_node_data_to_cells`.
     Returns:
-        ``(n_state, n_cells)`` array.
+        `(n_state, n_cells)` array.
     """
     mesh = _as_base_mesh(mesh_or_path)
     node_fields: Dict[str, np.ndarray] = dict(getattr(mesh, "node_data", {}) or {})

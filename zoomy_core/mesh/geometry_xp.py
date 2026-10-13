@@ -1,7 +1,7 @@
-"""Mesh geometry for the solver template (``prepare_mesh``): static topology and LSQ stencils built
-once in numpy (``build_topology``), then gather-only geometry and LSQ operators from the node
-coordinates (``compute_geometry``).  It is written against ``X.__array_namespace__()``, so numpy
-and jax.numpy run the same code and ``jax.grad`` w.r.t. ``X`` goes through; the module never
+"""Mesh geometry for the solver template (`prepare_mesh`): static topology and LSQ stencils built
+once in numpy (`build_topology`), then gather-only geometry and LSQ operators from the node
+coordinates (`compute_geometry`).  It is written against `X.__array_namespace__()`, so numpy
+and jax.numpy run the same code and `jax.grad` w.r.t. `X` goes through; the module never
 imports jax.
 """
 from __future__ import annotations
@@ -123,11 +123,11 @@ class MeshTopology:
 
     @property
     def ghost_range(self):
-        """Ghost cells are ``range(n_inner_cells, n_cells)``."""
+        """Ghost cells are `range(n_inner_cells, n_cells)`."""
         return range(self.n_inner_cells, self.n_cells)
 
     def branch_groups(self):
-        """``[(branch, boundary-face positions), ...]`` of ``bc_branch``."""
+        """`[(branch, boundary-face positions), ...]` of `bc_branch`."""
         if self.bc_branch is None:
             return []
         b = np.asarray(self.bc_branch)
@@ -147,7 +147,7 @@ def _first_visitor(cell_faces):
 
 
 class _FitCheck:
-    """Batched unisolvency test of the LSQ fits as ``_lsq_plan`` assembles them; at a wall a ghost
+    """Batched unisolvency test of the LSQ fits as `_lsq_plan` assembles them; at a wall a ghost
     informs only the pure monomials of its axis, every other row comes from the interior samples
     alone.
     """
@@ -170,7 +170,7 @@ class _FitCheck:
                 self.axis_rows[nz[0], k] = True
 
     def offsets(self, cells, S):
-        """Offsets ``(n, w, dim)`` of the samples ``S`` (-1: none, offset 0) from ``cells``, to the
+        """Offsets `(n, w, dim)` of the samples `S` (-1: none, offset 0) from `cells`, to the
         nearest periodic image.
         """
         D = self.centers[np.maximum(S, 0)] - self.centers[cells][:, None, :]
@@ -179,7 +179,7 @@ class _FitCheck:
         return np.where((S >= 0)[..., None], D, 0.0)
 
     def _mono(self, D):
-        """Monomial columns ``(M, ...)`` of the offsets ``D`` ``(..., dim)``."""
+        """Monomial columns `(M, ...)` of the offsets `D` `(..., dim)`."""
         pw = [[np.ones(D.shape[:-1])] for _ in range(self.dim)]
         for a in range(self.dim):
             for _ in range(int(self.powers[:, a].max(initial=0))):
@@ -193,7 +193,7 @@ class _FitCheck:
         return np.stack(cols)
 
     def __call__(self, cells, S, B):
-        """Per cell, whether the fit from inner samples ``S`` and ghosts of boundary faces ``B``
+        """Per cell, whether the fit from inner samples `S` and ghosts of boundary faces `B`
         (both -1 padded) is unisolvent.
         """
         n = len(cells)
@@ -248,7 +248,7 @@ class _FitCheck:
 
 
 def _normal_derivative_columns(xp, X, nrm, powers):
-    """``n . grad`` of the monomial columns at offsets ``X`` along ``nrm``, shape ``(..., M)``."""
+    """`n . grad` of the monomial columns at offsets `X` along `nrm`, shape `(..., M)`."""
     cols = []
     for pw in powers:
         col = None
@@ -269,7 +269,7 @@ class _ClosureCheck:
     """
 
     def __init__(self, base, kinds, foot, normal):
-        """Store the base check, the closure ``kinds`` ``(n_class, n_bf)``, foot offsets and outward
+        """Store the base check, the closure `kinds` `(n_class, n_bf)`, foot offsets and outward
         normals.
         """
         self.base = base
@@ -293,8 +293,8 @@ class _ClosureCheck:
         return ok
 
     def _constrained_ok(self, cells, S, B, kb):
-        """Full-column-rank test of the constrained fits of cells ``cells`` for the face kinds
-        ``kb``.
+        """Full-column-rank test of the constrained fits of cells `cells` for the face kinds
+        `kb`.
         """
         from zoomy_core.numerics.boundary_closure import DIRICHLET, GHOST, NEUMANN
         base = self.base
@@ -317,8 +317,8 @@ class _ClosureCheck:
 
 
 def _full_rank_ok(C):
-    """Whether every coefficient of the fits with monomial columns ``C`` ``(M, R, n)`` is determined
-    (full column rank, conditioning cut ``_LSQ_COND``), via an unrolled Cholesky.
+    """Whether every coefficient of the fits with monomial columns `C` `(M, R, n)` is determined
+    (full column rank, conditioning cut `_LSQ_COND`), via an unrolled Cholesky.
     """
     M = C.shape[0]
     G = [[None] * M for _ in range(M)]
@@ -348,8 +348,8 @@ def _full_rank_ok(C):
 
 
 def _rows_ok(V, rows):
-    """Whether the coefficients ``rows`` of the possibly rank-deficient fits ``V`` ``(n, R, M)`` are
-    determined; ill-conditioned directions count as null, as in ``_lsq_matrices``.
+    """Whether the coefficients `rows` of the possibly rank-deficient fits `V` `(n, R, M)` are
+    determined; ill-conditioned directions count as null, as in `_lsq_matrices`.
     """
     G = np.einsum("nri,nrj->nij", V, V)
     lam, Q = np.linalg.eigh(G)
@@ -365,7 +365,7 @@ def _rows_ok(V, rows):
 
 
 def _compact(S):
-    """Move the -1 entries of each row of ``S`` to the end (order kept) and drop trailing all -1
+    """Move the -1 entries of each row of `S` to the end (order kept) and drop trailing all -1
     columns.
     """
     S = np.take_along_axis(S, np.argsort(S < 0, axis=1, kind="stable"), axis=1)
@@ -373,13 +373,13 @@ def _compact(S):
 
 
 def _pad(S, w):
-    """Pad ``S`` with -1 columns to width ``w``."""
+    """Pad `S` with -1 columns to width `w`."""
     return np.concatenate([S, -np.ones((S.shape[0], w - S.shape[1]), dtype=S.dtype)],
                           axis=1) if S.shape[1] < w else S
 
 
 def _next_layer(check, cells, S, nl, n_inner):
-    """Face neighbours of ``cells`` and their stencils ``S`` not yet in ``S``, nearest first, with
+    """Face neighbours of `cells` and their stencils `S` not yet in `S`, nearest first, with
     distance-class numbers (equidistant cells share one).
     """
     n = len(cells)
@@ -403,8 +403,8 @@ def _next_layer(check, cells, S, nl, n_inner):
 
 
 def _extend(check, cells, S, B, nl, n_inner):
-    """Smallest extension of the stencils ``S`` that makes the fits unisolvent, one distance class
-    at a time over at most ``_LSQ_MAX_LAYERS`` layers; returns the new rows and which cells
+    """Smallest extension of the stencils `S` that makes the fits unisolvent, one distance class
+    at a time over at most `_LSQ_MAX_LAYERS` layers; returns the new rows and which cells
     succeeded.
     """
     out, done = [None] * len(cells), np.zeros(len(cells), dtype=bool)
@@ -433,7 +433,7 @@ def _extend(check, cells, S, B, nl, n_inner):
 
 
 def _unisolvent_stencils(check, cells, S, B, nl, n_inner, fallback=None):
-    """Stencils made unisolvent: kept where they already are, else replaced by ``fallback`` if that
+    """Stencils made unisolvent: kept where they already are, else replaced by `fallback` if that
     is, else extended.
     """
     ok = check(cells, S, B)
@@ -459,14 +459,14 @@ def _unisolvent_stencils(check, cells, S, B, nl, n_inner, fallback=None):
 
 
 def _face_stencils(nl, n_inner):
-    """Inner face neighbours of each inner cell, -1 padded, in ``cell_neighbors`` order."""
+    """Inner face neighbours of each inner cell, -1 padded, in `cell_neighbors` order."""
     f = np.asarray(nl[:n_inner])
     return _compact(np.where((f >= 0) & (f < n_inner)
                              & (f != np.arange(n_inner)[:, None]), f, -1))
 
 
 def _ghost_stencils(n_cells, nl, n_inner, required):
-    """Ghost rows: the ghost's inner face neighbours, grown by whole layers to ``required`` samples."""
+    """Ghost rows: the ghost's inner face neighbours, grown by whole layers to `required` samples."""
     out = {}
     for i_c in range(n_inner, n_cells):
         cur = [m for m in nl[i_c] if 0 <= m < n_inner]
@@ -590,8 +590,8 @@ def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
 
 def _lsq_plan(topo_n_cells, dim, mon, neighbors, bdy, n_axis, pure_axis_rows,
               closure_kinds=None):
-    """Static assembly plan of the batched pseudo-inverses: plain, interior-only (``bint``) and
-    per-ghost pure-normal (``bone``) fits, zero rows for degenerate cells, and the closure cells
+    """Static assembly plan of the batched pseudo-inverses: plain, interior-only (`bint`) and
+    per-ghost pure-normal (`bone`) fits, zero rows for degenerate cells, and the closure cells
     and kinds.
     """
     n_cells, max_nbr = neighbors.shape
@@ -644,7 +644,7 @@ def _lsq_plan(topo_n_cells, dim, mon, neighbors, bdy, n_axis, pure_axis_rows,
 
 
 def _periodic_pairs(mesh, bcs, centers):
-    """Per ``Periodic`` BC, the boundary-face positions of its faces and of their partners, matched
+    """Per `Periodic` BC, the boundary-face positions of its faces and of their partners, matched
     by sorting both sides along the seam.
     """
     from zoomy_core.model.boundary_conditions import Periodic
@@ -677,7 +677,7 @@ def _periodic_pairs(mesh, bcs, centers):
 
 
 def _periodic_partners(mesh, bcs, centers):
-    """``boundary_face_cells`` after ``BaseMesh.resolve_periodic_bcs`` without mutating the mesh,
+    """`boundary_face_cells` after `BaseMesh.resolve_periodic_bcs` without mutating the mesh,
     plus the periodic mask.
     """
     owner = np.asarray(mesh.face_cells[0, mesh.boundary_face_face_indices])
@@ -690,14 +690,14 @@ def _periodic_partners(mesh, bcs, centers):
 
 
 def periodic_vertices(mesh, bcs, centers=None):
-    """Identify the vertices of periodic seams; returns ``(canon, translations)`` or None without
-    ``Periodic`` BCs.
+    """Identify the vertices of periodic seams; returns `(canon, translations)` or None without
+    `Periodic` BCs.
 
     Args:
-        centers: cell centres ``(3, n_cells)``, default computed from the mesh.
+        centers: cell centres `(3, n_cells)`, default computed from the mesh.
     Returns:
-        ``canon`` ``(n_vertices,)``, the smallest vertex id of each class of vertices coinciding
-            modulo the periods, and ``translations`` ``(k, dim)``, one period vector per seam.
+        `canon` `(n_vertices,)`, the smallest vertex id of each class of vertices coinciding
+            modulo the periods, and `translations` `(k, dim)`, one period vector per seam.
     """
     if centers is None:
         centers = cell_face_geometry(mesh)["cell_centers"]
@@ -713,7 +713,7 @@ def periodic_vertices(mesh, bcs, centers=None):
     parent = np.arange(len(X))
 
     def root(v):
-        """Union-find root of vertex ``v`` with path halving."""
+        """Union-find root of vertex `v` with path halving."""
         while parent[v] != v:
             parent[v] = parent[parent[v]]
             v = parent[v]
@@ -737,7 +737,7 @@ def periodic_vertices(mesh, bcs, centers=None):
 
 
 def _image_shifts(D, translations):
-    """Translation (a combination of +-``translations``, or none) taking each offset in ``D`` to its
+    """Translation (a combination of +-`translations`, or none) taking each offset in `D` to its
     shortest image.
     """
     from itertools import product
@@ -748,8 +748,8 @@ def _image_shifts(D, translations):
 
 
 def _base_topology(mesh):
-    """Cell and face topology of ``mesh`` without stencils, with the frozen orientation decisions
-    and the reference geometry; returns ``(topo_partial, g0, inradius_fallback)``.
+    """Cell and face topology of `mesh` without stencils, with the frozen orientation decisions
+    and the reference geometry; returns `(topo_partial, g0, inradius_fallback)`.
     """
     mtype = str(mesh.type)
     if mtype not in _SUPPORTED:
@@ -844,7 +844,7 @@ def _base_topology(mesh):
 
 
 def cell_face_geometry(mesh):
-    """FVMMesh geometry of ``mesh`` (cell centres with ghost mirrors, volumes, inradii, face
+    """FVMMesh geometry of `mesh` (cell centres with ghost mirrors, volumes, inradii, face
     normals, volumes, centres), vectorised in numpy.
     """
     return _base_topology(mesh)[1]
@@ -879,19 +879,19 @@ def _closure_classes(closure, sampled, n_bf):
 
 def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
                    partners=None, periodic_ids=None, systems=(), closure=None):
-    """Build the static topology and LSQ stencils of ``mesh`` once in numpy, freezing the geometric
+    """Build the static topology and LSQ stencils of `mesh` once in numpy, freezing the geometric
     decisions (normal orientation, ghost axes, boundary routing by tag name, periodic partners).
 
     Args:
-        nsm: supplies the LSQ degree and the boundary conditions; ``lsq_degree`` and ``bcs``
+        nsm: supplies the LSQ degree and the boundary conditions; `lsq_degree` and `bcs`
             override them.
         partners: input cell of each boundary face for a mesh that cannot pair its own periodic
             faces (a distributed piece).
         periodic_ids: seam vertex identification of such a piece.
-        closure: ``{key: (n_rows, n_bf) kinds}`` of the row spaces closed at the boundary
-            (degree >= 2); default from ``nsm`` and ``systems``.
+        closure: `{key: (n_rows, n_bf) kinds}` of the row spaces closed at the boundary
+            (degree >= 2); default from `nsm` and `systems`.
     Returns:
-        ``MeshTopology``.
+        `MeshTopology`.
     References:
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
     """
@@ -996,7 +996,7 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
 # ═════════════════════════════════════════════════════════════════════════
 
 def _xp_of(X):
-    """Array namespace of ``X`` (numpy if it has none)."""
+    """Array namespace of `X` (numpy if it has none)."""
     ns = getattr(X, "__array_namespace__", None)
     if ns is None:
         return np
@@ -1004,7 +1004,7 @@ def _xp_of(X):
 
 
 def _pad3_rows(xp, a, dim):
-    """Pad ``(dim, n)`` to ``(3, n)`` with zero rows (FVMMesh convention)."""
+    """Pad `(dim, n)` to `(3, n)` with zero rows (FVMMesh convention)."""
     if dim == 3:
         return a
     z = xp.zeros((3 - dim,) + tuple(a.shape[1:]), dtype=a.dtype)
@@ -1020,8 +1020,8 @@ def _norm_rows(xp, v):
 
 
 def _heron(xp, X, i, j, k):
-    """Triangle area by Heron's formula over the vertices ``i, j, k`` in the operation order of the
-    reference ``_area_triangle_heron_formula``.
+    """Triangle area by Heron's formula over the vertices `i, j, k` in the operation order of the
+    reference `_area_triangle_heron_formula`.
     """
     a = _norm_rows(xp, X[:, j] - X[:, i])
     b = _norm_rows(xp, X[:, k] - X[:, j])
@@ -1049,7 +1049,7 @@ def _face_area_vector(xp, X, fv):
 
 def _cell_volume_3d(xp, X, cv, local, cc):
     """Volume of convex 3D cells as tetrahedra from each fanned face triangle to the cell centre
-    ``cc``.
+    `cc`.
     """
     vol = None
     for lf in local:
@@ -1065,7 +1065,7 @@ def _cell_volume_3d(xp, X, cv, local, cc):
 
 def _cell_face_geometry(xp, topo, X):
     """Cell and face geometry without LSQ (the FVMMesh fields), written against the array namespace
-    ``xp``.
+    `xp`.
     """
     dim = topo.dim
     n_inner, n_cells = topo.n_inner_cells, topo.n_cells
@@ -1163,7 +1163,7 @@ def _cell_face_geometry(xp, topo, X):
 
 
 def _monomial_columns(xp, dX, powers):
-    """Vandermonde columns ``prod_a dX_a**p_a`` without ``x**0`` nodes, whose derivative would be
+    """Vandermonde columns `prod_a dX_a**p_a` without `x**0` nodes, whose derivative would be
     NaN at a zero offset.
     """
     cols = []
@@ -1189,16 +1189,16 @@ def _monomial_columns(xp, dX, powers):
 
 
 def _pinv_cut(xp, V):
-    """``pinv(V)`` with singular values below ``_LSQ_COND`` times the largest cut, evaluated as
-    ``pinv(V P V)`` so the pinv derivative rule sees a constant-rank matrix.
+    """`pinv(V)` with singular values below `_LSQ_COND` times the largest cut, evaluated as
+    `pinv(V P V)` so the pinv derivative rule sees a constant-rank matrix.
     """
     P = xp.linalg.pinv(V, rtol=_LSQ_COND)
     return xp.linalg.pinv(V @ P @ V, rtol=_LSQ_COND)
 
 
 def _lsq_matrices(xp, topo, cc, fc, nrm):
-    """Batched LSQ derivative operators ``(n_cells, R, n_mon)``, the ``LSQMesh.lsq_gradQ`` contract
-    (``A_glob[i] = pinv(V_i).T``), with each ghost sample at the mirror image of the cell centre
+    """Batched LSQ derivative operators `(n_cells, R, n_mon)`, the `LSQMesh.lsq_gradQ` contract
+    (`A_glob[i] = pinv(V_i).T`), with each ghost sample at the mirror image of the cell centre
     across its boundary face.
     """
     plan = topo.lsq_plan
@@ -1263,8 +1263,8 @@ def _lsq_matrices(xp, topo, cc, fc, nrm):
 
 
 def _lsq_closure_matrices(xp, topo, cc, fc, nrm, vol, A_base):
-    """Constrained LSQ fits of the boundary closure, ``(n_class, n_cc, R, M)`` tables in the
-    ``lsq_gradQ`` layout: minimise the residual over interior and ghost samples subject to one
+    """Constrained LSQ fits of the boundary closure, `(n_class, n_cc, R, M)` tables in the
+    `lsq_gradQ` layout: minimise the residual over interior and ghost samples subject to one
     Dirichlet value or Neumann normal-derivative constraint per face, in null-space form.
 
     References:
@@ -1332,15 +1332,15 @@ def _lsq_closure_matrices(xp, topo, cc, fc, nrm, vol, A_base):
 
 
 def compute_geometry(topo: MeshTopology, X, *, lsq=True):
-    """All template geometry from the node coordinates ``X`` ``(dim, n_vertices)``, numpy or
-    jax.numpy as ``X`` decides; gather-only and differentiable in ``X``.
+    """All template geometry from the node coordinates `X` `(dim, n_vertices)`, numpy or
+    jax.numpy as `X` decides; gather-only and differentiable in `X`.
 
     Args:
-        lsq: also compute ``lsq_gradQ`` and the closure tables ``lsq_closure``.
+        lsq: also compute `lsq_gradQ` and the closure tables `lsq_closure`.
     Returns:
         dict with the FVMMesh/LSQMesh fields (cell centres with ghosts, volumes, inradii, face
             normals, volumes, centres), boundary distances, interior face vectors, TPFA
-            coefficients and, with ``lsq``, the LSQ operators.
+            coefficients and, with `lsq`, the LSQ operators.
     References:
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
     """
@@ -1378,8 +1378,8 @@ def compute_geometry(topo: MeshTopology, X, *, lsq=True):
 
     # TPFA (DiffusionOperatorV2 geometry, nu-free)
     def _tpfa(faces, a, b, valid=None):
-        """Distance and floored obliquity factor ``max(|n.e|, _TPFA_MIN_COS)`` between cells ``a``
-        and ``b`` across ``faces``.
+        """Distance and floored obliquity factor `max(|n.e|, _TPFA_MIN_COS)` between cells `a`
+        and `b` across `faces`.
 
         References:
             Eymard, Gallouet, Herbin 2000, https://doi.org/10.1016/s1570-8659(00)07005-8
@@ -1421,16 +1421,16 @@ def compute_geometry(topo: MeshTopology, X, *, lsq=True):
 
 
 def lsq_closure_derivatives(topo: MeshTopology, table, U, U_ghost, classes):
-    """Boundary-closure LSQ derivatives for the rows of ``U`` that have a closure class, at the
+    """Boundary-closure LSQ derivatives for the rows of `U` that have a closure class, at the
     closure cells.
 
     Args:
         U_ghost: ghost values at the boundary-face virtual points.
-        table: class tables ``geom["lsq_closure"]``.
-        classes: closure class per row of ``U`` (-1: none).
+        table: class tables `geom["lsq_closure"]`.
+        classes: closure class per row of `U` (-1: none).
     Returns:
-        ``(rows, D)`` with ``D`` ``(len(rows), n_cc, n_mon)`` scaled derivatives, or
-        ``([], None)`` without closure.
+        `(rows, D)` with `D` `(len(rows), n_cc, n_mon)` scaled derivatives, or
+        `([], None)` without closure.
     References:
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
     """
@@ -1456,14 +1456,14 @@ def lsq_closure_derivatives(topo: MeshTopology, table, U, U_ghost, classes):
 
 
 def lsq_derivatives(topo: MeshTopology, geom, U, U_ghost, classes=None):
-    """Batched LSQ derivatives of the fields ``U`` ``(n_v, n_cells)`` using ghost values at the
+    """Batched LSQ derivatives of the fields `U` `(n_v, n_cells)` using ghost values at the
     boundary-face virtual points, rows with a closure class taking the constrained fit.
 
     Args:
-        U_ghost: ``(n_v, n_bf)`` ghost values; `None`: the cell value (extrapolation).
-        classes: closure class per row of ``U`` (-1: none).
+        U_ghost: `(n_v, n_bf)` ghost values; `None`: the cell value (extrapolation).
+        classes: closure class per row of `U` (-1: none).
     Returns:
-        ``(n_v, n_cells, n_mon)`` derivatives scaled by ``lsq_scale_factors``.
+        `(n_v, n_cells, n_mon)` derivatives scaled by `lsq_scale_factors`.
     References:
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
     """
@@ -1500,7 +1500,7 @@ def lsq_derivatives(topo: MeshTopology, geom, U, U_ghost, classes=None):
 
 
 def lsq_gradient(topo: MeshTopology, geom, U, U_ghost, classes=None):
-    """First derivatives ``(n_v, dim, n_cells)`` from ``lsq_derivatives``.
+    """First derivatives `(n_v, dim, n_cells)` from `lsq_derivatives`.
     References:
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
     """

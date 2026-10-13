@@ -1,11 +1,11 @@
 """Reference-element geometry (face order, normals, areas, volumes, inradii) for the supported cell
-types, used by ``BaseMesh``.
+types, used by `BaseMesh`.
 """
 
 import numpy as np
 
 def convert_mesh_type_to_meshio_mesh_type(mesh_type: str) -> str:
-    """Map a Zoomy cell type (``wface`` = wedge) to the meshio cell-type name."""
+    """Map a Zoomy cell type (`wface` = wedge) to the meshio cell-type name."""
     if mesh_type == "triangle":
         return "triangle"
     elif mesh_type == "hexahedron":
@@ -22,7 +22,7 @@ def convert_mesh_type_to_meshio_mesh_type(mesh_type: str) -> str:
         assert False
 
 def _get_n_nodes_per_element(mesh_type: str) -> int:
-    """Number of vertices of a cell of ``mesh_type``."""
+    """Number of vertices of a cell of `mesh_type`."""
     if (mesh_type) == "quad":
         return 4
     elif (mesh_type) == "triangle":
@@ -37,7 +37,7 @@ def _get_n_nodes_per_element(mesh_type: str) -> int:
         assert False
 
 def get_extruded_mesh_type(mesh_type: str) -> str:
-    """Cell type obtained by extruding ``mesh_type`` one layer (line -> quad, triangle -> wface,
+    """Cell type obtained by extruding `mesh_type` one layer (line -> quad, triangle -> wface,
     quad -> hexahedron).
     """
     if (mesh_type) == "quad":
@@ -53,8 +53,8 @@ def get_extruded_mesh_type(mesh_type: str) -> str:
 def get_global_cell_index_from_vertices(
     cells, coordinates, return_first=True, offset=0
 ):
-    """Index (plus ``offset``) of the first cell, or of all cells if ``return_first`` is False,
-    containing every vertex in ``coordinates``.
+    """Index (plus `offset`) of the first cell, or of all cells if `return_first` is False,
+    containing every vertex in `coordinates`.
     """
     hits = []
     for index, cell in enumerate(cells):
@@ -68,7 +68,7 @@ def get_global_cell_index_from_vertices(
 
 
 def get_element_neighbors(element_vertices, current_elem, mesh_type):
-    """Elements sharing a face with ``current_elem``; returns ``(n_found, neighbour_indices,
+    """Elements sharing a face with `current_elem`; returns ``(n_found, neighbour_indices,
     local_face_indices)``.
     """
     num_vertices_per_face = _get_num_vertices_per_face(mesh_type)
@@ -95,7 +95,7 @@ def get_element_neighbors(element_vertices, current_elem, mesh_type):
 
 
 def face_normals(coordinates, element, mesh_type) -> float:
-    """Unit normals of the faces of one element, ``(n_faces, 3)``; orientation follows the vertex
+    """Unit normals of the faces of one element, `(n_faces, 3)`; orientation follows the vertex
     order.
     """
     if mesh_type == "triangle":
@@ -150,7 +150,7 @@ def _face_normals_3d(coordinates, element, mesh_type) -> float:
 
 
 def _face_normals_wface(coordinates, element, mesh_type) -> float:
-    """Unit face normals of a wedge element (same construction as ``_face_normals_3d``)."""
+    """Unit face normals of a wedge element (same construction as `_face_normals_3d`)."""
     faces = _face_order(element, mesh_type)
     boundary_mesh_type = _get_boundary_element_type(mesh_type)
     normals = np.zeros((len(faces), 3), dtype=float)
@@ -181,7 +181,7 @@ def face_areas(coordinates, element, mesh_type) -> float:
 
 
 def center(coordinates, element) -> float:
-    """Vertex-average centre of ``element``."""
+    """Vertex-average centre of `element`."""
     center = np.zeros(3, dtype=float)
     dim = coordinates.shape[1]
     for vertex_coord in coordinates[np.array(element)]:
@@ -191,7 +191,7 @@ def center(coordinates, element) -> float:
 
 
 def volume(coordinates, element, mesh_type) -> float:
-    """Volume (area in 2D, length for lines) of one element of ``mesh_type``."""
+    """Volume (area in 2D, length for lines) of one element of `mesh_type`."""
     if mesh_type == "line":
         return edge_length(coordinates, element)
     elif mesh_type == "triangle":
@@ -278,7 +278,7 @@ def _volume_wface(coordinates, element) -> float:
 
 
 def inradius(coordinates, element, mesh_type) -> float:
-    """Inradius of one element of ``mesh_type``."""
+    """Inradius of one element of `mesh_type`."""
     if mesh_type == "triangle":
         return _inradius_triangle(coordinates, element)
     elif mesh_type == "quad":
@@ -293,7 +293,7 @@ def inradius(coordinates, element, mesh_type) -> float:
 
 
 def _inradius_triangle(coordinates, element) -> float:
-    """Triangle inradius ``sqrt((s-a)(s-b)(s-c)/s)``."""
+    """Triangle inradius `sqrt((s-a)(s-b)(s-c)/s)`."""
     area = _area_triangle(coordinates, element)
     edges = _edge_order_triangle(element)
     perimeter = 0.0
@@ -308,7 +308,7 @@ def _inradius_triangle(coordinates, element) -> float:
 
 
 def _inradius_quad(coordinates, element) -> float:
-    """Quad inradius ``area / semi-perimeter``."""
+    """Quad inradius `area / semi-perimeter`."""
     area = _area_quad(coordinates, element)
     edges = _edge_order_quad(element)
     perimeter = 0.0
@@ -320,7 +320,7 @@ def _inradius_quad(coordinates, element) -> float:
 
 # see https://en.wikipedia.org/wiki/Tetrahedron, "Inradius"
 def _inradius_tetra(coordinates, element) -> float:
-    """Tetrahedron inradius ``3 V / total face area``."""
+    """Tetrahedron inradius `3 V / total face area`."""
     faces = _face_order_tetra(element)
     area = 0
     for face in faces:
@@ -344,14 +344,14 @@ def _inradius_generic(coordinates, element, mesh_type) -> float:
 
 
 def edge_length(coordinates, edge) -> float:
-    """Euclidean length of ``edge``."""
+    """Euclidean length of `edge`."""
     x0 = coordinates[edge[0]]
     x1 = coordinates[edge[1]]
     return np.linalg.norm(x1 - x0, 2)
 
 
 def _face_order(element, mesh_type):
-    """Vertex tuples of the faces of ``element``, dispatched on ``mesh_type``."""
+    """Vertex tuples of the faces of `element`, dispatched on `mesh_type`."""
     if mesh_type == "triangle":
         return _edge_order_triangle(element)
     elif mesh_type == "quad":
@@ -419,7 +419,7 @@ def _face_order_wface(element):
 
 
 def _get_num_vertices_per_face(mesh_type) -> float:
-    """Vertices per face for each face of ``mesh_type``."""
+    """Vertices per face for each face of `mesh_type`."""
     if mesh_type == "triangle":
         return [2, 2, 2]
     elif mesh_type == "quad":
@@ -434,7 +434,7 @@ def _get_num_vertices_per_face(mesh_type) -> float:
 
 
 def _get_dimension(mesh_type):
-    """Spatial dimension of ``mesh_type``."""
+    """Spatial dimension of `mesh_type`."""
     if mesh_type == "triangle":
         return 2
     elif mesh_type == "quad":
@@ -448,7 +448,7 @@ def _get_dimension(mesh_type):
 
 
 def _get_faces_per_element(mesh_type):
-    """Number of faces of ``mesh_type``."""
+    """Number of faces of `mesh_type`."""
     if mesh_type == "line":
         return 2
     elif mesh_type == "triangle":
@@ -466,7 +466,7 @@ def _get_faces_per_element(mesh_type):
 
 
 def _get_boundary_element_type(mesh_type):
-    """Cell type of each face of ``mesh_type``."""
+    """Cell type of each face of `mesh_type`."""
     if mesh_type == "triangle":
         return ["line", "line", "line"]
     elif mesh_type == "quad":
@@ -482,7 +482,7 @@ def _get_boundary_element_type(mesh_type):
 
 
 def find_edge_index(element, edge_vertices, element_type):
-    """Local index of the edge/face of ``element`` whose vertices lie in ``edge_vertices``."""
+    """Local index of the edge/face of `element` whose vertices lie in `edge_vertices`."""
     edges = _face_order(element, element_type)
     for i_edge, edge in enumerate(edges):
         if set(edge).issubset(edge_vertices):

@@ -1,37 +1,37 @@
-"""The finite-volume vocabulary of the hyperbolic solver: one :class:`Block` per mesh
+"""The finite-volume vocabulary of the hyperbolic solver: one `Block` per mesh
 operation, implemented under the same name by every backend. Arrays are
-``(rows, cells)`` or ``(rows, faces)``, ``faces`` meaning all faces in mesh order,
-and ``mesh`` is always an argument.
+`(rows, cells)` or `(rows, faces)`, `faces` meaning all faces in mesh order,
+and `mesh` is always an argument.
 """
 from zoomy_core.symsolver.core import Block, Effect
 
 
 # ── kernels on cells and faces ──────────────────────────────────────────────
 class cells(Block):
-    """``(kernel, Q, Qaux, p, time, dt, mesh)`` -> kernel in every cell, with ``time``,
-    ``dt`` and the cell centre passed when the kernel declares them.
+    """`(kernel, Q, Qaux, p, time, dt, mesh)` -> kernel in every cell, with `time`,
+    `dt` and the cell centre passed when the kernel declares them.
     """
 
 
 class faces(Block):
-    """``(kernel, QL, QR, AL, AR, p, mesh)`` -> kernel on every face with its unit
+    """`(kernel, QL, QR, AL, AR, p, mesh)` -> kernel on every face with its unit
     normal (owner to neighbour, outward at a boundary).
     """
 
 
 class face_aux(Block):
-    """``(Qaux, mesh)`` -> ``(AL, AR)``, the owner and neighbour aux per face (the inner
+    """`(Qaux, mesh)` -> `(AL, AR)`, the owner and neighbour aux per face (the inner
     cell on both sides at a boundary).
     """
 
 
 class face_wavespeed(Block):
-    """``(kernel, Q, Qaux, p, mesh)`` -> max ``|eigenvalue|`` per face over its two cells.
+    """`(kernel, Q, Qaux, p, mesh)` -> max `|eigenvalue|` per face over its two cells.
     """
 
 
 class face_inradius(Block):
-    """``(mesh)`` -> per-face cell size: min inradius of the adjacent cells."""
+    """`(mesh)` -> per-face cell size: min inradius of the adjacent cells."""
 
 
 # ── boundary ────────────────────────────────────────────────────────────────
@@ -48,39 +48,39 @@ class face_inradius(Block):
 #          from the inner state there; evaluated at the face centre.
 #          Consumer: the Riemann problem (boundary_traces).
 class boundary_states(Block):
-    """``(ghost, Q, Qaux, p, time, mesh)`` -> ``(Qg, Qauxg)``: the ghost state per
-    boundary face (kernel ``boundary_ghost_state``) and the inner cell's aux.
+    """`(ghost, Q, Qaux, p, time, mesh)` -> `(Qg, Qauxg)`: the ghost state per
+    boundary face (kernel `boundary_ghost_state`) and the inner cell's aux.
     """
 
 
 class boundary_ghosts(Block):
-    """``(ghost, Q, Qaux, p, time, mesh)`` -> the ghost per boundary face, as
-    :class:`boundary_states` without the aux.
+    """`(ghost, Q, Qaux, p, time, mesh)` -> the ghost per boundary face, as
+    `boundary_states` without the aux.
     """
 
 
 class boundary_traces(Block):
-    """``(bc, Q, QL, QR, Qaux, p, time, mesh)`` -> ``QR`` holding the outer face state
-    ``bc(QL)`` on boundary faces (the partner face's ``QL`` on a periodic seam).
+    """`(bc, Q, QL, QR, Qaux, p, time, mesh)` -> `QR` holding the outer face state
+    `bc(QL)` on boundary faces (the partner face's `QL` on a periodic seam).
     """
 
 
 # ── reconstruction and assembly ─────────────────────────────────────────────
 class pointwise(Block):
-    """``(kernel, X, Xaux, p)`` -> the kernel in every column of ``X`` (cells, faces or
+    """`(kernel, X, Xaux, p)` -> the kernel in every column of `X` (cells, faces or
     boundary faces); no time, step or position.
     """
 
 
 class cell_traces(Block):
-    """``(Q, mesh)`` -> ``(QL, QR)``, the owner's and neighbour's cell value per face;
-    ``QR`` on a boundary face is a placeholder for :class:`boundary_traces`.
+    """`(Q, mesh)` -> `(QL, QR)`, the owner's and neighbour's cell value per face;
+    `QR` on a boundary face is a placeholder for `boundary_traces`.
     """
 
 
 class gradient(Block):
-    """``(W, Wg, mesh)`` -> LSQ gradient of every row of ``W`` per cell, boundary faces
-    closed from the ghost values ``Wg``.
+    """`(W, Wg, mesh)` -> LSQ gradient of every row of `W` per cell, boundary faces
+    closed from the ghost values `Wg`.
 
     References:
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
@@ -88,9 +88,9 @@ class gradient(Block):
 
 
 class minmod(Block):
-    """``(rows, W, Wg, G, mesh)`` -> limiter factors in [0, 1] per row and cell (1 off
-    ``rows``): the largest keeping every face extrapolation within the bounds of the
-    face neighbours and boundary ghosts ``Wg``.
+    """`(rows, W, Wg, G, mesh)` -> limiter factors in [0, 1] per row and cell (1 off
+    `rows`): the largest keeping every face extrapolation within the bounds of the
+    face neighbours and boundary ghosts `Wg`.
 
     References:
         Sweby 1984, https://doi.org/10.1137/0721062
@@ -98,7 +98,7 @@ class minmod(Block):
 
 
 class venkatakrishnan(Block):
-    """As :class:`minmod`, the smooth Venkatakrishnan factor (eps^2 = h^2).
+    """As `minmod`, the smooth Venkatakrishnan factor (eps^2 = h^2).
 
     References:
         Venkatakrishnan 1995, https://doi.org/10.1006/jcph.1995.1084
@@ -106,7 +106,7 @@ class venkatakrishnan(Block):
 
 
 class barth_jespersen(Block):
-    """As :class:`minmod`, the Barth-Jespersen factor.
+    """As `minmod`, the Barth-Jespersen factor.
 
     References:
         Barth, Jespersen 1989, https://doi.org/10.2514/6.1989-366
@@ -114,9 +114,9 @@ class barth_jespersen(Block):
 
 
 class extrapolate(Block):
-    """``(W, G, phi, mesh)`` -> ``(WL, WR)``: each cell's ``W`` moved to the face centre
-    by ``phi * G``; ``WR`` on a boundary face is a placeholder for
-    :class:`boundary_traces`.
+    """`(W, G, phi, mesh)` -> `(WL, WR)`: each cell's `W` moved to the face centre
+    by `phi * G`; `WR` on a boundary face is a placeholder for
+    `boundary_traces`.
 
     References:
         van Leer 1979, https://doi.org/10.1016/0021-9991(79)90145-1
@@ -124,13 +124,13 @@ class extrapolate(Block):
 
 
 class divergence(Block):
-    """``(Wm, Wp, mesh)`` -> per cell ``sum_f |f| Wm / |V|`` over the faces it owns plus
-    ``|f| Wp / |V|`` over the faces it neighbours.
+    """`(Wm, Wp, mesh)` -> per cell `sum_f |f| Wm / |V|` over the faces it owns plus
+    `|f| Wp / |V|` over the faces it neighbours.
     """
 
 
 class edge_source(Block):
-    """``(kernel, Q, QL, QR, Qaux, p, mesh)`` -> per cell the interior nonconservative
+    """`(kernel, Q, QL, QR, Qaux, p, mesh)` -> per cell the interior nonconservative
     integral over each of its edges (order >= 2).
 
     References:
@@ -140,30 +140,30 @@ class edge_source(Block):
 
 # ── whole-domain operations ─────────────────────────────────────────────────
 class derivative_aux(Block):
-    """``(spec, Q, Qaux, mesh[, Qg, rows])`` -> Qaux with the derivative rows of
-    ``spec`` refilled from mesh gradients; with ``rows``, only those states'
-    derivatives, their boundary faces taken from the ghosts ``Qg``.
+    """`(spec, Q, Qaux, mesh[, Qg, rows])` -> Qaux with the derivative rows of
+    `spec` refilled from mesh gradients; with `rows`, only those states'
+    derivatives, their boundary faces taken from the ghosts `Qg`.
     """
 
 
 class put(Block):
-    """``(Q, rows, values)`` -> Q with the static state rows ``rows`` replaced."""
+    """`(Q, rows, values)` -> Q with the static state rows `rows` replaced."""
 
 
 class take(Block):
-    """``(Q, rows)`` -> the static state rows ``rows`` of ``Q``."""
+    """`(Q, rows)` -> the static state rows `rows` of `Q`."""
 
 
 class zeros(Block):
-    """``(n, mesh)`` -> an ``(n, cells)`` array of zeros."""
+    """`(n, mesh)` -> an `(n, cells)` array of zeros."""
 
 
 class diffusion(Block):
-    """``(kernel, bc, Q, Qaux, p, time, mesh)`` -> per cell div(A grad Q) of the
-    diffusion tensor ``kernel`` (explicit; RHS sign, A > 0 diffuses), face flux
-    ``n.A.grad_f``: the two-point flux plus a correction, ``grad_f`` the mean of the
+    """`(kernel, bc, Q, Qaux, p, time, mesh)` -> per cell div(A grad Q) of the
+    diffusion tensor `kernel` (explicit; RHS sign, A > 0 diffuses), face flux
+    `n.A.grad_f`: the two-point flux plus a correction, `grad_f` the mean of the
     two cells' LSQ gradients with the two-point difference as its part along the
-    cell-to-cell vector (boundary faces: the ghost of ``bc``, the tangential part from
+    cell-to-cell vector (boundary faces: the ghost of `bc`, the tangential part from
     the cell gradient). A cut face (distributed) carries no flux.
 
     References:
@@ -172,9 +172,9 @@ class diffusion(Block):
 
 
 class implicit_diffusion(Block):
-    """``(kernel, bc, Q, Qaux, p, time, dt, mesh)`` -> one Crank-Nicolson step of
-    the two-point part of :class:`diffusion` from ``time`` to ``time + dt``, its
-    correction explicit at ``Q`` (deferred correction).
+    """`(kernel, bc, Q, Qaux, p, time, dt, mesh)` -> one Crank-Nicolson step of
+    the two-point part of `diffusion` from `time` to `time + dt`, its
+    correction explicit at `Q` (deferred correction).
 
     References:
         Crank, Nicolson 1947, https://doi.org/10.1017/s0305004100023197
@@ -182,27 +182,27 @@ class implicit_diffusion(Block):
 
 
 class inadmissible(Block):
-    """``(kernel, Q, Qaux, p)`` -> cell mask: an admissibility row < 0 or a non-finite
+    """`(kernel, Q, Qaux, p)` -> cell mask: an admissibility row < 0 or a non-finite
     value.
     """
 
 
 class clean_round_off(Block):
-    """``(Q, rows, tol)`` -> ``Q`` with the entries of the static ``rows`` in
-    ``[-tol, 0)`` set to 0 (round-off below zero of a quantity declared
+    """`(Q, rows, tol)` -> `Q` with the entries of the static `rows` in
+    `[-tol, 0)` set to 0 (round-off below zero of a quantity declared
     non-negative).
     """
 
 
 class halo(Block):
-    """``(X, mesh)`` -> ``X`` with the copies of other ranks' cells current (serial:
-    ``X``); after every stencil update.
+    """`(X, mesh)` -> `X` with the copies of other ranks' cells current (serial:
+    `X`); after every stencil update.
     """
 
 
 class minimum(Block):
-    """``(a, b)`` -> elementwise minimum, NaN propagating, for graph-valued arguments
-    (``sp.Min`` would walk a shared graph as a tree).
+    """`(a, b)` -> elementwise minimum, NaN propagating, for graph-valued arguments
+    (`sp.Min` would walk a shared graph as a tree).
     """
     is_commutative = True
     is_extended_real = True
@@ -213,7 +213,7 @@ class reduce_min(Block):
 
 
 class reduce_max(Block):
-    """``(X)`` -> the largest entry (NaN propagates)."""
+    """`(X)` -> the largest entry (NaN propagates)."""
 
 
 class reduce_any(Block):
@@ -221,21 +221,21 @@ class reduce_any(Block):
 
 
 class select(Block):
-    """``(mask, A, B)`` -> A where mask else B, per cell or per face."""
+    """`(mask, A, B)` -> A where mask else B, per cell or per face."""
 
 
 # ── coupling geometry (preCICE) ─────────────────────────────────────────────
 class coupled_faces(Block):
-    """``(mesh)`` -> face mask of the coupled boundary faces."""
+    """`(mesh)` -> face mask of the coupled boundary faces."""
 
 
 class interface_states(Block):
-    """``(Q, mesh)`` -> states of the cells next to the coupled faces."""
+    """`(Q, mesh)` -> states of the cells next to the coupled faces."""
 
 
 class interface_flux(Block):
-    """``(sides, aux, side, Q, Qaux, peer, p, mesh)`` -> per face this participant's row
-    of one Riemann problem posed low -> high (row 0 for ``side = 0``), zero off the
+    """`(sides, aux, side, Q, Qaux, peer, p, mesh)` -> per face this participant's row
+    of one Riemann problem posed low -> high (row 0 for `side = 0`), zero off the
     coupled faces; both sides pose the same problem.
     """
 

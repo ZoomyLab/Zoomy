@@ -2,18 +2,18 @@
 
 Reconstruction classes
 ---------------------
-All reconstruction classes share the same interface: ``recon(Q) → (Q_L, Q_R)``.
+All reconstruction classes share the same interface: `recon(Q) → (Q_L, Q_R)`.
 The solver calls this once per flux evaluation — no if-clauses in the flux loop.
 
-- ``ConstantReconstruction``: 1st-order piecewise-constant (identity).
-- ``MUSCLReconstruction``: 2nd-order piecewise-linear with slope limiting
+- `ConstantReconstruction`: 1st-order piecewise-constant (identity).
+- `MUSCLReconstruction`: 2nd-order piecewise-linear with slope limiting
   (Barth-Jespersen or Venkatakrishnan).
-- ``FreeSurfaceMUSCL``: MUSCL with wet-dry fallback and h-positivity.
+- `FreeSurfaceMUSCL`: MUSCL with wet-dry fallback and h-positivity.
 
 Diffusion operators
 -------------------
-- ``FaceGradient``: corrected face-normal gradient for diffusion.
-- ``DiffusionOperator``: sparse discrete Laplacian (explicit + implicit).
+- `FaceGradient`: corrected face-normal gradient for diffusion.
+- `DiffusionOperator`: sparse discrete Laplacian (explicit + implicit).
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class MUSCLReconstruction:
     """Second-order MUSCL reconstruction with slope limiting.
 
     Green-Gauss gradients + slope limiter.
-    Call signature matches ``ConstantReconstruction``: ``recon(Q) → (Q_L, Q_R)``.
+    Call signature matches `ConstantReconstruction`: `recon(Q) → (Q_L, Q_R)`.
 
     Parameters
     ----------
@@ -283,7 +283,7 @@ class ConstantReconstructionV2:
     """First-order piecewise-constant reconstruction (ghost-cell-free).
 
     Q has shape (n_vars, n_inner_cells). Boundary face values are supplied
-    externally via ``bf_face_values``.
+    externally via `bf_face_values`.
     """
 
     def __init__(self, mesh, dim):
@@ -321,9 +321,9 @@ class ConstantReconstructionV2:
             Interface parity with the MUSCL classes.  This reconstruction
             IS the order-1 demotion target, so an a-posteriori MOOD mask is
             exactly a no-op here — not a silently dropped instruction.
-            ``supports_force_o1`` stays absent (falsy) so the cascade knows
+            `supports_force_o1` stays absent (falsy) so the cascade knows
             there is nothing below this to demote to.  Declaring the
-            argument matters because :class:`SurfaceReconstruction` wraps
+            argument matters because `SurfaceReconstruction` wraps
             *any* base and forwards the full protocol.
 
         Returns (Q_L, Q_R) each (n_vars, n_faces).
@@ -347,14 +347,14 @@ class ConstantReconstructionV2:
 
     def compute_phi(self, Q, bf_face_values=None):
         """No limiter — piecewise-constant reconstruction.  Returns
-        ``None`` (interface parity with the MUSCL classes)."""
+        `None` (interface parity with the MUSCL classes)."""
         return None
 
 
 class LSQMUSCLReconstruction:
     """Second-order MUSCL reconstruction with LSQ gradients (ghost-cell-free).
 
-    Uses precomputed LSQ stencil from ``LSQMesh`` for gradient computation.
+    Uses precomputed LSQ stencil from `LSQMesh` for gradient computation.
     Only interior cells participate in the LSQ stencil — boundary cells grow
     their stencil inward automatically.
 
@@ -368,8 +368,8 @@ class LSQMUSCLReconstruction:
     limiter : str
         "venkatakrishnan" (default), "barth_jespersen", or "minmod".
     unlimited_indices : sequence of int, optional
-        State-row indices whose slope is used **un-limited** (``φ = 1``).
-        Use for static fields like bathymetry ``b`` — limiting them would
+        State-row indices whose slope is used **un-limited** (`φ = 1`).
+        Use for static fields like bathymetry `b` — limiting them would
         smear the topography and reduce well-balanced accuracy.
         The unlimited gradient is still the LSQ slope from cell averages
         (no special slope computation), it just isn't clipped by the
@@ -485,10 +485,10 @@ class LSQMUSCLReconstruction:
             Pre-computed limiter coefficients.  When supplied the
             limiter is *frozen* — only the (smooth, linear-in-Q) LSQ
             gradient is recomputed — so the reconstruction is an
-            affine, hence smooth, function of ``Q``.  This lets an
+            affine, hence smooth, function of `Q`.  This lets an
             implicit solver call it inside a Newton iteration with a
-            clean finite-difference Jacobian.  When ``None`` (default)
-            φ is computed from ``Q``.
+            clean finite-difference Jacobian.  When `None` (default)
+            φ is computed from `Q`.
         force_o1 : ndarray of bool, shape (n_inner_cells,), optional
             A-posteriori MOOD demotion mask.  Flagged cells have EVERY
             row's limiter zeroed → genuine piecewise-constant
@@ -510,8 +510,8 @@ class LSQMUSCLReconstruction:
         return self._reconstruct(Q, grads, phi, bf_face_values)
 
     def _apply_force_o1(self, phi, force_o1):
-        """Zero the limiter of every ``force_o1`` cell → order-1 (constant)
-        reconstruction there.  Identity when ``force_o1`` is ``None``."""
+        """Zero the limiter of every `force_o1` cell → order-1 (constant)
+        reconstruction there.  Identity when `force_o1` is `None`."""
         if force_o1 is None:
             return phi
         phi = np.array(phi, copy=True)
@@ -522,7 +522,7 @@ class LSQMUSCLReconstruction:
         """Limiter coefficients φ (n_vars, nc) for the given state.
 
         Exposed so a caller can compute φ once — e.g. from a lagged
-        state — and pass it back into :meth:`__call__` to freeze the
+        state — and pass it back into `__call__` to freeze the
         limiter through an implicit-solver Newton iteration."""
         n_vars = Q.shape[0]
         grads = self._compute_gradients(Q, n_vars, bf_face_values=bf_face_values)
@@ -534,10 +534,10 @@ class LSQMUSCLReconstruction:
         """Cell-center gradient via precomputed LSQ stencil.
 
         When the mesh carries boundary-face neighbours
-        (``lsq_boundary_face_neighbors``), the LSQ ``A`` matrix was
-        built including them — so ``delta_u`` must also include the
-        boundary-face values to match ``A_loc``'s row count.  This
-        mirrors :func:`zoomy_core.mesh.lsq_reconstruction.compute_derivatives`.
+        (`lsq_boundary_face_neighbors`), the LSQ `A` matrix was
+        built including them — so `delta_u` must also include the
+        boundary-face values to match `A_loc`'s row count.  This
+        mirrors `zoomy_core.mesh.lsq_reconstruction.compute_derivatives`.
 
         Parameters
         ----------
@@ -547,7 +547,7 @@ class LSQMUSCLReconstruction:
             GHOST values from the BC kernel (the kernel applied to the
             inner cell state).  NOT face values — see the note in the
             body.  When the mesh has boundary-face neighbours and
-            ``u_bf`` is ``None``, extrapolation is used (ghost = inner
+            `u_bf` is `None`, extrapolation is used (ghost = inner
             cell).
 
         Returns (dim, nc).
@@ -752,13 +752,13 @@ class LSQMUSCLReconstruction:
     def _limit_va(self, u, grad, u_min, u_max):
         """Van Albada limiter — smooth, strictly bounded φ ∈ [0, 1).
 
-        Per-face candidate ``(r² + r) / (r² + r + 1)`` with
-        ``r = headroom / reconstructed-increment`` (always ≥ 0 in both
+        Per-face candidate `(r² + r) / (r² + r + 1)` with
+        `r = headroom / reconstructed-increment` (always ≥ 0 in both
         the positive and negative branches).  This is a smooth,
         monotone, strictly-bounded rational function — unlike the
         Venkatakrishnan / Barth-Jespersen candidates it needs **no**
-        ``min(1, ·)`` clamp, so the implicit-Newton finite-difference
-        Jacobian stays well-behaved.  (The per-cell ``min`` over faces
+        `min(1, ·)` clamp, so the implicit-Newton finite-difference
+        Jacobian stays well-behaved.  (The per-cell `min` over faces
         remains; the dominant non-smoothness — the unit clamp — is
         what this removes.)
         """
@@ -792,11 +792,11 @@ class LSQMUSCLReconstruction:
 
     def _compute_gradients(self, Q, n_vars, bf_face_values=None):
         """Raw LSQ cell-centre gradients (n_vars, dim, nc) — a fixed
-        linear stencil, hence smooth (C∞) in ``Q``.
+        linear stencil, hence smooth (C∞) in `Q`.
 
-        ``bf_face_values`` (n_vars, n_boundary_faces) come from the
+        `bf_face_values` (n_vars, n_boundary_faces) come from the
         BC kernel applied to the INNER CELL state, i.e. they are GHOST
-        states (see ``_lsq_gradient``), and are threaded into the LSQ
+        states (see `_lsq_gradient`), and are threaded into the LSQ
         stencil whenever the mesh carries boundary-face neighbours.
         Without it the LSQ falls back to inner-cell extrapolation."""
         grads = np.zeros((n_vars, self.dim, self._nc))
@@ -874,17 +874,17 @@ class LSQMUSCLReconstruction:
 class _ZhangShuPPMixin:
     """Xing–Zhang–Shu 2010 a-priori cell-mean positivity limiter (numpy).
 
-    Mirror of the jax ``_ZhangShuPP`` mixin.  Scales the reconstruction
-    *deviation* of the depth row by a per-cell ``θ ∈ [0, 1]`` so the
-    reconstructed depth at every face midpoint of the cell stays ``≥ 0``.  The
-    cell mean (hence conservation) is untouched, and ``θ = 1`` (no-op) wherever
+    Mirror of the jax `_ZhangShuPP` mixin.  Scales the reconstruction
+    *deviation* of the depth row by a per-cell `θ ∈ [0, 1]` so the
+    reconstructed depth at every face midpoint of the cell stays `≥ 0`.  The
+    cell mean (hence conservation) is untouched, and `θ = 1` (no-op) wherever
     the reconstruction is already non-negative — in particular at still water,
     so well-balancing is preserved.
     """
 
     def _build_cell_face_rays(self, mesh, dim):
-        """``r_cf[:, f, c] = face_centers[cell_faces[f, c]] − cell_centers[c]``,
-        shape ``(dim, n_faces_per_cell, n_inner_cells)`` — the rays from each
+        """`r_cf[:, f, c] = face_centers[cell_faces[f, c]] − cell_centers[c]`,
+        shape `(dim, n_faces_per_cell, n_inner_cells)` — the rays from each
         cell centre to its own face midpoints, for evaluating the
         reconstruction at the cell's faces."""
         nc = self._nc
@@ -894,8 +894,8 @@ class _ZhangShuPPMixin:
         self._r_cf = face_ctrs[:, cell_faces] - cell_ctrs[:, np.newaxis, :]
 
     def _pp_theta(self, h_bar, h_slope, eps=1e-14):
-        """Per-cell ``θ`` so ``min_face(h_bar + h_slope·r_cf) ≥ 0`` (``θ=1`` if
-        already ``≥ 0``).  ``h_slope`` is the LIMITED depth slope ``(dim, nc)``.
+        """Per-cell `θ` so `min_face(h_bar + h_slope·r_cf) ≥ 0` (`θ=1` if
+        already `≥ 0`).  `h_slope` is the LIMITED depth slope `(dim, nc)`.
         Rescales the deviation, never the mean, so conservation is exact."""
         delta = np.einsum("dc,dfc->fc", h_slope, self._r_cf)    # (nf_pc, nc)
         h_min = np.min(h_bar[np.newaxis, :] + delta, axis=0)     # (nc,)
@@ -909,11 +909,11 @@ class _ZhangShuPPMixin:
 class PositivityPreservingLSQMUSCL(_ZhangShuPPMixin, LSQMUSCLReconstruction):
     """LSQ-MUSCL with a-priori Xing–Zhang–Shu cell-mean positivity (numpy).
 
-    Mirror of the jax ``PositivityPreservingLSQMUSCLJAX``: after the standard
-    slope limiter produces ``φ``, cap the DEPTH-row deviation by the per-cell
-    XZS ``θ`` so the reconstructed depth stays ``≥ 0`` at every face midpoint.
+    Mirror of the jax `PositivityPreservingLSQMUSCLJAX`: after the standard
+    slope limiter produces `φ`, cap the DEPTH-row deviation by the per-cell
+    XZS `θ` so the reconstructed depth stays `≥ 0` at every face midpoint.
     Only the depth row is scaled; the momentum rows keep their limited slope.
-    Conservative (mean untouched) and well-balanced (``θ=1`` at still water).
+    Conservative (mean untouched) and well-balanced (`θ=1` at still water).
     """
 
     def __init__(self, mesh, dim, h_index, eps_positivity=1e-14, **kw):
@@ -991,40 +991,40 @@ class FreeSurfaceLSQMUSCL(LSQMUSCLReconstruction):
 class SurfaceReconstruction:
     """Well-balanced reconstruction in surface-elevation variables.
 
-    Wraps a base reconstruction (``ConstantReconstructionV2`` or
-    ``LSQMUSCLReconstruction``).  Instead of reconstructing the water
-    depth ``h`` directly, it reconstructs the free-surface elevation
-    ``η = h + b`` together with the bathymetry ``b``, then recovers the
-    per-side face depth ``h = η − b``.
+    Wraps a base reconstruction (`ConstantReconstructionV2` or
+    `LSQMUSCLReconstruction`).  Instead of reconstructing the water
+    depth `h` directly, it reconstructs the free-surface elevation
+    `η = h + b` together with the bathymetry `b`, then recovers the
+    per-side face depth `h = η − b`.
 
-    At lake-at-rest ``η`` is constant, so the limiter sees a flat field,
-    produces a zero slope, and ``h = η − b`` is recovered with the full
-    un-clipped ``b`` variation — which is what keeps the limiter
+    At lake-at-rest `η` is constant, so the limiter sees a flat field,
+    produces a zero slope, and `h = η − b` is recovered with the full
+    un-clipped `b` variation — which is what keeps the limiter
     well-balanced.  For piecewise-constant reconstruction the whole
     transform is an exact no-op.
 
     The depth / bathymetry locations are resolved **once** by the caller
-    (the symbolic ``Numerics.find_field`` → ``FieldHandle``, or the
+    (the symbolic `Numerics.find_field` → `FieldHandle`, or the
     solver's numpy analogue) and passed in here as plain indices — this
     class never searches for them, so there is a single source of truth
     for "which row is h, which field is b".
 
-    Note: reconstructing ``η`` makes the *limiter* well-balanced, but at
+    Note: reconstructing `η` makes the *limiter* well-balanced, but at
     order ≥ 2 the flux + NCP discretization still needs the cell-interior
     non-conservative integral to telescope exactly.
 
     Parameters
     ----------
     base : reconstruction instance
-        Underlying ``ConstantReconstructionV2`` or
-        ``LSQMUSCLReconstruction``.
+        Underlying `ConstantReconstructionV2` or
+        `LSQMUSCLReconstruction`.
     h_index : int
-        Row of the water depth in ``Q``.
+        Row of the water depth in `Q`.
     b_index : int
-        Index of the bathymetry — a row of ``Q`` when ``b_in_state``,
-        else a row of ``Qaux``.
+        Index of the bathymetry — a row of `Q` when `b_in_state`,
+        else a row of `Qaux`.
     b_in_state : bool
-        ``True`` when ``b`` lives in the conservative state.
+        `True` when `b` lives in the conservative state.
     """
 
     def __init__(self, base, h_index, b_index, b_in_state):
@@ -1040,8 +1040,8 @@ class SurfaceReconstruction:
 
     def _extend(self, Q, Qaux, bf_Q):
         """Build the extended arrays the base reconstruction operates
-        on: ``η = h + b`` in the depth slot, plus (when ``b`` lives in
-        ``Qaux``) an appended ``b`` row.  Returns ``(Q_ext, bf_ext)``."""
+        on: `η = h + b` in the depth slot, plus (when `b` lives in
+        `Qaux`) an appended `b` row.  Returns `(Q_ext, bf_ext)`."""
         h_idx = self.h_index
         n_state = Q.shape[0]
         n_bf = bf_Q.shape[1]
@@ -1066,7 +1066,7 @@ class SurfaceReconstruction:
     def compute_phi(self, Q, Qaux, bf_Q):
         """Limiter coefficients of the extended (η-in-depth-slot) array
         — for freezing the limiter through an implicit Newton
-        iteration.  ``None`` when the base reconstruction has no
+        iteration.  `None` when the base reconstruction has no
         limiter."""
         Q_ext, bf_ext = self._extend(Q, Qaux, bf_Q)
         return self.base.compute_phi(Q_ext, bf_ext)
@@ -1082,24 +1082,24 @@ class SurfaceReconstruction:
             BC-provided cell-centre values at boundary faces.
         phi : ndarray, optional
             Pre-computed limiter coefficients of the *extended* array
-            (see :meth:`compute_phi`).  When supplied the limiter is
+            (see `compute_phi`).  When supplied the limiter is
             frozen — passed straight through to the base reconstruction
-            — so the result is a smooth function of ``Q``.
+            — so the result is a smooth function of `Q`.
         force_o1 : ndarray of bool, shape (n_inner_cells,), optional
             A-posteriori MOOD demotion mask forwarded to the base
             reconstruction: flagged cells go piecewise-constant on the
-            η-extended array, so ``h = η − b`` collapses to the cell
+            η-extended array, so `h = η − b` collapses to the cell
             mean (order-1) there — no depth clamp.
 
         Returns
         -------
         Q_L, Q_R : ndarray, shape (n_state, n_faces)
-            Face states with the depth row holding the recovered ``h``.
+            Face states with the depth row holding the recovered `h`.
         b_L, b_R : ndarray, shape (n_faces,)
             Per-side reconstructed bathymetry — the caller writes these
-            into the per-face ``Qaux`` (or they already sit in ``Q_L`` /
-            ``Q_R`` when ``b_in_state``) so the hydrostatic
-            reconstruction sees a consistent ``h + b``.
+            into the per-face `Qaux` (or they already sit in `Q_L` /
+            `Q_R` when `b_in_state`) so the hydrostatic
+            reconstruction sees a consistent `h + b`.
         """
         h_idx = self.h_index
         n_state = Q.shape[0]
@@ -1285,7 +1285,7 @@ class DiffusionOperatorV2:
 
     Interior faces are assembled into the sparse matrix L (same as DiffusionOperator).
     Boundary faces are stored separately — their contributions come from
-    ``BC.face_gradient()`` and are added as an explicit RHS correction.
+    `BC.face_gradient()` and are added as an explicit RHS correction.
 
     Parameters
     ----------
@@ -1370,16 +1370,16 @@ class DiffusionOperatorV2:
         Parameters
         ----------
         u : ndarray
-            Scalar field (only the first ``nc`` inner-cell entries are used).
+            Scalar field (only the first `nc` inner-cell entries are used).
         bf_face_normal_grads : ndarray, shape (n_boundary_faces,)
             Face-normal gradient dQ/dn at each boundary face, from
-            ``BC.face_gradient()``.
+            `BC.face_gradient()`.
         nu_cell : ndarray, optional
-            PER-CELL diffusivity (state-dependent, e.g. ``ν/h²`` = ``−A[v,v,d,d]``).
+            PER-CELL diffusivity (state-dependent, e.g. `ν/h²` = `−A[v,v,d,d]`).
             When given, each face uses the average of its two cells' diffusivity
             and the boundary face uses the inner cell's — i.e. the actual rank-4
-            ``diffusion_matrix`` coefficient, not a constant ``nu``.  ``None``
-            falls back to the constant-``nu`` operator built in ``__init__``.
+            `diffusion_matrix` coefficient, not a constant `nu`.  `None`
+            falls back to the constant-`nu` operator built in `__init__`.
 
         Returns
         -------
@@ -1439,7 +1439,7 @@ class DiffusionOperatorV2:
             State after explicit step.
         dt : float
         bf_face_normal_grads : ndarray, shape (n_boundary_faces,)
-            From ``BC.face_gradient()``.
+            From `BC.face_gradient()`.
 
         Returns
         -------
@@ -1466,34 +1466,36 @@ class DiffusionOperatorV2:
 
 
 class DenseDiffusionOperator:
-    r"""Dense, state-dependent implicit diffusion: ``div(A : grad Q)``.
+    r"""Dense, state-dependent implicit diffusion: `div(A : grad Q)`.
 
     Assembles the two-point (normal-gradient) FVM divergence of the model's
-    GENERAL diffusive flux ``F_diff[i,d] = Σ_{j,e} A[i,j,d,e] ∂_e Q[j]`` from
-    the rank-4 ``diffusion_matrix`` ``A(Q, Qaux, p)`` (shape
-    ``(n_eq, n_state, n_dim, n_dim)``).  Unlike :class:`DiffusionOperatorV2`
-    (scalar ``ν`` × constant Laplacian, per-variable diagonal) this couples
-    variables (dense ``A[i,j]``, ``i≠j``) and lets ``A`` depend on the state.
+    GENERAL diffusive flux `F_diff[i,d] = Σ_{j,e} A[i,j,d,e] ∂_e Q[j]` from
+    the rank-4 `diffusion_matrix` `A(Q, Qaux, p)` (shape
+    `(n_eq, n_state, n_dim, n_dim)`).  Unlike `DiffusionOperatorV2`
+    (scalar `ν` × constant Laplacian, per-variable diagonal) this couples
+    variables (dense `A[i,j]`, `i≠j`) and lets `A` depend on the state.
 
     Discretisation.  At each face the full gradient is approximated by its
-    face-NORMAL two-point difference (TPFA), ``grad Q_j ≈ (∂Q_j/∂n)·n`` with
-    the unit face normal ``n``.  Contracting the tensor against ``n`` on both
-    the flux and the gradient index collapses ``A`` to a scalar variable
-    coupling ::
+    face-NORMAL two-point difference (TPFA), `grad Q_j ≈ (∂Q_j/∂n)·n` with
+    the unit face normal `n`.  Contracting the tensor against `n` on both
+    the flux and the gradient index collapses `A` to a scalar variable
+    coupling:
 
+    ```
         T[i,j] = Σ_{d,e} A[i,j,d,e] · n_d · n_e
+    ```
 
-    (face-averaged, ``Ā = ½(A_a + A_b)``), so the interior face-normal flux for
-    equation ``i`` is ``Σ_j T[i,j]·(Q_{j,b}−Q_{j,a})/(n·Δx)·|f|``.  The
-    geometry factors (``g = |f|/dist/|n·ê|`` interior, ``|f|/|n·ê|/V`` boundary)
-    are IDENTICAL to :class:`DiffusionOperatorV2`, so a constant diagonal
-    ``A = ν·I·δ_de`` reduces to ``ν·L`` bit-for-bit (unit normals ⇒
-    ``T = ν·δ_ij``).  This is the choice the jax mirror must match.
+    (face-averaged, `Ā = ½(A_a + A_b)`), so the interior face-normal flux for
+    equation `i` is `Σ_j T[i,j]·(Q_{j,b}−Q_{j,a})/(n·Δx)·|f|`.  The
+    geometry factors (`g = |f|/dist/|n·ê|` interior, `|f|/|n·ê|/V` boundary)
+    are IDENTICAL to `DiffusionOperatorV2`, so a constant diagonal
+    `A = ν·I·δ_de` reduces to `ν·L` bit-for-bit (unit normals ⇒
+    `T = ν·δ_ij`).  This is the choice the jax mirror must match.
 
     Time discretisation is Crank–Nicolson (θ=½): unconditionally stable, so no
-    parabolic CFL.  ``state_dependent=False`` ⇒ ``A`` is constant ⇒ a SINGLE
-    linear GMRES solve; ``state_dependent=True`` ⇒ ``A`` is evaluated at the
-    unknown ``Q^{n+1}`` ⇒ the implicit half is NONLINEAR and is solved by
+    parabolic CFL.  `state_dependent=False` ⇒ `A` is constant ⇒ a SINGLE
+    linear GMRES solve; `state_dependent=True` ⇒ `A` is evaluated at the
+    unknown `Q^{n+1}` ⇒ the implicit half is NONLINEAR and is solved by
     Newton with a matrix-free (finite-difference JVP) GMRES inner solve.
     """
 
@@ -1563,12 +1565,12 @@ class DenseDiffusionOperator:
     # -- tensor normalisation ------------------------------------------
 
     def _as_cell_tensor(self, A):
-        """Broadcast a lambdified ``diffusion_matrix`` return to the per-cell
-        rank-4 layout ``(n_eq, n_state, nc, n_dim, n_dim)``.
+        """Broadcast a lambdified `diffusion_matrix` return to the per-cell
+        rank-4 layout `(n_eq, n_state, nc, n_dim, n_dim)`.
 
         The numpy runtime stacks along a trailing axis, so a full-grid call
-        yields ``(n_eq, n_state, nc, dim, dim)`` while a purely-constant tensor
-        collapses to ``(n_eq, n_state, dim, dim)`` — both handled here."""
+        yields `(n_eq, n_state, nc, dim, dim)` while a purely-constant tensor
+        collapses to `(n_eq, n_state, dim, dim)` — both handled here."""
         A = np.asarray(A, dtype=float)
         d = self.dim
         if A.ndim == 5:
@@ -1583,11 +1585,11 @@ class DenseDiffusionOperator:
     # -- discrete divergence  D[i] = (∇·F_diff)[i] ---------------------
 
     def _divergence(self, Q, A_cells, bf_grads=None):
-        """Discrete ``∇·F_diff`` for state ``Q`` and per-cell tensor
-        ``A_cells`` (``(n_eq, n_st, nc, dim, dim)``).
+        """Discrete `∇·F_diff` for state `Q` and per-cell tensor
+        `A_cells` (`(n_eq, n_st, nc, dim, dim)`).
 
-        When ``bf_grads`` (``(n_vars, n_bf)`` face-normal gradients from the BC
-        kernel) is given the boundary diffusive flux is added; ``None`` returns
+        When `bf_grads` (`(n_vars, n_bf)` face-normal gradients from the BC
+        kernel) is given the boundary diffusive flux is added; `None` returns
         the interior-only operator (used inside the implicit matvec / JVP)."""
         n_eq = A_cells.shape[0]
         D = np.zeros((n_eq, self.nc), dtype=float)
@@ -1618,16 +1620,18 @@ class DenseDiffusionOperator:
                        newton_tol=1e-8, fd_eps=1e-7):
         r"""One implicit-diffusion sub-step.
 
-        Solves the Crank–Nicolson update of ``∂_t Q = ∇·F_diff(Q)``::
+        Solves the Crank–Nicolson update of `∂_t Q = ∇·F_diff(Q)`:
 
+        ```
             (Q^{n+1} − Q*)/dt = ½ [ 𝒟_impl(Q^{n+1}) + 𝒟_expl ],
+        ```
 
-        with ``𝒟_impl`` the interior divergence (``A`` at the current iterate)
-        and ``𝒟_expl = interior(Q*) + boundary(Q*)`` the frozen explicit half
-        (boundary treated explicitly from ``bf_grads``, exactly as
-        :meth:`DiffusionOperatorV2.implicit_solve_with_bc`).
+        with `𝒟_impl` the interior divergence (`A` at the current iterate)
+        and `𝒟_expl = interior(Q*) + boundary(Q*)` the frozen explicit half
+        (boundary treated explicitly from `bf_grads`, exactly as
+        `DiffusionOperatorV2.implicit_solve_with_bc`).
 
-        ``A_fn(Q) -> diffusion_matrix`` closes over ``Qaux``/``p``.  For a
+        `A_fn(Q) -> diffusion_matrix` closes over `Qaux`/`p`.  For a
         state-independent operator this is a single linear GMRES solve; for a
         state-dependent one a Newton loop with a matrix-free (FD-JVP) GMRES
         inner solve."""
@@ -1683,14 +1687,16 @@ class DenseDiffusionOperator:
         return Q
 
     def residual_norm(self, Q_np1, Q_star, dt, A_fn, bf_grads):
-        r"""Norm of the Crank–Nicolson residual the Newton solve drives to zero::
+        r"""Norm of the Crank–Nicolson residual the Newton solve drives to zero:
 
+        ```
             R = Q^{n+1} − Q* − dt/2 ( 𝒟_int(Q^{n+1}) + 𝒟_int(Q*) + bf ).
+        ```
 
         This is the θ=½ analogue of the task's backward-Euler target
-        ``(Q^{n+1}−Q*)/dt = ∇·F_diff(Q^{n+1})`` (θ=1); CN is used so the
-        constant-diagonal case reduces to :class:`DiffusionOperatorV2`
-        bit-for-bit.  ``→0`` ⇔ the implicit diffusion update is satisfied."""
+        `(Q^{n+1}−Q*)/dt = ∇·F_diff(Q^{n+1})` (θ=1); CN is used so the
+        constant-diagonal case reduces to `DiffusionOperatorV2`
+        bit-for-bit.  `→0` ⇔ the implicit diffusion update is satisfied."""
         D_expl = self._divergence(
             Q_star, self._as_cell_tensor(A_fn(Q_star)), bf_grads=bf_grads)
         D_impl = self._divergence(
@@ -1703,44 +1709,44 @@ class PrimitiveReconstruction:
     """Wraps a base ghost-cell-free reconstruction with pre/post
     transforms to the model's primitive well-balanced variables.
 
-    Pre  (per cell / boundary face):  ``state → wb``   via ``forward_fn``.
+    Pre  (per cell / boundary face):  `state → wb`   via `forward_fn`.
     Limit (per cell):                 base reconstruction on the WB values.
-    Post (per face, L and R side):    ``wb → state``    via ``inverse_fn``.
+    Post (per face, L and R side):    `wb → state`    via `inverse_fn`.
 
     The point of the WB transform is to limit the *physically*
-    bounded quantities (``η = h+b``, ``u = q/h``, …) instead of the
+    bounded quantities (`η = h+b`, `u = q/h`, …) instead of the
     conservative state, killing momentum overshoot at the wet/dry
     front (Audusse-Bouchut-Bristeau and follow-ups; see
-    ``thesis/chapters/30_numerics.md``).  The smooth-limiter
+    `thesis/chapters/30_numerics.md`).  The smooth-limiter
     choice (Venkatakrishnan, Van Albada) becomes harmless because
-    overshoots happen on ``η`` (nearly flat near LAR) and ``u``
-    (physically bounded), and the recovered ``q_face = h_face · u_face``
+    overshoots happen on `η` (nearly flat near LAR) and `u`
+    (physically bounded), and the recovered `q_face = h_face · u_face`
     is positivity-consistent by construction.
 
-    ``forward_fn`` / ``inverse_fn`` are the model's OWN
-    ``reconstruction_variables`` / ``state_from_reconstruction`` operators,
+    `forward_fn` / `inverse_fn` are the model's OWN
+    `reconstruction_variables` / `state_from_reconstruction` operators,
     lowered through :class:`~zoomy_core.transformation.to_numpy.
-    NumpyRuntimeModel` exactly like ``flux`` / ``source`` / every other
+    NumpyRuntimeModel` exactly like `flux` / `source` / every other
     operator — so they carry the FULL declared signature
     (``OPERATOR_ARG_SLOTS["reconstruction_variables"] == (variables,
-    aux_variables, parameters)``, ``["state_from_reconstruction"] ==
+    aux_variables, parameters)`, `["state_from_reconstruction"] ==
     (reconstruction, aux_variables, parameters)``, see
-    ``systemmodel.system_model``) instead of a hand-rolled state-only
+    `systemmodel.system_model`) instead of a hand-rolled state-only
     lambdify.  A model whose forward/inverse map references an algebraic
-    aux (e.g. the KP-desingularised ``hinv = 1/h`` that ``u = q·hinv``
-    depends on) needs that ``Qaux`` argument to even evaluate — dropping it
-    raised a bare ``NameError`` the first time an order-2 VAM case exercised
+    aux (e.g. the KP-desingularised `hinv = 1/h` that `u = q·hinv`
+    depends on) needs that `Qaux` argument to even evaluate — dropping it
+    raised a bare `NameError` the first time an order-2 VAM case exercised
     this path.  A model that inlines its own regularization instead (no
-    aux row at all) simply has an empty ``aux_variables`` group here and the
+    aux row at all) simply has an empty `aux_variables` group here and the
     lowered kernel ignores it — nothing in this class ever assumes a
     particular aux row exists, by name or position.
 
-    Aux is genuinely PER-CELL / PER-FACE data (unlike ``parameters``, which
+    Aux is genuinely PER-CELL / PER-FACE data (unlike `parameters`, which
     are compile-time constants the caller binds once), so it cannot be
-    baked in at construction — ``Qaux`` (cells) / ``Qaux_bf`` (boundary
-    faces) are supplied fresh on every call, mirroring the ``Q`` /
-    ``bf_face_values`` pair.  A model with zero aux rows still works: the
-    caller passes ``(0, n)`` arrays and the lowered kernel's (empty)
+    baked in at construction — `Qaux` (cells) / `Qaux_bf` (boundary
+    faces) are supplied fresh on every call, mirroring the `Q` /
+    `bf_face_values` pair.  A model with zero aux rows still works: the
+    caller passes `(0, n)` arrays and the lowered kernel's (empty)
     aux argument group contributes nothing.
     """
 
@@ -1821,11 +1827,11 @@ class PrimitiveReconstruction:
         return Q_L, Q_R
 
     def _face_aux(self, Qaux, Qaux_bf):
-        """Scatter cell / boundary aux onto ``self.base``'s full face axis,
-        aligned with its own ``Q_L``/``Q_R`` convention
-        (``LSQMUSCLReconstruction._reconstruct``): L = the face's owning
+        """Scatter cell / boundary aux onto `self.base`'s full face axis,
+        aligned with its own `Q_L`/`Q_R` convention
+        (`LSQMUSCLReconstruction._reconstruct`): L = the face's owning
         inner cell, R = the neighbour cell (interior faces) or the boundary
-        ghost ``Qaux_bf`` (boundary faces)."""
+        ghost `Qaux_bf` (boundary faces)."""
         base = self.base
         n_faces = base._n_faces
         aux_L = np.zeros((self._n_aux, n_faces))
@@ -1837,10 +1843,10 @@ class PrimitiveReconstruction:
         return aux_L, aux_R
 
     def _apply(self, fn, arr, aux):
-        """Apply the model's declared ``(state_like, Qaux, parameters)``
+        """Apply the model's declared `(state_like, Qaux, parameters)`
         operator to a WHOLE array of columns (cells or faces) at once — the
         same broadcasting convention every other lowered operator uses
-        (``sm.flux(Q, Qaux, p)`` etc.), so this works identically whether the
+        (`sm.flux(Q, Qaux, p)` etc.), so this works identically whether the
         model declares 0, 1, or many aux rows."""
         return np.asarray(fn(arr, aux, self._parameters), dtype=float)
 

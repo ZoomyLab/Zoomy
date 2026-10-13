@@ -22,10 +22,10 @@ from zoomy_core.misc.show import show
 
 
 class _LatexBlock:
-    """A display-math block that renders through whatever ``display`` the
+    """A display-math block that renders through whatever `display` the
     host provides (Jupyter, the GUI's Pyodide kernel) and prints as LaTeX
-    source otherwise. Importing ``IPython.display`` for this made the module
-    unimportable in the Pyodide kernel, which has ``display`` but no IPython."""
+    source otherwise. Importing `IPython.display` for this made the module
+    unimportable in the Pyodide kernel, which has `display` but no IPython."""
 
     __slots__ = ("tex",)
 
@@ -46,10 +46,10 @@ class ModelAnalyser:
     """Linear analysis of a system model: linearisation about a base state,
     plane-wave ansatz, dispersion relation.
 
-    Takes a :class:`~zoomy_core.systemmodel.system_model.SystemModel` and
+    Takes a `SystemModel` and
     nothing else — the analysis lives at the system level and does not
     know whether the system was derived or written down
-    (``SystemModel.from_model(model)`` is the way in)."""
+    (`SystemModel.from_model(model)` is the way in)."""
     def __init__(self, model):
         """Initialize the instance."""
         from zoomy_core.systemmodel.system_model import SystemModel

@@ -41,7 +41,7 @@ class Split(Operation):
     whole_leaf_op = True
 
     def __init__(self, variables=None, name="split"):
-        """``variables`` restricts the fold to these fields (None: all)."""
+        """`variables` restricts the fold to these fields (None: all)."""
         self._vars = variables
         desc = ("half product rule  c·f·∂f → ∂(c·f²/2)"
                 + (f" on {{{', '.join(str(v) for v in variables)}}}"
@@ -65,7 +65,7 @@ class InvertMassMatrix(Operation):
     whole_leaf_op = True
 
     def __init__(self, time=None, name="invert_mass_matrix"):
-        """``time`` is the time coordinate (default: the global ``t``)."""
+        """`time` is the time coordinate (default: the global `t`)."""
         self._t = time if time is not None else _coords.t
         super().__init__(
             name=name,
@@ -124,8 +124,8 @@ class InvertMassMatrix(Operation):
 
 
 def _antiderivative_in(coeff, var, field_to_sym):
-    """Antiderivative of ``coeff`` in the applied field ``var``, treating every field in
-    ``field_to_sym`` as an independent symbol.
+    """Antiderivative of `coeff` in the applied field `var`, treating every field in
+    `field_to_sym` as an independent symbol.
     """
     sym_of_var = field_to_sym[var]
     inv = {s: f for f, s in field_to_sym.items()}
@@ -156,7 +156,7 @@ def fold_to_conservative_form(expr, flux_fields, *, h, b, x, gravity_param):
     flux_fields = list(flux_fields)
 
     def dx(f):
-        """∂_x of ``f``."""
+        """∂_x of `f`."""
         return sp.Derivative(f, x)
 
     # Fresh bare symbols for the antiderivative-in-h integration.
@@ -205,7 +205,7 @@ def fold_to_conservative_form(expr, flux_fields, *, h, b, x, gravity_param):
 class FoldConservative(Operation):
     """Tracked op form of fold_to_conservative_form: conservative diffusion atoms ∂_x(D·∂_x q) are
     left untouched and the hyperbolic remainder is folded. Arguments mirror
-    fold_to_conservative_form (``gravity`` is its ``gravity_param``).
+    fold_to_conservative_form (`gravity` is its `gravity_param`).
     """
 
     whole_leaf_op = True
@@ -242,9 +242,9 @@ class Resolve(Operation):
 
     Args:
         test_function: Galerkin test weight, typically c(ζ)·φ(l, ζ) with l bound to the row's mode.
-        basis_cls: concrete basis class providing ``eval(k, ζ)`` and ``weight``.
+        basis_cls: concrete basis class providing `eval(k, ζ)` and `weight`.
         level: concrete basis level.
-        var: ζ integration variable (default ``zeta``).
+        var: ζ integration variable (default `zeta`).
         bounds: integration interval (default (0, 1)).
 
     References:
@@ -293,7 +293,7 @@ class Resolve(Operation):
         wv = self._weight_value
 
         def _weight_at(arg):
-            """Basis weight at ``arg`` (1 when the basis has none)."""
+            """Basis weight at `arg` (1 when the basis has none)."""
             if callable(wv):
                 return wv(arg)
             return sp.S.One if wv is None else wv
@@ -308,7 +308,7 @@ class Resolve(Operation):
         return expr
 
     def _integrate_poly(self, expr):
-        """Integrate ``expr`` over the ζ bounds term by term analytically, falling back to
+        """Integrate `expr` over the ζ bounds term by term analytically, falling back to
         sp.integrate for non-polynomial dependence.
         """
         z = self._var
@@ -342,13 +342,13 @@ class Resolve(Operation):
 
 class ResolveIntegral(Operation):
     """Resolve the opaque ∫…dζ atoms left by an abstract projection, each by a selectable method:
-    "auto" (classified per term by shape), "basis", "ftc" or "numerical". ``classify`` (Integral ->
-    method or None) overrides the default ``method`` per integral.
+    "auto" (classified per term by shape), "basis", "ftc" or "numerical". `classify` (Integral ->
+    method or None) overrides the default `method` per integral.
 
     Args:
         basis_cls: concrete basis used by the "basis" and "auto" methods.
         method: default resolution method.
-        weight: basis weight when no ``basis_cls`` is given.
+        weight: basis weight when no `basis_cls` is given.
         classify: optional per-integral method override.
     """
 
@@ -371,7 +371,7 @@ class ResolveIntegral(Operation):
 
     # ── per-integral method dispatch ─────────────────────────────────────
     def _method_for(self, integral):
-        """Method for one integral: the ``classify`` override, else the default."""
+        """Method for one integral: the `classify` override, else the default."""
         if self._classify is not None:
             chosen = self._classify(integral)
             if chosen:
@@ -401,7 +401,7 @@ class ResolveIntegral(Operation):
 
     # ── auto: classify each additive term by SHAPE (the "smart" resolution) ──
     def _auto_resolve(self, integrand, var, lo, hi):
-        """Resolve ``∫_lo^hi integrand d(var)`` term by term via ``_auto_term``."""
+        """Resolve `∫_lo^hi integrand d(var)` term by term via `_auto_term`."""
         out = sp.S.Zero
         for term in sp.Add.make_args(sp.expand(integrand)):
             out += self._auto_term(term, var, lo, hi)
@@ -490,7 +490,7 @@ class ResolveIntegral(Operation):
                     and len(a.args) == 1)
 
         def _weight_at(arg):
-            """Basis weight at ``arg`` (1 when the basis has none)."""
+            """Basis weight at `arg` (1 when the basis has none)."""
             return (wv(arg) if callable(wv)
                     else (sp.S.One if wv is None else wv))
 
@@ -503,7 +503,7 @@ class ResolveIntegral(Operation):
         return self._integrate_poly(e.doit(), z, lo, hi)
 
     def _integrate_poly(self, expr, var, lo, hi):
-        """Integrate ``expr`` over (lo, hi) in ``var`` term by term for polynomials, sp.integrate
+        """Integrate `expr` over (lo, hi) in `var` term by term for polynomials, sp.integrate
         otherwise.
         """
         z = var
@@ -550,7 +550,7 @@ class ResolveIntegral(Operation):
         z = self._var
 
         def _has_basis_atom(a):
-            """True when ``a`` contains an opaque basis head."""
+            """True when `a` contains an opaque basis head."""
             return any(getattr(f.func, "_is_basis_head", False)
                        for f in a.atoms(sp.Function))
 
@@ -580,7 +580,7 @@ class ResolveIntegral(Operation):
 
 
 def is_conservative_diffusion(term, x):
-    """True iff ``term`` is coeff·∂_x(F) with a single first-order ∂_x factor whose flux F itself
+    """True iff `term` is coeff·∂_x(F) with a single first-order ∂_x factor whose flux F itself
     contains a ∂_x, the ∂_x(D·∂_x q) shape that system_extract types as diffusion_matrix. Advective
     fluxes ∂_x(q²/h) and first-order couplings coeff·∂_x q do not match.
     """
@@ -659,7 +659,7 @@ def pull_consts(expr):
 
 
 def _single_deriv_factor(term):
-    """``(coeff, deriv)`` when ``term`` has exactly one Derivative factor, else None."""
+    """`(coeff, deriv)` when `term` has exactly one Derivative factor, else None."""
     factors = sp.Mul.make_args(term)
     ds = [f for f in factors if isinstance(f, sp.Derivative)]
     if len(ds) != 1:
@@ -705,7 +705,7 @@ def fold_conservatives(expr):
 # ── Consolidate: generalised Leibniz fold (incl. inside integrals) ─────────
 
 def _deriv_factor(term):
-    """``(coeff, arg, v)`` when ``term`` is coeff·∂_v(arg) with exactly one single-variable
+    """`(coeff, arg, v)` when `term` is coeff·∂_v(arg) with exactly one single-variable
     Derivative factor, else None.
     """
     facs = list(term.args) if isinstance(term, sp.Mul) else [term]
@@ -784,7 +784,7 @@ def fold_self_products(expr):
 
 
 def _coord_symbols(expr):
-    """Coordinate-like symbols of ``expr``: non-integer function arguments plus derivative and
+    """Coordinate-like symbols of `expr`: non-integer function arguments plus derivative and
     integral binding variables (parameters such as g are excluded).
     """
     coords = set()
@@ -831,7 +831,7 @@ def push_consts_into_flux(expr, coords=None):
 
 def _hide_brackets(expr):
     """Replace every Galerkin bracket (an is_bracket integral) by an opaque symbol carrying its free
-    integer indices; returns ``(hidden_expr, restore_map)``.
+    integer indices; returns `(hidden_expr, restore_map)`.
     """
     brackets = sorted({ig for ig in expr.atoms(sp.Integral) if is_bracket(ig)},
                       key=sp.srepr)
@@ -944,7 +944,7 @@ class GaussQuadrature(Operation):
     Exact for polynomials up to degree 2·order − 1; apply after the basis is resolved.
 
     Args:
-        var: integration variable (default ``zeta``).
+        var: integration variable (default `zeta`).
         order: number of Gauss nodes (>= 1).
 
     References:
@@ -1040,7 +1040,7 @@ class DeferQuadrature(Operation):
     log_level = 1
 
     def __init__(self, var=None, name="defer_quadrature"):
-        """Set the integration variable (default ``zeta``)."""
+        """Set the integration variable (default `zeta`)."""
         self._var = var if var is not None else sp.Symbol("zeta", real=True)
         super().__init__(name=name,
                          description="∫dζ → opaque ⟨…⟩^N numerical bracket")
@@ -1072,7 +1072,7 @@ class DeferQuadrature(Operation):
 
 class ResolveNumQuad(Operation):
     """Resolve every opaque NumQuad(f) to its order-point Gauss-Legendre sum over ζ in [0, 1]; run
-    it as the last derivation step. ``basis`` (optional) resolves opaque φ(k, ζ) still present in a
+    it as the last derivation step. `basis` (optional) resolves opaque φ(k, ζ) still present in a
     bracket body at the nodes.
 
     References:
@@ -1123,14 +1123,14 @@ class ResolveNumQuad(Operation):
 
 class Simplify(Operation):
     """Canonicalisation that keeps fluxes grouped while exposing cancellations: pull_consts followed
-    by consolidate. On an Equation it also runs Sort as a final step (``sort=False`` skips it).
+    by consolidate. On an Equation it also runs Sort as a final step (`sort=False` skips it).
     """
 
     whole_leaf_op = True
     log_level = 5            # minor canonicalisation — hidden at low verbosity
 
     def __init__(self, name="simplify", sort=True):
-        """``sort`` toggles the final Sort pass on Equations."""
+        """`sort` toggles the final Sort pass on Equations."""
         self._sort = sort
         super().__init__(name=name, description="canonical simplify")
 
@@ -1139,7 +1139,7 @@ class Simplify(Operation):
         return consolidate(pull_consts(sp_expr))
 
     def apply_to_equation(self, eq):
-        """Canonicalise the residual, then tag and sort its terms when ``sort`` is on."""
+        """Canonicalise the residual, then tag and sort its terms when `sort` is on."""
         # Equation-level: canonicalise the residual, then tag + sort the terms
         # (a leaf-only ``_leaf_sp`` would lose the ordering when ``eq.expr`` is
         # rebuilt, so the sort has to happen here).
@@ -1214,7 +1214,7 @@ def _classify_term(term, q_heads, t, spatial, detect_ncp=True):
 
 
 def _tag_context(eq):
-    """``(q_heads, t, spatial)`` read off the equation's parent model."""
+    """`(q_heads, t, spatial)` read off the equation's parent model."""
     m = getattr(eq, "_model", None)
     if m is None:
         return set(), None, set()
@@ -1232,12 +1232,12 @@ class AutoTag(Operation):
     log_level = 5
 
     def __init__(self, name="auto_tag", detect_ncp=True):
-        """``detect_ncp`` toggles detection of nonconservative products (off: they become source)."""
+        """`detect_ncp` toggles detection of nonconservative products (off: they become source)."""
         self._detect_ncp = detect_ncp
         super().__init__(name=name, description="tag untagged terms by category")
 
     def apply_to_equation(self, eq):
-        """Tag the untagged terms of ``eq``."""
+        """Tag the untagged terms of `eq`."""
         q_heads, t, spatial = _tag_context(eq)
         for tm in eq._terms:
             if tm.tag is None:
@@ -1256,7 +1256,7 @@ class SortByTag(Operation):
         super().__init__(name=name, description="order terms by physics tag")
 
     def apply_to_equation(self, eq):
-        """Sort ``eq``'s terms by tag rank."""
+        """Sort `eq`'s terms by tag rank."""
         rank = {tag: i for i, tag in enumerate(TAG_ORDER)}
         eq._terms.sort(
             key=lambda tm: rank.get(tm.tag or "untagged", len(TAG_ORDER)))
@@ -1271,12 +1271,12 @@ class Sort(Operation):
     log_level = 5
 
     def __init__(self, name="sort", detect_ncp=True):
-        """``detect_ncp`` is passed to AutoTag."""
+        """`detect_ncp` is passed to AutoTag."""
         self._detect_ncp = detect_ncp
         super().__init__(name=name, description="auto-tag + sort by physics tag")
 
     def apply_to_equation(self, eq):
-        """Auto-tag, then sort ``eq``'s terms."""
+        """Auto-tag, then sort `eq`'s terms."""
         AutoTag(detect_ncp=self._detect_ncp).apply_to_equation(eq)
         SortByTag().apply_to_equation(eq)
         return eq

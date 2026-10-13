@@ -12,7 +12,7 @@ __all__ = ["Basis"]
 
 
 class Basis:
-    """Symbolic modal basis: opaque Function heads ``phi(k, zeta)`` and ``weight(zeta)``.
+    """Symbolic modal basis: opaque Function heads `phi(k, zeta)` and `weight(zeta)`.
 
     Args:
         symbol: name of the two-argument trial/test head.
@@ -20,7 +20,7 @@ class Basis:
     """
 
     def __init__(self, symbol="phi", weight="c"):
-        """Mint the opaque ``phi`` and ``weight`` Function classes."""
+        """Mint the opaque `phi` and `weight` Function classes."""
         self.symbol = symbol
         self.weight_name = weight
         # ONE opaque Function class per family — exactly the production
@@ -38,9 +38,9 @@ class Basis:
     # ── compatibility shim for the bracket/resolve machinery ───────────
     @property
     def phi_fn(self):
-        """Alias of ``phi``, matching the attribute name of a concrete Basisfunction."""
+        """Alias of `phi`, matching the attribute name of a concrete Basisfunction."""
         return self.phi
 
     def __repr__(self):
-        """Return ``Basis(symbol=..., weight=...)``."""
+        """Return `Basis(symbol=..., weight=...)`."""
         return f"Basis(symbol={self.symbol!r}, weight={self.weight_name!r})"

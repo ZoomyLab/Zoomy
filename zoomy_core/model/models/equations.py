@@ -1,6 +1,6 @@
-"""Balance-equation blueprints (``Mass``, ``Momentum``, ``MomentumNonHydrostatic``,
-``Transport``) that declare their state/closure variables and add their residual to a derivation
-``Model``, plus the tracked scaling steps applied to them. They feed the SME/VAM derivations,
+"""Balance-equation blueprints (`Mass`, `Momentum`, `MomentumNonHydrostatic`,
+`Transport`) that declare their state/closure variables and add their residual to a derivation
+`Model`, plus the tracked scaling steps applied to them. They feed the SME/VAM derivations,
 before the Model is lifted to a SystemModel.
 """
 from __future__ import annotations
@@ -18,8 +18,8 @@ _CNAME = {C.x: "x", C.y: "y"}
 
 
 def evaluate_time_derivatives(expr, t):
-    """``.doit()`` only the ``Subs`` atoms and the derivatives carrying ``t`` of a residual,
-    keeping every purely spatial flux divergence ``d_x(F)`` folded so it stays in the flux slot.
+    """`.doit()` only the `Subs` atoms and the derivatives carrying `t` of a residual,
+    keeping every purely spatial flux divergence `d_x(F)` folded so it stays in the flux slot.
     """
     expr = sp.sympify(expr)
     # resolve the modal-closure Subs first (``.doit()`` substitutes ζ=0/1 etc.);
@@ -33,8 +33,8 @@ def evaluate_time_derivatives(expr, t):
 
 
 class Equation:
-    """Base balance blueprint: ``add_to(model)`` declares variables and adds the residual, and
-    ``model.add_equation(blueprint)`` dispatches to it.
+    """Base balance blueprint: `add_to(model)` declares variables and adds the residual, and
+    `model.add_equation(blueprint)` dispatches to it.
     """
 
     _is_blueprint = True
@@ -44,25 +44,25 @@ class Equation:
         self.model = model
 
     def add_to(self, model):
-        """Declare variables and add the residual to ``model``; implemented by subclasses."""
+        """Declare variables and add the residual to `model`; implemented by subclasses."""
         raise NotImplementedError
 
 
 class Mass(Equation):
-    """Incompressible mass balance ``sum_d d_d u_d + d_z w = 0``; registers the horizontal
-    velocities and ``w`` as state.
+    """Incompressible mass balance `sum_d d_d u_d + d_z w = 0`; registers the horizontal
+    velocities and `w` as state.
 
     Args:
-        suffix: scopes the field names for a multilayer column (``"_1"`` gives ``u_1, w_1``).
+        suffix: scopes the field names for a multilayer column (`"_1"` gives `u_1, w_1`).
     """
 
     def __init__(self, model=None, suffix=""):
-        """Store the model and the field-name ``suffix``."""
+        """Store the model and the field-name `suffix`."""
         super().__init__(model)
         self.suffix = suffix
 
     def add_to(self, model):
-        """Declare ``u`` (``v``) and ``w`` as state and add the ``mass`` equation; returns it."""
+        """Declare `u` (`v`) and `w` as state and add the `mass` equation; returns it."""
         coords = model.coords
         horiz = coords[1:-1]                       # (x,) or (x, y)
         s = self.suffix
@@ -77,11 +77,11 @@ class Mass(Equation):
 
 def gravity_components(model, coords):
     """Gravity body-force vector per spatial direction, the single gravity path of every
-    momentum blueprint (flat plane is ``e_d = 0``).
+    momentum blueprint (flat plane is `e_d = 0`).
 
     Returns:
-        ``(g_h, g_z)``: in-plane component per horizontal coordinate (downslope ``g e_x`` along
-            x, else 0) and the normal component ``-g``.
+        `(g_h, g_z)`: in-plane component per horizontal coordinate (downslope `g e_x` along
+            x, else 0) and the normal component `-g`.
     """
     horiz = coords[1:-1]
     g = model.parameters.g
@@ -92,13 +92,13 @@ def gravity_components(model, coords):
 
 
 class Momentum(Equation):
-    """General 3-D momentum balance with the full symmetric stress tensor ``tau_ij`` declared as
-    closure variables and the pressure ``p`` as state.
-    The shallow simplification is not built in; it is applied explicitly by ``moment_scaling``.
+    """General 3-D momentum balance with the full symmetric stress tensor `tau_ij` declared as
+    closure variables and the pressure `p` as state.
+    The shallow simplification is not built in; it is applied explicitly by `moment_scaling`.
     """
 
     def add_to(self, model):
-        """Declare ``p`` and the stress components, and add the ``momentum`` equation
+        """Declare `p` and the stress components, and add the `momentum` equation
         (horizontal rows plus the vertical row); returns it.
         """
         coords = model.coords
@@ -114,7 +114,7 @@ class Momentum(Equation):
         tau = {}                               # symmetric stress tensor, by name
 
         def stress(a, b):
-            """Return the (symmetric) stress function ``tau_ab``, creating it on first use."""
+            """Return the (symmetric) stress function `tau_ab`, creating it on first use."""
             key = "".join(sorted([dname(a), dname(b)]))   # τ_ij = τ_ji
             if key not in tau:
                 tau[key] = sp.Function(f"tau_{key}", real=True)(*coords)
@@ -141,11 +141,11 @@ class Momentum(Equation):
 
 def moment_scaling(model, momentum):
     """Shallow thin-layer scaling step: drop the in-plane stress components (both indices
-    horizontal) from the full-tensor ``Momentum`` and record it in the model history.
+    horizontal) from the full-tensor `Momentum` and record it in the model history.
 
-    The vertical row of ``Momentum`` carries no stress, so the viscous normal stress
-    ``tau_zz`` of the same order never enters; with an in-plane closure the SME adds it to the
-    vertical row (``inplane_normal_stress``).
+    The vertical row of `Momentum` carries no stress, so the viscous normal stress
+    `tau_zz` of the same order never enters; with an in-plane closure the SME adds it to the
+    vertical row (`inplane_normal_stress`).
     """
     drop = {s: sp.S.Zero for k, s in momentum.tau.items() if "z" not in k}
     if drop:
@@ -157,25 +157,25 @@ def moment_scaling(model, momentum):
 
 
 def inplane_normal_stress(model, uvel, horiz, nu):
-    """Viscous normal stress ``tau_zz = 2 rho nu d_z w = -2 rho nu div_h u`` of the
+    """Viscous normal stress `tau_zz = 2 rho nu d_z w = -2 rho nu div_h u` of the
     incompressible Newtonian fluid (bulk, before the sigma-map).
 
-    Same order as the in-plane stress ``add_inplane_viscous`` keeps; the hydrostatic SME takes
-    it through the vertical momentum into the pressure, ``p = rho g (eta - z) + tau_zz``.
+    Same order as the in-plane stress `add_inplane_viscous` keeps; the hydrostatic SME takes
+    it through the vertical momentum into the pressure, `p = rho g (eta - z) + tau_zz`.
     """
     rho = model.parameters.rho
     return -2 * rho * nu * sum(_DERIV[xd](uvel[i]) for i, xd in enumerate(horiz))
 
 
 def add_inplane_viscous(model, momentum_eqs, uvel, horiz, nu, normal_stress=False):
-    """Keep-all complement of ``moment_scaling``: add the incompressible Newtonian in-plane
-    deviatoric stress divergence ``-(1/rho) sum_e d_e[rho nu (d_d u_e + d_e u_d)]`` to each
+    """Keep-all complement of `moment_scaling`: add the incompressible Newtonian in-plane
+    deviatoric stress divergence `-(1/rho) sum_e d_e[rho nu (d_d u_e + d_e u_d)]` to each
     horizontal momentum residual, before the sigma-map.
 
     Args:
-        normal_stress: also add ``(1/rho) d_d tau_zz`` (``inplane_normal_stress``): the model's
-            pressure unknown is then ``p - tau_zz = -sigma_zz``, zero at the free surface (VAM,
-            ML-SME, ML-VAM), and the in-plane stress ``tau_de - delta_de tau_zz``.
+        normal_stress: also add `(1/rho) d_d tau_zz` (`inplane_normal_stress`): the model's
+            pressure unknown is then `p - tau_zz = -sigma_zz`, zero at the free surface (VAM,
+            ML-SME, ML-VAM), and the in-plane stress `tau_de - delta_de tau_zz`.
     """
     rho = model.parameters.rho
     dop = {C.x: d.x, C.y: d.y}
@@ -197,14 +197,14 @@ def add_inplane_viscous(model, momentum_eqs, uvel, horiz, nu, normal_stress=Fals
 
 def package_viscous(expr, nu, states, space):
     """Route a retained viscous residual into conservative diffusion by rewriting
-    ``C d_d d_e Q`` as ``d_d(C d_e Q) - (d_d C) d_e Q`` with the diffusive flux wrapped in a
-    ``ViscousDiffusion`` marker; non-viscous terms pass through.
+    `C d_d d_e Q` as `d_d(C d_e Q) - (d_d C) d_e Q` with the diffusive flux wrapped in a
+    `ViscousDiffusion` marker; non-viscous terms pass through.
 
     Args:
         expr: projected residual.
         nu: viscosity symbol identifying the viscous terms.
-        states: state functions ``Q`` that may carry second derivatives.
-        space: spatial coordinates ``d, e``.
+        states: state functions `Q` that may carry second derivatives.
+        space: spatial coordinates `d, e`.
     Returns:
         The residual with the viscous part in divergence form.
     """
@@ -238,17 +238,17 @@ def package_viscous(expr, nu, states, space):
 # abstractly and is therefore independent of WHEN the frame is resolved.
 
 def frame_slope(tag, direction):
-    """Opaque geometric-slope symbol of a boundary interface (``tag`` is ``"b"`` or ``"eta"``)
-    in horizontal ``direction`` ``"x"`` or ``"y"``, distinct from the physical
-    ``d_d(interface)``.
+    """Opaque geometric-slope symbol of a boundary interface (`tag` is `"b"` or `"eta"`)
+    in horizontal `direction` `"x"` or `"y"`, distinct from the physical
+    `d_d(interface)`.
     """
     return sp.Symbol(f"frameslope_{tag}_{direction}", real=True)
 
 
 def small_slope_scaling(model):
     """Tracked step resolving the opaque boundary frame to its small-slope limit (every
-    ``frame_slope`` symbol to 0, ``n -> z_hat``); skip it to keep the slope-aware tractions.
-    Geometric sibling of ``moment_scaling``; together they give the shallow-moment form.
+    `frame_slope` symbol to 0, `n -> z_hat`); skip it to keep the slope-aware tractions.
+    Geometric sibling of `moment_scaling`; together they give the shallow-moment form.
     """
     slopes = set()
     for eq in model._equations.values():
@@ -263,12 +263,12 @@ def small_slope_scaling(model):
 
 
 def slope_aware_scaling(model, interfaces):
-    """Complement of ``small_slope_scaling``: resolve each ``frame_slope`` symbol to the
-    physical interface slope ``d_dir(interface)``, so the geometrically exact model has no
+    """Complement of `small_slope_scaling`: resolve each `frame_slope` symbol to the
+    physical interface slope `d_dir(interface)`, so the geometrically exact model has no
     opaque symbol left.
 
     Args:
-        interfaces: map from frame tag to height expression, e.g. ``{"b": b, "eta": b + h}``.
+        interfaces: map from frame tag to height expression, e.g. `{"b": b, "eta": b + h}`.
     """
     from zoomy_core import coords as _C
     dirmap = {"x": _C.x, "y": _C.y}
@@ -296,19 +296,19 @@ def slope_aware_scaling(model, interfaces):
 
 class MomentumNonHydrostatic(Equation):
     """Non-hydrostatic momentum with the hydrostatic pressure pre-absorbed: horizontal rows
-    ``momentum_<d>`` carry ``g d_d(eta)`` and ``p`` is only the non-hydrostatic part, and the
-    vertical row ``momentum_z`` keeps ``d_z p``.
+    `momentum_<d>` carry `g d_d(eta)` and `p` is only the non-hydrostatic part, and the
+    vertical row `momentum_z` keeps `d_z p`.
 
     Args:
         suffix: scopes the field names (multilayer column).
-        tau_name: stress field name for one horizontal direction (default ``tau_xz``).
-        free_surface: overrides ``eta`` (default ``b + h``).
+        tau_name: stress field name for one horizontal direction (default `tau_xz`).
+        free_surface: overrides `eta` (default `b + h`).
     References:
         Escalante et al. 2024, https://doi.org/10.1016/j.jcp.2024.112882
     """
 
     def __init__(self, model=None, suffix="", tau_name="tau_xz", free_surface=None):
-        """Store the field-name ``suffix``, the stress name and the optional free-surface
+        """Store the field-name `suffix`, the stress name and the optional free-surface
         override.
         """
         super().__init__(model)
@@ -317,8 +317,8 @@ class MomentumNonHydrostatic(Equation):
         self.free_surface = free_surface
 
     def add_to(self, model):
-        """Declare ``p`` and one shear stress per horizontal direction and add the
-        ``momentum_x`` (``momentum_y``) and ``momentum_z`` equations.
+        """Declare `p` and one shear stress per horizontal direction and add the
+        `momentum_x` (`momentum_y`) and `momentum_z` equations.
         """
         coords = model.coords
         t = coords[0]
@@ -334,7 +334,7 @@ class MomentumNonHydrostatic(Equation):
         # so 1-D / per-layer is byte-identical; 2 horizontals → ``tau_xz, tau_yz``
         # (+ suffix) so momentum_y closes its OWN shear, not momentum_x's.
         def _sname(xd):
-            """Name of the shear-stress field for horizontal coordinate ``xd``."""
+            """Name of the shear-stress field for horizontal coordinate `xd`."""
             return self.tau_name if len(horiz) == 1 else f"tau_{_CNAME[xd]}z" + s
         tau = {xd: sp.Function(_sname(xd), real=True)(*coords) for xd in horiz}
         if self.free_surface is not None:
@@ -365,16 +365,16 @@ class MomentumNonHydrostatic(Equation):
 
 
 class Transport(Equation):
-    """Conservative transport of a scalar field ``name``,
-    ``d_t c + sum_d d_d(u_d c) + d_z(w c) = source``, registered as a state field (TKE,
+    """Conservative transport of a scalar field `name`,
+    `d_t c + sum_d d_d(u_d c) + d_z(w c) = source`, registered as a state field (TKE,
     dissipation, tracer, ...).
 
     Args:
-        source: optional source field or expression; ``None`` for a passive scalar.
+        source: optional source field or expression; `None` for a passive scalar.
     """
 
     def __init__(self, model=None, name="c", source=None):
-        """Store the field ``name`` and the optional ``source``."""
+        """Store the field `name` and the optional `source`."""
         super().__init__(model)
         self.name = name
         self.source = source

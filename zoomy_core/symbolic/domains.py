@@ -2,23 +2,23 @@
 
 Sympy-side atoms for representing continuous integration regions and
 their boundaries.  These are *not* the numerical mesh in
-``zoomy_core.mesh`` — they are symbolic descriptors used to drive
-weak-form derivations (``DivergenceTheorem``, ``MapToReferenceElement``)
+`zoomy_core.mesh` — they are symbolic descriptors used to drive
+weak-form derivations (`DivergenceTheorem`, `MapToReferenceElement`)
 without committing to a specific discretisation.
 
 Pattern:
 
-* ``Domain`` and its subclasses (``Interval``, ``Simplex``, ``Box``) are
+* `Domain` and its subclasses (`Interval`, `Simplex`, `Box`) are
   Python descriptors carrying coordinate symbols plus geometry data.
-* ``BoundaryIntegral(integrand, domain)`` is an opaque sympy atom — the
-  surface integral ``∫_∂D f ds``.  It is manufactured per ``Domain``
-  via the established ``phi_fn`` pattern (one ``sympy.Function``
-  subclass per domain instance, with ``_domain`` back-reference).
-* ``NormalVector(domain)`` returns the ``sympy.Function`` subclass for
-  the outward unit normal.  Calls ``n(0)``, ``n(1)``, … give opaque
+* `BoundaryIntegral(integrand, domain)` is an opaque sympy atom — the
+  surface integral `∫_∂D f ds`.  It is manufactured per `Domain`
+  via the established `phi_fn` pattern (one `sympy.Function`
+  subclass per domain instance, with `_domain` back-reference).
+* `NormalVector(domain)` returns the `sympy.Function` subclass for
+  the outward unit normal.  Calls `n(0)`, `n(1)`, … give opaque
   component atoms.
 
-Volume integrals stay as native ``sympy.Integral`` — the existing 1D
+Volume integrals stay as native `sympy.Integral` — the existing 1D
 pipeline keeps consuming them unchanged.
 """
 
@@ -38,7 +38,7 @@ class Domain:
     """Continuous integration region in symbolic form.
 
     Subclasses fill in geometry (vertices, intervals) and override
-    ``boundary``, ``reference``, ``affine_map``, ``normal`` as
+    `boundary`, `reference`, `affine_map`, `normal` as
     appropriate for their shape.
     """
 
@@ -74,15 +74,15 @@ class Domain:
             f"{type(self).__name__} does not define a reference element.")
 
     def affine_map(self) -> tuple[sp.Matrix, sp.Matrix]:
-        """Return ``(B, V0)`` such that ``x = V0 + B · ξ`` maps the
-        reference element to ``self``.  Defined only on volume domains.
+        """Return `(B, V0)` such that `x = V0 + B · ξ` maps the
+        reference element to `self`.  Defined only on volume domains.
         """
         raise NotImplementedError(
             f"{type(self).__name__} does not define an affine map.")
 
     def normal(self) -> type:
-        """Return the ``sympy.Function`` class for the outward unit
-        normal on ``self``.  Defined only on boundary domains.
+        """Return the `sympy.Function` class for the outward unit
+        normal on `self`.  Defined only on boundary domains.
         """
         raise NotImplementedError(
             f"{type(self).__name__} is not a boundary; normals are "
@@ -92,11 +92,11 @@ class Domain:
 
     @property
     def boundary_integral_fn(self) -> type:
-        """``sympy.Function`` subclass for ``∫_∂(self) f ds`` atoms.
+        """`sympy.Function` subclass for `∫_∂(self) f ds` atoms.
 
-        One class per ``Domain`` instance.  The back-reference
-        ``cls._domain`` lets operations recover the surrounding domain.
-        Renders in LaTeX as ``∮_{<name>} f \\, dS`` via the ``_latex``
+        One class per `Domain` instance.  The back-reference
+        `cls._domain` lets operations recover the surrounding domain.
+        Renders in LaTeX as `∮_{<name>} f \\, dS` via the `_latex`
         method.
         """
         if self._boundary_integral_fn is None:
@@ -118,7 +118,7 @@ class Domain:
 
     def _latex_name(self) -> str:
         """LaTeX-friendly version of the domain's name (override in subclasses
-        to inject ``\\partial`` / ``\\hat`` and similar)."""
+        to inject `\\partial` / `\\hat` and similar)."""
         # ``hat_K`` → ``\\hat{K}``, ``hat_∂K`` → ``\\hat{\\partial K}``.
         if self.name.startswith("hat_"):
             inner = self.name[4:]
@@ -128,11 +128,11 @@ class Domain:
 
     @property
     def normal_fn(self) -> type:
-        """``sympy.Function`` subclass for outward unit normal components.
+        """`sympy.Function` subclass for outward unit normal components.
 
-        Calls ``n(i)`` carry the back-reference ``cls._domain`` so
+        Calls `n(i)` carry the back-reference `cls._domain` so
         downstream operations can verify "this normal belongs to that
-        boundary".  Renders in LaTeX as ``n_<name>^{(i)}``.
+        boundary".  Renders in LaTeX as `n_<name>^{(i)}`.
         """
         if self._normal_fn is None:
             domain_name_latex = self._latex_name()
@@ -164,7 +164,7 @@ class Domain:
 
 
 class Interval(Domain):
-    """1D interval ``[a, b]`` parametrised by a single ``var``."""
+    """1D interval `[a, b]` parametrised by a single `var`."""
 
     def __init__(self, var: sp.Symbol, a, b, name: str | None = None):
         super().__init__((var,), name or f"I_{var}")
@@ -189,11 +189,11 @@ class Interval(Domain):
 
 
 class Simplex(Domain):
-    """``n``-dim simplex from a vertex tuple.
+    """`n`-dim simplex from a vertex tuple.
 
-    ``vertices`` is a sequence of ``n+1`` points, each a tuple/Matrix
-    of length ``n`` (matching ``coords``).  ``B = [V₁−V₀ | V₂−V₀ | …]``,
-    ``V₀`` is the offset, and the affine map is ``x = V₀ + B · ξ``.
+    `vertices` is a sequence of `n+1` points, each a tuple/Matrix
+    of length `n` (matching `coords`).  `B = [V₁−V₀ | V₂−V₀ | …]`,
+    `V₀` is the offset, and the affine map is `x = V₀ + B · ξ`.
     """
 
     def __init__(self, vertices: Sequence, coords: Sequence[sp.Symbol],
@@ -241,7 +241,7 @@ class Simplex(Domain):
 
 
 class Box(Domain):
-    """Tensor product of ``Interval`` factors."""
+    """Tensor product of `Interval` factors."""
 
     def __init__(self, intervals: Sequence[Interval], name: str | None = None):
         coords = tuple(I.coords[0] for I in intervals)
@@ -275,8 +275,8 @@ class Box(Domain):
 class _BoundaryDomain(Domain):
     """Base for boundary-of-volume domains.
 
-    Boundary domains expose ``normal()`` but do not have their own
-    ``boundary()`` (we don't model boundary-of-boundary in this layer).
+    Boundary domains expose `normal()` but do not have their own
+    `boundary()` (we don't model boundary-of-boundary in this layer).
     """
 
     parent: Domain
@@ -310,11 +310,11 @@ class _BoundaryDomain(Domain):
 
 
 class PointSet(_BoundaryDomain):
-    """Degenerate 0-dim boundary — the boundary of an :class:`Interval`.
+    """Degenerate 0-dim boundary — the boundary of an `Interval`.
 
-    Bridge to the existing ``Subs(f, var, bound)`` plumbing in
-    ``ins_generator``: a ``BoundaryIntegral`` over a ``PointSet`` is
-    semantically ``f|_{var=b} − f|_{var=a}`` and resolves through that
+    Bridge to the existing `Subs(f, var, bound)` plumbing in
+    `ins_generator`: a `BoundaryIntegral` over a `PointSet` is
+    semantically `f|_{var=b} − f|_{var=a}` and resolves through that
     convention rather than producing a new symbolic kind.
     """
 
@@ -333,14 +333,14 @@ class PointSet(_BoundaryDomain):
 
 
 class SimplexBoundary(_BoundaryDomain):
-    """Opaque boundary of a :class:`Simplex` — one symbolic atom covers
-    ``∂K`` (no per-face decomposition in this layer).
+    """Opaque boundary of a `Simplex` — one symbolic atom covers
+    `∂K` (no per-face decomposition in this layer).
     """
 
 
 class BoxBoundary(_BoundaryDomain):
-    """Opaque boundary of a :class:`Box` — same convention as
-    :class:`SimplexBoundary`.
+    """Opaque boundary of a `Box` — same convention as
+    `SimplexBoundary`.
     """
 
 
@@ -350,24 +350,26 @@ class BoxBoundary(_BoundaryDomain):
 
 
 def BoundaryIntegral(integrand: sp.Expr, domain: Domain) -> sp.Expr:
-    """Construct a symbolic ``∫_∂D f ds`` atom.
+    """Construct a symbolic `∫_∂D f ds` atom.
 
-    ``domain`` should be a boundary domain (e.g. ``K.boundary()``).  The
-    result is an opaque ``sympy.Function`` call whose class carries
-    ``_domain`` back to ``domain`` — operations like
-    ``DivergenceTheorem`` and ``MapToReferenceElement`` walk for
+    `domain` should be a boundary domain (e.g. `K.boundary()`).  The
+    result is an opaque `sympy.Function` call whose class carries
+    `_domain` back to `domain` — operations like
+    `DivergenceTheorem` and `MapToReferenceElement` walk for
     instances of this class to find boundary integrals.
     """
     return domain.boundary_integral_fn(integrand)
 
 
 def NormalVector(domain: Domain) -> type:
-    """Return the ``sympy.Function`` class for outward unit normal
-    components on ``domain``.
+    """Return the `sympy.Function` class for outward unit normal
+    components on `domain`.
 
-    Usage::
+    Usage:
 
+    ```
         n = NormalVector(K.boundary())
         flux = sp.diff(u, x) * n(0) + sp.diff(u, y) * n(1)
+    ```
     """
     return domain.normal_fn

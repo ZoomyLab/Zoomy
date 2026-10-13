@@ -2,22 +2,22 @@
 
 A *block* is an opaque operation the template calls by name; its body is
 supplied per backend (one shared xp body for numpy and jax, native code for
-C++).  Its :class:`BlockSpec` states:
+C++).  Its `BlockSpec` states:
 
-* ``inputs`` / ``outputs`` -- typed :class:`~.kinds.Port` lists.  A port name
+* `inputs` / `outputs` -- typed `Port` lists.  A port name
   that appears in BOTH lists is an in/out port (passed once, by mutable
   reference, in C);
-* ``comm`` -- ``none`` (pointwise / local), ``neighbor`` (reads halo / ghost
-  data), ``global`` (collective reduction).  The type checker's
+* `comm` -- `none` (pointwise / local), `neighbor` (reads halo / ghost
+  data), `global` (collective reduction).  The type checker's
   replicated-predicate rule reads it;
-* ``role`` -- ``block`` (called with ``Call``) or ``callback`` (called with
-  ``Callback``; a host side effect);
-* ``doc`` -- the contract a backend body implements.
+* `role` -- `block` (called with `Call`) or `callback` (called with
+  `Callback`; a host side effect);
+* `doc` -- the contract a backend body implements.
 
-Every ``Call`` / ``Callback`` is checked against its spec at build time
+Every `Call` / `Callback` is checked against its spec at build time
 (arity and kind).  Body contract (Python backends): a body is called with the
 input values in port order and returns its outputs -- the bare value for one
-output, a tuple for several, ``None`` for none.
+output, a tuple for several, `None` for none.
 """
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ class BlockSpec:
 
 
 class BlockRegistry:
-    """Name -> :class:`BlockSpec`.  ``extended(...)`` returns a child registry
+    """Name -> `BlockSpec`.  `extended(...)` returns a child registry
     (parent specs visible, additions local) so plugins and tests never mutate
     the shared default."""
 

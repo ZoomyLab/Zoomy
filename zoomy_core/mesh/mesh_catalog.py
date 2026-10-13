@@ -61,7 +61,7 @@ def _http_get_bytes(url: str) -> bytes:
 
 
 async def _http_get_json_async(url: str):
-    """Fetch JSON with ``pyfetch`` under Pyodide, else with ``requests``."""
+    """Fetch JSON with `pyfetch` under Pyodide, else with `requests`."""
     if _IN_PYODIDE:
         resp = await pyfetch(url)
         return await resp.json()
@@ -73,7 +73,7 @@ async def _http_get_json_async(url: str):
 
 
 async def _http_get_bytes_async(url: str) -> bytes:
-    """Fetch raw bytes with ``pyfetch`` under Pyodide, else with ``requests``."""
+    """Fetch raw bytes with `pyfetch` under Pyodide, else with `requests`."""
     if _IN_PYODIDE:
         resp = await pyfetch(url)
         return await resp.bytes()
@@ -89,7 +89,7 @@ async def _http_get_bytes_async(url: str) -> bytes:
 # ---------------------------------------------------------------------------
 @dataclass
 class MeshEntry:
-    """One logical mesh (e.g. ``square__mesh``) with its available sizes and file types."""
+    """One logical mesh (e.g. `square__mesh`) with its available sizes and file types."""
 
     name: str
     sizes: List[str] = field(default_factory=list)
@@ -98,26 +98,26 @@ class MeshEntry:
     # Derived from name
     @property
     def category(self) -> str:
-        """Display category from the first ``__``-separated name segment ("" if unknown)."""
+        """Display category from the first `__`-separated name segment ("" if unknown)."""
         first = self.name.split("__")[0]
         return CATEGORIES.get(first, "")
 
     @property
     def short_name(self) -> str:
-        """Name without category prefix for display, e.g. ``square__mesh`` -> ``square / mesh``."""
+        """Name without category prefix for display, e.g. `square__mesh` -> `square / mesh`."""
         parts = self.name.split("__")
         if parts[0] in CATEGORIES:
             parts = parts[1:]
         return " / ".join(parts)
 
     def filename(self, filetype: str = "h5", size: str = "medium") -> str:
-        """File name of the ``size``/``filetype`` variant."""
+        """File name of the `size`/`filetype` variant."""
         if size and self.sizes:
             return f"{self.name}__{size}.{filetype}"
         return f"{self.name}.{filetype}"
 
     def url(self, filetype: str = "h5", size: str = "medium") -> str:
-        """Download URL of the ``size``/``filetype`` variant."""
+        """Download URL of the `size`/`filetype` variant."""
         return FILES_URL + self.filename(filetype, size)
 
 
@@ -128,8 +128,8 @@ class MeshCatalog:
     """Browse, inspect and download meshes from the Zoomy mesh repository."""
 
     def __init__(self, cache_dir: Optional[str | Path] = None, auto_fetch: bool = True):
-        """Create the catalog, fetching the index unless ``auto_fetch`` is False; ``cache_dir``
-        defaults to ``~/.zoomy/meshes``.
+        """Create the catalog, fetching the index unless `auto_fetch` is False; `cache_dir`
+        defaults to `~/.zoomy/meshes`.
         """
         self._entries: Dict[str, MeshEntry] = {}
         self._cache_dir = Path(cache_dir) if cache_dir else Path.home() / ".zoomy" / "meshes"
@@ -145,14 +145,14 @@ class MeshCatalog:
         return self
 
     async def refresh_async(self) -> "MeshCatalog":
-        """Async variant of ``refresh``."""
+        """Async variant of `refresh`."""
         data = await _http_get_json_async(INDEX_URL)
         self._entries = self._parse_index(data)
         return self
 
     @staticmethod
     def _parse_index(data) -> Dict[str, MeshEntry]:
-        """Parse a v2 (dict) or v1 (flat file list) index into ``MeshEntry`` objects."""
+        """Parse a v2 (dict) or v1 (flat file list) index into `MeshEntry` objects."""
         entries: Dict[str, MeshEntry] = {}
 
         if isinstance(data, dict) and data.get("version", 1) >= 2:
@@ -196,7 +196,7 @@ class MeshCatalog:
         return sorted(self._entries)
 
     def get(self, name: str) -> MeshEntry:
-        """Entry for ``name``, also accepting a unique substring; raises KeyError if absent or
+        """Entry for `name`, also accepting a unique substring; raises KeyError if absent or
         ambiguous.
         """
         if name in self._entries:
@@ -234,7 +234,7 @@ class MeshCatalog:
     # -- display (mirrors CLI overview/list/show) ---------------------------
 
     def list(self, category: Optional[str] = None) -> Dict[str, List[MeshEntry]]:
-        """Print a grouped overview, optionally of one ``category``, and return the groups."""
+        """Print a grouped overview, optionally of one `category`, and return the groups."""
         groups = self.by_category()
         if category:
             key = next(
@@ -287,8 +287,8 @@ class MeshCatalog:
 
         Args:
             name: full or partial mesh name.
-            size: ``"coarse"``, ``"medium"`` or ``"fine"``.
-            filetype: ``"h5"``, ``"msh"`` or ``"geo"``.
+            size: `"coarse"`, `"medium"` or `"fine"`.
+            filetype: `"h5"`, `"msh"` or `"geo"`.
             folder: target directory (default the cache directory).
         """
         if filetype not in ALLOWED_TYPES:
@@ -326,7 +326,7 @@ class MeshCatalog:
         filetype: str = "h5",
         folder: Optional[str | Path] = None,
     ) -> Path:
-        """Async variant of ``download`` for Pyodide."""
+        """Async variant of `download` for Pyodide."""
         if filetype not in ALLOWED_TYPES:
             raise ValueError(f"Invalid filetype '{filetype}'. Allowed: {ALLOWED_TYPES}")
 
@@ -357,7 +357,7 @@ class MeshCatalog:
     def _download_candidates(
         entry: MeshEntry, filetype: str, size: str
     ) -> List[tuple[str, str]]:
-        """``(filename, url)`` pairs to try: the size-suffixed file first, then the unsuffixed one."""
+        """`(filename, url)` pairs to try: the size-suffixed file first, then the unsuffixed one."""
         candidates = []
         if entry.sizes:
             candidates.append(
@@ -377,7 +377,7 @@ class MeshCatalog:
         size: str = "medium",
         folder: Optional[str | Path] = None,
     ):
-        """Download a mesh and return it as an LSQMesh, from HDF5 if possible, else from ``.msh``."""
+        """Download a mesh and return it as an LSQMesh, from HDF5 if possible, else from `.msh`."""
         from zoomy_core.mesh.lsq_mesh import LSQMesh
         from zoomy_core.mesh.base_mesh import BaseMesh
         from zoomy_core.mesh.fvm_mesh import FVMMesh
@@ -397,7 +397,7 @@ class MeshCatalog:
         size: str = "medium",
         folder: Optional[str | Path] = None,
     ):
-        """Async variant of ``load`` (HDF5 only)."""
+        """Async variant of `load` (HDF5 only)."""
         path = await self.download_async(name, size=size, filetype="h5", folder=folder)
         from zoomy_core.mesh.lsq_mesh import LSQMesh as Mesh
 
@@ -432,9 +432,9 @@ class MeshCatalog:
         return len(self._entries)
 
     def __contains__(self, name: str) -> bool:
-        """Whether ``name`` is an exact mesh name."""
+        """Whether `name` is an exact mesh name."""
         return name in self._entries
 
     def __getitem__(self, name: str) -> MeshEntry:
-        """Same as ``get``."""
+        """Same as `get`."""
         return self.get(name)

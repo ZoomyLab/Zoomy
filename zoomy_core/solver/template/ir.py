@@ -1,39 +1,39 @@
 """Statements and procedures of the solver template IR.
 
-The template is a tree of :class:`Procedure` objects whose bodies are
+The template is a tree of `Procedure` objects whose bodies are
 statements.  The IR holds STRUCTURE only; lowering knowledge lives in the
-walkers (:mod:`.walker_python`, :mod:`.walker_c`) and the backend primitive
+walkers (`.walker_python`, `.walker_c`) and the backend primitive
 objects.
 
 Statement kinds
 ---------------
-``Seq(body)``                           sequence (grouping only)
-``Assign(target, expr, kind=None)``     scalar or whole-array elementwise
-                                        assignment; ``target`` may be indexed
-                                        (``"lam[f]"``) inside ``ForEachFace``
-``Call(callee, args, out)``             call a registered block or a Procedure
+`Seq(body)`                           sequence (grouping only)
+`Assign(target, expr, kind=None)`     scalar or whole-array elementwise
+                                        assignment; `target` may be indexed
+                                        (`"lam[f]"`) inside `ForEachFace`
+`Call(callee, args, out)`             call a registered block or a Procedure
 ``Hook(name, inputs, outputs, default)``named extension point; plugins fill it,
-                                        otherwise ``default`` runs
-``IfStatic(flag, then, otherwise)``     BUILD-time branch, resolved away
-``While(cond, body, carry=None)``       runtime loop, dynamic trip count
-``Repeat(n, body, index, carry)``       runtime loop, STATIC trip count
-``ForEachFace(index, count, body)``     face traversal, STATIC count
-``Select(pred, then, otherwise)``       runtime branch
-``Root(residual, x0, args, out, opts)`` nonlinear solve R(x; args) = 0;
-                                        ``residual`` is a Procedure (closure)
-``LinSolve(matvec, rhs, args, out, opts)``  linear solve A(x; args) = rhs
-``Guard(ok, msg, values)``              fatal check
-``Callback(fn, inputs, outputs, kind)`` host side effect: ``idempotent`` |
-                                        ``stateful`` | ``returns``
+                                        otherwise `default` runs
+`IfStatic(flag, then, otherwise)`     BUILD-time branch, resolved away
+`While(cond, body, carry=None)`       runtime loop, dynamic trip count
+`Repeat(n, body, index, carry)`       runtime loop, STATIC trip count
+`ForEachFace(index, count, body)`     face traversal, STATIC count
+`Select(pred, then, otherwise)`       runtime branch
+`Root(residual, x0, args, out, opts)` nonlinear solve R(x; args) = 0;
+                                        `residual` is a Procedure (closure)
+`LinSolve(matvec, rhs, args, out, opts)`  linear solve A(x; args) = rhs
+`Guard(ok, msg, values)`              fatal check
+`Callback(fn, inputs, outputs, kind)` host side effect: `idempotent` |
+                                        `stateful` | `returns`
 
 Scope rules (shared by the type checker and every walker)
 ----------------------------------------------------------
-* Names are bound by procedure inputs, ``Assign`` targets, ``Call`` /
-  ``Callback`` outputs, ``Root`` / ``LinSolve`` outputs and stats.
-* ``Seq`` and ``Hook`` bodies are inline: their bindings stay visible.
-* A loop (``While`` / ``Repeat`` / ``ForEachFace``) updates only names bound
+* Names are bound by procedure inputs, `Assign` targets, `Call` /
+  `Callback` outputs, `Root` / `LinSolve` outputs and stats.
+* `Seq` and `Hook` bodies are inline: their bindings stay visible.
+* A loop (`While` / `Repeat` / `ForEachFace`) updates only names bound
   BEFORE it (its carry); names first bound inside the body are body-local.
-* After a ``Select`` the names written in a branch that were bound before keep
+* After a `Select` the names written in a branch that were bound before keep
   the branch value; a name first bound inside is visible afterwards only when
   BOTH branches bind it.
 * Carries and Select outputs are inferred (written AND bound before AND live)
@@ -57,8 +57,8 @@ _IR_FILES = {os.path.join(_TEMPLATE_DIR, "ir.py"), "<string>"}
 
 
 def _origin() -> str:
-    """``file:line`` of the code that built a statement (first frame outside
-    this module and the dataclass-generated ``__init__``)."""
+    """`file:line` of the code that built a statement (first frame outside
+    this module and the dataclass-generated `__init__`)."""
     f = sys._getframe(1)
     while f is not None and (f.f_code.co_filename in _IR_FILES
                              or f.f_code.co_filename.startswith("<")):
@@ -114,8 +114,8 @@ class IRError(ValueError):
 
 @dataclasses.dataclass(frozen=True)
 class Statement:
-    """Base class.  ``note`` is printed next to the statement in generated
-    code and in ``show()``; ``origin`` records the builder line."""
+    """Base class.  `note` is printed next to the statement in generated
+    code and in `show()`; `origin` records the builder line."""
 
     note: str = dataclasses.field(default="", kw_only=True)
     origin: str = dataclasses.field(default="", kw_only=True, compare=False,
@@ -161,10 +161,10 @@ _INDEXED = re.compile(r"^\s*([A-Za-z_]\w*)\s*\[(.+)\]\s*$")
 
 @dataclasses.dataclass(frozen=True)
 class Assign(Statement):
-    """``target = expr``.  ``kind`` declares the target kind explicitly
-    (otherwise it is inferred from ``expr``).  A whole-array target with an
-    array-valued ``expr`` is an ELEMENTWISE assignment; an indexed target
-    ``"x[i]"`` writes one element (``ForEachFace`` bodies)."""
+    """`target = expr`.  `kind` declares the target kind explicitly
+    (otherwise it is inferred from `expr`).  A whole-array target with an
+    array-valued `expr` is an ELEMENTWISE assignment; an indexed target
+    `"x[i]"` writes one element (`ForEachFace` bodies)."""
 
     target: str
     expr: Any
@@ -196,8 +196,8 @@ class Assign(Statement):
 
 @dataclasses.dataclass(frozen=True)
 class Call(Statement):
-    """Call ``callee`` (a registered block name or a :class:`Procedure`) with
-    argument NAMES; bind its outputs to ``out``."""
+    """Call `callee` (a registered block name or a `Procedure`) with
+    argument NAMES; bind its outputs to `out`."""
 
     callee: Any
     args: tuple = ()
@@ -222,10 +222,10 @@ class Call(Statement):
 
 @dataclasses.dataclass(frozen=True)
 class Hook(Statement):
-    """Named extension point.  ``inputs`` / ``outputs`` declare what a filling
-    body may read / must leave bound (it may write ONLY ``outputs`` among the
-    names bound before it).  ``body`` is the plugin fill (``None`` = unfilled,
-    the ``default`` body runs)."""
+    """Named extension point.  `inputs` / `outputs` declare what a filling
+    body may read / must leave bound (it may write ONLY `outputs` among the
+    names bound before it).  `body` is the plugin fill (`None` = unfilled,
+    the `default` body runs)."""
 
     name: str
     inputs: tuple = ()
@@ -254,8 +254,8 @@ class Hook(Statement):
 
 @dataclasses.dataclass(frozen=True)
 class IfStatic(Statement):
-    """BUILD-time branch on a flag; :func:`resolve_static` splices the chosen
-    branch.  No walker lowers an unresolved ``IfStatic``."""
+    """BUILD-time branch on a flag; `resolve_static` splices the chosen
+    branch.  No walker lowers an unresolved `IfStatic`."""
 
     flag: str
     then: tuple = ()
@@ -289,8 +289,8 @@ class While(Statement):
 
 @dataclasses.dataclass(frozen=True)
 class Repeat(Statement):
-    """Loop with a STATIC trip count ``n`` (an int or the name of an int
-    constant).  ``index`` (optional) is bound to 0..n-1 inside the body."""
+    """Loop with a STATIC trip count `n` (an int or the name of an int
+    constant).  `index` (optional) is bound to 0..n-1 inside the body."""
 
     n: Any
     body: tuple = ()
@@ -312,7 +312,7 @@ class Repeat(Statement):
 
 @dataclasses.dataclass(frozen=True)
 class ForEachFace(Statement):
-    """Face traversal ``for index in range(count)``; ``count`` is STATIC (an
+    """Face traversal `for index in range(count)`; `count` is STATIC (an
     int or the name of an int constant)."""
 
     index: str
@@ -355,17 +355,17 @@ class Select(Statement):
 class LinSolveOpts:
     """Options of a linear solve.
 
-    ``kind``       ``krylov`` (restarted GMRES with the backend inner product)
-                   | ``dense`` | ``cellwise`` (block-diagonal over the trailing
-                   cell axis) | ``banded`` (block-banded over the cell axis,
-                   half-bandwidth ``bandwidth`` cells)
-    ``tol``        relative residual tolerance (number or constant name)
-    ``restart``    Krylov restart length; ``maxiter`` restart cycles
-    ``precond``    Procedure ``(r, *args) -> z`` (right preconditioner, linear)
-    ``nullspace``  ``None`` | ``"constant"`` (whole vector) |
-                   ``"constant_per_row"`` (per leading row, over the cell axis):
+    `kind`       `krylov` (restarted GMRES with the backend inner product)
+                   | `dense` | `cellwise` (block-diagonal over the trailing
+                   cell axis) | `banded` (block-banded over the cell axis,
+                   half-bandwidth `bandwidth` cells)
+    `tol`        relative residual tolerance (number or constant name)
+    `restart`    Krylov restart length; `maxiter` restart cycles
+    `precond`    Procedure `(r, *args) -> z` (right preconditioner, linear)
+    `nullspace`  `None` | `"constant"` (whole vector) |
+                   `"constant_per_row"` (per leading row, over the cell axis):
                    rhs and solution are projected to zero mean
-    ``on_fail``    ``guard`` (D9, default) | ``warn`` | ``ignore``
+    `on_fail`    `guard` (D9, default) | `warn` | `ignore`
     """
 
     kind: str = "krylov"
@@ -394,16 +394,16 @@ class LinSolveOpts:
 class RootOpts:
     """Options of a nonlinear (Newton) solve.
 
-    ``jac``         ``ad`` | ``fd`` | ``analytic`` -- how the Newton update
-                    applies J(x)v; ``analytic`` uses ``jac_proc`` =
-                    Procedure ``(x, v, *args) -> Jv``.  Derivatives of the root
+    `jac`         `ad` | `fd` | `analytic` -- how the Newton update
+                    applies J(x)v; `analytic` uses `jac_proc` =
+                    Procedure `(x, v, *args) -> Jv`.  Derivatives of the root
                     (jax) always use the exact AD linearisation (implicit
                     function theorem).
-    ``linsolve``    :class:`LinSolveOpts` for the Newton update systems
-    ``aux_policy``  ``frozen`` | ``local`` | ``full``: how the residual treats
+    `linsolve`    `LinSolveOpts` for the Newton update systems
+    `aux_policy`  `frozen` | `local` | `full`: how the residual treats
                     aux fields; recorded here, realised by the stage that
                     builds the residual Procedure
-    ``on_fail``     ``guard`` (D9, default) | ``warn`` | ``ignore``
+    `on_fail`     `guard` (D9, default) | `warn` | `ignore`
     """
 
     tol: Any = 1e-12
@@ -428,9 +428,9 @@ class RootOpts:
 
 @dataclasses.dataclass(frozen=True)
 class Root(Statement):
-    """``out`` = root x of ``residual(x, *args)`` starting from ``x0``.
+    """`out` = root x of `residual(x, *args)` starting from `x0`.
 
-    ``stats`` optionally names ``(ok, rnorm, iters)`` (bool, real, int)."""
+    `stats` optionally names `(ok, rnorm, iters)` (bool, real, int)."""
 
     residual: "Procedure"
     x0: str
@@ -473,9 +473,9 @@ class Root(Statement):
 
 @dataclasses.dataclass(frozen=True)
 class LinSolve(Statement):
-    """``out`` = x with ``matvec(x, *args) = rhs``.
+    """`out` = x with `matvec(x, *args) = rhs`.
 
-    ``stats`` optionally names ``(ok, rel_resid, iters)``."""
+    `stats` optionally names `(ok, rel_resid, iters)`."""
 
     matvec: "Procedure"
     rhs: str
@@ -511,8 +511,8 @@ class LinSolve(Statement):
 
 @dataclasses.dataclass(frozen=True)
 class Guard(Statement):
-    """Fatal check: ``ok`` must hold.  ``values`` are reported on failure.
-    ``on`` (optional) names the live values the check is attached to in
+    """Fatal check: `ok` must hold.  `values` are reported on failure.
+    `on` (optional) names the live values the check is attached to in
     traced lowerings; by default the walker picks live names itself."""
 
     ok: Any
@@ -533,14 +533,14 @@ CALLBACK_KINDS = ("idempotent", "stateful", "returns")
 
 @dataclasses.dataclass(frozen=True)
 class Callback(Statement):
-    """Host side effect ``fn`` (a registered callback block).
+    """Host side effect `fn` (a registered callback block).
 
-    ``idempotent``  replay-safe (e.g. a write keyed by i_snapshot); allowed
+    `idempotent`  replay-safe (e.g. a write keyed by i_snapshot); allowed
                     inside compiled loops (jax: ordered io_callback with a
                     zero tangent), replayed by reverse-mode recomputation
-    ``returns``     returns data that is a deterministic function of its inputs
+    `returns`     returns data that is a deterministic function of its inputs
                     (zero tangent); allowed inside compiled loops
-    ``stateful``    advances host state (preCICE advance, a counter): never
+    `stateful`    advances host state (preCICE advance, a counter): never
                     replayed, so it forces its enclosing loop onto the host;
                     the reverse jax backend has no lowering for it
     """
@@ -567,13 +567,13 @@ class Callback(Statement):
 
 @dataclasses.dataclass(frozen=True, eq=False)
 class Procedure:
-    """``name(inputs) -> outputs`` with a statement ``body``.
+    """`name(inputs) -> outputs` with a statement `body`.
 
-    ``outputs`` are the procedure's RESULTS: names bound at the end of the
+    `outputs` are the procedure's RESULTS: names bound at the end of the
     body, returned to the caller (a bare value for one output, a tuple for
     several, nothing for none -- the same convention as block bodies).
-    Procedures may be passed to ``Root`` / ``LinSolve`` (closures over the
-    caller's scope via their extra ``args``).
+    Procedures may be passed to `Root` / `LinSolve` (closures over the
+    caller's scope via their extra `args`).
 
     Equality is identity-free structural equality on (name, ports, body)."""
 
@@ -608,7 +608,7 @@ class Procedure:
 
     @property
     def results(self) -> tuple:
-        """Alias of ``outputs`` (the values returned to the caller)."""
+        """Alias of `outputs` (the values returned to the caller)."""
         return self.outputs
 
     def resolve(self, flags) -> "Procedure":
@@ -623,9 +623,9 @@ class Procedure:
 
 
 def transform(proc: Procedure, fn, memo=None) -> Procedure:
-    """Top-down rewrite of ``proc`` and every procedure it references.
+    """Top-down rewrite of `proc` and every procedure it references.
 
-    ``fn(stmt)`` returns ``None`` (keep ``stmt`` and descend into it) or a
+    `fn(stmt)` returns `None` (keep `stmt` and descend into it) or a
     replacement statement / sequence, which is spliced in place and itself
     transformed again.  Procedures are memoised by identity, so a procedure
     referenced several times maps to ONE rewritten object."""
@@ -663,7 +663,7 @@ def _descend(s, fn, memo):
 
 
 def walk(block, fn, path=()):
-    """Pre-order visit ``fn(stmt, path)`` over a block (not into referenced
+    """Pre-order visit `fn(stmt, path)` over a block (not into referenced
     procedures)."""
     for i, s in enumerate(block):
         p = path + (i,)
@@ -680,10 +680,10 @@ def iter_statements(block):
 
 
 def resolve_static(proc: Procedure, flags) -> Procedure:
-    """Splice the chosen branch of every :class:`IfStatic`, recursively into
+    """Splice the chosen branch of every `IfStatic`, recursively into
     every nested block and every referenced procedure.
 
-    A flag referenced by a REACHED IfStatic but absent from ``flags`` raises:
+    A flag referenced by a REACHED IfStatic but absent from `flags` raises:
     a build-time branch has no default."""
     flags = dict(flags or {})
 
@@ -724,7 +724,7 @@ def is_resolved(proc: Procedure) -> bool:
 
 
 def collect_procedures(root: Procedure) -> dict:
-    """``name -> Procedure`` for ``root`` and every procedure it references,
+    """`name -> Procedure` for `root` and every procedure it references,
     callees first (a valid definition order).  Two DIFFERENT procedures with
     one name raise."""
     order: list = []
@@ -751,7 +751,7 @@ def collect_procedures(root: Procedure) -> dict:
 
 
 def fill_hooks(proc: Procedure, fills: dict) -> Procedure:
-    """Fill hooks by name: ``fills[name] = [(filled_by, statements), ...]``;
+    """Fill hooks by name: `fills[name] = [(filled_by, statements), ...]`;
     several fills of one hook run in order.  Already-filled hooks are kept."""
 
     def fn(s):

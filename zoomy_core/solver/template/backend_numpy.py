@@ -1,6 +1,6 @@
-"""Minimal numpy backend primitive object ``B`` (host lowering).
+"""Minimal numpy backend primitive object `B` (host lowering).
 
-Never imports jax (pyodide-safe).  Python ``while`` / ``if``, ``raise`` for
+Never imports jax (pyodide-safe).  Python `while` / `if`, `raise` for
 guards, direct calls for callbacks, Newton with an FD / analytic Jacobian
 action, scipy GMRES and dense / cell-block / banded direct solves.  The full
 numpy solver backend (bodies, presets) is stage 2; this object is what the
@@ -19,7 +19,7 @@ FD_EPS = float(np.finfo(float).eps) ** (1.0 / 3.0)
 
 
 def as_outputs(value, n):
-    """Normalise a body's return to a tuple of ``n`` outputs."""
+    """Normalise a body's return to a tuple of `n` outputs."""
     if n == 0:
         return ()
     if n == 1:
@@ -31,7 +31,7 @@ def as_outputs(value, n):
 
 
 def fd_jvp(f, x, v, fx=None):
-    """Central finite-difference directional derivative of ``f`` at ``x``."""
+    """Central finite-difference directional derivative of `f` at `x`."""
     vmax = float(np.max(np.abs(v))) if np.size(v) else 0.0
     if vmax == 0.0:
         return np.zeros_like(np.asarray(f(x) if fx is None else fx))
@@ -57,8 +57,8 @@ def project_nullspace(v, mode):
 
 
 class NumpyLinearSolvers:
-    """The linear-solve kinds of :class:`~.ir.LinSolveOpts` on numpy.  Each
-    returns ``(x, ok, rel_resid, iters)``."""
+    """The linear-solve kinds of `LinSolveOpts` on numpy.  Each
+    returns `(x, ok, rel_resid, iters)`."""
 
     @staticmethod
     def solve(matvec, b, *, kind, tol, restart=30, maxiter=50, precond=None,
@@ -139,8 +139,8 @@ def cellwise_solve(A, b):
 
 def band_probe(A, b, bw):
     """Columns of an operator block-banded over the cell axis (half-bandwidth
-    ``bw`` cells), recovered with ``nv*(2bw+1)`` probes.  Returns the dense
-    matrix in cell-major ordering (index ``c*nv + v``)."""
+    `bw` cells), recovered with `nv*(2bw+1)` probes.  Returns the dense
+    matrix in cell-major ordering (index `c*nv + v`)."""
     b = np.asarray(b, dtype=float)
     B2 = _cell_view(b)
     nv, nc = B2.shape
@@ -238,8 +238,8 @@ class NumpyBackend:
 
     @staticmethod
     def root(residual, x0, *, tol, maxiter, jac="ad", jvp=None, linsolve=None):
-        """Newton.  numpy has no AD: ``jac='ad'`` uses the central FD Jacobian
-        action (the root is the same to ``tol``); ``analytic`` uses ``jvp``."""
+        """Newton.  numpy has no AD: `jac='ad'` uses the central FD Jacobian
+        action (the root is the same to `tol`); `analytic` uses `jvp`."""
         lin = dict(linsolve or {"kind": "cellwise"})
         x = np.array(x0, dtype=float, copy=True)
         r = np.asarray(residual(x), dtype=float)

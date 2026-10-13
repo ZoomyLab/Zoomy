@@ -1,6 +1,6 @@
-"""Declared state roles of a ``SystemModel`` (depth, bed, stationary, positive, momentum,
-gravity), stored as ``sm.history`` records of field names.
-Generic code reads ``Roles`` instead of guessing from field names; a model with no declaration
+"""Declared state roles of a `SystemModel` (depth, bed, stationary, positive, momentum,
+gravity), stored as `sm.history` records of field names.
+Generic code reads `Roles` instead of guessing from field names; a model with no declaration
 gets no free-surface specialisation.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ _UNSET = object()
 
 @dataclass(frozen=True)
 class Roles:
-    """Resolved roles: row indices into ``sm.state`` for depth, bed, stationary, positive and
+    """Resolved roles: row indices into `sm.state` for depth, bed, stationary, positive and
     momentum rows, plus the gravity parameter name.
     """
 
@@ -47,7 +47,7 @@ class Roles:
     @property
     def momentum_vectors(self) -> Tuple[Tuple[int, ...], ...]:
         """Momentum rows grouped per vector (one tuple per moment/layer, one entry per direction);
-        the transpose of ``momentum``.
+        the transpose of `momentum`.
         """
         if not self.momentum:
             return ()
@@ -58,7 +58,7 @@ class Roles:
         nm = self.names
 
         def one(i):
-            """State name of row ``i`` (``None`` stays ``None``)."""
+            """State name of row `i` (`None` stays `None`)."""
             return None if i is None else nm[i]
         return {
             "depth": one(self.depth), "bed": one(self.bed),
@@ -70,7 +70,7 @@ class Roles:
 
 
 def _state_names(sm) -> list:
-    """State names of ``sm`` as strings."""
+    """State names of `sm` as strings."""
     return [str(s) for s in sm.state]
 
 
@@ -102,7 +102,7 @@ def _carries_sign(sym) -> bool:
 
 def assumption_positive_names(sm) -> list:
     """State fields whose symbol carries a positive or non-negative assumption.
-    Valid on a ``SystemModel`` only, because the ``NumericalSystemModel`` strips state
+    Valid on a `SystemModel` only, because the `NumericalSystemModel` strips state
     assumptions.
     """
     return [str(s) for s in sm.state
@@ -112,11 +112,11 @@ def assumption_positive_names(sm) -> list:
 def declare_roles(sm, *, depth=_UNSET, bed=_UNSET, stationary=_UNSET,
                   positive=_UNSET, momentum=_UNSET, gravity=_UNSET,
                   description: Optional[str] = None):
-    """Record a role declaration on ``sm`` (a ``history`` record) and return ``sm``.
+    """Record a role declaration on `sm` (a `history` record) and return `sm`.
 
     Args:
         depth, bed, stationary, positive, momentum, gravity: only the keys passed are recorded;
-            ``None`` clears a scalar role.
+            `None` clears a scalar role.
         description: label of the history record.
     """
     rec = {}
@@ -160,7 +160,7 @@ def declare_roles(sm, *, depth=_UNSET, bed=_UNSET, stationary=_UNSET,
 
 
 def declared_role_record(sm) -> dict:
-    """All role declarations on ``sm`` merged in order (later wins per key)."""
+    """All role declarations on `sm` merged in order (later wins per key)."""
     merged = {}
     for entry in getattr(sm, "history", None) or []:
         if isinstance(entry, dict) and entry.get("name") == ROLE_RECORD:
@@ -170,17 +170,17 @@ def declared_role_record(sm) -> dict:
 
 def resolve_roles(sm) -> Roles:
     """Resolve the declared roles against the current state; undeclared
-    ``stationary``/``positive`` fall back to structure and sign assumptions, never to names.
+    `stationary`/`positive` fall back to structure and sign assumptions, never to names.
     """
     names = _state_names(sm)
     rec = declared_role_record(sm)
 
     def idx(name):
-        """Row index of state name ``name`` (``None`` if absent)."""
+        """Row index of state name `name` (`None` if absent)."""
         return names.index(name) if (name is not None and name in names) else None
 
     def idx_list(lst):
-        """Row indices of the names in ``lst`` that are still in the state."""
+        """Row indices of the names in `lst` that are still in the state."""
         return tuple(i for i in (idx(n) for n in lst) if i is not None)
 
     if rec.get("stationary") is not None:
@@ -207,8 +207,8 @@ def resolve_roles(sm) -> Roles:
 
 
 def derive_momentum_directions(sm, depth=None) -> Optional[list]:
-    """Momentum rows per direction as name lists, derived from the model's ``interpolate_to_3d``
-    lift or, failing that, from the depth row's mass-balance flux; ``None`` if neither applies.
+    """Momentum rows per direction as name lists, derived from the model's `interpolate_to_3d`
+    lift or, failing that, from the depth row's mass-balance flux; `None` if neither applies.
     """
     from zoomy_core.model.boundary_conditions import (
         derive_momentum_field_indices)
@@ -243,10 +243,10 @@ def declare_free_surface_roles(sm, *, depth, bed=None, gravity=None,
                                momentum="derive", positive="assumptions",
                                description=None):
     """Declare the free-surface roles (depth, bed as stationary row, gravity, momentum groups,
-    positive rows) and tag ``sm`` as ``free_surface``.
+    positive rows) and tag `sm` as `free_surface`.
 
     Returns:
-        ``sm``.
+        `sm`.
     """
     depth_name = _as_name(sm, depth)
     bed_name = None if bed is None else _as_name(sm, bed)
@@ -268,7 +268,7 @@ def declare_free_surface_roles(sm, *, depth, bed=None, gravity=None,
 
 
 def infer_sigma_map_roles(sm, model) -> bool:
-    """Declare depth and bed from a sigma-mapped model's relation ``z = b + h*zeta``; returns True
+    """Declare depth and bed from a sigma-mapped model's relation `z = b + h*zeta`; returns True
     when a declaration was made.
     """
     rel = getattr(model, "coord_relations", None) or {}
@@ -278,7 +278,7 @@ def infer_sigma_map_roles(sm, model) -> bool:
     names = set(_state_names(sm))
 
     def field_name(expr):
-        """Name of ``expr`` if it is a single state field, else ``None``."""
+        """Name of `expr` if it is a single state field, else `None`."""
         expr = sp.sympify(expr)
         if isinstance(expr, sp.Symbol):
             return str(expr) if str(expr) in names else None

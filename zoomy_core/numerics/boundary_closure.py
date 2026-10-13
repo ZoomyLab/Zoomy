@@ -1,6 +1,6 @@
 """Classify, per boundary face and row, whether a boundary condition fixes the value (Dirichlet),
 the normal derivative (Neumann) or neither (ghost), from the ghost-state kernel.
-Feeds the constrained LSQ derivative fits of ``geometry_xp.build_topology``; a row misclassified
+Feeds the constrained LSQ derivative fits of `geometry_xp.build_topology`; a row misclassified
 as ghost costs accuracy, never correctness.
 
 References:
@@ -22,23 +22,23 @@ _SEED = 20261012
 
 
 def _flat(expr):
-    """Flatten a sympy expression into a list (empty for ``None``)."""
+    """Flatten a sympy expression into a list (empty for `None`)."""
     return list(sp.flatten(expr)) if expr is not None else []
 
 
 def _symbols(fn):
-    """Argument groups of the ghost kernel ``fn`` as lists of symbols."""
+    """Argument groups of the ghost kernel `fn` as lists of symbols."""
     a = fn.args
 
     def grp(k):
-        """Symbols of argument group ``k`` as a list."""
+        """Symbols of argument group `k` as a list."""
         v = a[k]
         return list(v.get_list()) if hasattr(v, "get_list") else [v]
     return {k: grp(k) for k in a.keys() if k != "idx"}
 
 
 def _subs_op(op, Q, A, p):
-    """Definition of operator ``op`` evaluated at state ``Q``, aux ``A`` and parameters ``p``."""
+    """Definition of operator `op` evaluated at state `Q`, aux `A` and parameters `p`."""
     args = op.args
     m = dict(zip(args.variables.get_list(), Q))
     m.update(zip(args.aux_variables.get_list(), A))
@@ -48,7 +48,7 @@ def _subs_op(op, Q, A, p):
 
 
 def _ghost_pairs(nsm, space):
-    """Row expressions of ``space`` at the inner state and at the ghost of each BC branch, in the
+    """Row expressions of `space` at the inner state and at the ghost of each BC branch, in the
     ghost kernel's symbols.
     """
     fn, branches = nsm.boundary_ghost_kernel()
@@ -57,7 +57,7 @@ def _ghost_pairs(nsm, space):
     upd = nsm.operator("update_aux_variables")
 
     def aux(X, Aprev):
-        """Aux values at state ``X`` from ``update_aux_variables`` (``Aprev`` if the system has
+        """Aux values at state `X` from `update_aux_variables` (`Aprev` if the system has
         none).
         """
         if upd is None or not _flat(upd.definition):
@@ -87,8 +87,8 @@ def _ghost_pairs(nsm, space):
 
 
 def _tests(nsm, space):
-    """Per branch and row, evaluators of the state gradient of ``ghost + W`` (Dirichlet) and
-    ``ghost - W`` (Neumann), cached on the NSM.
+    """Per branch and row, evaluators of the state gradient of `ghost + W` (Dirichlet) and
+    `ghost - W` (Neumann), cached on the NSM.
     """
     cache = nsm.__dict__.setdefault("_closure_tests", {})
     if space in cache:
@@ -119,7 +119,7 @@ def _tests(nsm, space):
 
 
 def _vanishes(f, normals, n_others, rng):
-    """Per face, whether the lambdified gradient ``f`` is zero in every random draw."""
+    """Per face, whether the lambdified gradient `f` is zero in every random draw."""
     if f is None:
         return np.ones(normals.shape[1], dtype=bool)
     if f is False:
@@ -141,15 +141,15 @@ def _vanishes(f, normals, n_others, rng):
 
 
 def face_kinds(nsm, space, branch, normals):
-    """Kinds (``GHOST`` / ``DIRICHLET`` / ``NEUMANN``) of the rows of ``space`` on the boundary
+    """Kinds (`GHOST` / `DIRICHLET` / `NEUMANN`) of the rows of `space` on the boundary
     faces.
 
     Args:
         branch: BC branch per face (-1: no BC, e.g. a partition cut, gives ghost).
-        normals: outward unit normals, shape ``(dim_n, n_faces)``.
+        normals: outward unit normals, shape `(dim_n, n_faces)`.
 
     Returns:
-        ``(n_rows, n_faces)`` int8 array.
+        `(n_rows, n_faces)` int8 array.
     """
     tests, n_dim, n_others, n_rows = _tests(nsm, space)
     branch = np.asarray(branch, dtype=int)
@@ -172,14 +172,14 @@ def face_kinds(nsm, space, branch, normals):
 
 
 def closure_spaces(nsm, systems=()):
-    """Row spaces whose derivative fits a solver template closes: the state of ``nsm`` and
-    ``systems``, and the reconstruction variables at order >= 2.
+    """Row spaces whose derivative fits a solver template closes: the state of `nsm` and
+    `systems`, and the reconstruction variables at order >= 2.
 
     Returns:
-        List of ``(key, system, space)`` with ``key = (owner, space)``.
+        List of `(key, system, space)` with `key = (owner, space)`.
     """
     def owner(s):
-        """Printed name of system ``s`` (``_symbolic_name``, default ``nsm``)."""
+        """Printed name of system `s` (`_symbolic_name`, default `nsm`)."""
         return getattr(s, "_symbolic_name", None) or "nsm"
     out = [((owner(nsm), "state"), nsm, "state")]
     if int(getattr(nsm.reconstruction, "order", 1)) >= 2:
@@ -190,8 +190,8 @@ def closure_spaces(nsm, systems=()):
 
 
 def closure_kinds(nsm, systems, branch, normals):
-    """``{key: (n_rows, n_bf) kinds}`` over ``closure_spaces``, the ``closure`` argument of
-    ``geometry_xp.build_topology``; systems without BCs are skipped.
+    """`{key: (n_rows, n_bf) kinds}` over `closure_spaces`, the `closure` argument of
+    `geometry_xp.build_topology`; systems without BCs are skipped.
     """
     out = {}
     for key, system, space in closure_spaces(nsm, systems):

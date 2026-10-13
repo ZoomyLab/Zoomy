@@ -1,4 +1,4 @@
-"""``NumericalSystemModel``: a ``SystemModel`` plus the numerics (Riemann solver, reconstruction,
+"""`NumericalSystemModel`: a `SystemModel` plus the numerics (Riemann solver, reconstruction,
 diffusion scheme, regularization, kernels table) that the solver templates consume.
 Pipeline: Model -> SystemModel -> NumericalSystemModel -> solver template -> backend runtime.
 """
@@ -72,7 +72,7 @@ def _numerical_symbol_map(sm) -> dict:
 
 
 def _rename(obj, mapping):
-    """Substitute ``mapping`` through sympy content and plain containers."""
+    """Substitute `mapping` through sympy content and plain containers."""
     import sympy as sp
     if obj is None or isinstance(obj, (str, bytes, bool, int, float, complex)):
         return obj
@@ -100,7 +100,7 @@ def _rename(obj, mapping):
 
 
 def _rename_kernel(kernel, mapping) -> None:
-    """Move a BC/IC kernel into the new symbol space, definition and ``args.variables`` binding
+    """Move a BC/IC kernel into the new symbol space, definition and `args.variables` binding
     together.
     """
     if kernel is None:
@@ -124,9 +124,9 @@ def _rename_kernel(kernel, mapping) -> None:
 
 
 def construct_numerical(sm):
-    """Build the numerical twin of ``sm``: a deep copy whose state and aux symbols carry no sign
+    """Build the numerical twin of `sm`: a deep copy whose state and aux symbols carry no sign
     assumptions, so sympy cannot delete a numerical guard as a tautology.
-    This is the SystemModel -> NumericalSystemModel boundary; the caller's ``sm`` keeps its
+    This is the SystemModel -> NumericalSystemModel boundary; the caller's `sm` keeps its
     assumptions.
     """
     import copy
@@ -195,9 +195,9 @@ def _free_symbols_deep(obj):
 
 
 def numerics_fluctuations_are_zero(numerics) -> bool:
-    """True only if the built ``numerical_fluctuations`` of ``numerics`` is proven structurally
+    """True only if the built `numerical_fluctuations` of `numerics` is proven structurally
     zero; unknown counts as nonzero.
-    It reads the built face kernel, not the model's ``nonconservative_matrix``.
+    It reads the built face kernel, not the model's `nonconservative_matrix`.
     """
     import sympy as sp
     definition = getattr(
@@ -249,7 +249,7 @@ _NONLOCAL_AUX_KINDS = frozenset({"derivative", "limited_derivative"})
 
 
 def _operator_is_live(arr) -> bool:
-    """Whether operator ``arr`` has any entry not proven zero (unknown counts as live)."""
+    """Whether operator `arr` has any entry not proven zero (unknown counts as live)."""
     import sympy as sp
     for e in _op_flat(arr):
         try:
@@ -292,22 +292,22 @@ OPERATOR_ZERO_FLAGS = {
 
 
 def operator_is_zero(arr) -> bool:
-    """True if operator ``arr`` is structurally zero (absent, empty or every entry proven zero),
+    """True if operator `arr` is structurally zero (absent, empty or every entry proven zero),
     so a backend may skip evaluating it.
     """
     return not _operator_is_live(arr)
 
 
 def operator_zero_flags(sm) -> dict:
-    """``{flag_name: bool}`` for every slot of ``OPERATOR_ZERO_FLAGS``, read off ``sm`` with
-    ``operator_is_zero`` so printers can loop.
+    """`{flag_name: bool}` for every slot of `OPERATOR_ZERO_FLAGS`, read off `sm` with
+    `operator_is_zero` so printers can loop.
     """
     return {flag: operator_is_zero(getattr(sm, attr, None))
             for attr, flag in OPERATOR_ZERO_FLAGS.items()}
 
 
 def _nonlocal_aux_symbols(sm) -> set:
-    """Aux symbols that depend on neighbour cells, read off ``sm.aux_registry``; all aux if the
+    """Aux symbols that depend on neighbour cells, read off `sm.aux_registry`; all aux if the
     registry was never derived.
     """
     import sympy as sp
@@ -329,9 +329,9 @@ def _nonlocal_aux_symbols(sm) -> set:
 
 
 def implicit_stage_mode(nsm) -> str:
-    """Which implicit-stage path ``nsm`` needs: ``"coupled"`` (live implicit diffusion, or an
-    implicit source reading a non-local aux), ``"local_source"`` (cell-local fast path) or
-    ``"none"``.
+    """Which implicit-stage path `nsm` needs: `"coupled"` (live implicit diffusion, or an
+    implicit source reading a non-local aux), `"local_source"` (cell-local fast path) or
+    `"none"`.
     Derived from the operators, so a model with both implicit diffusion and source gives one
     coupled stage.
 
@@ -361,7 +361,7 @@ def implicit_stage_mode(nsm) -> str:
 
 
 def _op_flat(arr):
-    """Flat list of the scalar entries of an operator array, ``[]`` for non-arrays."""
+    """Flat list of the scalar entries of an operator array, `[]` for non-arrays."""
     import sympy as sp
     if arr is None:
         return []
@@ -378,7 +378,7 @@ def _op_flat(arr):
 
 
 def _resolve_boundary_traces(nsm) -> None:
-    """Collapse every bed/surface-trace ``Subs(f(zeta), zeta, 0|1)`` node left after symbolic
+    """Collapse every bed/surface-trace `Subs(f(zeta), zeta, 0|1)` node left after symbolic
     lowering into its concrete value on all operator arrays, and raise if any remain.
     """
     import sympy as sp
@@ -443,9 +443,9 @@ def _resolve_boundary_traces(nsm) -> None:
 
 @dataclass
 class ReconstructionSpec:
-    """Face-state reconstruction configuration: ``order`` 1 (piecewise constant) or 2 (LSQ-MUSCL
-    with ``limiter``), ``free_surface_aware`` wet/dry handling, and ``positivity`` (``""``,
-    ``"zhang_shu"`` a-priori cap, ``"mood"`` a-posteriori order-1 re-step).
+    """Face-state reconstruction configuration: `order` 1 (piecewise constant) or 2 (LSQ-MUSCL
+    with `limiter`), `free_surface_aware` wet/dry handling, and `positivity` (`""`,
+    `"zhang_shu"` a-priori cap, `"mood"` a-posteriori order-1 re-step).
 
     References:
         van Leer 1979, https://doi.org/10.1016/0021-9991(79)90145-1
@@ -486,8 +486,8 @@ class ReconstructionSpec:
 
 @dataclass
 class DiffusionSpec:
-    """Diffusion configuration: ``enabled`` (auto-False when ``diffusion_matrix`` is zero), time
-    ``scheme`` and ``nu`` overriding ``sm.parameter_values['nu']``.
+    """Diffusion configuration: `enabled` (auto-False when `diffusion_matrix` is zero), time
+    `scheme` and `nu` overriding `sm.parameter_values['nu']`.
     """
     enabled: bool = True
     scheme: str = "crank_nicolson"
@@ -495,8 +495,8 @@ class DiffusionSpec:
 
 
 def _linearize_source(sm):
-    """Rewrite ``sm.source`` into the point-implicit update ``S_lin = (I - dt J)^-1 S`` with the
-    consistent jacobian ``J = dS/dQ + dS/daux * daux/dQ``, as one opaque per-row ``solve``
+    """Rewrite `sm.source` into the point-implicit update `S_lin = (I - dt J)^-1 S` with the
+    consistent jacobian `J = dS/dQ + dS/daux * daux/dQ`, as one opaque per-row `solve`
     call.
     """
     import sympy as sp
@@ -547,10 +547,10 @@ def _linearize_source(sm):
 
 @dataclass
 class NumericalSystemModel(SystemModel):
-    """``SystemModel`` subclass that adds the numerics the solver templates consume: Riemann
-    class, reconstruction, diffusion, regularization and ``extra_operations``.
-    Build it with ``from_system_model``, which works on a numerical twin of the system; the
-    ``BoundaryConditions`` container stays at ``_bc_source``.
+    """`SystemModel` subclass that adds the numerics the solver templates consume: Riemann
+    class, reconstruction, diffusion, regularization and `extra_operations`.
+    Build it with `from_system_model`, which works on a numerical twin of the system; the
+    `BoundaryConditions` container stays at `_bc_source`.
 
     References:
         Rusanov 1962, https://doi.org/10.1016/0041-5553(62)90062-9
@@ -710,13 +710,13 @@ class NumericalSystemModel(SystemModel):
     # ── SystemModel identity bridge ───────────────────────────────
     @property
     def sm(self) -> "SystemModel":
-        """Return ``self``, keeping the historical ``nsm.sm.<x>`` access working."""
+        """Return `self`, keeping the historical `nsm.sm.<x>` access working."""
         return self
 
     # ── Derivation pipeline ───────────────────────────────────────
 
     def _is_transport_system(self) -> bool:
-        """True iff the system has a structurally nonzero ``flux`` or ``nonconservative_matrix``;
+        """True iff the system has a structurally nonzero `flux` or `nonconservative_matrix`;
         the Chorin pressure and corrector stages are not transport.
         """
         import sympy as sp
@@ -731,7 +731,7 @@ class NumericalSystemModel(SystemModel):
     # ── emitted-numerics predicate (REQ-209) ──────────────────────
 
     def _probe_numerics(self):
-        """A ``Numerics`` instance over this NSM for interrogating the built face kernels, reusing
+        """A `Numerics` instance over this NSM for interrogating the built face kernels, reusing
         a live one or building and keeping one.
         """
         if self.riemann is None:
@@ -747,7 +747,7 @@ class NumericalSystemModel(SystemModel):
 
     @property
     def fluctuations_are_zero(self) -> bool:
-        """True iff the built ``numerical_fluctuations`` is structurally zero, i.e. no fluctuation
+        """True iff the built `numerical_fluctuations` is structurally zero, i.e. no fluctuation
         term is emitted.
         It depends on the (model x Riemann solver x current representation) triple and is re-read
         on every access.
@@ -756,8 +756,8 @@ class NumericalSystemModel(SystemModel):
 
     @property
     def implicit_mode(self) -> str:
-        """Implicit-stage path this system needs (``"none"``, ``"local_source"``, ``"coupled"``),
-        re-read from the operators on every access; see ``implicit_stage_mode``.
+        """Implicit-stage path this system needs (`"none"`, `"local_source"`, `"coupled"`),
+        re-read from the operators on every access; see `implicit_stage_mode`.
 
         References:
             Kennedy, Carpenter 2003, https://doi.org/10.1016/s0168-9274(02)00138-1
@@ -768,63 +768,63 @@ class NumericalSystemModel(SystemModel):
 
     @property
     def operators_are_zero(self) -> dict:
-        """``{flag_name: bool}`` of the structural-zero flag of every operator slot (see
-        ``operator_is_zero``), re-read on every access.
+        """`{flag_name: bool}` of the structural-zero flag of every operator slot (see
+        `operator_is_zero`), re-read on every access.
         """
         return operator_zero_flags(self)
 
     @property
     def flux_is_zero(self) -> bool:
-        """True iff ``flux`` is structurally zero."""
+        """True iff `flux` is structurally zero."""
         return operator_is_zero(getattr(self, "flux", None))
 
     @property
     def hydrostatic_pressure_is_zero(self) -> bool:
-        """True iff ``hydrostatic_pressure`` is structurally zero (hand-built SWE keeps ``g
-        h^2/2`` in ``flux`` instead).
+        """True iff `hydrostatic_pressure` is structurally zero (hand-built SWE keeps ``g
+        h^2/2`` in `flux` instead).
         """
         return operator_is_zero(getattr(self, "hydrostatic_pressure", None))
 
     @property
     def nonconservative_matrix_is_zero(self) -> bool:
-        """True iff the model's ``nonconservative_matrix`` is structurally zero; not the same as
-        ``fluctuations_are_zero``, which reads the built face kernel.
+        """True iff the model's `nonconservative_matrix` is structurally zero; not the same as
+        `fluctuations_are_zero`, which reads the built face kernel.
         """
         return operator_is_zero(getattr(self, "nonconservative_matrix", None))
 
     @property
     def eigenvalues_are_zero(self) -> bool:
-        """True iff ``eigenvalues`` is structurally zero, i.e. no hyperbolic transport."""
+        """True iff `eigenvalues` is structurally zero, i.e. no hyperbolic transport."""
         return operator_is_zero(getattr(self, "eigenvalues", None))
 
     @property
     def source_is_zero(self) -> bool:
-        """True iff the implicit ``source`` is structurally zero."""
+        """True iff the implicit `source` is structurally zero."""
         return operator_is_zero(getattr(self, "source", None))
 
     @property
     def source_explicit_is_zero(self) -> bool:
-        """True iff ``source_explicit`` is structurally zero."""
+        """True iff `source_explicit` is structurally zero."""
         return operator_is_zero(getattr(self, "source_explicit", None))
 
     @property
     def diffusion_matrix_is_zero(self) -> bool:
-        """True iff the implicit ``diffusion_matrix`` is structurally zero, so a backend may skip
+        """True iff the implicit `diffusion_matrix` is structurally zero, so a backend may skip
         building its diffusion operator.
         """
         return operator_is_zero(getattr(self, "diffusion_matrix", None))
 
     @property
     def diffusion_matrix_explicit_is_zero(self) -> bool:
-        """True iff ``diffusion_matrix_explicit`` is structurally zero."""
+        """True iff `diffusion_matrix_explicit` is structurally zero."""
         return operator_is_zero(
             getattr(self, "diffusion_matrix_explicit", None))
 
     def default_operations(self) -> list:
-        """Operations ``derive`` applies to every NSM before ``extra_operations``, in load-bearing
+        """Operations `derive` applies to every NSM before `extra_operations`, in load-bearing
         order: face-normal normalization, the selected depth regularization, then the
         eigenvalue guard.
-        Only shallow-water transport systems (depth state ``h``, flux or NCP) get the
+        Only shallow-water transport systems (depth state `h`, flux or NCP) get the
         Kurganov-Petrova desingularization.
 
         References:
@@ -863,8 +863,8 @@ class NumericalSystemModel(SystemModel):
         return ops
 
     def _depth_regularization_operations(self, legacy, aux, direct) -> list:
-        """The operation(s) implementing ``depth_regularization`` (legacy, ``"aux"``, ``"direct"``
-        or ``"none"``).
+        """The operation(s) implementing `depth_regularization` (legacy, `"aux"`, `"direct"`
+        or `"none"`).
         """
         choice = self.depth_regularization
         if choice is None:
@@ -885,8 +885,8 @@ class NumericalSystemModel(SystemModel):
             "None (legacy desingularize_hinv), 'aux', 'direct' or 'none'.")
 
     def _eigenvalue_guard_operations(self, power, gate) -> list:
-        """The operation(s) implementing ``eigenvalue_guard`` (``None``, ``"power"``, ``"gate"``
-        or ``"both"``).
+        """The operation(s) implementing `eigenvalue_guard` (`None`, `"power"`, `"gate"`
+        or `"both"`).
         """
         choice = self.eigenvalue_guard
         if choice is None:
@@ -902,8 +902,8 @@ class NumericalSystemModel(SystemModel):
             "None, 'power', 'gate' or 'both'.")
 
     def derive(self) -> "NumericalSystemModel":
-        """Run ``default_operations() + extra_operations`` on this NSM in place via
-        ``SystemModel.apply``; returns ``self``.
+        """Run `default_operations() + extra_operations` on this NSM in place via
+        `SystemModel.apply`; returns `self`.
         """
         for op in self.default_operations() + list(self.extra_operations):
             self.apply(op)
@@ -912,7 +912,7 @@ class NumericalSystemModel(SystemModel):
     # ── operations reach the already-built numerics too ───────────
 
     def apply(self, operation, *, name=None, description=None):
-        """Apply a system operation, then refresh every ``Numerics`` already built from this NSM
+        """Apply a system operation, then refresh every `Numerics` already built from this NSM
         so its registered functions see the new operators.
         """
         out = super().apply(operation, name=name, description=description)
@@ -939,7 +939,7 @@ class NumericalSystemModel(SystemModel):
 
     @classmethod
     def from_model(cls, model, **kwargs) -> "NumericalSystemModel":
-        """Shortcut for ``from_system_model(SystemModel.from_model(model), **kwargs)``."""
+        """Shortcut for `from_system_model(SystemModel.from_model(model), **kwargs)`."""
         return cls.from_system_model(SystemModel.from_model(model), **kwargs)
 
     @classmethod
@@ -969,21 +969,21 @@ class NumericalSystemModel(SystemModel):
         eigenvalue_guard: Optional[str] = "gate",
         normalize_normal: bool = True,
     ) -> "NumericalSystemModel":
-        """Build an NSM from a ``SystemModel`` (or a ``Model``, auto-promoted) on its numerical
-        twin, resolving the numerics defaults and running ``derive``.
+        """Build an NSM from a `SystemModel` (or a `Model`, auto-promoted) on its numerical
+        twin, resolving the numerics defaults and running `derive`.
 
         Args:
-            riemann: Riemann class; defaults to the tag rule, else ``NonconservativeRusanov``.
-            reconstruction: ``ReconstructionSpec``; defaults to first order.
-            diffusion: ``DiffusionSpec``; enabled iff ``diffusion_matrix`` is nonzero.
+            riemann: Riemann class; defaults to the tag rule, else `NonconservativeRusanov`.
+            reconstruction: `ReconstructionSpec`; defaults to first order.
+            diffusion: `DiffusionSpec`; enabled iff `diffusion_matrix` is nonzero.
             eigenvalue_eps: regularization of the numerical eigensolve.
             dt_max: timestep cap shared by all backends.
             tag_rules: per-call override of the tag -> numerics defaults.
-            extra_operations: opt-in operations run by ``derive``.
+            extra_operations: opt-in operations run by `derive`.
             additional_systems: co-running sub-systems whose derivatives size the LSQ stencil.
-            scaled_q_indices: rows a hydrostatic reconstruction rescales by ``h*/h``.
-            source_treatment: ``"explicit"`` or ``"linearized"`` (point-implicit).
-            depth_regularization, regularization_eps, eigenvalue_treatment, eigenvalue_guard, normalize_normal: depth-law axes, see ``depth_law_study``.
+            scaled_q_indices: rows a hydrostatic reconstruction rescales by `h*/h`.
+            source_treatment: `"explicit"` or `"linearized"` (point-implicit).
+            depth_regularization, regularization_eps, eigenvalue_treatment, eigenvalue_guard, normalize_normal: depth-law axes, see `depth_law_study`.
 
         Returns:
             The derived NSM; the LSQ degree is always auto-derived.
@@ -1120,7 +1120,7 @@ class NumericalSystemModel(SystemModel):
 
     def resolved_lsq_degree(self) -> int:
         """LSQ polynomial degree for the mesh: the maximum derivative order over the aux registry,
-        ``additional_systems`` and ``source_derivative_specs`` (at least 1); never set by hand.
+        `additional_systems` and `source_derivative_specs` (at least 1); never set by hand.
 
         References:
             Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
@@ -1138,7 +1138,7 @@ class NumericalSystemModel(SystemModel):
 
     def build_numerics(self):
         """Instantiate the symbolic Riemann numerics over this NSM (threading
-        ``scaled_q_indices``) and register it weakly so later operations refresh it.
+        `scaled_q_indices`) and register it weakly so later operations refresh it.
         """
         import weakref
         if self.scaled_q_indices is not None:
@@ -1154,11 +1154,11 @@ class NumericalSystemModel(SystemModel):
 
     @property
     def call(self):
-        """The kernels table: one ``KernelCall`` per kernel the NSM carries (operators, boundary
-        kernels, numerics functions), ``None`` where empty, printed as
-        ``<_symbolic_name>.<slot>``.
-        Two boundary kernels exist: ``boundary_conditions`` (face value, for the Riemann problem)
-        and ``boundary_ghost_state`` (mirror-image ghost, for gradients, limiters, derivative aux
+        """The kernels table: one `KernelCall` per kernel the NSM carries (operators, boundary
+        kernels, numerics functions), `None` where empty, printed as
+        `<_symbolic_name>.<slot>`.
+        Two boundary kernels exist: `boundary_conditions` (face value, for the Riemann problem)
+        and `boundary_ghost_state` (mirror-image ghost, for gradients, limiters, derivative aux
         and diffusion).
         """
         owner = getattr(self, "_symbolic_name", None) or "nsm"
@@ -1182,7 +1182,7 @@ class NumericalSystemModel(SystemModel):
 
     @property
     def aux_derivatives(self):
-        """Aux rows filled from mesh derivatives: ``aux_registry`` plus ``aux_input_registry``."""
+        """Aux rows filled from mesh derivatives: `aux_registry` plus `aux_input_registry`."""
         return (list(getattr(self, "aux_registry", None) or [])
                 + list(getattr(self, "aux_input_registry", None) or []))
 
@@ -1196,8 +1196,8 @@ class NumericalSystemModel(SystemModel):
 
 
 def to_numerical_system_model(obj) -> "NumericalSystemModel":
-    """Coerce a ``Model``, ``SystemModel`` or NSM to a ``NumericalSystemModel``, the single front
-    door of the core code printers; other types raise ``TypeError``.
+    """Coerce a `Model`, `SystemModel` or NSM to a `NumericalSystemModel`, the single front
+    door of the core code printers; other types raise `TypeError`.
     """
     if isinstance(obj, NumericalSystemModel):
         return obj
@@ -1217,7 +1217,7 @@ def to_numerical_system_model(obj) -> "NumericalSystemModel":
 
 
 def _diffusion_auto_enabled(sm) -> bool:
-    """True iff the system carries a structurally nonzero ``diffusion_matrix``."""
+    """True iff the system carries a structurally nonzero `diffusion_matrix`."""
     import sympy as sp
     A = getattr(sm, "diffusion_matrix", None)
     if A is None:
@@ -1230,7 +1230,7 @@ def _diffusion_auto_enabled(sm) -> bool:
 
 
 def _lsq_degree_from_aux_registry(sm) -> int:
-    """Maximum derivative order over the derivative entries of ``sm.aux_registry`` (1 if none)."""
+    """Maximum derivative order over the derivative entries of `sm.aux_registry` (1 if none)."""
     registry = getattr(sm, "aux_registry", None) or []
     orders = [
         sum(int(k) for k in entry["multi_index"])
@@ -1242,8 +1242,8 @@ def _lsq_degree_from_aux_registry(sm) -> int:
 
 
 def _assert_bc_kernels_match_state(sm) -> None:
-    """Raise if a BC kernel was built against state symbols that no longer match ``sm.state``, as
-    after ``change_state_variables``.
+    """Raise if a BC kernel was built against state symbols that no longer match `sm.state`, as
+    after `change_state_variables`.
     """
     expected = list(sm.state)
     for attr in ("boundary_conditions",
@@ -1278,7 +1278,7 @@ def _assert_bc_kernels_match_state(sm) -> None:
 
 
 def _lsq_degree_from_derivative_specs(specs) -> int:
-    """Maximum axes count over ``StructuredDerivativeModel`` derivative specs (1 if empty)."""
+    """Maximum axes count over `StructuredDerivativeModel` derivative specs (1 if empty)."""
     if not specs:
         return 1
     orders = [sum(1 for a in spec.axes if a != "t") for spec in specs]

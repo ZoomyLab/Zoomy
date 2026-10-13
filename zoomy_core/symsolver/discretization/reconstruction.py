@@ -1,6 +1,6 @@
 """Face reconstruction of the solver templates: order 1 takes cell values of the
-reconstruction variables ``W(Q)`` to the faces, order 2 a limited LSQ gradient, and
-the inverse map recovers ``Q``. Nothing is clipped: face positivity is the flux
+reconstruction variables `W(Q)` to the faces, order 2 a limited LSQ gradient, and
+the inverse map recovers `Q`. Nothing is clipped: face positivity is the flux
 kernel's, cell positivity MOOD's.
 """
 import sympy as sp
@@ -15,12 +15,12 @@ LIMITERS = {"minmod": minmod, "venkatakrishnan": venkatakrishnan,
 
 
 def reconstruct(nsm, Q, Qaux, p, time, order, demote, mesh):
-    """Face traces ``(QL, QR)`` of order 1 (cell values) or 2 (limited LSQ gradient);
-    ``QR`` on a boundary face is a placeholder for the BC value.
+    """Face traces `(QL, QR)` of order 1 (cell values) or 2 (limited LSQ gradient);
+    `QR` on a boundary face is a placeholder for the BC value.
 
     Args:
-        demote: ``False`` none, ``True`` all cells, or a cell mask; demoted cells are
-            constant in ``W`` (MOOD).
+        demote: `False` none, `True` all cells, or a cell mask; demoted cells are
+            constant in `W` (MOOD).
     References:
         van Leer 1979, https://doi.org/10.1016/0021-9991(79)90145-1
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
@@ -58,7 +58,7 @@ def reconstruct(nsm, Q, Qaux, p, time, order, demote, mesh):
 
 
 def maps(nsm):
-    """``(W(Q), Q(W))`` kernels, or ``(None, None)`` when ``Q`` itself is reconstructed.
+    """`(W(Q), Q(W))` kernels, or `(None, None)` when `Q` itself is reconstructed.
     """
     what = nsm.reconstruction.variables
     if what == "conservative":
@@ -73,8 +73,8 @@ def maps(nsm):
 
 
 def bed_rows(nsm):
-    """``(bed, depth)`` rows when the reconstruction is the pair (h, eta = b + h) with
-    ``bed="derived"``, else None.
+    """`(bed, depth)` rows when the reconstruction is the pair (h, eta = b + h) with
+    `bed="derived"`, else None.
 
     References:
         Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090

@@ -3,7 +3,7 @@
 Direct port of the framework developed in the transparent-derivation
 notebooks (``thesis/notebooks/legacy/modeling/transparent_derivations/
 sme_clean.py`` etc.).  Same classes, same auto-history mechanics, same
-``simplify`` pipeline (sp.expand → pull var-independent factors out of
+`simplify` pipeline (sp.expand → pull var-independent factors out of
 Derivative atoms → recover fluxes by pulling var-independent coeffs back
 inside Derivative arguments).
 
@@ -33,13 +33,13 @@ __all__ = [
 
 
 def _pull_constants_out(*deriv_args):
-    """For a ``Derivative(inner, var)`` atom: split ``inner`` into the
+    """For a `Derivative(inner, var)` atom: split `inner` into the
     var-independent and var-dependent parts and lift the
     var-independent part outside.
 
-    For ``inner`` of type ``Add``, distribute the Derivative
-    (chain-rule for sums) — otherwise ``as_independent`` would treat
-    ``const`` as an additive constant and ``0 * Derivative(rest, var)``
+    For `inner` of type `Add`, distribute the Derivative
+    (chain-rule for sums) — otherwise `as_independent` would treat
+    `const` as an additive constant and `0 * Derivative(rest, var)`
     would wrongly zero the term.
     """
     d = sp.Derivative(*deriv_args)
@@ -60,9 +60,9 @@ def _pull_constants_out(*deriv_args):
 
 
 def _recover_fluxes(expr):
-    """For each leaf term of shape ``c · Derivative(inner, var)`` where
-    ``c`` is *var-independent*, pull ``c`` back inside the Derivative so
-    the conservative atom ``Derivative(c · inner, var)`` survives — that's
+    """For each leaf term of shape `c · Derivative(inner, var)` where
+    `c` is *var-independent*, pull `c` back inside the Derivative so
+    the conservative atom `Derivative(c · inner, var)` survives — that's
     what the flux/hydrostatic tagger reads."""
     new_terms = []
     for term in sp.Add.make_args(expr):
@@ -86,7 +86,7 @@ def _recover_fluxes(expr):
 
 
 class Term:
-    """One additive term of an :class:`Equation`."""
+    """One additive term of an `Equation`."""
 
     __slots__ = ("expr", "tag", "_parent")
 
@@ -112,9 +112,9 @@ class Term:
 
 
 class _TermGroup:
-    """Returned by ``eq.term[[i, j, k]]`` / ``eq.term[i, j]``.  Forwards
-    ``apply`` to each term in the held sub-list — enables
-    ``eq.term[[0, 1, 7]].apply(ProductRule(...))`` over a hand-picked index
+    """Returned by `eq.term[[i, j, k]]` / `eq.term[i, j]`.  Forwards
+    `apply` to each term in the held sub-list — enables
+    `eq.term[[0, 1, 7]].apply(ProductRule(...))` over a hand-picked index
     list, writing the rewrites back into the parent equation."""
 
     def __init__(self, terms):
@@ -132,15 +132,15 @@ class _TermGroup:
 
 
 class _TermAccessor:
-    """The ``eq.term`` accessor — ADDITIVE-TERM selection on a scalar
-    :class:`Equation`.
+    """The `eq.term` accessor — ADDITIVE-TERM selection on a scalar
+    `Equation`.
 
-    Disambiguated from moment/component ``[...]`` access (which lives on
-    :class:`MomentFamily` / ``VectorEquation``): ``eq.term[i]`` is a single
-    additive term, ``eq.term[i, j]`` / ``eq.term[[i, j]]`` a hand-picked term
-    group.  Both return a term-view whose ``.apply(op)`` rewrites ONLY those
+    Disambiguated from moment/component `[...]` access (which lives on
+    `MomentFamily` / `VectorEquation`): `eq.term[i]` is a single
+    additive term, `eq.term[i, j]` / `eq.term[[i, j]]` a hand-picked term
+    group.  Both return a term-view whose `.apply(op)` rewrites ONLY those
     additive terms and writes the result back into the parent equation, and
-    whose ``.expr`` reads the selected sub-expression.
+    whose `.expr` reads the selected sub-expression.
     """
 
     __slots__ = ("_equation",)
@@ -165,16 +165,16 @@ class _TermAccessor:
 
 
 class Equation(RelationMixin):
-    """Linear list of :class:`Term` carrying the residual of one PDE/algebraic
-    equation.  ``apply`` delegates to ``Expression.apply`` (the library
+    """Linear list of `Term` carrying the residual of one PDE/algebraic
+    equation.  `apply` delegates to `Expression.apply` (the library
     operation-dispatch layer) and auto-records a history entry on the
-    parent :class:`Model` if one is set.
+    parent `Model` if one is set.
 
-    Via :class:`~zoomy_core.model.operations.RelationMixin` an Equation can be
-    ORIENTED — built from ``sp.Eq(lhs, rhs)`` or produced by :meth:`solve_for`
-    — in which case it carries ``_as_relation = {lhs: rhs}`` and acts as a
-    substitution under ``.apply`` (with ``.lhs`` / ``.rhs`` / ``.subs_map``).
-    That is what replaces the former ``Substitution`` / ``Relation`` classes.
+    Via `RelationMixin` an Equation can be
+    ORIENTED — built from `sp.Eq(lhs, rhs)` or produced by `solve_for`
+    — in which case it carries `_as_relation = {lhs: rhs}` and acts as a
+    substitution under `.apply` (with `.lhs` / `.rhs` / `.subs_map`).
+    That is what replaces the former `Substitution` / `Relation` classes.
     """
 
     def __init__(self, expression, name="eq", model=None):
@@ -204,16 +204,16 @@ class Equation(RelationMixin):
 
     def get_solver_tag(self, name):
         """Return the sp.Expr for a solver tag, or None if not set.
-        ``name`` is normalised through ``canonical_solver_tag``."""
+        `name` is normalised through `canonical_solver_tag`."""
         from zoomy_core.model.derivation.tag_catalog import canonical_solver_tag
         if not self._solver_groups:
             return None
         return self._solver_groups.get(canonical_solver_tag(name))
 
     def untagged_remainder(self):
-        """Return ``self.expr - sum(solver_tags.values())``, simplified.
+        """Return `self.expr - sum(solver_tags.values())`, simplified.
         Zero ⇒ every term has been routed to a solver tag; non-zero
-        drives ``collect_solver_tag``'s ``untagged_policy``."""
+        drives `collect_solver_tag`'s `untagged_policy`."""
         if not self._solver_groups:
             return self.expr
         tagged_sum = sum(self._solver_groups.values(), sp.S.Zero)
@@ -251,13 +251,13 @@ class Equation(RelationMixin):
 
     @property
     def term(self):
-        """ADDITIVE-TERM accessor — ``eq.term[i]`` (one term),
-        ``eq.term[i, j]`` / ``eq.term[[i, j]]`` (a term group).  Each view's
-        ``.apply(op)`` rewrites ONLY those terms back into this equation.
+        """ADDITIVE-TERM accessor — `eq.term[i]` (one term),
+        `eq.term[i, j]` / `eq.term[[i, j]]` (a term group).  Each view's
+        `.apply(op)` rewrites ONLY those terms back into this equation.
 
-        Disambiguated from ``[l]`` MOMENT access (``MomentFamily`` /
-        ``VectorEquation``): a scalar ``Equation`` is no longer term-indexable
-        via bare ``eq[i]`` — use ``eq.term[i]``."""
+        Disambiguated from `[l]` MOMENT access (`MomentFamily` /
+        `VectorEquation`): a scalar `Equation` is no longer term-indexable
+        via bare `eq[i]` — use `eq.term[i]`."""
         return _TermAccessor(self)
 
     # ── indexing + iteration ─────────────────────────────────────
@@ -314,12 +314,12 @@ class Equation(RelationMixin):
     def simplify(self):
         """Canonical form (three sub-steps):
 
-        1. ``sp.expand`` — flatten Mul/Add nesting and combine like terms.
+        1. `sp.expand` — flatten Mul/Add nesting and combine like terms.
         2. **Pull var-independent factors out** of every Derivative
-           argument: ``Derivative(g·h, x) → g·Derivative(h, x)``,
-           ``Derivative(0, x) → 0``.
-        3. **Recover fluxes** — for each term ``c · Derivative(_, x)``
-           where ``c`` is var-independent, pull ``c`` back inside so the
+           argument: `Derivative(g·h, x) → g·Derivative(h, x)`,
+           `Derivative(0, x) → 0`.
+        3. **Recover fluxes** — for each term `c · Derivative(_, x)`
+           where `c` is var-independent, pull `c` back inside so the
            tagger sees the conservative atom.
         """
         expr = sp.expand(self.expr)
@@ -331,19 +331,19 @@ class Equation(RelationMixin):
 
     # ── solve / remove (derivation-core operations) ──────────────────
     def solve_for(self, symbol):
-        """Algebraically isolate ``symbol`` from this equation's residual
-        (``self.expr == 0``); returns a NEW oriented :class:`Equation`
-        ``symbol = solved-expr`` (carrying ``_as_relation = {symbol: sol}``).
+        """Algebraically isolate `symbol` from this equation's residual
+        (`self.expr == 0`); returns a NEW oriented `Equation`
+        `symbol = solved-expr` (carrying `_as_relation = {symbol: sol}`).
 
-        The result *stays an Equation* — pass it straight to ``.apply`` and it
-        acts as the substitution ``symbol -> sol`` (``.lhs`` / ``.rhs`` /
-        ``.subs_map`` expose the rule).  This is what the old ``Substitution``
+        The result *stays an Equation* — pass it straight to `.apply` and it
+        acts as the substitution `symbol -> sol` (`.lhs` / `.rhs` /
+        `.subs_map` expose the rule).  This is what the old `Substitution`
         return value did, with no separate class.
 
-        Pure algebra — ``solve_for`` does **not** integrate.  If ``symbol``
-        appears under a ``Derivative`` the residual is *differential* in it;
-        integrate the balance first (e.g. ``eq.apply(Integrate(var, lo, hi))``
-        followed by a boundary-condition substitution) and then ``solve_for``
+        Pure algebra — `solve_for` does **not** integrate.  If `symbol`
+        appears under a `Derivative` the residual is *differential* in it;
+        integrate the balance first (e.g. `eq.apply(Integrate(var, lo, hi))`
+        followed by a boundary-condition substitution) and then `solve_for`
         the resulting algebraic relation.
         """
         residual = sp.expand(self.expr)
@@ -377,8 +377,8 @@ class Equation(RelationMixin):
     # ── describe ─────────────────────────────────────────────────────
     def _ordered_tex(self, strip_args=False):
         """LaTeX of the residual with the terms in their CURRENT order — sympy's
-        ``Add`` re-sorts to a canonical order, so an unevaluated ``Add`` is
-        printed with ``order='none'`` to honour a :class:`SortByTag` ordering."""
+        `Add` re-sorts to a canonical order, so an unevaluated `Add` is
+        printed with `order='none'` to honour a `SortByTag` ordering."""
         ordered = (sp.Add(*[tm.expr for tm in self._terms], evaluate=False)
                    if self._terms else sp.S.Zero)
         from zoomy_core.model.operations import (
@@ -388,8 +388,8 @@ class Equation(RelationMixin):
         return printer.doprint(ordered)
 
     def _tagged_tex(self, strip_args=False):
-        """Multiline ``\\underbrace{…}_{tag}`` render — consecutive same-tag
-        terms (the rest state after :class:`SortByTag`) grouped under one brace
+        """Multiline `\\underbrace{…}_{tag}` render — consecutive same-tag
+        terms (the rest state after `SortByTag`) grouped under one brace
         labelled by their physics tag."""
         from zoomy_core.model.operations import (
             _StripArgsLatexPrinter, _BracketLatexPrinter)
@@ -417,11 +417,11 @@ class Equation(RelationMixin):
         return f"{self._ordered_tex(strip_args)} = 0"
 
     def describe(self, strip_args=False, header=True, show_tags=False):
-        """Render this equation as a :class:`Description`.
+        """Render this equation as a `Description`.
 
-        Terms print in their current order (so a :class:`SortByTag` shows).  An
-        oriented equation (from ``solve_for`` / ``sp.Eq``) renders ``lhs = rhs``
-        rather than ``residual = 0``.  ``show_tags=True`` underbraces each
+        Terms print in their current order (so a `SortByTag` shows).  An
+        oriented equation (from `solve_for` / `sp.Eq`) renders `lhs = rhs`
+        rather than `residual = 0`.  `show_tags=True` underbraces each
         physics-tag group."""
         from zoomy_core.misc.description import Description
         parts = []
@@ -441,10 +441,10 @@ class Equation(RelationMixin):
         return Description("\n".join(parts))
 
     def describe_line(self, strip_args=False, bullet=False, show_tags=False):
-        """One-line markdown render (used by ``Model.describe``).  An oriented
-        equation renders as ``lhs = rhs``; a plain residual as ``… = 0`` with
-        terms in their current order.  ``show_tags`` underbraces each tag
-        group (same render as :meth:`describe`)."""
+        """One-line markdown render (used by `Model.describe`).  An oriented
+        equation renders as `lhs = rhs`; a plain residual as `… = 0` with
+        terms in their current order.  `show_tags` underbraces each tag
+        group (same render as `describe`)."""
         prefix = "- " if bullet else ""
         if self._as_relation:
             from zoomy_core.model.operations import (

@@ -1,13 +1,13 @@
 """Solver template: IR, walkers and authoring classes (backend-agnostic).
 
 Layers (docs/dev/solver_template/SPEC.md):
-  IR          :mod:`.ir` statements + Procedure, :mod:`.registry` typed block
-              signatures, :mod:`.check` scope / kind / arity / liveness
-  walkers     :mod:`.walker_python` (readable Python source per backend),
-              :mod:`.walker_c` (C++)
-  authoring   :mod:`.scheme`, :mod:`.stage`, :mod:`.plugin`, :mod:`.builders`,
-              :mod:`.solver`
-  backends    :mod:`.backend_numpy` here; jax in ``zoomy_jax.template``
+  IR          `.ir` statements + Procedure, `.registry` typed block
+              signatures, `.check` scope / kind / arity / liveness
+  walkers     `.walker_python` (readable Python source per backend),
+              `.walker_c` (C++)
+  authoring   `.scheme`, `.stage`, `.plugin`, `.builders`,
+              `.solver`
+  backends    `.backend_numpy` here; jax in `zoomy_jax.template`
 
 Never imports jax.
 """

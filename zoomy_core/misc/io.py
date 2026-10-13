@@ -42,7 +42,7 @@ def get_hdf5_type(value):
 
 
 def write_dict_to_hdf5(group, d):
-    """Recursively store nested dicts / ``Zstruct``-like objects into an HDF5 group."""
+    """Recursively store nested dicts / `Zstruct`-like objects into an HDF5 group."""
     for key, value in d.items():
         if isinstance(value, dict):
             subgroup = group.create_group(key)
@@ -61,7 +61,7 @@ def write_dict_to_hdf5(group, d):
 
 
 def load_hdf5_to_dict(group):
-    """Inverse of :func:`write_dict_to_hdf5` for reading settings or metadata."""
+    """Inverse of `write_dict_to_hdf5` for reading settings or metadata."""
     d = {}
     for key, value in group.items():
         if isinstance(value, h5py.Group):
@@ -78,7 +78,7 @@ def load_hdf5_to_dict(group):
 
 
 def save_settings(settings):
-    """Write ``settings`` to ``settings.h5`` inside the configured output directory."""
+    """Write `settings` to `settings.h5` inside the configured output directory."""
     main_dir = misc.get_main_directory()
 
     filepath = os.path.join(main_dir, settings.output.directory)
@@ -87,7 +87,7 @@ def save_settings(settings):
 
 
 def load_settings(filepath):
-    """Load a :class:`~zoomy_core.misc.misc.Settings` object from ``settings.h5``."""
+    """Load a `Settings` object from `settings.h5`."""
     main_dir = misc.get_main_directory()
 
     filepath = os.path.join(main_dir, filepath)
@@ -249,16 +249,16 @@ def _save_hdf5(_filepath, i_snapshot, time, Q, Qaux, overwrite=True):
 
 
 def write_mesh_to_hdf5(_filepath, mesh, names=None):
-    """Initialise the solver output h5 with the mesh topology under ``/mesh/`` so
+    """Initialise the solver output h5 with the mesh topology under `/mesh/` so
     the file is SELF-DESCRIBING for the postprocessing readers
-    (``zoomy_plotting.read_hdf5`` → ``columns_from_slice`` / the column & mesh
+    (`zoomy_plotting.read_hdf5` → `columns_from_slice` / the column & mesh
     plots).  Written once at setup (fresh file); the per-snapshot field writer
-    then appends ``/fields/``.  No-op without h5py.
+    then appends `/fields/`.  No-op without h5py.
 
-    ``names`` — the state variable names, in ``Q`` row order — are stored as
-    ``/fields@names`` (the convention ``zoomy_prepost`` writes and
-    ``zoomy_plotting.read_hdf5`` resolves), so a reader can ask the store for
-    ``"h"`` instead of guessing that ``q1`` is the depth."""
+    `names` — the state variable names, in `Q` row order — are stored as
+    `/fields@names` (the convention `zoomy_prepost` writes and
+    `zoomy_plotting.read_hdf5` resolves), so a reader can ask the store for
+    `"h"` instead of guessing that `q1` is the depth."""
     if not _HAVE_H5PY:
         return
     main_dir = misc.get_main_directory()
@@ -302,7 +302,7 @@ def get_save_fields(_filepath, write_all=False, overwrite=True):
 
 
 def save_fields_test(a):
-    """Test helper: tuple interface around :func:`_save_fields_to_hdf5`."""
+    """Test helper: tuple interface around `_save_fields_to_hdf5`."""
     filepath, time, next_write_at, i_snapshot, Q, Qaux, write_all = a
     if not write_all and time < next_write_at:
         return i_snapshot
@@ -312,13 +312,13 @@ def save_fields_test(a):
 
 
 def load_mesh_from_hdf5(filepath):
-    """Load a :class:`~zoomy_core.mesh.lsq_mesh.LSQMesh` from disk via ``Mesh.from_hdf5``."""
+    """Load a `LSQMesh` from disk via `Mesh.from_hdf5`."""
     mesh = Mesh.from_hdf5(filepath)
     return mesh
 
 
 def load_fields_from_hdf5(filepath, i_snapshot=-1):
-    """Read ``Q``, ``Qaux``, and time for one snapshot (default: latest)."""
+    """Read `Q`, `Qaux`, and time for one snapshot (default: latest)."""
     main_dir = misc.get_main_directory()
 
     filepath = os.path.join(main_dir, filepath)

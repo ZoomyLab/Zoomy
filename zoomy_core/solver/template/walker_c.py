@@ -1,33 +1,33 @@
 """C walker: template IR -> C++ (host orchestration over backend handles).
 
-Derived from :class:`zoomy_core.transformation.procedure_c.CProcedurePrinter`
+Derived from `zoomy_core.transformation.procedure_c.CProcedurePrinter`
 (GenericCppBase expression printing: typed Min/Max literals, the math-function
 caster, CSE-free scalar printing) with the eight fixes the feasibility
 prototype needed to make the real march compile and run
-(``docs/dev/solver_template/prototypes/feas_c/feas_printer.py``):
+(`docs/dev/solver_template/prototypes/feas_c/feas_printer.py`):
 
 F1  declare-once / typed local table: every local is declared ONCE at the
     head of its procedure with the kind the type checker inferred;
-F2  whole-array ``Assign`` -> ``zoomy_elementwise(lambda, target, operands...)``
+F2  whole-array `Assign` -> `zoomy_elementwise(lambda, target, operands...)`
     (operands must share the target kind; reductions inside are lifted);
-F3  written scalars by mutable reference (``double& time``), read scalars by
-    value, arrays as typed handles (``const CellState&``);
+F3  written scalars by mutable reference (`double& time`), read scalars by
+    value, arrays as typed handles (`const CellState&`);
 F4  locals bound to the context workspace (``CellState& Q0 =
     ctx.ws.step__Q0;``), the workspace struct and its allocator are emitted;
-F5  ``Procedure.results`` pass-once: an in/out port is ONE mutable parameter;
+F5  `Procedure.results` pass-once: an in/out port is ONE mutable parameter;
     outputs not among the inputs are trailing references; aliasing between a
     read-only and a written actual goes through a temporary;
 F6  arity / kind check of every call at print time against the block registry
     / procedure ports;
-F7  host-only orchestration (no ``PORTABLE_FN``; ``orchestration_qualifier``);
-F8  an explicit context parameter ``Ctx& ctx`` on every procedure and block,
-    plus emitted ``constexpr`` constants.
+F7  host-only orchestration (no `PORTABLE_FN`; `orchestration_qualifier`);
+F8  an explicit context parameter `Ctx& ctx` on every procedure and block,
+    plus emitted `constexpr` constants.
 
-The backend header supplies the handle types, ``Ctx`` (with ``ws`` of the
-emitted workspace type), ``zoomy_elementwise``, ``zoomy_copy``,
-``zoomy_reduce_{any,all,min,max,sum}``, ``zoomy_guard_value`` /
-``zoomy_guard_fail``, ``zoomy_warn``, ``zoomy_safe_div``, ``zoomy_at``,
-``zoomy_root``, ``zoomy_linsolve``, ``zoomy_alloc_<kind>`` and the block
+The backend header supplies the handle types, `Ctx` (with `ws` of the
+emitted workspace type), `zoomy_elementwise`, `zoomy_copy`,
+`zoomy_reduce_{any,all,min,max,sum}`, `zoomy_guard_value` /
+`zoomy_guard_fail`, `zoomy_warn`, `zoomy_safe_div`, `zoomy_at`,
+`zoomy_root`, `zoomy_linsolve`, `zoomy_alloc_<kind>` and the block
 definitions.
 """
 from __future__ import annotations
@@ -84,8 +84,8 @@ class CWalkerError(TemplateCheckError):
 
 @dataclasses.dataclass
 class CProgram:
-    """Emitted C++: ``decls`` (constants, workspace struct + allocator, block
-    and procedure declarations) and ``procs`` (procedure definitions)."""
+    """Emitted C++: `decls` (constants, workspace struct + allocator, block
+    and procedure declarations) and `procs` (procedure definitions)."""
 
     decls: str
     procs: str
@@ -705,7 +705,7 @@ def make_printer_class():
             return label
 
         def _lambda(self, proc, lead, args, outname="_r"):
-            """``[&](const T& _x, T& _r) { proc(ctx, _x, args..., _r); }``"""
+            """`[&](const T& _x, T& _r) { proc(ctx, _x, args..., _r); }`"""
             if proc.outputs[0].name in proc.input_names:
                 raise CWalkerError(f"{proc.name}: a residual / matvec / "
                                    "preconditioner output must not reuse an "
@@ -802,8 +802,8 @@ def make_printer_class():
 class CWalker:
     """Emit C++ for a template program.
 
-    ``emit(root, registry=..., constants=..., flags=...)`` resolves the
-    build-time branches, type-checks, and returns a :class:`CProgram`."""
+    `emit(root, registry=..., constants=..., flags=...)` resolves the
+    build-time branches, type-checks, and returns a `CProgram`."""
 
     def __init__(self, *, workspace_type="TemplateWorkspace"):
         self.workspace_type = workspace_type

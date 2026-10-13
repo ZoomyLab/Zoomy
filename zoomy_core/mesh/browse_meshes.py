@@ -1,4 +1,4 @@
-"""Backward-compatible free functions around ``MeshCatalog``; new code should use ``MeshCatalog``
+"""Backward-compatible free functions around `MeshCatalog`; new code should use `MeshCatalog`
 directly.
 """
 
@@ -26,7 +26,7 @@ _catalog: MeshCatalog | None = None
 
 
 def _get_catalog() -> MeshCatalog:
-    """Return the lazily created module-level ``MeshCatalog``."""
+    """Return the lazily created module-level `MeshCatalog`."""
     global _catalog
     if _catalog is None:
         _catalog = MeshCatalog()
@@ -60,14 +60,14 @@ def show_meshes(do_print=True):
 # Mesh download
 # ============================================================
 async def download_mesh_async(mesh_name, folder="./", filetype="msh", size="medium"):
-    """Async: download ``mesh_name`` of the given ``size`` and ``filetype`` into ``folder``."""
+    """Async: download `mesh_name` of the given `size` and `filetype` into `folder`."""
     catalog = MeshCatalog(auto_fetch=False)
     await catalog.refresh_async()
     return await catalog.download_async(mesh_name, size=size, filetype=filetype, folder=folder)
 
 
 def download_mesh(mesh_name, folder="./", filetype="msh", size="medium"):
-    """Download ``mesh_name`` of the given ``size`` and ``filetype`` into ``folder``; returns a
+    """Download `mesh_name` of the given `size` and `filetype` into `folder`; returns a
     coroutine under Pyodide.
     """
     if _IN_PYODIDE:

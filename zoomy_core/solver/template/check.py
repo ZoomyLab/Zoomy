@@ -1,19 +1,19 @@
 """Build-time checking of a template program: scope, kinds, arity, liveness.
 
-:func:`check_program` runs two passes per procedure:
+`check_program` runs two passes per procedure:
 
-1. a FORWARD pass (scope + kinds): every name read is bound, every ``Call`` /
-   ``Callback`` matches its signature (arity and kind), loop carries and Select
+1. a FORWARD pass (scope + kinds): every name read is bound, every `Call` /
+   `Callback` matches its signature (arity and kind), loop carries and Select
    operands keep their kinds, hooks only write their declared outputs, and the
-   replicated-predicate rule holds (a ``Select`` / ``While`` predicate guarding
-   communicating work, and every ``Guard`` predicate, must be the same on all
+   replicated-predicate rule holds (a `Select` / `While` predicate guarding
+   communicating work, and every `Guard` predicate, must be the same on all
    ranks: derived from scalars, constants, reductions or global blocks);
 2. a BACKWARD pass (liveness): the carry of every loop and the outputs of every
-   ``Select`` are inferred as the names written inside, bound before, and live
-   afterwards (or read by the next iteration); ``Guard`` anchors are chosen
+   `Select` are inferred as the names written inside, bound before, and live
+   afterwards (or read by the next iteration); `Guard` anchors are chosen
    among the live values.
 
-The result (:class:`ProgramInfo`) is what both walkers lower from, so the C
+The result (`ProgramInfo`) is what both walkers lower from, so the C
 and Python code agree on every carry, output and declaration.
 """
 from __future__ import annotations
@@ -51,7 +51,7 @@ def where(proc_name, path, stmt=None) -> str:
 
 
 def fmt_path(path) -> str:
-    """``("body", 3, "then", 1)`` -> ``body[3].then[1]``."""
+    """`("body", 3, "then", 1)` -> `body[3].then[1]`."""
     out = []
     i = 0
     path = tuple(path)
@@ -364,7 +364,7 @@ class _Kinds:
 
 
 def _repl_expr(e, repl) -> bool:
-    """Is the (scalar) value of ``e`` identical on every rank?"""
+    """Is the (scalar) value of `e` identical on every rank?"""
     if isinstance(e, E.REDUCTIONS):
         return True
     if isinstance(e, sp.Symbol):
@@ -977,8 +977,8 @@ def _ordered_writes(*blocks) -> list:
 
 def check_program(root: Procedure, registry: Optional[BlockRegistry] = None,
                   constants: Optional[ConstTable] = None) -> ProgramInfo:
-    """Check ``root`` and every procedure it references; return the analysis
-    the walkers lower from.  Raises :class:`TemplateCheckError`."""
+    """Check `root` and every procedure it references; return the analysis
+    the walkers lower from.  Raises `TemplateCheckError`."""
     registry = BLOCKS if registry is None else registry
     constants = ConstTable() if constants is None else constants
     pc = _ProgramChecker(root, registry, constants)

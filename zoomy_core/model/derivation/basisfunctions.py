@@ -1,4 +1,4 @@
-"""Concrete polynomial bases in ``z`` (Legendre, Chebyshev, splines, layered, BC-aware) for the
+"""Concrete polynomial bases in `z` (Legendre, Chebyshev, splines, layered, BC-aware) for the
 moment/Galerkin derivation. They resolve the opaque Galerkin brackets of a Model into numbers on the
 way to a SystemModel.
 """
@@ -13,33 +13,33 @@ from sympy.functions.special.polynomials import chebyshevu
 
 
 class Basisfunction:
-    """Base class of a concrete basis: polynomials ``basis`` plus opaque heads ``phi_fn(k, zeta)``
-    and ``c_fn(zeta)`` that point back to the instance. ResolveBasis routes Galerkin brackets built
-    from these heads to :meth:`resolve`.
+    """Base class of a concrete basis: polynomials `basis` plus opaque heads `phi_fn(k, zeta)`
+    and `c_fn(zeta)` that point back to the instance. ResolveBasis routes Galerkin brackets built
+    from these heads to `resolve`.
 
     Args:
-        level: highest basis index (``level + 1`` functions).
-        symbol: name of the opaque ``phi_fn`` Function class.
+        level: highest basis index (`level + 1` functions).
+        symbol: name of the opaque `phi_fn` Function class.
     """
     name = "Basisfunction"
 
     def bounds(self):
-        """Return the integration interval ``[0, 1]``."""
+        """Return the integration interval `[0, 1]`."""
         return [0, 1]
 
     def basis_definition(self):
-        """Return the monomials ``z**k`` for ``k = 0..level``."""
+        """Return the monomials `z**k` for `k = 0..level`."""
         z = Symbol("z")
         b = lambda k, z: z**k
         return [b(k, z) for k in range(self.level + 1)]
 
     def weight(self, z):
-        """Return the weight ``omega(z) = 1``."""
+        """Return the weight `omega(z) = 1`."""
         return 1
 
     def mean_coefficients(self):
-        """Return coefficients ``c_k`` with ``sum(c_k phi_k) = 1``, so the depth mean is ``sum(c_k
-        alpha_k)``. Default ``[1, 0, ...]`` assumes ``phi_0 = 1``; override when the constant is a
+        """Return coefficients `c_k` with `sum(c_k phi_k) = 1`, so the depth mean is ``sum(c_k
+        alpha_k)`. Default `[1, 0, ...]`` assumes `phi_0 = 1`; override when the constant is a
         combination (e.g. B-splines).
         """
         c = [sympy.Integer(0)] * (self.level + 1)
@@ -47,13 +47,13 @@ class Basisfunction:
         return c
 
     def weight_eval(self, z):
-        """Evaluate ``weight`` numerically via lambdify."""
+        """Evaluate `weight` numerically via lambdify."""
         z = Symbol("z")
         f = sympy.lambdify(z, self.weight(z))
         return f(z)
 
     def __init__(self, level=0, symbol="phi", **kwargs):
-        """Build the concrete ``basis``, the opaque heads ``phi_fn`` / ``c_fn`` and the bracket
+        """Build the concrete `basis`, the opaque heads `phi_fn` / `c_fn` and the bracket
         cache.
         """
         self.level = level
@@ -98,9 +98,9 @@ class Basisfunction:
     weight_name = "c"
 
     def closed_form_bracket(self, name, args):
-        """Return the closed form of a named bracket (``"Gram"`` / ``"Weight"``) in symbolic
-        indices, or ``None``. The base class has none; orthogonal bases override it, e.g.
-        :class:`Legendre_shifted`.
+        """Return the closed form of a named bracket (`"Gram"` / `"Weight"`) in symbolic
+        indices, or `None`. The base class has none; orthogonal bases override it, e.g.
+        `Legendre_shifted`.
 
         Args:
             name: bracket family name.
@@ -109,11 +109,11 @@ class Basisfunction:
         return None
 
     def resolve_atoms(self, expr):
-        """Replace each ``phi_fn(k, arg)`` with integer ``k`` by the polynomial ``eval(k, arg)``;
-        symbolic ``k`` stays opaque. Atoms of other bases are untouched.
+        """Replace each `phi_fn(k, arg)` with integer `k` by the polynomial `eval(k, arg)`;
+        symbolic `k` stays opaque. Atoms of other bases are untouched.
         """
         def _replace(k, z_arg):
-            """Evaluate one ``phi_fn`` atom if its index is an integer."""
+            """Evaluate one `phi_fn` atom if its index is an integer."""
             if k.is_Integer:
                 return self.eval(int(k), z_arg)
             # Symbolic index → leave opaque (un-doited Sum).
@@ -124,7 +124,7 @@ class Basisfunction:
     # ── Galerkin-bracket resolution: ⟨…⟩ → number (antiderivative + cache) ──
 
     def _concretize_bracket(self, body):
-        """Replace opaque ``phi`` / ``c`` heads (integer index) in a bracket body by this basis's
+        """Replace opaque `phi` / `c` heads (integer index) in a bracket body by this basis's
         polynomials and weight, leaving numerical-quadrature brackets opaque.
         """
         def _is_phi(e):
@@ -167,11 +167,11 @@ class Basisfunction:
         return body
 
     def evaluate_bracket(self, body, var, lower=0, upper=1):
-        """Evaluate one Galerkin bracket ``int_lower^upper body d(var)`` to a number by concretising
+        """Evaluate one Galerkin bracket `int_lower^upper body d(var)` to a number by concretising
         and using the antiderivative; memoised per instance.
 
         Args:
-            body: product of opaque ``phi`` / ``c`` heads, their derivatives and nested running
+            body: product of opaque `phi` / `c` heads, their derivatives and nested running
                 integrals.
             var: integration variable.
         """
@@ -186,7 +186,7 @@ class Basisfunction:
         return val
 
     def analytical_weighted_integral_bounds(self, poly_expr, var, lower, upper):
-        """Return ``int_lower^upper poly_expr d(var)`` by antiderivative."""
+        """Return `int_lower^upper poly_expr d(var)` by antiderivative."""
         try:
             anti = sympy.Poly(poly_expr, var).integrate().as_expr()
         except (sympy.GeneratorsNeeded, sympy.PolynomialError):
@@ -194,8 +194,8 @@ class Basisfunction:
         return anti.subs(var, upper) - anti.subs(var, lower)
 
     def resolve(self, expr, var):
-        """Resolve every Galerkin bracket in ``expr`` to a number against this basis (closed forms
-        for ``Gram`` / ``Weight``, :meth:`evaluate_bracket` otherwise). Only inserts values: outer
+        """Resolve every Galerkin bracket in `expr` to a number against this basis (closed forms
+        for `Gram` / `Weight`, `evaluate_bracket` otherwise). Only inserts values: outer
         derivatives are not evaluated and deferred integrals stay compact.
 
         Args:
@@ -279,11 +279,11 @@ class Basisfunction:
         return expr
 
     def get(self, k):
-        """Return the polynomial of basis function ``k``."""
+        """Return the polynomial of basis function `k`."""
         return self.basis[k]
 
     def gram(self, i, j):
-        """Return the Galerkin mass-matrix entry ``<phi_i, phi_j> = int omega phi_i phi_j dz``, from
+        """Return the Galerkin mass-matrix entry `<phi_i, phi_j> = int omega phi_i phi_j dz`, from
         the closed form if the basis has one.
 
         Args:
@@ -298,25 +298,25 @@ class Basisfunction:
             z, *self.bounds())
 
     def eval(self, k, _z):
-        """Evaluate basis function ``k`` at ``_z``."""
+        """Evaluate basis function `k` at `_z`."""
         return self.get(k).subs(z, _z)
 
     def at0(self, k):
-        """Return basis function ``k`` at the bottom of the layer, ``eval(k, bounds[0])``."""
+        """Return basis function `k` at the bottom of the layer, `eval(k, bounds[0])`."""
         return self.eval(k, self.bounds()[0])
 
     def at1(self, k):
-        """Return basis function ``k`` at the free surface, ``eval(k, bounds[1])``."""
+        """Return basis function `k` at the free surface, `eval(k, bounds[1])`."""
         return self.eval(k, self.bounds()[1])
 
     def eval_psi(self, k, _z):
-        """Evaluate the running integral of basis function ``k`` from the lower bound to ``_z``."""
+        """Evaluate the running integral of basis function `k` from the lower bound to `_z`."""
         z = sympy.Symbol('z')
         psi = sympy.integrate(self.get(k), (z, self.bounds()[0], z))
         return psi.subs(z, _z)
 
     def get_lambda(self, k):
-        """Return a numeric callable of basis function ``k`` accepting scalars, lists or arrays."""
+        """Return a numeric callable of basis function `k` accepting scalars, lists or arrays."""
         f = lambdify(z, self.get(k))
 
         def lam(z):
@@ -331,7 +331,7 @@ class Basisfunction:
         return lam
 
     def plot(self, ax):
-        """Plot every basis function on ``bounds`` into the matplotlib axes ``ax``."""
+        """Plot every basis function on `bounds` into the matplotlib axes `ax`."""
         X = np.linspace(self.bounds()[0], self.bounds()[1], 1000)
         for i in range(len(self.basis)):
             f = lambdify(z, self.get(i))
@@ -339,7 +339,7 @@ class Basisfunction:
             ax.plot(X, y, label=f"basis {i}")
 
     def reconstruct_velocity_profile(self, alpha, N=100):
-        """Return ``sum(alpha_i phi_i)`` on ``N`` equispaced points of ``bounds``."""
+        """Return `sum(alpha_i phi_i)` on `N` equispaced points of `bounds`."""
         Z = np.linspace(self.bounds()[0], self.bounds()[1], N)
         u = np.zeros_like(Z)
         for i in range(len(self.basis)):
@@ -348,7 +348,7 @@ class Basisfunction:
         return u
     
     def reconstruct_velocity_profile_at(self, alpha, z):
-        """Return ``sum(alpha_i phi_i)`` at the point ``z``."""
+        """Return `sum(alpha_i phi_i)` at the point `z`."""
         u = 0
         for i in range(len(self.basis)):
             b = lambdify(z, self.eval(i, z))
@@ -356,7 +356,7 @@ class Basisfunction:
         return u
 
     def reconstruct_alpha(self, velocities, z):
-        """Return per-mode coefficients of sampled ``velocities`` at points ``z`` by trapezoid
+        """Return per-mode coefficients of sampled `velocities` at points `z` by trapezoid
         quadrature (assumes an orthogonal basis).
         """
         n_basis = len(self.basis)
@@ -373,8 +373,8 @@ class Basisfunction:
         return alpha
     
     def project_onto_basis(self, Y):
-        """Return the unnormalised projections ``int Y phi_k omega dz`` of the samples ``Y``
-        (equispaced on ``bounds``) by trapezoid quadrature.
+        """Return the unnormalised projections `int Y phi_k omega dz` of the samples `Y`
+        (equispaced on `bounds`) by trapezoid quadrature.
         """
         Z = np.linspace(self.bounds()[0], self.bounds()[1], Y.shape[0])
         n_basis = len(self.basis)
@@ -389,16 +389,16 @@ class Basisfunction:
     def projection_rows(self, nodes, weights, samples, norm=None):
         """Return one symbolic row per basis function that projects a profile sampled at fixed nodes
         onto the basis (discrete least squares, full inverse Gram matrix). Each row is plain
-        arithmetic in ``samples``, so every code printer can lower it.
+        arithmetic in `samples`, so every code printer can lower it.
 
         Args:
-            nodes: sample points ``zeta_j``.
-            weights: quadrature weights ``w_j`` (same length).
-            samples: input symbols ``field(zeta_j)`` (same length).
-            norm: optional per-row scale, a callable of ``k`` or a sequence.
+            nodes: sample points `zeta_j`.
+            weights: quadrature weights `w_j` (same length).
+            samples: input symbols `field(zeta_j)` (same length).
+            norm: optional per-row scale, a callable of `k` or a sequence.
 
         Returns:
-            List of ``len(basis)`` sympy rows.
+            List of `len(basis)` sympy rows.
         """
         if not (len(nodes) == len(weights) == len(samples)):
             raise ValueError(
@@ -431,26 +431,26 @@ class Basisfunction:
         return rows
 
     def get_diff_basis(self):
-        """Return the ``z``-derivatives of all basis polynomials."""
+        """Return the `z`-derivatives of all basis polynomials."""
         db = [diff(b, z) for i, b in enumerate(self.basis)]
         return db
 
 
 class Monomials(Basisfunction):
-    """Monomial basis ``z**k`` (the base-class default)."""
+    """Monomial basis `z**k` (the base-class default)."""
     name = "Monomials"
 
 
 class LayeredBasis(Basisfunction):
-    """Multi-layer basis: an inner basis rescaled onto each of ``N`` sub-intervals and zero outside,
-    giving ``N * (inner_level + 1)`` functions with flat index ``i*m + k``. ``inner_level=0`` gives
-    piecewise constants (multi-layer SWE), ``Legendre_shifted`` multi-layer moments.
+    """Multi-layer basis: an inner basis rescaled onto each of `N` sub-intervals and zero outside,
+    giving `N * (inner_level + 1)` functions with flat index `i*m + k`. `inner_level=0` gives
+    piecewise constants (multi-layer SWE), `Legendre_shifted` multi-layer moments.
 
     Args:
         inner_cls: per-layer Basisfunction subclass.
         inner_level: level of the inner basis.
-        interfaces: explicit breakpoints (``N + 1``), in zeta or physical z.
-        n_layers: number of equal layers on ``[0, 1]`` when ``interfaces`` is not given.
+        interfaces: explicit breakpoints (`N + 1`), in zeta or physical z.
+        n_layers: number of equal layers on `[0, 1]` when `interfaces` is not given.
 
     References:
         Audusse et al. 2011, https://doi.org/10.1051/m2an/2010036
@@ -498,7 +498,7 @@ class LayeredBasis(Basisfunction):
         return out
 
     def bounds(self):
-        """Return the outer interfaces ``[first, last]``."""
+        """Return the outer interfaces `[first, last]`."""
         return [self.interfaces[0], self.interfaces[-1]]
 
     def weight(self, z):
@@ -517,18 +517,18 @@ class LayeredBasis(Basisfunction):
 
     # Convenience accessors for layer / moment indexing --------------
     def flat_index(self, layer_idx, moment_idx):
-        """Map ``(layer_idx, moment_idx)`` to the flat basis index."""
+        """Map `(layer_idx, moment_idx)` to the flat basis index."""
         return layer_idx * self.inner_n_basis + moment_idx
 
     def layer_zeta(self, layer_idx, z_value):
-        """Return the local coordinate ``(z_value - lower_i) / h_i`` in layer ``layer_idx``."""
+        """Return the local coordinate `(z_value - lower_i) / h_i` in layer `layer_idx`."""
         lo = self.interfaces[layer_idx]
         hi = self.interfaces[layer_idx + 1]
         return (z_value - lo) / (hi - lo)
 
 
 class Legendre_shifted(Basisfunction):
-    """Shifted Legendre basis ``phi_k(z) = P_k(2z - 1)`` on ``[0, 1]``, orthogonal under unit
+    """Shifted Legendre basis `phi_k(z) = P_k(2z - 1)` on `[0, 1]`, orthogonal under unit
     weight; the standard SME moment basis.
 
     References:
@@ -537,19 +537,19 @@ class Legendre_shifted(Basisfunction):
     name = "Legendre_shifted"
 
     def basis_definition(self):
-        """Return ``legendre(k, 2z - 1)``, so ``phi_k(0) = (-1)^k`` at the bed and ``phi_k(1) = 1``
+        """Return `legendre(k, 2z - 1)`, so `phi_k(0) = (-1)^k` at the bed and `phi_k(1) = 1`
         at the free surface.
         """
         z = Symbol("z")
         return [legendre(k, 2 * z - 1) for k in range(self.level + 1)]
 
     def analytical_weighted_integral(self, poly_expr, var):
-        """Return ``int_0^1 poly_expr d(var)`` (unit weight) by antiderivative."""
+        """Return `int_0^1 poly_expr d(var)` (unit weight) by antiderivative."""
         anti = sympy.integrate(poly_expr, var)
         return anti.subs(var, 1) - anti.subs(var, 0)
 
     def closed_form_bracket(self, name, args):
-        """Return ``Gram(i, l) = delta_il / (2l + 1)`` and ``Weight(l) = delta_l0``, or ``None`` for
+        """Return `Gram(i, l) = delta_il / (2l + 1)` and `Weight(l) = delta_l0`, or `None` for
         any other bracket.
         """
         if name == "Gram" and len(args) == 2:
@@ -568,7 +568,7 @@ class WeightedBasis(Basisfunction):
     Args:
         inner: wrapped Basisfunction.
         weight: weight expression in the integration variable.
-        level: basis level (default: that of ``inner``).
+        level: basis level (default: that of `inner`).
     """
     name = "WeightedBasis"
 
@@ -592,7 +592,7 @@ class WeightedBasis(Basisfunction):
         return self._weight
 
     def analytical_weighted_integral(self, poly_expr, var):
-        """Return ``int_0^1 poly_expr * weight d(var)`` by antiderivative."""
+        """Return `int_0^1 poly_expr * weight d(var)` by antiderivative."""
         w = self._weight
         if hasattr(w, "subs"):
             w = w.subs(Symbol("z"), var) if Symbol("z") in getattr(w, "free_symbols", set()) else w
@@ -600,47 +600,47 @@ class WeightedBasis(Basisfunction):
         return sympy.expand(anti.subs(var, 1) - anti.subs(var, 0))
 
     def closed_form_bracket(self, name, args):
-        """Return ``None``: no delta closed form under a non-unit weight."""
+        """Return `None`: no delta closed form under a non-unit weight."""
         return None
 
 
 class Chebyshevu(Basisfunction):
-    """Chebyshev-U basis on ``[-1, 1]`` with weight ``sqrt(1 - z**2)`` and normalisation
-    ``sqrt(2/pi)``.
+    """Chebyshev-U basis on `[-1, 1]` with weight `sqrt(1 - z**2)` and normalisation
+    `sqrt(2/pi)`.
     """
     name = "Chebyshevu"
     
     def bounds(self):
-        """Return ``[-1, 1]``."""
+        """Return `[-1, 1]`."""
         return [-1, 1]
     
     def weight(self, z):
         # do not forget to include the jacobian of the coordinate transformation in the weight
-        """Return ``sqrt(1 - z**2)``."""
+        """Return `sqrt(1 - z**2)`."""
         return sympy.sqrt(1-z**2)
 
     def basis_definition(self):
-        """Return ``sqrt(2/pi) * U_k(z)``."""
+        """Return `sqrt(2/pi) * U_k(z)`."""
         z = Symbol("z")
         b = lambda k, z: sympy.sqrt(2 / sympy.pi) * chebyshevu(k, z)
         return [b(k, z) for k in range(self.level + 1)]
     
 class Chebyshevu_shifted(Basisfunction):
-    """Chebyshev-U basis ``U_k(2z - 1)`` on ``[0, 1]`` with weight ``sqrt(z(1 - z))`` and ``phi_0 =
-    1``, orthogonal with norm ``pi/8``.
+    """Chebyshev-U basis `U_k(2z - 1)` on `[0, 1]` with weight `sqrt(z(1 - z))` and ``phi_0 =
+    1``, orthogonal with norm `pi/8`.
     """
     name = "Chebyshevu_shifted"
 
     def bounds(self):
-        """Return ``[0, 1]``."""
+        """Return `[0, 1]`."""
         return [0, 1]
 
     def weight(self, z):
-        """Return ``sqrt(z (1 - z))``."""
+        """Return `sqrt(z (1 - z))`."""
         return sympy.sqrt(z * (1 - z))
 
     def basis_definition(self):
-        """Return ``U_k(2z - 1)``."""
+        """Return `U_k(2z - 1)`."""
         z = Symbol("z")
         return [chebyshevu(k, 2 * z - 1) for k in range(self.level + 1)]
 
@@ -648,7 +648,7 @@ class Chebyshevu_shifted(Basisfunction):
     _vandermonde_cache: dict = {}
 
     def _u_vandermonde_inv(self, deg):
-        """Return the cached inverse of the monomial-to-``U_k(2z - 1)`` matrix for degree ``deg``."""
+        """Return the cached inverse of the monomial-to-`U_k(2z - 1)` matrix for degree `deg`."""
         if deg in self._vandermonde_cache:
             return self._vandermonde_cache[deg]
         z_sym = Symbol("z")
@@ -661,8 +661,8 @@ class Chebyshevu_shifted(Basisfunction):
         return Vinv
 
     def analytical_weighted_integral(self, poly_expr, var):
-        """Return ``int_0^1 poly_expr * sqrt(z(1 - z)) d(var)`` via U-orthogonality, or ``None`` if
-        ``poly_expr`` is not a polynomial.
+        """Return `int_0^1 poly_expr * sqrt(z(1 - z)) d(var)` via U-orthogonality, or `None` if
+        `poly_expr` is not a polynomial.
         """
         expanded = sympy.expand(poly_expr)
         try:
@@ -686,14 +686,14 @@ class Chebyshevu_shifted(Basisfunction):
         return c[0] * sympy.pi / 8
 
     def quadrature_nodes(self, n=None):
-        """Return Gauss-Chebyshev-U nodes and weights on ``[0, 1]`` for the weight ``sqrt(z(1 -
+        """Return Gauss-Chebyshev-U nodes and weights on `[0, 1]` for the weight ``sqrt(z(1 -
         z))``.
 
         Args:
-            n: node count minus one; default ``2 * (level + 1)``.
+            n: node count minus one; default `2 * (level + 1)`.
 
         Returns:
-            Tuple ``(nodes, weights)`` of arrays.
+            Tuple `(nodes, weights)` of arrays.
         """
         if n is None:
             n = 2 * (self.level + 1)
@@ -707,22 +707,22 @@ class Chebyshevu_shifted(Basisfunction):
 
 
 class Legendre_DN(Basisfunction):
-    """Legendre-based basis on ``[-1, 1]`` satisfying no-slip at the bottom ``z = -1`` and no-stress
-    at the top ``z = 1`` by construction; not an SWE-limit basis.
+    """Legendre-based basis on `[-1, 1]` satisfying no-slip at the bottom `z = -1` and no-stress
+    at the top `z = 1` by construction; not an SWE-limit basis.
     """
     name = "Legendre_DN - satifying no-slip and no-stress. This is a non-SWE basis"
 
     def bounds(self):
-        """Return ``[-1, 1]``."""
+        """Return `[-1, 1]`."""
         return [-1, 1]
 
     def basis_definition(self):
-        """Return ``P_k + alpha_k P_{k+1} + beta_k P_{k+2}`` with fixed rational ``alpha_k``,
-        ``beta_k``.
+        """Return `P_k + alpha_k P_{k+1} + beta_k P_{k+2}` with fixed rational `alpha_k`,
+        `beta_k`.
         """
         z = Symbol("z")
         def b(k, z):
-            """Return the ``k``-th recombined Legendre polynomial."""
+            """Return the `k`-th recombined Legendre polynomial."""
             alpha = sympy.Rational((2*k+3), (k+2)**2)
             beta = -sympy.Rational((k+1),(k+2))**2
             return (legendre(k, z) ) + alpha * (legendre(k+1, z) ) + beta * (legendre(k+2, z))
@@ -731,16 +731,16 @@ class Legendre_DN(Basisfunction):
 
 
 class GalerkinBasis(Basisfunction):
-    """Boundary-condition-aware basis: ``phi_0 = 1`` and ``phi_k`` recombined from parent
+    """Boundary-condition-aware basis: `phi_0 = 1` and `phi_k` recombined from parent
     polynomials (Legendre or Chebyshev-U) to satisfy 'free', 'noslip', 'nostress' or 'slip'
     conditions at bottom and top.
 
     Args:
         level: highest basis index.
-        parent: parent family, ``'legendre'`` or ``'chebyshev'``.
-        bc_bottom: condition at ``z = 0``.
-        bc_top: condition at ``z = 1``.
-        slip_length: slip length for ``'slip'`` (symbolic ``slip_length`` if None).
+        parent: parent family, `'legendre'` or `'chebyshev'`.
+        bc_bottom: condition at `z = 0`.
+        bc_top: condition at `z = 1`.
+        slip_length: slip length for `'slip'` (symbolic `slip_length` if None).
 
     References:
         Shen 1994, https://doi.org/10.1137/0915089
@@ -758,7 +758,7 @@ class GalerkinBasis(Basisfunction):
         self.name = f"Galerkin_{parent}_{bc_bottom}_{bc_top}"
 
     def bounds(self):
-        """Return ``[0, 1]``."""
+        """Return `[0, 1]`."""
         return [0, 1]
 
     def weight(self, z):
@@ -766,7 +766,7 @@ class GalerkinBasis(Basisfunction):
         return sympy.Integer(1)
 
     def _parent_poly(self, k, z):
-        """Return the ``k``-th parent polynomial on ``[0, 1]``."""
+        """Return the `k`-th parent polynomial on `[0, 1]`."""
         if self._parent == "legendre":
             return legendre(k, 2 * z - 1) * (-1) ** k
         elif self._parent == "chebyshev":
@@ -775,8 +775,8 @@ class GalerkinBasis(Basisfunction):
             raise ValueError(f"Unknown parent polynomial: {self._parent}")
 
     def _bc_equation(self, poly, z_bc, bc_type):
-        """Return the residual of the boundary condition ``bc_type`` at ``z_bc`` for ``poly``
-        (``None`` for 'free').
+        """Return the residual of the boundary condition `bc_type` at `z_bc` for `poly`
+        (`None` for 'free').
         """
         z = Symbol("z")
         val = poly.subs(z, z_bc)
@@ -795,7 +795,7 @@ class GalerkinBasis(Basisfunction):
             raise ValueError(f"Unknown BC type: {bc_type}")
 
     def basis_definition(self):
-        """Return ``[1, phi_1, ...]`` with each ``phi_k`` solved from the linear boundary conditions
+        """Return `[1, phi_1, ...]` with each `phi_k` solved from the linear boundary conditions
         (one condition: two parents, two conditions: three).
         """
         z = Symbol("z")
@@ -861,8 +861,8 @@ class GalerkinBasis(Basisfunction):
 
 
 class SplineBasis(Basisfunction):
-    """Raw B-spline hat-function basis on ``[0, 1]`` with nodal coefficients and partition of unity
-    (``sum B_k = 1``). Provides :meth:`get_knot_spans` for piecewise integration.
+    """Raw B-spline hat-function basis on `[0, 1]` with nodal coefficients and partition of unity
+    (`sum B_k = 1`). Provides `get_knot_spans` for piecewise integration.
 
     Args:
         level: highest basis index.
@@ -876,7 +876,7 @@ class SplineBasis(Basisfunction):
         super().__init__(level=level, **kwargs)
 
     def bounds(self):
-        """Return ``[0, 1]``."""
+        """Return `[0, 1]`."""
         return [0, 1]
 
     def weight(self, z):
@@ -884,7 +884,7 @@ class SplineBasis(Basisfunction):
         return sympy.Integer(1)
 
     def _make_knots(self):
-        """Return the clamped knot vector for ``level + 1`` functions of the given degree."""
+        """Return the clamped knot vector for `level + 1` functions of the given degree."""
         n = self.level + 1
         n_internal = max(n - self._degree, 1)
         internal = [sympy.Rational(i, n_internal) for i in range(n_internal + 1)]
@@ -892,7 +892,7 @@ class SplineBasis(Basisfunction):
         return knots
 
     def basis_definition(self):
-        """Return the first ``level + 1`` B-splines, padded with zeros."""
+        """Return the first `level + 1` B-splines, padded with zeros."""
         z_sym = Symbol("z")
         n = self.level + 1
         knots = self._make_knots()
@@ -907,7 +907,7 @@ class SplineBasis(Basisfunction):
         return result[:n]
 
     def get_knot_spans(self):
-        """Return the ``(a, b)`` intervals between consecutive distinct knots."""
+        """Return the `(a, b)` intervals between consecutive distinct knots."""
         knots = self._make_knots()
         unique_knots = sorted(set(float(k) for k in knots))
         spans = []
@@ -924,7 +924,7 @@ class SplineBasis(Basisfunction):
 
 
 class Spline(Basisfunction):
-    """Legacy B-spline basis with fixed knots; use :class:`SplineBasis` instead."""
+    """Legacy B-spline basis with fixed knots; use `SplineBasis` instead."""
     name = "Spline"
 
     def basis_definition(self, degree=1, knots=[0, 0, 0.001, 1, 1]):
@@ -935,15 +935,15 @@ class Spline(Basisfunction):
 
 
 class OrthogonalSplineWithConstant(Basisfunction):
-    """B-spline basis plus a constant, orthonormalised on ``[0, 1]`` by Gram-Schmidt."""
+    """B-spline basis plus a constant, orthonormalised on `[0, 1]` by Gram-Schmidt."""
     name = "OrthogonalSplineWithConstant"
 
     def basis_definition(self, degree=1, knots=[0, 0, 0.5, 1, 1]):
-        """Return the Gram-Schmidt orthonormalised basis ``[1] + B-splines[:-1]``."""
+        """Return the Gram-Schmidt orthonormalised basis `[1] + B-splines[:-1]`."""
         z = Symbol("z")
 
         def prod(u, v):
-            """Return the ``L2(0, 1)`` inner product of ``u`` and ``v``."""
+            """Return the `L2(0, 1)` inner product of `u` and `v`."""
             return integrate(u * v, (z, 0, 1))
 
         basis = bspline_basis_set(degree, knots, z)

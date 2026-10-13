@@ -140,7 +140,7 @@ class FVMMesh(BaseMesh):
 
     @classmethod
     def from_msh(cls, filepath: str) -> "FVMMesh":
-        """Load a gmsh ``.msh`` file as an FVMMesh."""
+        """Load a gmsh `.msh` file as an FVMMesh."""
         base = BaseMesh.from_msh(filepath)
         return cls.from_base(base)
 
@@ -152,18 +152,18 @@ class FVMMesh(BaseMesh):
 
     @classmethod
     def create_1d(cls, domain: tuple, n_inner_cells: int) -> "FVMMesh":
-        """Structured 1D FVMMesh on ``domain`` with ``n_inner_cells`` cells."""
+        """Structured 1D FVMMesh on `domain` with `n_inner_cells` cells."""
         base = BaseMesh.create_1d(domain, n_inner_cells)
         return cls.from_base(base)
 
     @classmethod
     def create_2d(cls, domain: tuple, nx: int, ny: int) -> "FVMMesh":
-        """Structured 2D FVMMesh on ``domain`` with ``nx`` x ``ny`` cells."""
+        """Structured 2D FVMMesh on `domain` with `nx` x `ny` cells."""
         base = BaseMesh.create_2d(domain, nx, ny)
         return cls.from_base(base)
 
     @classmethod
     def create_3d(cls, domain: tuple, nx: int, ny: int, nz: int) -> "FVMMesh":
-        """Structured 3D FVMMesh on ``domain`` with ``nx`` x ``ny`` x ``nz`` cells."""
+        """Structured 3D FVMMesh on `domain` with `nx` x `ny` x `nz` cells."""
         base = BaseMesh.create_3d(domain, nx, ny, nz)
         return cls.from_base(base)

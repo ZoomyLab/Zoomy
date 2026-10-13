@@ -17,17 +17,17 @@ import zoomy_core.misc.interpolation as interpolate_mesh
 
 
 def default_constant_func(n_variables: int) -> FArray:
-    """Default constant state ``[1, 0, 0, ...]``."""
+    """Default constant state `[1, 0, 0, ...]`."""
     return np.array([1.0] + [0.0 for i in range(n_variables - 1)])
 
 
 def default_low_state(n_variables: int) -> FArray:
-    """Default low (right) state ``[1, 0, ...]``."""
+    """Default low (right) state `[1, 0, ...]`."""
     return np.array([1.0 * (i == 0) for i in range(n_variables)])
 
 
 def default_high_state(n_variables: int) -> FArray:
-    """Default high (left) state ``[2, 0, ...]``."""
+    """Default high (left) state `[2, 0, ...]`."""
     return np.array([2.0 * (i == 0) for i in range(n_variables)])
 
 
@@ -40,11 +40,11 @@ def default_user_function(x: FArray) -> FArray:
 
 
 class InitialConditions(param.Parameterized):
-    """Abstract base of initial conditions; subclasses implement ``apply`` and
-    ``get_definition``.
+    """Abstract base of initial conditions; subclasses implement `apply` and
+    `get_definition`.
     """
     def apply(self, X, Q):
-        """Abstract: fill ``Q`` from ``X``."""
+        """Abstract: fill `Q` from `X`."""
         assert False, "InitialConditions is an abstract class."
         return Q
 
@@ -58,21 +58,21 @@ class InitialConditions(param.Parameterized):
 
 
 class Constant(InitialConditions):
-    """Spatially constant initial state given by ``constants(n_variables)``."""
+    """Spatially constant initial state given by `constants(n_variables)`."""
     constants = param.Callable(default=default_constant_func)
 
     def __init__(self, constants=None, **params):
-        """Set ``constants`` (callable ``n_variables -> state``) if given."""
+        """Set `constants` (callable `n_variables -> state`) if given."""
         if constants is not None:
             params["constants"] = constants
         super().__init__(**params)
 
     def apply(self, X, Q):
-        """Fill ``Q`` (shape ``(n_variables, n_cells)``) in place from the cell coordinates
-        ``X`` (shape ``(dim, n_cells)``).
+        """Fill `Q` (shape `(n_variables, n_cells)`) in place from the cell coordinates
+        `X` (shape `(dim, n_cells)`).
 
         Returns:
-            The filled ``Q``.
+            The filled `Q`.
         """
         n_variables = Q.shape[0]
         const_vals = self.constants(n_variables)
@@ -81,23 +81,23 @@ class Constant(InitialConditions):
         return Q
 
     def get_definition(self, X, p, n_variables):
-        """Symbolic initial state ``ZArray`` of length ``n_variables`` for code generation."""
+        """Symbolic initial state `ZArray` of length `n_variables` for code generation."""
         vals = self.constants(n_variables)
         return ZArray(vals)
 
 
 class RP(InitialConditions):
-    """1-D Riemann problem: ``high`` state for ``x < jump_position_x``, ``low`` state otherwise."""
+    """1-D Riemann problem: `high` state for `x < jump_position_x`, `low` state otherwise."""
     low = param.Callable(default=default_low_state)
     high = param.Callable(default=default_high_state)
     jump_position_x = param.Number(default=0.0)
 
     def apply(self, X, Q):
-        """Fill ``Q`` (shape ``(n_variables, n_cells)``) in place from the cell coordinates
-        ``X`` (shape ``(dim, n_cells)``).
+        """Fill `Q` (shape `(n_variables, n_cells)`) in place from the cell coordinates
+        `X` (shape `(dim, n_cells)`).
 
         Returns:
-            The filled ``Q``.
+            The filled `Q`.
         """
         assert X.shape[1] == Q.shape[1]
         n_variables = Q.shape[0]
@@ -111,7 +111,7 @@ class RP(InitialConditions):
         return Q
 
     def get_definition(self, X, p, n_variables):
-        """Symbolic initial state ``ZArray`` of length ``n_variables`` for code generation."""
+        """Symbolic initial state `ZArray` of length `n_variables` for code generation."""
         val_low = self.low(n_variables)
         val_high = self.high(n_variables)
 
@@ -125,8 +125,8 @@ class RP(InitialConditions):
 
 
 class RP2d(InitialConditions):
-    """2-D Riemann problem: ``high`` state in the quadrant ``x < jump_position_x`` and
-    ``y < jump_position_y``, ``low`` otherwise.
+    """2-D Riemann problem: `high` state in the quadrant `x < jump_position_x` and
+    `y < jump_position_y`, `low` otherwise.
     """
     low = param.Callable(default=default_low_state)
     high = param.Callable(default=default_high_state)
@@ -134,11 +134,11 @@ class RP2d(InitialConditions):
     jump_position_y = param.Number(default=0.0)
 
     def apply(self, X, Q):
-        """Fill ``Q`` (shape ``(n_variables, n_cells)``) in place from the cell coordinates
-        ``X`` (shape ``(dim, n_cells)``).
+        """Fill `Q` (shape `(n_variables, n_cells)`) in place from the cell coordinates
+        `X` (shape `(dim, n_cells)`).
 
         Returns:
-            The filled ``Q``.
+            The filled `Q`.
         """
         assert X.shape[1] == Q.shape[1]
         n_variables = Q.shape[0]
@@ -152,7 +152,7 @@ class RP2d(InitialConditions):
         return Q
 
     def get_definition(self, X, p, n_variables):
-        """Symbolic initial state ``ZArray`` of length ``n_variables`` for code generation."""
+        """Symbolic initial state `ZArray` of length `n_variables` for code generation."""
         val_low = self.low(n_variables)
         val_high = self.high(n_variables)
         cond = sp.And(X[0] < self.jump_position_x, X[1] < self.jump_position_y)
@@ -163,7 +163,7 @@ class RP2d(InitialConditions):
 
 
 class RP3d(InitialConditions):
-    """3-D Riemann problem: ``high`` state in the octant below all three jump positions, ``low``
+    """3-D Riemann problem: `high` state in the octant below all three jump positions, `low`
     otherwise.
     """
     low = param.Callable(default=default_low_state)
@@ -173,11 +173,11 @@ class RP3d(InitialConditions):
     jump_position_z = param.Number(default=0.0)
 
     def apply(self, X, Q):
-        """Fill ``Q`` (shape ``(n_variables, n_cells)``) in place from the cell coordinates
-        ``X`` (shape ``(dim, n_cells)``).
+        """Fill `Q` (shape `(n_variables, n_cells)`) in place from the cell coordinates
+        `X` (shape `(dim, n_cells)`).
 
         Returns:
-            The filled ``Q``.
+            The filled `Q`.
         """
         assert X.shape[1] == Q.shape[1]
         n_variables = Q.shape[0]
@@ -195,7 +195,7 @@ class RP3d(InitialConditions):
         return Q
 
     def get_definition(self, X, p, n_variables):
-        """Symbolic initial state ``ZArray`` of length ``n_variables`` for code generation."""
+        """Symbolic initial state `ZArray` of length `n_variables` for code generation."""
         val_low = self.low(n_variables)
         val_high = self.high(n_variables)
         cond = sp.And(
@@ -210,17 +210,17 @@ class RP3d(InitialConditions):
 
 
 class RadialDambreak(InitialConditions):
-    """Radial dam break: ``high`` state within ``radius`` of the mesh centroid, ``low`` outside."""
+    """Radial dam break: `high` state within `radius` of the mesh centroid, `low` outside."""
     low = param.Callable(default=default_low_state)
     high = param.Callable(default=default_high_state)
     radius = param.Number(default=0.1)
 
     def apply(self, X, Q):
-        """Fill ``Q`` (shape ``(n_variables, n_cells)``) in place from the cell coordinates
-        ``X`` (shape ``(dim, n_cells)``).
+        """Fill `Q` (shape `(n_variables, n_cells)`) in place from the cell coordinates
+        `X` (shape `(dim, n_cells)`).
 
         Returns:
-            The filled ``Q``.
+            The filled `Q`.
         """
         dim = X.shape[0]
         center = np.zeros(dim)
@@ -240,7 +240,7 @@ class RadialDambreak(InitialConditions):
     def get_definition(self, X, p, n_variables):
         # NOTE: For C++ generation, we assume center is at (0,0,0) or needs explicit params.
         # This implementation assumes origin for simplicity.
-        """Symbolic initial state, with the circle centred at the origin (unlike ``apply``,
+        """Symbolic initial state, with the circle centred at the origin (unlike `apply`,
         which uses the centroid).
         """
         dist_sq = X[0] ** 2 + X[1] ** 2 + X[2] ** 2
@@ -256,21 +256,21 @@ class RadialDambreak(InitialConditions):
 
 
 class UserFunction(InitialConditions):
-    """Initial state from a user callable ``function(x) -> state`` evaluated per cell."""
+    """Initial state from a user callable `function(x) -> state` evaluated per cell."""
     function = param.Callable(default=None)
 
     def __init__(self, function=None, **params):
-        """Set ``function`` if given."""
+        """Set `function` if given."""
         if function is not None:
             params["function"] = function
         super().__init__(**params)
 
     def apply(self, X, Q):
-        """Fill ``Q`` (shape ``(n_variables, n_cells)``) in place from the cell coordinates
-        ``X`` (shape ``(dim, n_cells)``).
+        """Fill `Q` (shape `(n_variables, n_cells)`) in place from the cell coordinates
+        `X` (shape `(dim, n_cells)`).
 
         Returns:
-            The filled ``Q``.
+            The filled `Q`.
         """
         assert X.shape[1] == Q.shape[1]
         func_to_use = self.function
@@ -281,7 +281,7 @@ class UserFunction(InitialConditions):
         return Q
 
     def get_definition(self, X, p, n_variables):
-        """Symbolic initial state obtained by calling ``function`` on symbolic ``X``; a zero
+        """Symbolic initial state obtained by calling `function` on symbolic `X`; a zero
         state if it is not symbolic.
         """
         if self.function is None:
@@ -297,15 +297,15 @@ class UserFunction(InitialConditions):
 
 
 class Project3D(InitialConditions):
-    """Initial condition from a 3-D profile through the model's own ``project_from_3d`` map,
+    """Initial condition from a 3-D profile through the model's own `project_from_3d` map,
     sampled at its projection nodes. Covers the horizontal-velocity moments (SME family); the
-    profile is given as ``height(x)``, optional ``bed(x)`` and ``velocity(x, zeta)``.
+    profile is given as `height(x)`, optional `bed(x)` and `velocity(x, zeta)`.
 
     Args:
-        model: the Model providing ``project_from_3d``.
-        height: callable ``x -> h``.
-        velocity: callable ``(x, zeta) -> u``, the vertical velocity profile.
-        bed: callable ``x -> b``; defaults to a flat bed at zero.
+        model: the Model providing `project_from_3d`.
+        height: callable `x -> h`.
+        velocity: callable `(x, zeta) -> u`, the vertical velocity profile.
+        bed: callable `x -> b`; defaults to a flat bed at zero.
     """
 
     def __init__(self, model, height, velocity, bed=None, **params):
@@ -319,7 +319,7 @@ class Project3D(InitialConditions):
         self._nodes = None
 
     def _build(self):
-        """Lambdify the projection rows and collect the ``P3_u`` node positions."""
+        """Lambdify the projection rows and collect the `P3_u` node positions."""
         import sympy as sp
         pf = self._model.project_from_3d
         p3u = sorted({a for e in pf for a in sp.sympify(e).atoms(sp.Function)
@@ -331,11 +331,11 @@ class Project3D(InitialConditions):
                       for i in range(len(pf))]
 
     def apply(self, X, Q):
-        """Fill ``Q`` (shape ``(n_variables, n_cells)``) in place from the cell coordinates
-        ``X`` (shape ``(dim, n_cells)``).
+        """Fill `Q` (shape `(n_variables, n_cells)`) in place from the cell coordinates
+        `X` (shape `(dim, n_cells)`).
 
         Returns:
-            The filled ``Q``.
+            The filled `Q`.
         """
         if self._rows is None:
             self._build()
@@ -349,7 +349,7 @@ class Project3D(InitialConditions):
 
 class RestartFromHdf5(InitialConditions):
     # Parameters omitted for brevity, functionality preserved
-    """Restart from an HDF5 snapshot; a runtime operation handled by the solver, so ``apply`` is
+    """Restart from an HDF5 snapshot; a runtime operation handled by the solver, so `apply` is
     a no-op.
     """
     path_to_fields = param.String(default=None)

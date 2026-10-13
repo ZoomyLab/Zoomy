@@ -1,6 +1,6 @@
-"""The derivation ``Model``: ordered coordinates, parameters, scalar/vector equations, the unknown
+"""The derivation `Model`: ordered coordinates, parameters, scalar/vector equations, the unknown
 registry Q/Qaux and the operation history. It is the entry point of the derivation chain Model ->
-SystemModel (``SystemModel.from_model``).
+SystemModel (`SystemModel.from_model`).
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ _COMPONENT_NAMES = {
 
 
 class VectorEquation:
-    """Vector equation: ordered component Equations with named-axis (``.x/.y/.z``) and index access.
-    Components are also flattened into the model's ``_equations`` as ``<name>_<axis>``.
+    """Vector equation: ordered component Equations with named-axis (`.x/.y/.z`) and index access.
+    Components are also flattened into the model's `_equations` as `<name>_<axis>`.
     """
 
     def __init__(self, name, shape, components):
@@ -48,7 +48,7 @@ class VectorEquation:
 
     # ── named-axis access ────────────────────────────────────────────
     def __getattr__(self, item):
-        """Named-axis access ``.x`` / ``.y`` / ``.z``."""
+        """Named-axis access `.x` / `.y` / `.z`."""
         # Only consulted when normal attribute lookup fails.
         names = self.__dict__.get("_axis_names", ())
         if item in names:
@@ -57,7 +57,7 @@ class VectorEquation:
 
     # ── integer / term indexing ──────────────────────────────────────
     def __getitem__(self, i):
-        """Component by index or axis name, or ``(component, term)``."""
+        """Component by index or axis name, or `(component, term)`."""
         if isinstance(i, tuple) and len(i) == 2:
             comp, term = i
             if isinstance(comp, str):
@@ -79,7 +79,7 @@ class VectorEquation:
         return list(self._components)
 
     def replace_axis(self, axis, replacement):
-        """Swap the component at ``axis`` (name or index), e.g. for a MomentFamily after a
+        """Swap the component at `axis` (name or index), e.g. for a MomentFamily after a
         moment-axis bump.
         """
         i = (self._axis_names.index(axis) if isinstance(axis, str) else axis)
@@ -109,9 +109,9 @@ class VectorEquation:
 
 
 class MomentFamily:
-    """Indexed family of moment rows produced by ``resolve_modes`` (``model.mass[l]``,
-    ``model.momentum.x[l]``). Rows are also flattened into the model's ``_equations`` as
-    ``<base>_<mode>``.
+    """Indexed family of moment rows produced by `resolve_modes` (`model.mass[l]`,
+    `model.momentum.x[l]`). Rows are also flattened into the model's `_equations` as
+    `<base>_<mode>`.
     """
 
     def __init__(self, name, modes, components, index=None):
@@ -141,7 +141,7 @@ class MomentFamily:
 
     # ── ``.eq0 / .eq1 / …`` and ``.eq_l`` aliases ────────────────────
     def __getattr__(self, item):
-        """Aliases ``.eq0``, ``.eq1``, ... for the mode rows and ``.eq_l`` for the whole family."""
+        """Aliases `.eq0`, `.eq1`, ... for the mode rows and `.eq_l` for the whole family."""
         # Consulted only on normal-lookup failure.  ``eqK`` → mode-K row.
         comps = self.__dict__.get("_components", [])
         if item.startswith("eq"):
@@ -173,8 +173,8 @@ class MomentFamily:
 
 
 class FieldHandle:
-    """Handle on a model field (typically the sigma-mapped applied form) exposing ``.head``,
-    ``.expr``, ``.at(value)`` and call syntax. Sympifiable; handles live on ``Model.functions``
+    """Handle on a model field (typically the sigma-mapped applied form) exposing `.head`,
+    `.expr`, `.at(value)` and call syntax. Sympifiable; handles live on `Model.functions`
     only.
     """
 
@@ -193,7 +193,7 @@ class FieldHandle:
         return self._applied
 
     def at(self, value):
-        """Field evaluated at ``value`` in its last (vertical) argument."""
+        """Field evaluated at `value` in its last (vertical) argument."""
         return self._applied.subs(self._applied.args[-1], value)
 
     def __call__(self, *args):
@@ -212,13 +212,13 @@ class FieldHandle:
 class Model:
     """Computational-graph spine of a symbolic derivation: coordinates, parameters, equations,
     unknowns (Q declared, Qaux derived) and history. Operations are applied with
-    ``model.apply(op)``; the result is lifted to a SystemModel.
+    `model.apply(op)`; the result is lifted to a SystemModel.
     """
 
     def __init__(self, coords=(_coords.t, _coords.x, _coords.z),
                  parameters=None, name="model"):
-        """Create an empty model over ``coords`` (default ``t, x, z``) with positive-Symbol
-        ``parameters`` given as ``{name: default}``.
+        """Create an empty model over `coords` (default `t, x, z`) with positive-Symbol
+        `parameters` given as `{name: default}`.
         """
         self.name = name
         self._coords = tuple(coords)
@@ -304,7 +304,7 @@ class Model:
 
     # ── parameters helpers ───────────────────────────────────────────
     def parameter(self, name, default=0.0):
-        """Return the positive Symbol for parameter ``name``, creating it with ``default`` if it is
+        """Return the positive Symbol for parameter `name`, creating it with `default` if it is
         not yet declared.
         """
         if name in self.parameters.keys():
@@ -321,7 +321,7 @@ class Model:
 
     @property
     def vertical(self):
-        """Vertical coordinate: the mapped ``zeta`` after a PDETransformation, else the last
+        """Vertical coordinate: the mapped `zeta` after a PDETransformation, else the last
         coordinate.
         """
         if self._vertical is not None:
@@ -348,14 +348,14 @@ class Model:
 
     # ── declarative variable registration (equation-blueprint API) ──────
     def declare_state(self, *fields):
-        """Add fields to ``Q`` as primary (state) unknowns; used by equation blueprints."""
+        """Add fields to `Q` as primary (state) unknowns; used by equation blueprints."""
         for f in fields:
             self._Q[self._field_name(f)] = f
         self._refresh_unknowns()
         return fields[0] if len(fields) == 1 else fields
 
     def declare_closure(self, *fields):
-        """Record fields as closure variables (present in the equations, routed to ``Qaux`` unless
+        """Record fields as closure variables (present in the equations, routed to `Qaux` unless
         substituted).
         """
         if not hasattr(self, "_closure_vars"):
@@ -367,11 +367,11 @@ class Model:
     # ── equation registration ────────────────────────────────────────
     def add_equation(self, name, shape_or_expr=None, expr=None, *, group="model",
                  _refresh=True):
-        """Register a scalar equation, a vector equation (``name, shape, [exprs]``), a blueprint, or
+        """Register a scalar equation, a vector equation (`name, shape, [exprs]`), a blueprint, or
         an oriented relation such as a KinematicBC (stored as an assumption).
 
         Args:
-            group: ``"model"`` for the final PDE system or ``"aux"`` for auxiliary relations that
+            group: `"model"` for the final PDE system or `"aux"` for auxiliary relations that
                 never reach the SystemModel.
 
         Returns:
@@ -445,7 +445,7 @@ class Model:
         return vec
 
     def remove(self, name):
-        """Remove a named equation, vector row or stored assumption; returns ``self``."""
+        """Remove a named equation, vector row or stored assumption; returns `self`."""
         if name in self._assumptions:
             del self._assumptions[name]
             self._refresh_unknowns()
@@ -486,8 +486,8 @@ class Model:
         self._refresh_unknowns()
 
     def _collapse_moment_family(self, base, keep):
-        """Shrink moment family ``base`` to the modes in ``keep``; a single survivor is re-keyed
-        from ``<base>_<mode>`` to ``<base>`` but stays a family.
+        """Shrink moment family `base` to the modes in `keep`; a single survivor is re-keyed
+        from `<base>_<mode>` to `<base>` but stays a family.
         """
         fam = self._moment_families[base]
         keep = list(keep)
@@ -509,7 +509,7 @@ class Model:
 
     # ── attribute access to equations ────────────────────────────────
     def __getattr__(self, item):
-        """Resolve ``model.<name>`` to a vector proxy, moment family, scalar equation or stored
+        """Resolve `model.<name>` to a vector proxy, moment family, scalar equation or stored
         assumption.
         """
         # Consulted only on normal-lookup failure.  Resolve vector proxies
@@ -531,8 +531,8 @@ class Model:
 
     # ── apply (broadcast / route model-level ops) ────────────────────
     def apply(self, op, **kwargs):
-        """Apply an operation: ``system_level`` ops once to the model, ``whole_model_op`` ops via
-        ``apply_to_model``, all others broadcast over every scalar equation.
+        """Apply an operation: `system_level` ops once to the model, `whole_model_op` ops via
+        `apply_to_model`, all others broadcast over every scalar equation.
         """
         lvl = getattr(op, "log_level", 1)
         if getattr(op, "system_level", False):
@@ -580,7 +580,7 @@ class Model:
 
     @property
     def Qaux(self):
-        """Derived auxiliaries: every field in the equations that is not in ``Q``, not a coordinate
+        """Derived auxiliaries: every field in the equations that is not in `Q`, not a coordinate
         and not a parameter.
         """
         q_heads = {self._head(f)
@@ -601,7 +601,7 @@ class Model:
 
     def explicit_state(self):
         """One applied field per time-derivative row of the primary equations, with modal families
-        flattened; the state vector for ``SystemModel.from_model``.
+        flattened; the state vector for `SystemModel.from_model`.
         """
         t = self.coords[0]
         out, seen = [], set()
@@ -623,14 +623,14 @@ class Model:
     @property
     def functions(self):
         """Registry of every field by its original name as a FieldHandle (bulk form, vertical
-        argument normalised to ``zeta`` after the sigma map).
+        argument normalised to `zeta` after the sigma map).
         """
         zeta = sp.Symbol("zeta", real=True)
         deco_to_orig = {deco: orig.__name__
                         for orig, deco in self._field_decoration.items()}
 
         def _rank(f):
-            """Rank an applied field: canonical ``zeta`` form over other Symbol arguments over
+            """Rank an applied field: canonical `zeta` form over other Symbol arguments over
             boundary/numeric forms.
             """
             # Prefer the canonical ζ form, then any Symbol/Dummy vertical arg,
@@ -662,8 +662,8 @@ class Model:
         return out
 
     def _refresh_unknowns(self):
-        """Drop from ``Q`` any unknown that has appeared and then left the primary equations or was
-        demoted via ``move_to_aux``.
+        """Drop from `Q` any unknown that has appeared and then left the primary equations or was
+        demoted via `move_to_aux`.
         """
         primary_heads = {self._head(f)
                          for f in self._collect_fields(primary_only=True)}
@@ -684,8 +684,8 @@ class Model:
         self._Q = {nm: v for nm, v in self._Q.items() if _kept(v)}
 
     def move_to_aux(self, *fields):
-        """Demote fields (given data such as the bed ``b``) from ``Q`` to ``Qaux`` even if they stay
-        in a primary equation; returns ``self``.
+        """Demote fields (given data such as the bed `b`) from `Q` to `Qaux` even if they stay
+        in a primary equation; returns `self`.
         """
         for field in fields:
             self._aux_fields.add(self._resolve_head(field))
@@ -693,16 +693,16 @@ class Model:
         return self
 
     def register_group(self, slot, index, relation):
-        """Record ``relation`` as component ``index`` of function group ``slot`` (e.g.
-        ``'interpolate'``, ``'project'``), parsed into the matching SystemModel slot by
-        ``from_model``.
+        """Record `relation` as component `index` of function group `slot` (e.g.
+        `'interpolate'`, `'project'`), parsed into the matching SystemModel slot by
+        `from_model`.
 
         Args:
             relation: oriented relation, Equation, FieldHandle or bare sympy expression; only its
                 right-hand side is stored.
 
         Returns:
-            ``self``
+            `self`
         """
         key = (int(index) if isinstance(index, int)
                or getattr(index, "is_Integer", False) else index)
@@ -733,8 +733,8 @@ class Model:
         return self._head(field)
 
     def redeclare_unknown(self, old_field, new_fields, rename_key=False):
-        """Transfer unknown status from ``old_field`` to ``new_fields``, keeping the logical key
-        (decoration) or renaming it to the new family (``rename_key=True``).
+        """Transfer unknown status from `old_field` to `new_fields`, keeping the logical key
+        (decoration) or renaming it to the new family (`rename_key=True`).
         """
         old_head = self._head(old_field)
         if not isinstance(new_fields, (list, tuple)):
@@ -791,7 +791,7 @@ class Model:
 
     def _collect_fields(self, primary_only=False):
         """Every field application across the equations whose head is not a parameter;
-        ``primary_only`` skips auxiliary rows.
+        `primary_only` skips auxiliary rows.
         """
         param_names = set(self.parameters.keys())
         fields = set()
@@ -816,7 +816,7 @@ class Model:
     # ── modal-index / basis accessors (per-field Resolve) ─────────────
     def modal_index(self, target):
         """Modal-mode index assigned to a field or coefficient family by
-        ``separation_of_variables``.
+        `separation_of_variables`.
         """
         idx = self._modal_registry.index_for(target)
         if idx is None:
@@ -849,8 +849,8 @@ class Model:
     # ── describe ─────────────────────────────────────────────────────
     def describe(self, strip_args=False, show="model", show_tags=False,
                  show_history=False, max_log_level=5):
-        """Markdown description of the model: parameters, Q and equations; ``show`` selects
-        ``"model"``, ``"aux"`` or ``"all"`` rows.
+        """Markdown description of the model: parameters, Q and equations; `show` selects
+        `"model"`, `"aux"` or `"all"` rows.
         """
         if show not in ("model", "aux", "all"):
             raise ValueError(
@@ -943,15 +943,15 @@ class Model:
 def resolve_modes(equation, *, index, modes, test_weight=None,
                   basis_cls=None, level=None, var=None, resolver=None):
     """Moment-axis shape bump: specialise the abstract Galerkin test index of a row to concrete
-    modes and group the rows as a MomentFamily (scalar ``(1,) -> (N+1,)``, vector component ``(n,)
+    modes and group the rows as a MomentFamily (scalar `(1,) -> (N+1,)`, vector component ``(n,)
     -> (n, N+1)``).
 
     Args:
-        equation: row carrying the abstract ``index`` (``model.mass`` or ``model.momentum.x``).
+        equation: row carrying the abstract `index` (`model.mass` or `model.momentum.x`).
         modes: concrete moment indices.
         test_weight, basis_cls, level, var: if given, each row is also closed by
-            ``closure.Resolve``.
-        resolver: custom per-mode closer ``(row, test_weight_k, k)`` used instead of ``Resolve``.
+            `closure.Resolve`.
+        resolver: custom per-mode closer `(row, test_weight_k, k)` used instead of `Resolve`.
 
     Returns:
         The MomentFamily.
@@ -1032,10 +1032,10 @@ def resolve_modes(equation, *, index, modes, test_weight=None,
 
 
 class ResolveModes(Operation):
-    """Tracked-operation form of ``resolve_modes``; it does not close the basis brackets."""
+    """Tracked-operation form of `resolve_modes`; it does not close the basis brackets."""
 
     def __init__(self, index, modes, name="resolve_modes"):
-        """Store the abstract ``index`` and the concrete ``modes``."""
+        """Store the abstract `index` and the concrete `modes`."""
         self._index = index
         self._modes = list(modes)
         super().__init__(
@@ -1043,5 +1043,5 @@ class ResolveModes(Operation):
             description=f"moment shape-bump {index} → {self._modes}")
 
     def apply_to_equation(self, equation):
-        """Bump the equation via ``resolve_modes``."""
+        """Bump the equation via `resolve_modes`."""
         return resolve_modes(equation, index=self._index, modes=self._modes)

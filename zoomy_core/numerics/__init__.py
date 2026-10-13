@@ -1,4 +1,4 @@
-"""Numerical layer: ``NumericalSystemModel`` wraps a ``SystemModel`` with the reconstruction,
+"""Numerical layer: `NumericalSystemModel` wraps a `SystemModel` with the reconstruction,
 Riemann solver, diffusion scheme and regularization the solver templates consume.
 Pipeline: Model -> SystemModel -> NumericalSystemModel -> solver template -> backend runtime.
 """

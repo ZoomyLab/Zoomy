@@ -1,7 +1,7 @@
-"""Human-readable rendering of a template (``Solver.show()``).
+"""Human-readable rendering of a template (`Solver.show()`).
 
 Pseudo-code, one statement per line, nested blocks indented.  Unresolved
-``IfStatic`` nodes are shown with both branches (teaching view); hooks show
+`IfStatic` nodes are shown with both branches (teaching view); hooks show
 which plugin filled them.
 """
 from __future__ import annotations

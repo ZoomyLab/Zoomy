@@ -1,17 +1,17 @@
-"""``ExternalProcedure`` — the third declaration kind (validation appendix D12).
+"""`ExternalProcedure` — the third declaration kind (validation appendix D12).
 
-``register_symbolic_function`` cannot carry the solver's opaque blocks: it
-evaluates the body EAGERLY at registration (``basefunction.py``) and a ``None``
-body yields a ZERO definition, and the ``kernel_functions`` externals are
+`register_symbolic_function` cannot carry the solver's opaque blocks: it
+evaluates the body EAGERLY at registration (`basefunction.py`) and a `None`
+body yields a ZERO definition, and the `kernel_functions` externals are
 expression-position scalar atoms.  The design's opaque blocks
-(``prepare_mesh`` / ``mood_resolve`` / ``write_fields`` / the coupling
+(`prepare_mesh` / `mood_resolve` / `write_fields` / the coupling
 surfaces / …) are statement-position, side-effecting and handle-typed.
 
 So: declare the NAME + SIGNATURE in core, supply the BODY per backend, and put
-every declaration on :data:`REQUIRED_PROCEDURES` — the same contract shape
-``REQUIRED_KERNELS`` (``kernel_functions.py``) already uses for the numerical
+every declaration on `REQUIRED_PROCEDURES` — the same contract shape
+`REQUIRED_KERNELS` (`kernel_functions.py`) already uses for the numerical
 UserFunctions, so a backend missing a body is a RED TEST rather than a link
-error mid-build (C++) or a ``NameError`` at lambdify (python).
+error mid-build (C++) or a `NameError` at lambdify (python).
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from zoomy_core.solver.ir import check_arg_keys, check_procedure_name
 class ExternalProcedure:
     """A solver block declared in core, bodied by each backend.
 
-    ``args`` / ``results`` are solver argument-vocabulary slots; ``doc`` states
+    `args` / `results` are solver argument-vocabulary slots; `doc` states
     the CONTRACT the backend body must satisfy (that text is the whole point —
     it is what a new backend implements against).
     """
@@ -206,13 +206,13 @@ REQUIRED_PROCEDURES = {
 
 
 class MissingProcedureBody(LookupError):
-    """A backend's body table does not cover ``REQUIRED_PROCEDURES``."""
+    """A backend's body table does not cover `REQUIRED_PROCEDURES`."""
 
 
 def required_procedure_gaps(bodies) -> tuple:
-    """Slots of :data:`REQUIRED_PROCEDURES` a backend's body table misses.
+    """Slots of `REQUIRED_PROCEDURES` a backend's body table misses.
 
-    ``bodies`` is any container supporting ``in`` (a dict of callables for the
+    `bodies` is any container supporting `in` (a dict of callables for the
     python backends, a set of emitted symbol names for the C++ ones).  Returns
     a sorted tuple — empty means the contract is met.  The backend's own
     contract test turns a non-empty result into a RED TEST.

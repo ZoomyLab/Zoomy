@@ -1,7 +1,7 @@
 """Multilayer shallow moment equations (ML-SME): every layer is a full SME moment column, with
 interface mass fluxes closed by the layer-fraction constraint. State is
-``[b, h, q_1_0 ... q_N_level]``; the model is lifted to a SystemModel via
-``SystemModel.from_model``.
+`[b, h, q_1_0 ... q_N_level]`; the model is lifted to a SystemModel via
+`SystemModel.from_model`.
 """
 from __future__ import annotations
 
@@ -31,9 +31,9 @@ zeta = sp.Symbol("zeta", real=True)
 
 
 class MLSME(BaseModel):
-    """Multilayer SME with ``n_layers`` layers that move with the free surface, each a moment
-    column of order ``level``. The interface transfer velocity is upwinded or averaged through
-    the ``closures`` (``UpwindInterface`` / ``MeanInterface``); the kinematic ``w`` terms stay
+    """Multilayer SME with `n_layers` layers that move with the free surface, each a moment
+    column of order `level`. The interface transfer velocity is upwinded or averaged through
+    the `closures` (`UpwindInterface` / `MeanInterface`); the kinematic `w` terms stay
     untouched.
 
     References:
@@ -66,7 +66,7 @@ class MLSME(BaseModel):
         "SME.project_nz.  Each layer reduces its own sub-column to moments."))
 
     def derive_model(self):
-        """Derive each layer as an SME column, close the interface mass fluxes ``G`` from the
+        """Derive each layer as an SME column, close the interface mass fluxes `G` from the
         fraction constraint, and assemble the model. Returns the derivation model with
         continuity, one momentum equation per layer / direction / mode, and the interpolate,
         project and wall rows.
@@ -90,14 +90,14 @@ class MLSME(BaseModel):
         # horizontal keeps q_ℓ / û_ℓ (byte-identical); 2 horizontal → q_x_ℓ,
         # q_y_ℓ / û_ℓ, v̂_ℓ.
         def qname(xd, ell):
-            """Name of the discharge of layer ``ell`` in direction ``xd``."""
+            """Name of the discharge of layer `ell` in direction `xd`."""
             return f"q_{ell}" if dim == 2 else f"q_{CN[xd]}_{ell}"
         def shat(xd, ell):
-            """Name of the velocity coefficient of layer ``ell`` in direction ``xd``."""
+            """Name of the velocity coefficient of layer `ell` in direction `xd`."""
             return (rf"\hat{{u}}_{ell}" if dim == 2
                     else rf"\hat{{{HNAME[xd]}}}_{ell}")
         def sname(xd, ell):
-            """Name of the shear-stress field of layer ``ell`` in direction ``xd``."""
+            """Name of the shear-stress field of layer `ell` in direction `xd`."""
             return f"tau_{ell}" if dim == 2 else f"tau_{CN[xd]}z_{ell}"
         # e_x (downslope gravity component) is minted on the per-layer sub-model
         # by gravity_components (mirrors SME/VAM); declare it on the assembled
@@ -135,8 +135,8 @@ class MLSME(BaseModel):
                              for c in (self.closures or []))
 
         def derive_layer(ell):
-            """Return the continuity and the per-direction modal momentum rows of layer ``ell``
-            as ``(cont, {direction: [row per mode]})``.
+            """Return the continuity and the per-direction modal momentum rows of layer `ell`
+            as `(cont, {direction: [row per mode]})`.
             """
             Nu = levels[ell - 1]            # per-layer moment order
             z_bot, z_top, h_l = ifaces[ell - 1], ifaces[ell], hl[ell - 1]
@@ -170,8 +170,8 @@ class MLSME(BaseModel):
                                     uvel, list(horiz), nu_s, normal_stress=True)
 
             def _kbc(iface, G):
-                """Kinematic boundary condition of layer ``ell`` at ``iface`` with interface
-                mass flux ``G``.
+                """Kinematic boundary condition of layer `ell` at `iface` with interface
+                mass flux `G`.
                 """
                 kw = dict(w=w, u=uvel[0], interface=iface, rho=rl,
                           mass_flux=(G if G != 0 else None))
@@ -206,7 +206,7 @@ class MLSME(BaseModel):
                 c.register(ml)
 
             def _state(at, *, alias=None, btag=None):
-                """Closure state of layer ``ell`` evaluated at the vertical location ``at``."""
+                """Closure state of layer `ell` evaluated at the vertical location `at`."""
                 fields = {"u": getattr(ml.functions, f"u_{ell}"),
                           "w": getattr(ml.functions, f"w_{ell}")}
                 if dim == 3:
@@ -318,7 +318,7 @@ class MLSME(BaseModel):
         inner_basis = Legendre_shifted(level=max(levels) + 2)
 
         def _trace(ell, side, xd):
-            """Modal velocity of layer ``ell`` in direction ``xd`` at local height ``side`` (0
+            """Modal velocity of layer `ell` in direction `xd` at local height `side` (0
             bottom, 1 top).
             """
             sgn = lambda i: inner_basis.eval(i, side)
@@ -330,8 +330,8 @@ class MLSME(BaseModel):
         iface = interface_closure(self.closures)
 
         def _ustar(a, xd):
-            """Transfer velocity ``u*`` shared by the layers adjacent to internal interface
-            ``a`` in direction ``xd``.
+            """Transfer velocity `u*` shared by the layers adjacent to internal interface
+            `a` in direction `xd`.
             """
             below, above = _trace(a, 1, xd), _trace(a + 1, 0, xd)
             if iface is not None:
@@ -359,7 +359,7 @@ class MLSME(BaseModel):
         from zoomy_core.model.models.material import ClosureState, ProfileField
 
         def _layer_state(ell, side):
-            """Closure state of layer ``ell`` over its modal profile, at local height ``side``."""
+            """Closure state of layer `ell` over its modal profile, at local height `side`."""
             h_ell = l_all[ell - 1] * ht
             prof = {HNAME[xd]: ProfileField(
                 sum(q_mod[ell][xd][k] / h_ell * inner_basis.eval(k, zeta)
@@ -434,7 +434,7 @@ class MLSME(BaseModel):
             cum.append(cum[-1] + lf)
 
         def _u_piecewise(xd):
-            """Velocity profile in direction ``xd`` over global ``zeta``, piecewise over the
+            """Velocity profile in direction `xd` over global `zeta`, piecewise over the
             layers.
             """
             pieces = []

@@ -1,8 +1,8 @@
 """Time-stepping strategies for explicit FVM solvers.
 
-All timestep functions return a ``compute_dt`` closure that is
-compatible with both NumPy and JAX (JIT-safe: no Python ``float()``
-or ``min()`` on traced values).
+All timestep functions return a `compute_dt` closure that is
+compatible with both NumPy and JAX (JIT-safe: no Python `float()`
+or `min()` on traced values).
 """
 
 import numpy as np
@@ -13,11 +13,11 @@ def _safe_minimum(a, b):
 
     Dispatches on operand TYPE: when both operands are plain NumPy/Python
     numbers the reduction stays in NumPy (float64), and only a JAX operand
-    (a tracer under ``jax.jit`` or a device array) routes through
-    ``jnp.minimum``.  The old unconditional ``jnp.minimum`` silently promoted a
-    NumPy ``float64`` ``dt`` to a default-``float32`` JAX array whenever jax was
+    (a tracer under `jax.jit` or a device array) routes through
+    `jnp.minimum`.  The old unconditional `jnp.minimum` silently promoted a
+    NumPy `float64` `dt` to a default-`float32` JAX array whenever jax was
     merely importable — harmless while the cap was rarely applied, but REQ-190
-    now caps EVERY step, and a wet-case ``dt`` must stay bit-identical."""
+    now caps EVERY step, and a wet-case `dt` must stay bit-identical."""
     plain = (np.ndarray, np.generic, int, float)
     if isinstance(a, plain) and isinstance(b, plain):
         return np.minimum(a, b)
@@ -33,12 +33,12 @@ def constant(dt=0.1):
 
 
 def apply_default_dt_max(compute_dt, dt_max):
-    """Fill a timestep strategy's ``dt_max`` from the NSM default (REQ-190).
+    """Fill a timestep strategy's `dt_max` from the NSM default (REQ-190).
 
-    Solvers call this once at setup with ``nsm.dt_max``: a strategy that
-    supports an NSM-default cap (``adaptive``) fills its cap **iff the caller
-    did not pass one explicitly** (an explicit ``dt_max=`` on ``adaptive(...)``
-    always wins).  Strategies without the hook (``constant`` dt, a user's own
+    Solvers call this once at setup with `nsm.dt_max`: a strategy that
+    supports an NSM-default cap (`adaptive`) fills its cap **iff the caller
+    did not pass one explicitly** (an explicit `dt_max=` on `adaptive(...)`
+    always wins).  Strategies without the hook (`constant` dt, a user's own
     callable) are left untouched — capability detection, not a mismatch shim.
     """
     setter = getattr(compute_dt, "set_default_dt_max", None)
@@ -51,7 +51,7 @@ def adaptive(CFL=0.9, nu=0.0, dimension=2, degree=0, dt_max=None):
 
     Uses the classical hyperbolic / parabolic limits with the spatial
     dimension and DG polynomial degree factored *into the denominator*
-    so the ``CFL`` knob is a single safety factor ∈ (0, 1]:
+    so the `CFL` knob is a single safety factor ∈ (0, 1]:
 
     .. math::
 
@@ -60,11 +60,11 @@ def adaptive(CFL=0.9, nu=0.0, dimension=2, degree=0, dt_max=None):
         \\Delta t_\\text{diff} &\\le \\mathrm{CFL} \\;
             \\frac{(2\\,r_\\text{in})^2}{2 \\, d \\, \\nu}.
 
-    Here ``r_in`` is the cell inradius (so ``2·r_in`` is the conservative
-    "diameter"), ``d`` the spatial dimension, ``k`` the DG polynomial
-    degree (use ``0`` for FV).  The hyperbolic CFL constant ``1/(2k+1)``
+    Here `r_in` is the cell inradius (so `2·r_in` is the conservative
+    "diameter"), `d` the spatial dimension, `k` the DG polynomial
+    degree (use `0` for FV).  The hyperbolic CFL constant `1/(2k+1)`
     is the SSP-RK(k+1,k+1) stability limit (Cockburn & Shu, 1991);
-    the spatial dimension contributes the ``1/d`` factor in 2D/3D.
+    the spatial dimension contributes the `1/d` factor in 2D/3D.
 
     Parameters
     ----------
@@ -74,13 +74,13 @@ def adaptive(CFL=0.9, nu=0.0, dimension=2, degree=0, dt_max=None):
         Hard upper cap on dt — for explicit SOURCE stiffness (e.g. the
         regularized-Bingham plug viscosity or a bed-slip penalty) that
         the hyperbolic CFL cannot see, AND the timestep a WAVE-FREE domain
-        takes: when every gated eigenvalue is 0 (fully dry / sub-``wet_dry_eps``)
-        the CFL is ``+inf`` everywhere, so ``dt`` collapses to this cap rather
+        takes: when every gated eigenvalue is 0 (fully dry / sub-`wet_dry_eps`)
+        the CFL is `+inf` everywhere, so `dt` collapses to this cap rather
         than a hardcoded floor (REQ-190).  Backend-neutral (JIT-safe): prefer
-        this over wrapping ``compute_dt`` in a Python ``min(float(...))`` lambda,
-        which fails under ``jax.jit``.  When ``None`` at construction the value
-        is FILLED from the NSM's ``dt_max`` by the solver at setup
-        (:func:`apply_default_dt_max`); passing a number here is EXPLICIT and
+        this over wrapping `compute_dt` in a Python `min(float(...))` lambda,
+        which fails under `jax.jit`.  When `None` at construction the value
+        is FILLED from the NSM's `dt_max` by the solver at setup
+        (`apply_default_dt_max`); passing a number here is EXPLICIT and
         overrides the NSM default.
     nu : float
         Scalar viscosity for the parabolic CFL (default 0 → skip).
@@ -123,7 +123,7 @@ def adaptive(CFL=0.9, nu=0.0, dimension=2, degree=0, dt_max=None):
         return dt
 
     def set_default_dt_max(value):
-        """Fill ``dt_max`` from a solver-supplied default (the NSM's ``dt_max``)
+        """Fill `dt_max` from a solver-supplied default (the NSM's `dt_max`)
         IFF the caller did not pass one explicitly.  Explicit argument wins."""
         if not cap["explicit"] and value is not None:
             cap["dt_max"] = value

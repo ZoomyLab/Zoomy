@@ -1,4 +1,4 @@
-"""The machinery under the solver templates: ``Block`` and ``Effect`` names in a sympy
+"""The machinery under the solver templates: `Block` and `Effect` names in a sympy
 graph, scoped common-subexpression planning, and the Python and C++ printers. A
 template runs once on sympy symbols and a printer turns the resulting graph into
 source code.
@@ -24,24 +24,24 @@ class Block(sp.Function):
 
 
 class Get(sp.Function):
-    """Component ``i`` of a block that returns several values."""
+    """Component `i` of a block that returns several values."""
     nargs = 2
 
 
 class while_loop(Block):
-    """``(cond, body, init) -> final carry``; cond and body take the carry."""
+    """`(cond, body, init) -> final carry`; cond and body take the carry."""
 
 
 class cond(Block):
-    """``(pred, then, other) -> value``; the branches take no arguments."""
+    """`(pred, then, other) -> value`; the branches take no arguments."""
 
 
 class root(Block):
-    """``(residual, x0) -> x`` with ``residual(x) = 0``."""
+    """`(residual, x0) -> x` with `residual(x) = 0`."""
 
 
 class linsolve(Block):
-    """``(matvec, b) -> x`` with ``matvec(x) = b``, solved matrix-free (restarted GMRES
+    """`(matvec, b) -> x` with `matvec(x) = b`, solved matrix-free (restarted GMRES
     by default).
 
     References:
@@ -50,22 +50,22 @@ class linsolve(Block):
 
 
 class EffectNode(Block):
-    """Base of the graph nodes created by :class:`Effect`."""
+    """Base of the graph nodes created by `Effect`."""
     pass
 
 
 class Effect:
-    """Declared effect, ``name = Effect(n_out)`` inside a namespace class; the backend
-    name is ``<namespace>_<attr>``. It receives the order token first and returns
-    ``(token, *outputs)``.
+    """Declared effect, `name = Effect(n_out)` inside a namespace class; the backend
+    name is `<namespace>_<attr>`. It receives the order token first and returns
+    `(token, *outputs)`.
     """
 
     def __init__(self, n_out=0):
-        """``n_out``: number of values the effect returns."""
+        """`n_out`: number of values the effect returns."""
         self.n_out = n_out
 
     def __set_name__(self, owner, name):
-        """Create the node class ``<owner>_<attr>``."""
+        """Create the node class `<owner>_<attr>`."""
         self.node = type(f"{owner.__name__}_{name}", (EffectNode,), {})
 
     def __call__(self, *args):
@@ -89,7 +89,7 @@ _ARITY = {}
 
 
 def unpack(call, n):
-    """Return ``n`` :class:`Get` nodes for the components of a multi-output ``call``.
+    """Return `n` `Get` nodes for the components of a multi-output `call`.
     """
     _ARITY[call] = n
     return tuple(Get(call, i) for i in range(n))
@@ -101,7 +101,7 @@ def _tuple(out):
 
 
 def _lam(f, names=None):
-    """Trace ``f`` into an ``sp.Lambda`` over fresh dummies."""
+    """Trace `f` into an `sp.Lambda` over fresh dummies."""
     names = names or list(inspect.signature(f).parameters)
     args = tuple(sp.Dummy(n) for n in names)
     out = f(*args)
@@ -109,7 +109,7 @@ def _lam(f, names=None):
 
 
 def _pure(f, names=None):
-    """As :func:`_lam`, asserting that ``f`` runs no effect."""
+    """As `_lam`, asserting that `f` runs no effect."""
     before = _CTX.tok
     L = _lam(f, names)
     assert _CTX.tok is before, "effects are not allowed inside this callable"
@@ -117,7 +117,7 @@ def _pure(f, names=None):
 
 
 def While(c, body, init):
-    """Run-time loop with an explicit carry: ``body(*carry) -> carry``; returns the
+    """Run-time loop with an explicit carry: `body(*carry) -> carry`; returns the
     final carry.
     """
     init, outer = tuple(init), _CTX.tok
@@ -142,7 +142,7 @@ def Cond(pred, then, other):
     def wrap(f):
         """Thread the effect token through a branch."""
         def g():
-            """The branch as a no-argument callable returning ``(*outputs, token)``."""
+            """The branch as a no-argument callable returning `(*outputs, token)`."""
             _CTX.tok = outer
             out = _tuple(f())
             toks.append(_CTX.tok)
@@ -156,18 +156,18 @@ def Cond(pred, then, other):
 
 
 def Root(residual, x0):
-    """Solve ``residual(x) = 0`` from ``x0`` at run time."""
+    """Solve `residual(x) = 0` from `x0` at run time."""
     return root(_pure(residual), x0)
 
 
 def LinSolve(matvec, b):
-    """Solve ``matvec(x) = b`` at run time (see :class:`linsolve`)."""
+    """Solve `matvec(x) = b` at run time (see `linsolve`)."""
     return linsolve(_pure(matvec), b)
 
 
 # ── scoped common-subexpression elimination ─────────────────────────────────
 def _children(e):
-    """The child nodes of a graph node (a ``Lambda``'s body)."""
+    """The child nodes of a graph node (a `Lambda`'s body)."""
     if isinstance(e, sp.Lambda):
         return [e.expr]
     return [] if e.is_Atom else list(e.args)
@@ -180,7 +180,7 @@ class _Plan:
     """
 
     def __init__(self, outputs):
-        """Plan the statements for the graph reaching ``outputs``."""
+        """Plan the statements for the graph reaching `outputs`."""
         self.post, seen, users = [], set(), {}
 
         def dfs(e):
@@ -234,14 +234,14 @@ class _Plan:
                 ctx.setdefault(c, set()).update(inner)
 
     def _depth(self, s):
-        """Nesting depth of scope ``s``."""
+        """Nesting depth of scope `s`."""
         d = 0
         while s is not None:
             s, d = self.parent[s], d + 1
         return d
 
     def _lca(self, scopes):
-        """Innermost scope containing all ``scopes``."""
+        """Innermost scope containing all `scopes`."""
         scopes = list(scopes)
         a = scopes[0]
         for b in scopes[1:]:
@@ -255,7 +255,7 @@ class _Plan:
         return a
 
     def in_scope(self, s):
-        """The named nodes placed in scope ``s``."""
+        """The named nodes placed in scope `s`."""
         return [e for e in self.named if self.place[e] is s]
 
 
@@ -267,7 +267,7 @@ def _build_with_names(build, args, labels, roots):
     reuses the author's names.
     """
     def harvest(frame):
-        """Record the names of the sympy values in ``frame``."""
+        """Record the names of the sympy values in `frame`."""
         for k, v in frame.f_locals.items():
             if isinstance(v, sp.Basic) and not v.is_Atom and v not in labels:
                 labels[v] = k
@@ -279,7 +279,7 @@ def _build_with_names(build, args, labels, roots):
         return local
 
     def glob(frame, event, arg):
-        """Trace function that follows only frames under ``roots``."""
+        """Trace function that follows only frames under `roots`."""
         f = frame.f_code.co_filename
         if f == __file__ or not any(f.startswith(r) for r in roots):
             return None
@@ -306,7 +306,7 @@ class _Common:
         return super()._print(e, **kw)
 
     def _fresh(self, base):
-        """A variable name based on ``base`` not yet used."""
+        """A variable name based on `base` not yet used."""
         nm, k = base, 1
         while nm in self.used:
             k += 1
@@ -320,22 +320,22 @@ class _Common:
         return self.names[e]
 
     def _print_KernelRef(self, e):
-        """Print a kernel as ``<owner>.<slot>``."""
+        """Print a kernel as `<owner>.<slot>`."""
         return self.kernel_prefix.get(e.owner, e.owner + ".") + e.slot
 
     def _print_Float(self, e):
-        """Print the exact double (``repr`` round-trips; sympy prints 15 digits)."""
+        """Print the exact double (`repr` round-trips; sympy prints 15 digits)."""
         # the double itself (repr round-trips; sympy prints 15 digits): a
         # constant dt printed short ended its run 4e-20 early -> one more
         # step of 4e-20 and a singular pressure solve
         return repr(float(e))
 
     def _print_Abs(self, e):
-        """Print ``abs(x)``."""
+        """Print `abs(x)`."""
         return f"abs({self._print(e.args[0])})"
 
     def emit(self, plan, scope, ind):
-        """Emit the statements of ``scope`` as source lines, naming each node after the
+        """Emit the statements of `scope` as source lines, naming each node after the
         author's variable where known.
         """
         lines = []
@@ -381,7 +381,7 @@ class _Common:
         return lines
 
     def procedure(self, name, args, build, roots=(_HERE,)):
-        """Print ``build(*args)`` as one function whose last argument and last output is
+        """Print `build(*args)` as one function whose last argument and last output is
         the effect token.
 
         Args:
@@ -419,7 +419,7 @@ class PyPrinter(_Common, PythonCodePrinter):
                           "fully_qualified_modules": False})
 
     def _print_Get(self, e):
-        """Print component ``i`` as ``x[i]``."""
+        """Print component `i` as `x[i]`."""
         return f"{self._print(e.args[0])}[{e.args[1]}]"
 
     def _print_Function(self, e):
@@ -427,22 +427,22 @@ class PyPrinter(_Common, PythonCodePrinter):
         return f"{e.func.__name__}({', '.join(self._print(a) for a in e.args)})"
 
     def _fold(self, f, a):
-        """Left-nested binary call ``f(f(a, b), c)``."""
+        """Left-nested binary call `f(f(a, b), c)`."""
         s = self._print(a[0])
         for x in a[1:]:
             s = f"{f}({s}, {self._print(x)})"
         return s
 
     def _print_Min(self, e):
-        """Print ``Min`` as nested ``minimum``."""
+        """Print `Min` as nested `minimum`."""
         return self._fold("minimum", e.args)
 
     def _print_Max(self, e):
-        """Print ``Max`` as nested ``maximum``."""
+        """Print `Max` as nested `maximum`."""
         return self._fold("maximum", e.args)
 
     def _print_And(self, e):          # traced booleans: no Python ``and``
-        """Print ``And`` as ``logical_and`` (traced booleans admit no Python ``and``).
+        """Print `And` as `logical_and` (traced booleans admit no Python `and`).
         """
         return self._fold("logical_and", e.args)
 
@@ -455,18 +455,18 @@ class PyPrinter(_Common, PythonCodePrinter):
         return f"{ind}{nm} = {rhs}"
 
     def lambda_def(self, nm, args, body, ret, ind):
-        """Nested ``def`` returning ``ret``."""
+        """Nested `def` returning `ret`."""
         return [f"{ind}def {nm}({', '.join(args)}):", *body, f"{ind}    return {ret}"]
 
     def proc_def(self, name, args, body, ret):
-        """Top-level ``def`` returning ``ret``."""
+        """Top-level `def` returning `ret`."""
         return "\n".join([f"def {name}({', '.join(args)}):", *body,
                           f"    return {ret}"])
 
 
 class CxxPrinter(_Common, CxxBase):
     """C++ family: foam and AMReX print the same text, with the runtime's free functions
-    ``pow`` / ``minimum`` / ``maximum`` and no structured bindings (C++17 lambdas
+    `pow` / `minimum` / `maximum` and no structured bindings (C++17 lambdas
     cannot capture them).
     """
     destructure = False
@@ -479,39 +479,39 @@ class CxxPrinter(_Common, CxxBase):
 
     def _callee(self, e):
         """Callee name; a kernel map with several outputs carries the count,
-        ``faces<2>(...)``, since C++ fixes the result type at compile time.
+        `faces<2>(...)`, since C++ fixes the result type at compile time.
         """
         n = _ARITY.get(e, 1)
         tmpl = f"<{n}>" if n > 1 and e.args and isinstance(e.args[0], KernelRef) else ""
         return f"{e.func.__name__}{tmpl}"
 
     def _print_Get(self, e):
-        """Print component ``i`` as ``std::get<i>(x)``."""
+        """Print component `i` as `std::get<i>(x)`."""
         return f"std::get<{e.args[1]}>({self._print(e.args[0])})"
 
     def _print_Tuple(self, e):
-        """Print a tuple as ``std::make_tuple``."""
+        """Print a tuple as `std::make_tuple`."""
         return f"std::make_tuple({', '.join(self._print(a) for a in e.args)})"
 
     def _print_Pow(self, e):
-        """Print ``pow(b, x)``, a reciprocal as ``1.0/b``."""
+        """Print `pow(b, x)`, a reciprocal as `1.0/b`."""
         b, x = e.args
         if x == -1:
             return f"(1.0/{self.parenthesize(b, 1000)})"
         return f"pow({self._print(b)}, {self._print(x)})"
 
     def assign(self, nm, rhs, ind):
-        """``auto`` declaration."""
+        """`auto` declaration."""
         return f"{ind}auto {nm} = {rhs};"
 
     def lambda_def(self, nm, args, body, ret, ind):
-        """Nested ``[&]`` lambda returning ``ret``."""
+        """Nested `[&]` lambda returning `ret`."""
         a = ", ".join(f"auto {x}" for x in args)
         return [f"{ind}auto {nm} = [&]({a}) {{", *body, f"{ind}    return {ret};",
                 f"{ind}}};"]
 
     def proc_def(self, name, args, body, ret):
-        """Top-level ``inline auto`` lambda returning ``ret``."""
+        """Top-level `inline auto` lambda returning `ret`."""
         a = ", ".join(f"auto {x}" for x in args)
         return "\n".join([f"inline auto {name} = []({a}) {{", *body,
                           f"    return {ret};", "};"])

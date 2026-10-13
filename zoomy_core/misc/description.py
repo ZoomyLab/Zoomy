@@ -1,7 +1,7 @@
 """Rich description object for notebook-native rendering and document export.
 
-``Description`` holds markdown content and renders automatically in
-Jupyter via ``_repr_markdown_``.  Export to ``.md`` or ``.tex`` files
+`Description` holds markdown content and renders automatically in
+Jupyter via `_repr_markdown_`.  Export to `.md` or `.tex` files
 for direct use in documents.
 """
 
@@ -45,9 +45,9 @@ class Description:
     def to_latex(self) -> str:
         """Convert to LaTeX document fragment.
 
-        Translates markdown headings, bold, and ``$$`` blocks into
-        LaTeX equivalents.  The result can be pasted into a ``.tex``
-        file or included via ``\\input{}``.
+        Translates markdown headings, bold, and `$$` blocks into
+        LaTeX equivalents.  The result can be pasted into a `.tex`
+        file or included via `\\input{}`.
         """
         text = self._md
 

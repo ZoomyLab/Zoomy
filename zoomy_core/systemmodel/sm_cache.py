@@ -1,6 +1,6 @@
-"""Cache of built ``SystemModel`` objects (memory, user directory, shipped ``_prebuilt``), keyed on the
+"""Cache of built `SystemModel` objects (memory, user directory, shipped `_prebuilt`), keyed on the
 model spec and the source of every class in its MRO; a model whose source cannot be read is never cached.
-Off by default; ``ZOOMY_DERIVATION_CACHE=1`` enables it and ``ZOOMY_DERIVATION_REBUILD=1`` rebuilds.
+Off by default; `ZOOMY_DERIVATION_CACHE=1` enables it and `ZOOMY_DERIVATION_REBUILD=1` rebuilds.
 """
 from __future__ import annotations
 
@@ -21,19 +21,19 @@ _UNCACHEABLE_WARNED: set[str] = set()
 
 
 def _enabled() -> bool:
-    """Whether cache reads are enabled (``ZOOMY_DERIVATION_CACHE``)."""
+    """Whether cache reads are enabled (`ZOOMY_DERIVATION_CACHE`)."""
     from zoomy_core.model.derivation.cache_keys import derivation_cache_enabled
     return derivation_cache_enabled()
 
 
 def _rebuild() -> bool:
-    """Whether ``ZOOMY_DERIVATION_REBUILD`` forces a fresh build."""
+    """Whether `ZOOMY_DERIVATION_REBUILD` forces a fresh build."""
     return os.environ.get("ZOOMY_DERIVATION_REBUILD", "").strip() in {"1", "true", "yes"}
 
 
 def _user_dir() -> Path:
-    """User cache directory (``$ZOOMY_CACHE_DIR`` or ``~/.cache/zoomy``) for pickled
-    ``SystemModel`` objects.
+    """User cache directory (`$ZOOMY_CACHE_DIR` or `~/.cache/zoomy`) for pickled
+    `SystemModel` objects.
     """
     root = os.environ.get("ZOOMY_CACHE_DIR")
     base = Path(root) if root else Path.home() / ".cache" / "zoomy"
@@ -41,12 +41,12 @@ def _user_dir() -> Path:
 
 
 def _prebuilt_dir() -> Path:
-    """Directory of the ``SystemModel`` pickles shipped inside the package."""
+    """Directory of the `SystemModel` pickles shipped inside the package."""
     return Path(__file__).resolve().parent / "_prebuilt"
 
 
 def _src_hash(obj) -> str:
-    """Short hash of the source of ``obj`` (``"nosrc"`` if unavailable)."""
+    """Short hash of the source of `obj` (`"nosrc"` if unavailable)."""
     try:
         return hashlib.sha256(inspect.getsource(obj).encode()).hexdigest()[:16]
     except (OSError, TypeError):
@@ -54,7 +54,7 @@ def _src_hash(obj) -> str:
 
 
 def _mro_classes(cls):
-    """The model's MRO classes minus ``object`` and ``abc`` plumbing."""
+    """The model's MRO classes minus `object` and `abc` plumbing."""
     for c in cls.__mro__:
         if c is object or c.__module__ == "abc":
             continue
@@ -62,7 +62,7 @@ def _mro_classes(cls):
 
 
 def _mro_source_terms(cls) -> str | None:
-    """Identity and source hash of every MRO class, or ``None`` if one has no retrievable source."""
+    """Identity and source hash of every MRO class, or `None` if one has no retrievable source."""
     parts = []
     for c in _mro_classes(cls):
         try:
@@ -90,8 +90,8 @@ def _warn_uncacheable(model_cls, failed_cls) -> None:
 
 
 def cache_key(model, builder) -> str | None:
-    """Cache key of the built ``SystemModel`` of ``model`` (spec, MRO sources, builder source), or
-    ``None`` if uncacheable.
+    """Cache key of the built `SystemModel` of `model` (spec, MRO sources, builder source), or
+    `None` if uncacheable.
     BCs and ICs are runtime data and are not part of the key.
     """
     from zoomy_core.model.derivation.cache_keys import CACHE_VERSION, model_spec_key
@@ -105,8 +105,8 @@ def cache_key(model, builder) -> str | None:
 
 
 def fetch(key: str | None):
-    """A fresh ``SystemModel`` unpickled for ``key``, or ``None`` on a miss, disabled cache or
-    ``key is None``.
+    """A fresh `SystemModel` unpickled for `key`, or `None` on a miss, disabled cache or
+    `key is None`.
     """
     if key is None or not _enabled() or _rebuild():
         return None
@@ -146,7 +146,7 @@ def fetch(key: str | None):
 
 
 def store(key: str | None, sm) -> None:
-    """Persist ``sm`` under ``key`` in memory and the user directory; a no-op for ``key is None``
+    """Persist `sm` under `key` in memory and the user directory; a no-op for `key is None`
     or a disabled cache.
     """
     if key is None or not _enabled():   # uncacheable model: never persist

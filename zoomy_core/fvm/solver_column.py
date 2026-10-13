@@ -1,7 +1,7 @@
 """Column-integrating solver for depth-integrated equations on extruded meshes.
 
-Extends ``IMEXSolver`` with numerical vertical integration. Operates on
-the raw depth-integrated equations (from ``sme()`` or ``vam()``) before
+Extends `IMEXSolver` with numerical vertical integration. Operates on
+the raw depth-integrated equations (from `sme()` or `vam()`) before
 basis projection — depth integrals are evaluated numerically by summing
 over vertical cells in each column.
 

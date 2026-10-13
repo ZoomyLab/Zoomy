@@ -1,6 +1,6 @@
 """Foam printer for the SystemModel contract.
 
-Trusts that the incoming :class:`SystemModel` is complete and well-shaped
+Trusts that the incoming `SystemModel` is complete and well-shaped
 (emitted by Zoomy's own pipeline) — no defensive checks, no fallback
 machinery.  Options that affect the *content* of the emitted C++ live as
 printer flags, not as branching in the printer's plumbing.
@@ -18,18 +18,18 @@ from zoomy_core.transformation.generic_c import GenericCppBase, GenericCppModel
 
 
 def _promote_with_dry_gate(obj):
-    """Coerce ``obj`` to an NSM, opting the depth eigenvalue gate back in.
+    """Coerce `obj` to an NSM, opting the depth eigenvalue gate back in.
 
-    REQ-181 dropped ``gate_eigenvalues_dry`` from the depth
-    :meth:`NumericalSystemModel.default_operations` ("we do not make this
+    REQ-181 dropped `gate_eigenvalues_dry` from the depth
+    `NumericalSystemModel.default_operations` ("we do not make this
     eigenvalues guard a default").  The foam pipeline hands the printer a raw
-    :class:`SystemModel` (``SystemModel.from_model(model)``), so this coercion
+    `SystemModel` (`SystemModel.from_model(model)`), so this coercion
     is where foam used to receive the gate via the default.  Re-apply it here —
     under the SAME predicate the default used (transport system carrying a depth
-    ``h``) — so foam's generated eigenvalue code stays byte-identical.
+    `h`) — so foam's generated eigenvalue code stays byte-identical.
 
     An already-built NSM is returned unchanged: its builder already chose its
-    operations (and re-gating would double-wrap the ``conditional``)."""
+    operations (and re-gating would double-wrap the `conditional`)."""
     from zoomy_core.numerics.numerical_system_model import NumericalSystemModel
     from zoomy_core.systemmodel.operations import gate_eigenvalues_dry
     if isinstance(obj, NumericalSystemModel):
@@ -69,21 +69,21 @@ _AXIS = ("x", "y", "z")
 
 
 def _qualified_numerics_call(name):
-    """Print an opaque UserFunctions leaf as ``numerics::<name>(…)``.
+    """Print an opaque UserFunctions leaf as `numerics::<name>(…)`.
 
-    The leaves (``eigensystem`` — the Roe ``|A| = R|Λ|L`` decomposition;
-    ``eigenvalues`` — its λ-only companion; ``solve`` — the point-implicit
-    source's per-cell ``A⁻¹b``) are implemented in ``UserFunctions.H`` under
-    ``namespace numerics``, while the generated kernels live in ``namespace
-    Model`` / ``namespace Numerics``.  Unqualified lookup does not reach
-    ``numerics``, so the call MUST carry the namespace (REQ-187: it did not,
+    The leaves (`eigensystem` — the Roe `|A| = R|Λ|L` decomposition;
+    `eigenvalues` — its λ-only companion; `solve` — the point-implicit
+    source's per-cell `A⁻¹b`) are implemented in `UserFunctions.H` under
+    `namespace numerics`, while the generated kernels live in ``namespace
+    Model`` / `namespace Numerics`.  Unqualified lookup does not reach
+    `numerics`, so the call MUST carry the namespace (REQ-187: it did not,
     and VAM / opaque-eigenvalue models failed to compile with "'eigenvalues'
     not declared in this scope" while analytic-eigenvalue SWE was unaffected).
 
     Shared by BOTH foam printers.  It used to sit on the Numerics printer
-    alone, which left the SAME bug live in ``Model.H`` — and there
-    ``eigenvalues`` is worse than unresolved, because the emitted kernel is
-    itself named ``eigenvalues`` and the unqualified call binds to IT.
+    alone, which left the SAME bug live in `Model.H` — and there
+    `eigenvalues` is worse than unresolved, because the emitted kernel is
+    itself named `eigenvalues` and the unqualified call binds to IT.
     """
     def _emit(printer, *args):
         return (f"numerics::{name}("
@@ -120,22 +120,22 @@ _INTERPOLATE_COLUMN_WRAPPER = """inline Foam::List<Foam::List<Foam::scalar>> int
 
 
 class FoamSystemModelPrinter(GenericCppBase):
-    """Foam printer for a frozen :class:`SystemModel`.
+    """Foam printer for a frozen `SystemModel`.
 
-    Emits ``Model.H`` with one kernel per operator matrix.  Per-direction
-    kernels (``flux_x`` / ``_y`` / ``_z`` etc.) match the calling
-    convention of the existing hand-written ``numerics.H``.
+    Emits `Model.H` with one kernel per operator matrix.  Per-direction
+    kernels (`flux_x` / `_y` / `_z` etc.) match the calling
+    convention of the existing hand-written `numerics.H`.
 
     Options
     -------
     analytical_eigenvalues : bool, default False
         If True, emit a REAL spectrum: the SystemModel's symbolic
-        ``eigenvalues`` when it has them, else the numerical spectrum off
-        ``quasilinear_matrix``.  If False, emit a zero placeholder — the
+        `eigenvalues` when it has them, else the numerical spectrum off
+        `quasilinear_matrix`.  If False, emit a zero placeholder — the
         solver computes eigenvalues numerically itself.  Either way this
         slot is NOT the wave speed: that is
-        ``Numerics::local_max_abs_eigenvalue``, which takes the closed-form
-        ``spectral_radius_bound`` and never an eigensolve.
+        `Numerics::local_max_abs_eigenvalue`, which takes the closed-form
+        `spectral_radius_bound` and never an eigensolve.
     """
 
     _output_subdir = ".foam_interface"
@@ -189,8 +189,8 @@ class FoamSystemModelPrinter(GenericCppBase):
             self.project_from_3d = sm.project_from_3d
 
     def _parameter_symbols(self):
-        """Ordered parameter Symbols for the ``p`` interface — the
-        SystemModel's parameters, plus ``dt_symbol`` as a trailing slot when
+        """Ordered parameter Symbols for the `p` interface — the
+        SystemModel's parameters, plus `dt_symbol` as a trailing slot when
         the Chorin split baked a time-step into the operators."""
         p_syms = list(self.sm.parameters.values())
         if self.dt_symbol is not None:
@@ -198,8 +198,8 @@ class FoamSystemModelPrinter(GenericCppBase):
         return p_syms
 
     def _parameter_keys_and_values(self):
-        """(names, default_values) for the emitted ``parameter_names`` /
-        ``default_parameters`` — mirrors :meth:`_parameter_symbols`."""
+        """(names, default_values) for the emitted `parameter_names` /
+        `default_parameters` — mirrors `_parameter_symbols`."""
         keys = list(self.sm.parameters.keys())
         vals = list(self.sm.parameter_values.values())
         if self.dt_symbol is not None:
@@ -218,7 +218,7 @@ class FoamSystemModelPrinter(GenericCppBase):
         return f"{target}{''.join(f'[{i}]' for i in indices)} = {value};"
 
     def _print_Abs(self, expr):
-        """Foam has no ``Foam::fabs``; canonical abs is ``Foam::mag``."""
+        """Foam has no `Foam::fabs`; canonical abs is `Foam::mag`."""
         return f"Foam::mag({self._print(expr.args[0])})"
 
     def _foam_type(self, shape):
@@ -235,13 +235,13 @@ class FoamSystemModelPrinter(GenericCppBase):
         )
 
     def get_array_declaration(self, target, shape, init_zero=False):
-        """Foam-flavoured ``auto res = Foam::List<...>(...);`` decl, used
-        by the inherited :meth:`convert_expression_body` in place of the
-        base's ``SimpleArray<T, N>`` declaration."""
+        """Foam-flavoured `auto res = Foam::List<...>(...);` decl, used
+        by the inherited `convert_expression_body` in place of the
+        base's `SimpleArray<T, N>` declaration."""
         return f"auto {target} = {self._foam_init(shape)};"
 
     def wrap_function_signature(self, name, args_str, body_str, shape):
-        """Signature wrapper — the body already declares ``res`` and
+        """Signature wrapper — the body already declares `res` and
         returns it, so we only emit the surrounding function."""
         return (
             f"\ninline {self._foam_type(shape)} {name}(\n"
@@ -259,10 +259,10 @@ class FoamSystemModelPrinter(GenericCppBase):
         return self.wrap_function_signature(name, sig, body, shape)
 
     def _coord_symbol_map(self):
-        """REQ-185: bind the time scalar ``t`` → ``time`` and the position
-        VECTOR components ``x/y/z`` → ``X.x()/X.y()/X.z()`` for the ``source``
+        """REQ-185: bind the time scalar `t` → `time` and the position
+        VECTOR components `x/y/z` → `X.x()/X.y()/X.z()` for the `source`
         kernel (same convention the BC kernel uses).  Scoped-pushed only around
-        that kernel so it never shadows the ``interpolate_to_3d`` z-mapping."""
+        that kernel so it never shadows the `interpolate_to_3d` z-mapping."""
         cmap = {self.sm.time: "time"}
         pos = getattr(self.sm, "position", None)
         if pos is not None:
@@ -271,8 +271,8 @@ class FoamSystemModelPrinter(GenericCppBase):
         return cmap
 
     def _slice(self, tensor, axis_idx, out_shape):
-        """``tensor[..., axis_idx]`` reshaped to ``out_shape``.  If
-        ``out_shape`` has a trailing ``1`` padding (the ``flux_x`` column
+        """`tensor[..., axis_idx]` reshaped to `out_shape`.  If
+        `out_shape` has a trailing `1` padding (the `flux_x` column
         convention), walk one fewer axis when collecting source values."""
         walk = (
             out_shape[:-1]
@@ -464,11 +464,11 @@ class FoamSystemModelPrinter(GenericCppBase):
         return "\n".join(blocks)
 
     def _emit_update_aux_variables(self):
-        """Emit ``update_aux_variables(Q, Qaux, dt, mesh)`` from
-        ``sm.aux_registry`` — one ``numerics::compute_derivative(...)`` per
+        """Emit `update_aux_variables(Q, Qaux, dt, mesh)` from
+        `sm.aux_registry` — one `numerics::compute_derivative(...)` per
         derivative-kind aux (the solver-side helper does the LSQ / Gauss-grad
         on the OpenFOAM mesh).  Emitted verbatim from the registry, which the
-        Phase-1 split already made minimal (no ``state_index_filter``)."""
+        Phase-1 split already made minimal (no `state_index_filter`)."""
         sm = self.sm
         lines = [
             "inline void update_aux_variables(",
@@ -528,15 +528,15 @@ class FoamSystemModelPrinter(GenericCppBase):
         """Assignment lines for the ALGEBRAIC (non-derivative) aux rows.
 
         These are POINTWISE closures, not spatial derivatives, so the
-        derivative leg of :meth:`_emit_update_aux_variables` never assigns
-        them — yet every operator reads them (``Qaux[hinv]·q²`` …), so without
+        derivative leg of `_emit_update_aux_variables` never assigns
+        them — yet every operator reads them (`Qaux[hinv]·q²` …), so without
         this they stay uninitialised garbage.  Emitted AFTER the derivative
         auxes (a closure may read one) and before any operator consumes it.
 
-        ONE body, two lowerings: ``deref`` supplies the symbol → accessor maps
-        and ``lhs`` the assignment target, so the mesh-aware field refresh
-        (``*Qaux[i]`` OpenFOAM field algebra) and the mesh-free
-        :meth:`_emit_pointwise_aux` (``Qaux[i]`` scalar list) share the same
+        ONE body, two lowerings: `deref` supplies the symbol → accessor maps
+        and `lhs` the assignment target, so the mesh-aware field refresh
+        (`*Qaux[i]` OpenFOAM field algebra) and the mesh-free
+        `_emit_pointwise_aux` (`Qaux[i]` scalar list) share the same
         closure expressions instead of each carrying its own copy.
         """
         sm = self.sm
@@ -571,20 +571,20 @@ class FoamSystemModelPrinter(GenericCppBase):
         return out
 
     def _emit_pointwise_aux(self):
-        """Emit ``pointwise_aux(Q, p) -> Qaux`` — the algebraic aux closures on
+        """Emit `pointwise_aux(Q, p) -> Qaux` — the algebraic aux closures on
         a SINGLE scalar-list state, with no mesh.
 
         A caller that holds one state vector and no field (the preCICE coupling
         evaluates an interface Riemann flux on states RECONSTRUCTED from an
         exchanged water column, which belong to no cell) still needs the
-        algebraic auxes the flux reads — ``hinv`` in every depth-based model.
+        algebraic auxes the flux reads — `hinv` in every depth-based model.
         Derivative auxes stay 0: they are spatial, and a pointwise flux has no
         neighbourhood to take them from.
 
         The closure expressions come from the model's own
-        ``update_aux_variables`` via :meth:`_emit_algebraic_aux_lines`, so the
+        `update_aux_variables` via `_emit_algebraic_aux_lines`, so the
         formula lives in core and is never restated backend-side.  A model
-        whose algebraic aux binds ``t`` or a position raises rather than
+        whose algebraic aux binds `t` or a position raises rather than
         silently emitting a mesh-free approximation of it.
         """
         n_aux = len(self.sm.aux_state)
@@ -608,10 +608,10 @@ class FoamSystemModelPrinter(GenericCppBase):
         return "\n".join(lines)
 
     def _emit_deriv_aux_lines(self, registry):
-        """``compute_derivative`` (+ function-comment) lines for a derivative-kind
-        aux registry — shared by ``update_aux_variables`` (live) and
-        ``update_aux_input_variables`` (frozen predictor forcing).  ``row`` indexes
-        the FULL ``aux_state`` (both registries share it) so the slots line up."""
+        """`compute_derivative` (+ function-comment) lines for a derivative-kind
+        aux registry — shared by `update_aux_variables` (live) and
+        `update_aux_input_variables` (frozen predictor forcing).  `row` indexes
+        the FULL `aux_state` (both registries share it) so the slots line up."""
         sm = self.sm
         aux_names = [str(s) for s in sm.aux_state]
         state_names = [str(s) for s in sm.state]
@@ -647,11 +647,11 @@ class FoamSystemModelPrinter(GenericCppBase):
         return out
 
     def _emit_update_aux_input_variables(self):
-        """Emit ``update_aux_input_variables(Q, Qaux, mesh)`` — fills the FROZEN
-        predictor-forcing auxes (``sm.aux_input_registry``, e.g. the Chorin
+        """Emit `update_aux_input_variables(Q, Qaux, mesh)` — fills the FROZEN
+        predictor-forcing auxes (`sm.aux_input_registry`, e.g. the Chorin
         pressure's q/h/b derivatives that drive the Poisson RHS) via
-        ``compute_derivative``.  These slots are declared in ``n_dof_qaux`` but
-        NOT re-derived by ``update_aux_variables`` (which only owns the live
+        `compute_derivative`.  These slots are declared in `n_dof_qaux` but
+        NOT re-derived by `update_aux_variables` (which only owns the live
         pressure derivatives), so without this they stay 0 and the pressure
         residual/RHS is identically 0 → P≡0 (REQ-147).  The driver calls this ONCE
         per step (inputs constant across the Krylov iterations) before the solve.
@@ -672,7 +672,7 @@ class FoamSystemModelPrinter(GenericCppBase):
         return "\n".join(lines)
 
     def _emit_mass_matrix(self):
-        """Emit ``mass_matrix(Q, Qaux, p) -> List[n_eq][n_state]``."""
+        """Emit `mass_matrix(Q, Qaux, p) -> List[n_eq][n_state]`."""
         sm = self.sm
         return self._kernel(
             "mass_matrix", sm.mass_matrix,
@@ -681,11 +681,11 @@ class FoamSystemModelPrinter(GenericCppBase):
         )
 
     def _emit_update_variables(self):
-        """Emit the per-cell ``update_variables(Q, Qaux, p, dt) -> List[n]``
-        from ``sm.update_variables_or_identity()``.  For a full model the values
+        """Emit the per-cell `update_variables(Q, Qaux, p, dt) -> List[n]`
+        from `sm.update_variables_or_identity()`.  For a full model the values
         are the whole state remap; for a corrector sub-system one updated value
-        per row, in the order of ``equation_to_state_index``; for a model with
-        no remap at all the identity (``Q`` unchanged)."""
+        per row, in the order of `equation_to_state_index`; for a model with
+        no remap at all the identity (`Q` unchanged)."""
         sm = self.sm
         uv = sp.Array(sp.flatten(sm.update_variables_or_identity()))
         n = len(uv)
@@ -694,16 +694,16 @@ class FoamSystemModelPrinter(GenericCppBase):
             self._operator_arg_keys("update_variables"))
 
     def _emit_reconstruction_kernels(self):
-        """Emit ``Model::reconstruction_variables(Q, Qaux, p)`` (forward)
-        and ``Model::state_from_reconstruction(W, Qaux, p)`` (inverse).
+        """Emit `Model::reconstruction_variables(Q, Qaux, p)` (forward)
+        and `Model::state_from_reconstruction(W, Qaux, p)` (inverse).
 
         Forward map uses the same Q/Qaux/p symbol scope as every other
         operator kernel — no extra symbol map needed.
 
-        Inverse map is parameterised by fresh ``WB_<state_name>`` symbols
-        generated by ``reconstruction_inverse.invert_reconstruction``.
+        Inverse map is parameterised by fresh `WB_<state_name>` symbols
+        generated by `reconstruction_inverse.invert_reconstruction`.
         Push a temporary symbol map for the emission so each WB symbol
-        prints as ``W[i]`` (where ``i`` is the index of the matching
+        prints as `W[i]` (where `i` is the index of the matching
         state slot), then pop.
         """
         sm = self.sm
@@ -753,20 +753,20 @@ class FoamSystemModelPrinter(GenericCppBase):
     def _emit_projection_kernels(self):
         """Emit the coupling projections on one interface COLUMN, when defined:
 
-        * ``Model::interpolate_to_3d(Q, Qaux, p, z[N]) -> field[N][6]`` — the
-          canonical 3D field ``[b,h,u,v,w,p]`` evaluated at every z of the
-          column.  Loops the per-position kernel ``interpolate_to_3d_at``
-          (from ``sm.interpolate_to_3d``; ``sm.position[2]`` → scalar ``z``).
-        * ``Model::project_from_3d(column, p) -> Q`` — the inverse: reduce one
+        * `Model::interpolate_to_3d(Q, Qaux, p, z[N]) -> field[N][6]` — the
+          canonical 3D field `[b,h,u,v,w,p]` evaluated at every z of the
+          column.  Loops the per-position kernel `interpolate_to_3d_at`
+          (from `sm.interpolate_to_3d`; `sm.position[2]` → scalar `z`).
+        * `Model::project_from_3d(column, p) -> Q` — the inverse: reduce one
           sampled interface column back to the 2D state.  The project rows are
           the model's Integral-FREE, fixed-node Galerkin reduction (plain
           arithmetic in the column samples), so this lowers through the SAME
-          generic kernel path as every other operator — no ``Integral``/``I[]``
-          quadrature accumulator and no foam-only ``project_from_3d_at`` +
-          column-quadrature wrapper.  ``_lower_project_from_3d`` (shared with
-          the generic-C printer) binds each sampled value ``P3_<field>(ζ_j)``
-          to its column slot ``column[j][slot]``; the C++ driver supplies the
-          resolved ``column`` and calls this directly.
+          generic kernel path as every other operator — no `Integral`/`I[]`
+          quadrature accumulator and no foam-only `project_from_3d_at` +
+          column-quadrature wrapper.  `_lower_project_from_3d` (shared with
+          the generic-C printer) binds each sampled value `P3_<field>(ζ_j)`
+          to its column slot `column[j][slot]`; the C++ driver supplies the
+          resolved `column` and calls this directly.
 
         interpolate_to_3d and project_from_3d are inverse on a column.  A model
         with neither defined emits nothing (uncoupled cases unchanged).
@@ -808,14 +808,14 @@ class FoamSystemModelPrinter(GenericCppBase):
         """Emit ``Model::boundary_conditions(bc_idx, time, X, dX, Q,
         Qaux, p, n)`` from the SystemModel's symbolic Piecewise kernel.
 
-        The argument list is read off the BC Function's DECLARED ``args``
+        The argument list is read off the BC Function's DECLARED `args`
         (idx, time, position, distance, variables, aux_variables,
         parameters, normal) — the same single-source pattern as
-        ``_operator_arg_keys`` — and spelled in Foam syntax via
-        ``ARG_MAPPING`` + ``_FOAM_ARG``.
+        `_operator_arg_keys` — and spelled in Foam syntax via
+        `ARG_MAPPING` + `_FOAM_ARG`.
 
-        Returns a ``Foam::List<scalar>`` of size ``n_eq`` — the
-        boundary state for the branch matching ``bc_idx``.
+        Returns a `Foam::List<scalar>` of size `n_eq` — the
+        boundary state for the branch matching `bc_idx`.
         """
         bc = self.sm.boundary_conditions
         # The Q / Qaux / p / n symbols are already mapped via __init__'s
@@ -877,14 +877,14 @@ _FOAM_NUMERICS_ARG = {
 
 
 class FoamNumericsPrinter(GenericCppBase):
-    """Foam printer for a symbolic :class:`Numerics` object (Rusanov,
+    """Foam printer for a symbolic `Numerics` object (Rusanov,
     HLL, NonconservativeRusanov, …).
 
-    Emits ``Numerics.H`` with one kernel per entry in
-    ``numerics.functions`` — typically ``numerical_flux``,
-    ``numerical_fluctuations``, ``local_max_abs_eigenvalue``.  Body
+    Emits `Numerics.H` with one kernel per entry in
+    `numerics.functions` — typically `numerical_flux`,
+    `numerical_fluctuations`, `local_max_abs_eigenvalue`.  Body
     expressions are CSE-optimised by the inherited
-    :meth:`convert_expression_body`; signatures use the Foam type
+    `convert_expression_body`; signatures use the Foam type
     aliases above.
     """
 
@@ -983,7 +983,7 @@ class FoamNumericsPrinter(GenericCppBase):
         return f"{target}{''.join(f'[{i}]' for i in indices)} = {value};"
 
     def _print_Abs(self, expr):
-        """Foam has no ``Foam::fabs``; canonical abs is ``Foam::mag``."""
+        """Foam has no `Foam::fabs`; canonical abs is `Foam::mag`."""
         return f"Foam::mag({self._print(expr.args[0])})"
 
     def _foam_type(self, shape):
@@ -1014,7 +1014,7 @@ class FoamNumericsPrinter(GenericCppBase):
     # ── Emission ─────────────────────────────────────────────────────────
 
     def _generate_signature_from_function(self, func_obj):
-        """Foam-typed parameter list built from ``func_obj.args.keys()``."""
+        """Foam-typed parameter list built from `func_obj.args.keys()`."""
         return ",\n    ".join(_FOAM_NUMERICS_ARG[k] for k in func_obj.args.keys())
 
     def create_code(self):
@@ -1050,27 +1050,27 @@ def write_chorin_split_headers(split, output_dir, dt_symbol, *,
                                pressure_ns="ChorinPressure",
                                corrector_ns="ChorinCorrector"):
     """Write the three sub-model headers a C++ Chorin-projection driver needs
-    from a VAM pressure split (``model.chorin_split(dt)`` →
-    ``split_for_pressure_structural`` → ``(SM_pred, SM_press, SM_corr)``).
+    from a VAM pressure split (`model.chorin_split(dt)` →
+    `split_for_pressure_structural` → `(SM_pred, SM_press, SM_corr)`).
 
     No foam-only fork: this just LOOPS the ordinary
-    :class:`FoamSystemModelPrinter` over the three self-contained sub-systems
+    `FoamSystemModelPrinter` over the three self-contained sub-systems
     and writes one full model header each.  The pressure-aux refresh is NOT a
-    separate emission anymore — it rides inside ``SM_press``'s own (already
-    minimal) ``update_aux_variables``, folded into its model header.
+    separate emission anymore — it rides inside `SM_press`'s own (already
+    minimal) `update_aux_variables`, folded into its model header.
 
-    * ``Model.H``     — ``namespace {predictor_ns}`` : predictor ops
-      (pressure-zeroed flux / NCP / source + ``mass_matrix``);
-    * ``Pressure.H``  — ``namespace {pressure_ns}``  : the elliptic
-      ``source(Q, Qaux, p)`` linear in ``(P, P_x, P_xx)`` + the pressure-mode
-      ``equation_to_state_index`` + its minimal ``update_aux_variables``
+    * `Model.H`     — `namespace {predictor_ns}` : predictor ops
+      (pressure-zeroed flux / NCP / source + `mass_matrix`);
+    * `Pressure.H`  — `namespace {pressure_ns}`  : the elliptic
+      `source(Q, Qaux, p)` linear in `(P, P_x, P_xx)` + the pressure-mode
+      `equation_to_state_index` + its minimal `update_aux_variables`
       (P-derivative computes only);
-    * ``Corrector.H`` — ``namespace {corrector_ns}`` : ``update_variables``
-      ``U_k ← U_k − dt/M_kk · T_u[k](P)`` + its ``equation_to_state_index``.
+    * `Corrector.H` — `namespace {corrector_ns}` : `update_variables`
+      `U_k ← U_k − dt/M_kk · T_u[k](P)` + its `equation_to_state_index`.
 
     The corrector takes dt as an explicit kernel argument
-    (``update_variables(Q, Qaux, p, dt)``), so dt is NOT baked into its
-    parameter vector — only the pressure block carries ``dt_symbol``.
+    (`update_variables(Q, Qaux, p, dt)`), so dt is NOT baked into its
+    parameter vector — only the pressure block carries `dt_symbol`.
 
     Returns the list of written paths.
     """

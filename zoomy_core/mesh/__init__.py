@@ -10,13 +10,13 @@ from zoomy_core.mesh.mesh_ic import (
 
 
 def ensure_lsq_mesh(mesh, model) -> LSQMesh:
-    """Promote ``mesh`` to an LSQMesh whose stencil degree is taken from ``model``.
+    """Promote `mesh` to an LSQMesh whose stencil degree is taken from `model`.
 
     Args:
         mesh: BaseMesh, FVMMesh or LSQMesh; an LSQMesh of lower degree is rebuilt in place.
         model: Model, SystemModel or NumericalSystemModel; its resolved LSQ degree sets the stencil.
     Returns:
-        The LSQMesh (or ``mesh`` untouched if it is not a BaseMesh).
+        The LSQMesh (or `mesh` untouched if it is not a BaseMesh).
     References:
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
     """

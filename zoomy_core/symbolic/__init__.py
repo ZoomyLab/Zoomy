@@ -1,41 +1,41 @@
 """Principled symbolic-derivation primitive layer for zoomy_core.
 
 This package replaces the semi-automatic, partially sympy-driven
-pipeline in ``zoomy_core.model.models.ins_generator`` with a closed
+pipeline in `zoomy_core.model.models.ins_generator` with a closed
 set of well-defined mathematical primitives.  Every primitive is
 ONE textbook calculus rule that fires only when explicitly invoked.
-Sympy is used for arithmetic on ``Add``/``Mul``/``Pow`` and for
-purely-structural ``xreplace``; sympy is *never* used to fire chain
-rule, Leibniz, IBP, common-denominator, factor, or ``.doit()``.
+Sympy is used for arithmetic on `Add`/`Mul`/`Pow` and for
+purely-structural `xreplace`; sympy is *never* used to fire chain
+rule, Leibniz, IBP, common-denominator, factor, or `.doit()`.
 
 Public surface (Phase 0):
 
-* :func:`D`, :func:`Int`, :func:`Sub` — held-form sympy constructors
-  (always ``evaluate=False``).
-* :class:`PrimitiveDoesNotMatch` — exception raised when a primitive's
+* `D`, `Int`, `Sub` — held-form sympy constructors
+  (always `evaluate=False`).
+* `PrimitiveDoesNotMatch` — exception raised when a primitive's
   preconditions fail.
-* :class:`AutoEvalGuard` — context manager that bans sympy
+* `AutoEvalGuard` — context manager that bans sympy
   auto-evaluation calls inside its block (used in tests + the slim
   walkthrough verifier).
 
 Primitives are added incrementally during Phase 0:
 
-* ``primitives_canonical`` — purely-structural rewriters
-  (``AlphaRename``, ``SplitIntegralOverAdd``,
-  ``MergeIntegralsOverAdd``, ``DistributeMulOverAdd``,
-  ``ZeroDerivativeOfFreeSymbol``, ``UnSubs``).
-* ``primitives_calculus`` — calculus rules (``ProductRuleForward``,
-  ``ProductRuleInverse``, ``ChainRule``, ``Leibniz``,
-  ``FundamentalTheorem``, ``IntegrationByParts``,
-  ``PolynomialIntegrate``, ``DistributeDerivativeOverAdd``,
-  ``PullScalarOutOfDerivative``, ``PushScalarIntoDerivative``).
-* ``primitives_change_of_variable`` — ``AffineChangeOfVariable``.
-* ``primitives_basis`` — ``CanonicalizePhiDerivativeSubs``,
-  ``ProjectBasisIntegrand``.
-* ``primitives_substitution`` — ``Subst``, ``FunctionExpand``,
-  ``SubsAtPoint``, ``SolveFor``.
-* ``canonicalise`` — the fixed, finite-step ``canonicalise`` pass that
-  replaces the legacy ``_simplify_preserve_integrals`` 6-iteration
+* `primitives_canonical` — purely-structural rewriters
+  (`AlphaRename`, `SplitIntegralOverAdd`,
+  `MergeIntegralsOverAdd`, `DistributeMulOverAdd`,
+  `ZeroDerivativeOfFreeSymbol`, `UnSubs`).
+* `primitives_calculus` — calculus rules (`ProductRuleForward`,
+  `ProductRuleInverse`, `ChainRule`, `Leibniz`,
+  `FundamentalTheorem`, `IntegrationByParts`,
+  `PolynomialIntegrate`, `DistributeDerivativeOverAdd`,
+  `PullScalarOutOfDerivative`, `PushScalarIntoDerivative`).
+* `primitives_change_of_variable` — `AffineChangeOfVariable`.
+* `primitives_basis` — `CanonicalizePhiDerivativeSubs`,
+  `ProjectBasisIntegrand`.
+* `primitives_substitution` — `Subst`, `FunctionExpand`,
+  `SubsAtPoint`, `SolveFor`.
+* `canonicalise` — the fixed, finite-step `canonicalise` pass that
+  replaces the legacy `_simplify_preserve_integrals` 6-iteration
   fixpoint loop.
 """
 

@@ -16,7 +16,7 @@ FORMAT_VERSION = 3
 
 # ── global numbering ─────────────────────────────────────────────────────────
 def _hilbert_2d(x, y, order):
-    """Hilbert index of integer points in ``[0, 2**order)^2``."""
+    """Hilbert index of integer points in `[0, 2**order)^2`."""
     x, y = x.astype(np.int64), y.astype(np.int64)
     d = np.zeros_like(x)
     n = np.int64(1) << order
@@ -33,7 +33,7 @@ def _hilbert_2d(x, y, order):
 
 
 def _morton(q, bits):
-    """Morton index of integer points ``q`` of shape ``(dim, n)`` in ``[0, 2**bits)``."""
+    """Morton index of integer points `q` of shape `(dim, n)` in `[0, 2**bits)`."""
     d = np.zeros(q.shape[1], dtype=np.int64)
     for b in range(bits):
         for k in range(q.shape[0]):
@@ -42,7 +42,7 @@ def _morton(q, bits):
 
 
 def curve_keys(centers, lo, hi):
-    """Position along the space-filling curve of centres ``(dim, n)`` in the box ``lo``..``hi``
+    """Position along the space-filling curve of centres `(dim, n)` in the box `lo`..`hi`
     (Hilbert in 2D, Morton in 3D, x in 1D).
     """
     c = np.asarray(centers, dtype=float)
@@ -56,14 +56,14 @@ def curve_keys(centers, lo, hi):
 
 
 def curve_order(centers):
-    """Cell order along the space-filling curve through the centres ``(dim, n)``, ties by index."""
+    """Cell order along the space-filling curve through the centres `(dim, n)`, ties by index."""
     c = np.asarray(centers, dtype=float)
     key = curve_keys(c, c.min(axis=1, keepdims=True), c.max(axis=1, keepdims=True))
     return np.argsort(key, kind="stable")
 
 
 def cell_face_tags(mesh):
-    """``(faces_per_cell, n_inner_cells)`` physical tag of each boundary face at its inner cell's
+    """`(faces_per_cell, n_inner_cells)` physical tag of each boundary face at its inner cell's
     local face, -1 elsewhere.
     """
     nc, n_bf = int(mesh.n_inner_cells), int(mesh.n_boundary_faces)
@@ -79,8 +79,8 @@ def cell_face_tags(mesh):
 
 
 def partitioned(mesh):
-    """Arrays of ``mesh`` in the global numbering (cells along the curve, vertices by first
-    appearance), built from the cells' own faces so a periodic remap of ``boundary_face_cells``
+    """Arrays of `mesh` in the global numbering (cells along the curve, vertices by first
+    appearance), built from the cells' own faces so a periodic remap of `boundary_face_cells`
     does not enter.
     """
     nc = int(mesh.n_inner_cells)
@@ -103,7 +103,7 @@ def partitioned(mesh):
 
 def _mesh_group(f, mesh_type, dim, n_cells, n_vertices, k, nfpc, names,
                 cell_data, x_dtype=float, i_dtype=np.int64):
-    """Create the (unfilled) ``/mesh`` group of a mesh file."""
+    """Create the (unfilled) `/mesh` group of a mesh file."""
     g = f.create_group("mesh")
     g.attrs["format_version"] = FORMAT_VERSION
     g.create_dataset("dimension", data=dim)
@@ -124,11 +124,11 @@ def _mesh_group(f, mesh_type, dim, n_cells, n_vertices, k, nfpc, names,
 
 
 def write_mesh(mesh, path, cell_data=None):
-    """Write ``mesh`` as a partition-ready mesh file (serial); use ``write_mesh_parallel`` for large
+    """Write `mesh` as a partition-ready mesh file (serial); use `write_mesh_parallel` for large
     meshes.
 
     Args:
-        cell_data: ``{name: (n_cells,)}`` per-cell values in the mesh's cell order.
+        cell_data: `{name: (n_cells,)}` per-cell values in the mesh's cell order.
     """
     import h5py
     p = partitioned(mesh)
@@ -157,13 +157,13 @@ def read_mesh(path):
 
 # ── sources: the global arrays, read in pieces ──────────────────────────────
 class ArraySource:
-    """In-memory mesh (identical on every rank) renumbered on the fly; ``cell_ids`` / ``vertex_ids``
+    """In-memory mesh (identical on every rank) renumbered on the fly; `cell_ids` / `vertex_ids`
     map the global numbering back to the mesh.
     """
     is_file = False
 
     def __init__(self, mesh):
-        """Renumber ``mesh`` into the global numbering."""
+        """Renumber `mesh` into the global numbering."""
         p = partitioned(mesh)
         self.type, self.dim, self.names = p["type"], p["dim"], p["names"]
         self._X, self._cv, self._tags = p["X"], p["cv"], p["tags"]
@@ -172,20 +172,20 @@ class ArraySource:
         self.mesh = mesh
 
     def cells(self, ids):
-        """Vertex ids of the cells ``ids``, ``(verts_per_cell, n)``."""
+        """Vertex ids of the cells `ids`, `(verts_per_cell, n)`."""
         return self._cv[:, ids]
 
     def face_tags(self, ids):
-        """Face tags of the cells ``ids``, ``(faces_per_cell, n)``."""
+        """Face tags of the cells `ids`, `(faces_per_cell, n)`."""
         return self._tags[:, ids]
 
     def vertices(self, ids):
-        """Coordinates of the vertices ``ids``, ``(dim, n)``."""
+        """Coordinates of the vertices `ids`, `(dim, n)`."""
         return self._X[:, ids]
 
     def periodic_partners(self, bcs):
-        """Periodic faces of ``bcs`` in the global numbering as ``(cell, slot, partner)``: face
-        ``slot`` of ``cell`` takes ``partner``'s state.
+        """Periodic faces of `bcs` in the global numbering as `(cell, slot, partner)`: face
+        `slot` of `cell` takes `partner`'s state.
         """
         from zoomy_core.mesh.geometry_xp import _periodic_partners
         m = self.mesh
@@ -200,7 +200,7 @@ class ArraySource:
                 gid[np.asarray(partner)[periodic]])
 
     def periodic_vertices(self, bcs):
-        """Seam vertex identification of ``bcs`` in the global vertex numbering, ``(canon,
+        """Seam vertex identification of `bcs` in the global vertex numbering, ``(canon,
         translations)``.
         """
         from zoomy_core.mesh.geometry_xp import periodic_vertices
@@ -212,11 +212,11 @@ class ArraySource:
 
 
 class FileSource:
-    """Mesh file written by ``write_mesh``; each read touches only the rows asked for."""
+    """Mesh file written by `write_mesh`; each read touches only the rows asked for."""
     is_file = True
 
     def __init__(self, path):
-        """Open the mesh file at ``path``; raises ValueError if it is not partition-ready."""
+        """Open the mesh file at `path`; raises ValueError if it is not partition-ready."""
         import h5py
         self.path = os.fspath(path)
         self._f = h5py.File(self.path, "r")
@@ -235,7 +235,7 @@ class FileSource:
         self._g = g
 
     def _read(self, name, ids):
-        """Columns ``ids`` (any order) of dataset ``name``, read as slices of consecutive ids."""
+        """Columns `ids` (any order) of dataset `name`, read as slices of consecutive ids."""
         d = self._g[name]
         ids = np.asarray(ids, dtype=np.int64)
         out = np.empty(d.shape[:-1] + (ids.size,), dtype=d.dtype)
@@ -250,19 +250,19 @@ class FileSource:
         return out
 
     def cell_data(self, name, ids):
-        """Per-cell values ``name`` of the cells ``ids``."""
+        """Per-cell values `name` of the cells `ids`."""
         return self._read(f"cell_data/{name}", ids)
 
     def cells(self, ids):
-        """Vertex ids of the cells ``ids``, ``(verts_per_cell, n)``."""
+        """Vertex ids of the cells `ids`, `(verts_per_cell, n)`."""
         return self._read("cell_vertices", ids)
 
     def face_tags(self, ids):
-        """Face tags of the cells ``ids``, ``(faces_per_cell, n)``."""
+        """Face tags of the cells `ids`, `(faces_per_cell, n)`."""
         return self._read("cell_face_tags", ids)
 
     def vertices(self, ids):
-        """Coordinates of the vertices ``ids``, ``(dim, n)``."""
+        """Coordinates of the vertices `ids`, `(dim, n)`."""
         return self._read("vertex_coordinates", ids)
 
     def periodic_partners(self, bcs):
@@ -283,7 +283,7 @@ def source(mesh):
 
 # ── communication ────────────────────────────────────────────────────────────
 def _alltoallv(comm, parts, dtype=np.int64):
-    """Send ``parts[q]`` (1D) to rank q and return what each rank sent here."""
+    """Send `parts[q]` (1D) to rank q and return what each rank sent here."""
     from mpi4py import MPI
     dtype = np.dtype(dtype)
     parts = [np.ascontiguousarray(p, dtype=dtype).reshape(-1) for p in parts]
@@ -299,7 +299,7 @@ def _alltoallv(comm, parts, dtype=np.int64):
 
 
 def _route(comm, dest, *arrays):
-    """Move the columns of each array to rank ``dest`` and return what arrived, concatenated in
+    """Move the columns of each array to rank `dest` and return what arrived, concatenated in
     source-rank order.
     """
     P = comm.Get_size()
@@ -318,8 +318,8 @@ def _route(comm, dest, *arrays):
 
 
 def _ask(comm, ids, owner, answer, dtype):
-    """Evaluate ``answer(ids_q)`` on the rank ``owner`` names for each id and return the answers
-    aligned with ``ids``.
+    """Evaluate `answer(ids_q)` on the rank `owner` names for each id and return the answers
+    aligned with `ids`.
     """
     P = comm.Get_size()
     dest = owner(ids)
@@ -338,8 +338,8 @@ def _ask(comm, ids, owner, answer, dtype):
 
 
 def _sample_sort(comm, k1, k2, *payload):
-    """Globally sort by the distinct pairs ``(k1, k2)`` so each rank ends with a contiguous sorted
-    range; returns ``(k1, k2, *payload)`` of that range.
+    """Globally sort by the distinct pairs `(k1, k2)` so each rank ends with a contiguous sorted
+    range; returns `(k1, k2, *payload)` of that range.
     """
     P = comm.Get_size()
     o = np.lexsort((k2, k1))
@@ -363,17 +363,17 @@ def _sample_sort(comm, k1, k2, *payload):
 def write_mesh_parallel(comm, path, mesh_type, X, v0, cv, c0, *, faces=None,
                         face_tags=None, tag_names=None, default_tag=0,
                         cell_data=None):
-    """Write the mesh file of ``write_mesh`` from pieces held by the ranks, no rank holding the
+    """Write the mesh file of `write_mesh` from pieces held by the ranks, no rank holding the
     whole mesh.
 
     Args:
-        X: this rank's vertices ``(dim, n)``, ids ``v0, v0 + 1, ...`` in contiguous rank-ordered
+        X: this rank's vertices `(dim, n)`, ids `v0, v0 + 1, ...` in contiguous rank-ordered
             blocks.
-        cv: this rank's cells ``(verts_per_cell, n)`` with global vertex ids, ids ``c0, c0 + 1,
+        cv: this rank's cells `(verts_per_cell, n)` with global vertex ids, ids ``c0, c0 + 1,
             ...``.
-        faces: boundary elements ``(verts_per_face, n)`` with ``face_tags`` (any rank); untagged
-            boundary faces get ``default_tag``.
-        cell_data: ``{name: (n,)}`` of this rank's cells.
+        faces: boundary elements `(verts_per_face, n)` with `face_tags` (any rank); untagged
+            boundary faces get `default_tag`.
+        cell_data: `{name: (n,)}` of this rank's cells.
     """
     from mpi4py import MPI
     import h5py
@@ -385,7 +385,7 @@ def write_mesh_parallel(comm, path, mesh_type, X, v0, cv, c0, *, faces=None,
     vend = np.array(comm.allgather(int(v0) + X.shape[1]))
 
     def owner(v):                                    # vertex block of a rank
-        """Rank holding the vertex block of vertex ``v``."""
+        """Rank holding the vertex block of vertex `v`."""
         return np.searchsorted(vend, v, side="right")
 
     # cells along the curve: centroids from the vertices' owners
@@ -473,7 +473,7 @@ def write_mesh_parallel(comm, path, mesh_type, X, v0, cv, c0, *, faces=None,
 
 
 class _Directory:
-    """Vertex-to-cells directory, vertex block ``v * P // n_v`` held by one rank each."""
+    """Vertex-to-cells directory, vertex block `v * P // n_v` held by one rank each."""
 
     def __init__(self, comm, own, own_cv, n_vertices):
         """Distribute the (vertex, cell) pairs of the owned cells to the directory ranks."""
@@ -490,7 +490,7 @@ class _Directory:
         self.v, self.c = v[o], c[o]
 
     def cells_around(self, vertices):
-        """Union of the cells around ``vertices``, asked of their directory holders."""
+        """Union of the cells around `vertices`, asked of their directory holders."""
         vertices = np.unique(vertices)
         dest = vertices * self.P // self.n_v
         cut = np.searchsorted(dest, np.arange(1, self.P))   # sorted already
@@ -508,12 +508,12 @@ class _Directory:
 # ── the distributed mesh ────────────────────────────────────────────────────
 class Partition:
     """One rank's piece: local cells (owned, then halo layer 1, then 2) and the exchange lists;
-    ``cells`` / ``vertices`` map local to the source's numbering.
+    `cells` / `vertices` map local to the source's numbering.
     """
 
     def __init__(self, comm, src, offsets, gids, n_own, n_ring, vids, send,
                  recv, periodic=None, periodic_ids=None):
-        """Store the rank's cells, vertices, exchange lists and periodic data, and clone ``comm``
+        """Store the rank's cells, vertices, exchange lists and periodic data, and clone `comm`
         for host-side collectives.
         """
         self.comm, self.source, self.offsets = comm, src, offsets
@@ -529,8 +529,8 @@ class Partition:
         self._hcomm = comm.Clone()                   # host-side collectives
 
     def gather(self, X, root=0):
-        """Owned columns of ``X`` ``(rows, local cells)`` from every rank in the source's cell
-        order, on ``root`` (None elsewhere).
+        """Owned columns of `X` `(rows, local cells)` from every rank in the source's cell
+        order, on `root` (None elsewhere).
         """
         X = np.asarray(X)
         got = self._hcomm.gather((self.cells[:self.n_own], X[..., :self.n_own]),
@@ -543,7 +543,7 @@ class Partition:
         return out
 
     def scatter(self, X_global):
-        """Local columns (owned plus halo) of a global ``(rows, cells)`` array."""
+        """Local columns (owned plus halo) of a global `(rows, cells)` array."""
         return np.asarray(X_global)[..., self.cells]
 
     def sum_to_global(self, G_local, ids, n_global):
@@ -551,7 +551,7 @@ class Partition:
         derivative with respect to a global quantity every rank holds copies of.
 
         Args:
-            ids: global index of each local column (``self.vertices``, ``self.cells``), or None
+            ids: global index of each local column (`self.vertices`, `self.cells`), or None
                 for replicated parameters.
         """
         from mpi4py import MPI
@@ -605,7 +605,7 @@ class Partition:
             return False
 
     def write_mesh(self, path, names=None):
-        """Write the output file's ``/mesh`` (each rank its share of the input blocks) and the field
+        """Write the output file's `/mesh` (each rank its share of the input blocks) and the field
         names.
         """
         import h5py
@@ -630,7 +630,7 @@ class Partition:
                 fg.attrs["names"] = np.array([str(n) for n in names], dtype="S")
 
     def write_fields(self, path, i, time, Q, Qaux):
-        """Write snapshot ``i``, each rank its owned columns of ``Q`` and ``Qaux``."""
+        """Write snapshot `i`, each rank its owned columns of `Q` and `Qaux`."""
         import h5py
         a, b = int(self.offsets[self.rank]), int(self.offsets[self.rank + 1])
         with h5py.File(path, "a", driver="mpio", comm=self._hcomm) as f:
@@ -646,15 +646,15 @@ class Partition:
 
 
 def distribute(src, comm, bcs=None):
-    """Build this rank's local BaseMesh (owned cells, two halo layers, cut faces tagged ``halo``)
-    and its ``Partition``.  Periodic partners of owned cells join layer 1 and those of layer 1
+    """Build this rank's local BaseMesh (owned cells, two halo layers, cut faces tagged `halo`)
+    and its `Partition`.  Periodic partners of owned cells join layer 1 and those of layer 1
     join layer 2.
 
     Args:
         src: ArraySource, FileSource, mesh or path.
-        bcs: boundary conditions; their ``Periodic`` entries are paired across ranks.
+        bcs: boundary conditions; their `Periodic` entries are paired across ranks.
     Returns:
-        ``(local_mesh, partition)``.
+        `(local_mesh, partition)`.
     """
     from zoomy_core.model.boundary_conditions import Periodic
     if not isinstance(src, (ArraySource, FileSource)):
@@ -672,7 +672,7 @@ def distribute(src, comm, bcs=None):
     around = lambda v: directory.cells_around(canon(v))               # noqa: E731
 
     def partners(cells):           # periodic partners of ``cells``
-        """Periodic partners of ``cells``."""
+        """Periodic partners of `cells`."""
         if pairs is None:
             return np.zeros(0, dtype=np.int64)
         return pairs[2][np.isin(pairs[0], cells)]

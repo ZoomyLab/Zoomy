@@ -1,25 +1,25 @@
 """Expression vocabulary of the template IR.
 
-Template expressions are sympy expressions over NAMES (``sp.Symbol``) bound in
-the enclosing scope.  Arithmetic, comparisons, ``And``/``Or``/``Not``,
-``Min``/``Max``, ``Abs``, ``Piecewise`` and the elementary functions are plain
+Template expressions are sympy expressions over NAMES (`sp.Symbol`) bound in
+the enclosing scope.  Arithmetic, comparisons, `And`/`Or`/`Not`,
+`Min`/`Max`, `Abs`, `Piecewise` and the elementary functions are plain
 sympy.  The functions below add what a solver template needs on top: finiteness,
 reductions, a value select, filled-array constructors and a safe divide.
 
 Semantics (identical in every walker):
 
-``IsFinite(x)``        elementwise isfinite (scalar -> bool)
-``AnyTrue(m)``         global OR-reduction of a mask / predicate -> bool
-``AllTrue(m)``         global AND-reduction -> bool
-``ReduceMin(x)``       global min -> real (AD-safe in the jax backend)
-``ReduceMax(x)``       global max -> real
-``ReduceSum(x)``       global sum -> real
-``Where(c, a, b)``     elementwise value select (both branches evaluated)
-``FullLike(x, v)``     array of ``x``'s shape filled with ``v``
-``ZerosLike(x)``       array of ``x``'s shape filled with 0
-``MaskLike(x, v)``     cell mask over the trailing (cell) axis of ``x``
-``SafeDiv(a, b, f)``   ``a / b`` where ``b != 0``, else ``f``; the divisor is
-                       double-where'd, so reverse AD stays finite at ``b == 0``
+`IsFinite(x)`        elementwise isfinite (scalar -> bool)
+`AnyTrue(m)`         global OR-reduction of a mask / predicate -> bool
+`AllTrue(m)`         global AND-reduction -> bool
+`ReduceMin(x)`       global min -> real (AD-safe in the jax backend)
+`ReduceMax(x)`       global max -> real
+`ReduceSum(x)`       global sum -> real
+`Where(c, a, b)`     elementwise value select (both branches evaluated)
+`FullLike(x, v)`     array of `x`'s shape filled with `v`
+`ZerosLike(x)`       array of `x`'s shape filled with 0
+`MaskLike(x, v)`     cell mask over the trailing (cell) axis of `x`
+`SafeDiv(a, b, f)`   `a / b` where `b != 0`, else `f`; the divisor is
+                       double-where'd, so reverse AD stays finite at `b == 0`
 
 The reductions are GLOBAL: under domain decomposition they are collective, and
 a value computed by one is replicated on every rank (the replicated-predicate
@@ -100,7 +100,7 @@ ELEMENTARY = {
 
 
 def S(*names):
-    """``S("Q", "dt")`` -> ``(Symbol("Q"), Symbol("dt"))``; one name -> one
+    """`S("Q", "dt")` -> `(Symbol("Q"), Symbol("dt"))`; one name -> one
     Symbol.  Shorthand for writing template expressions."""
     syms = tuple(sp.Symbol(n) for n in names)
     return syms[0] if len(syms) == 1 else syms
@@ -108,7 +108,7 @@ def S(*names):
 
 def as_expr(value):
     """Sympify a template expression; a bare name string becomes a Symbol,
-    Python ``bool`` becomes ``sp.true``/``sp.false``."""
+    Python `bool` becomes `sp.true`/`sp.false`."""
     if isinstance(value, str):
         return sp.Symbol(value)
     if isinstance(value, bool):
@@ -120,7 +120,7 @@ def as_expr(value):
 
 def names_in(expr) -> tuple:
     """Free NAMES an expression reads, sorted: Symbols plus the labels of
-    indexed arrays (``x[i]``)."""
+    indexed arrays (`x[i]`)."""
     if expr is None:
         return ()
     expr = as_expr(expr)

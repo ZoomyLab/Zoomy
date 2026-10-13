@@ -1,4 +1,4 @@
-"""Pure-numpy helpers that extrude a 2D (or 1D) mesh's points, elements and boundary faces by ``Nz``
+"""Pure-numpy helpers that extrude a 2D (or 1D) mesh's points, elements and boundary faces by `Nz`
 vertical layers.
 """
 
@@ -6,7 +6,7 @@ import numpy as np
 
 
 def extrude_points(points, Z):
-    """Replicate ``points`` at each z in ``Z``, layer by layer."""
+    """Replicate `points` at each z in `Z`, layer by layer."""
     n_points = points.shape[0]
     dim = points.shape[1]
     Nz = Z.shape[0]

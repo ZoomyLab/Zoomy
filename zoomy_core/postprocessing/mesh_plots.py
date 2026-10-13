@@ -1,8 +1,8 @@
 """Unstructured-mesh postprocessing (2D/3D) — companion to column_plots.
 
-Adopts the zoomy_plotting base (``SimulationStore`` + ``MatplotlibPlotter``,
+Adopts the zoomy_plotting base (`SimulationStore` + `MatplotlibPlotter`,
 the same machinery the Zoomy GUI uses) and adds what the coupling/thesis
-figures need: a VTK-series reader producing a ``SimulationStore``, segment
+figures need: a VTK-series reader producing a `SimulationStore`, segment
 and plane slicing, the slice -> ColumnField bridge (a slice of a reduced
 run lifted through the model IS a column field, so every column_plots
 function works on slices), and a pure-matplotlib 3D viewpoint chooser.
@@ -12,20 +12,20 @@ rendering is matplotlib (headless-safe, style-governed).
 
 Layer 1 (tools)
 ---------------
-- :func:`store_from_vtk`      pvd / vtk.series / single vtu -> SimulationStore
-- :func:`plotter`             store -> styled MatplotlibPlotter (1D/2D/3D)
-- :func:`mark_slice`          slice-segment marker (cf. mark_stations)
-- :func:`slice_store`         sample cell fields along a segment (nearest cell)
-- :func:`slice_plane`         plane cut of a 3D store -> in-plane 2D store
-- :func:`columns_from_slice`  slice of a reduced run -> ColumnField (lifted
+- `store_from_vtk`      pvd / vtk.series / single vtu -> SimulationStore
+- `plotter`             store -> styled MatplotlibPlotter (1D/2D/3D)
+- `mark_slice`          slice-segment marker (cf. mark_stations)
+- `slice_store`         sample cell fields along a segment (nearest cell)
+- `slice_plane`         plane cut of a 3D store -> in-plane 2D store
+- `columns_from_slice`  slice of a reduced run -> ColumnField (lifted
   through the MODEL'S interpolate_to_3d, like column_plots.read_zoomyfoam)
-- :func:`preview_3d`          viewpoint chooser: grid of (elev, azim) views
-- :func:`plot_topo_field`     2D plan view: gray topography + field on top
-- :func:`plot_topo_field_3d`  3D surfaces: gray topo + colored free surface
+- `preview_3d`          viewpoint chooser: grid of (elev, azim) views
+- `plot_topo_field`     2D plan view: gray topography + field on top
+- `plot_topo_field_3d`  3D surfaces: gray topo + colored free surface
 
 Layer 2 (composed figures)
 --------------------------
-- :func:`fig_mesh_slice`      field map + marked slice + lifted water column
+- `fig_mesh_slice`      field map + marked slice + lifted water column
 """
 from __future__ import annotations
 
@@ -131,7 +131,7 @@ def store_from_vtk(path) -> SimulationStore:
 
 
 def plotter(store: SimulationStore) -> MatplotlibPlotter:
-    """The styled mesh plotter (``plot_1d/plot_2d/plot_3d/plot``)."""
+    """The styled mesh plotter (`plot_1d/plot_2d/plot_3d/plot`)."""
     return MatplotlibPlotter(store)
 
 
@@ -151,7 +151,7 @@ def slice_store(store, fields, p0, p1, time_step=0, n=100):
     """Sample cell fields along the segment p0 -> p1 (nearest cell center).
 
     Works in 2D and 3D (the dimension is taken from len(p0)). Returns
-    ``(s, {name: values})`` with ``s`` the arc length along the slice.
+    `(s, {name: values})` with `s` the arc length along the slice.
     """
     from scipy.spatial import cKDTree
     p0 = np.asarray(p0, dtype=float)
@@ -170,7 +170,7 @@ def slice_plane(store, origin, normal, time_step=0, fields=None):
     """Plane cut of a 3D store -> a 2D SimulationStore in plane coordinates.
 
     pyvista does the geometric cut (no rendering); parent-cell data rides
-    along, so ``plotter(slice_plane(...)).plot_2d`` gives the in-plane
+    along, so `plotter(slice_plane(...)).plot_2d` gives the in-plane
     field map. Axes are (s1, s2): an orthonormal in-plane basis.
     """
     import pyvista as pv
@@ -241,10 +241,10 @@ def _state_field_names(store, model, state_prefix):
 def columns_from_slice(store, model, p0, p1, time_step=0, n=100, K=24,
                        state_prefix="Q", label=""):
     """Slice a REDUCED-model run and lift it through the model's own
-    ``interpolate_to_3d`` -> :class:`~.column_plots.ColumnField`.
+    `interpolate_to_3d` -> `ColumnField`.
 
-    The state is read from cell fields ``Q0..Qn`` (zoomy VTK convention;
-    the hdf5 reader's ``q0..qn`` is detected too). Every column_plots
+    The state is read from cell fields `Q0..Qn` (zoomy VTK convention;
+    the hdf5 reader's `q0..qn` is detected too). Every column_plots
     function (water, profiles, stations) then works on the slice.
     """
     from .column_plots import ColumnField, CANONICAL
@@ -295,7 +295,7 @@ def columns_from_slice(store, model, p0, p1, time_step=0, n=100, K=24,
 def preview_3d(fig, store, views=((20, -60), (20, 30), (20, 120), (60, -45)),
                field=0, time_step=0, **kw):
     """Viewpoint chooser: the mesh (edges on) from several (elev, azim)
-    angles, so a final view can be picked for ``plot_3d(viewpoint=...)``."""
+    angles, so a final view can be picked for `plot_3d(viewpoint=...)`."""
     pl = plotter(store)
     nv = len(views)
     for k, view in enumerate(views):
@@ -326,7 +326,7 @@ def _vertex_values(store, cell_values):
 
 def _topo_contours(ax, store, topo_vert, contours, **kw):
     """Contour lines of the topography (vertex-averaged, fan-triangulated).
-    ``contours``: int (number of levels) or an explicit level sequence."""
+    `contours`: int (number of levels) or an explicit level sequence."""
     import matplotlib.tri as mtri
     from zoomy_plotting.mesh.faces import triangulate
     ii, jj, kk, _ = triangulate(store.cells)
@@ -348,13 +348,13 @@ def plot_topo_field(ax, store, topo, field, time_step=0, hide_below=None,
                     topo_cmap=None, cmap=None, vlim=None, topo_vlim=None,
                     colorbar=True, topo_colorbar=False, contours=None,
                     alpha=None):
-    """Plan view: bottom topography in grayscale, ``field`` colored on top.
+    """Plan view: bottom topography in grayscale, `field` colored on top.
 
-    - ``topo``/``field``: cell-field names (e.g. "Q0"/"Q1").
-    - ``hide_below``: cells with field <= threshold are NOT drawn, so the
+    - `topo`/`field`: cell-field names (e.g. "Q0"/"Q1").
+    - `hide_below`: cells with field <= threshold are NOT drawn, so the
       gray topography shows through (dry-area masking).
-    - ``colorbar`` (field, right) and ``topo_colorbar`` (grayscale, left)
-      are independent; ``contours`` adds topography iso-lines (int = number
+    - `colorbar` (field, right) and `topo_colorbar` (grayscale, left)
+      are independent; `contours` adds topography iso-lines (int = number
       of levels, or an explicit level list).
     """
     import matplotlib as mpl
@@ -412,10 +412,10 @@ def plot_topo_field_3d(ax, store, topo, field, time_step=0, surface=None,
                        topo_vlim=None, colorbar=True, topo_colorbar=False,
                        contours=None, viewpoint="auto", alpha=None):
     """Perspective view of a 2D run: gray topography surface z=b, plus the
-    surface z=``surface`` (default topo+field, i.e. the free surface b+h)
-    colored by ``field``.  Same options as :func:`plot_topo_field`;
-    ``contours`` draws topography iso-lines at their true height.
-    ``viewpoint``: "auto" | (elev, azim)."""
+    surface z=`surface` (default topo+field, i.e. the free surface b+h)
+    colored by `field`.  Same options as `plot_topo_field`;
+    `contours` draws topography iso-lines at their true height.
+    `viewpoint`: "auto" | (elev, azim)."""
     import matplotlib as mpl
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
     from zoomy_plotting.mesh.faces import triangulate

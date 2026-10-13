@@ -1,19 +1,19 @@
 """Generic singular-pencil reduction for the principal-symbol problem.
 
 When a linearised PDE system has algebraic constraint rows (M_t row =
-zero), the principal-symbol pencil ``(M_x, M_t)`` is *singular* —
-``det(M_x − λ M_t) ≡ 0`` and standard generalised-eigenvalue solvers
+zero), the principal-symbol pencil `(M_x, M_t)` is *singular* —
+`det(M_x − λ M_t) ≡ 0` and standard generalised-eigenvalue solvers
 return garbage.
 
 This module reduces a singular pencil to a regular one by repeatedly:
 
-  1. Picking an algebraic row (``M_t`` row identically zero).
+  1. Picking an algebraic row (`M_t` row identically zero).
   2. Solving its M_x-row for one field (the field with the simplest
      non-zero coefficient in that row).
   3. Substituting that field's expression into every other row of
-     ``M_x`` and ``M_t``, then dropping the row + the eliminated column.
+     `M_x` and `M_t`, then dropping the row + the eliminated column.
 
-After reduction (when no all-zero ``M_t`` row remains), the pencil is
+After reduction (when no all-zero `M_t` row remains), the pencil is
 regular and standard generalised-eigenvalue routines work.
 
 The algorithm is *generic* — it works for any system with algebraic
@@ -38,19 +38,19 @@ def reduce_singular_pencil(M_x: sp.Matrix, M_t: sp.Matrix,
 
     Three classes of "algebraic" rows are handled:
 
-      a) ``M_t row = 0`` and ``M_x row != 0`` — principal-symbol
+      a) `M_t row = 0` and `M_x row != 0` — principal-symbol
          algebraic constraint at high k.  Use the M_x row to solve
          for one field and substitute into all remaining rows
          (M_x, M_t and M_0 if provided).
 
-      b) ``M_t row = 0`` and ``M_x row = 0`` and ``M_0 row != 0`` —
+      b) `M_t row = 0` and `M_x row = 0` and `M_0 row != 0` —
          zeroth-order algebraic constraint (k-independent).  Use the
-         M_0 row to solve.  REQUIRES ``M_0`` argument.
+         M_0 row to solve.  REQUIRES `M_0` argument.
 
       c) All three rows zero — redundant; drop the row.
 
-    Returns ``(M_x_reduced, M_t_reduced, fields_reduced)`` with no
-    all-zero ``M_t`` rows.  If ``M_0`` was provided it is also
+    Returns `(M_x_reduced, M_t_reduced, fields_reduced)` with no
+    all-zero `M_t` rows.  If `M_0` was provided it is also
     reduced; access via the returned tuple's caller side-effect (the
     matrix is mutated in place — pass a copy if you need the original).
     """

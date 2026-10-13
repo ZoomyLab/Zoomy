@@ -1,16 +1,16 @@
 """The step and time-loop builders: the template written ONCE.
 
-``build_step``       one step at a frozen dt: Shu-Osher stages unrolled with
+`build_step`       one step at a frozen dt: Shu-Osher stages unrolled with
                      stage times t + c_k dt (D3), aux refreshed between
-                     stages (D7), MOOD per D1 as a ``Select`` that re-enters
+                     stages (D7), MOOD per D1 as a `Select` that re-enters
                      the stage sequence (troubled cells at order 1, then the
-                     whole step at order 1, then a fatal ``Guard``), the
-                     ``post_step`` hook (default: update_variables) and the
+                     whole step at order 1, then a fatal `Guard`), the
+                     `post_step` hook (default: update_variables) and the
                      end-of-step aux update.
-``build_time_loop``  the march: dt from the D4 law, clamped to land exactly
-                     on ``t_until`` (= the traced ``time_end``), D9 ``Guard``
+`build_time_loop`  the march: dt from the D4 law, clamped to land exactly
+                     on `t_until` (= the traced `time_end`), D9 `Guard`
                      on dt, the step, observer / output hooks, initial and
-                     final snapshot hooks.  ``time0`` and ``time_end`` are
+                     final snapshot hooks.  `time0` and `time_end` are
                      traced inputs, never baked into the compiled code.
 
 Blocks are referenced by NAME; their bodies are per backend.
@@ -37,7 +37,7 @@ MOOD_MODES = ("d1", "guard", "off")
 
 def scheme_constants(scheme: ShuOsher, ctx: BuildContext, prefix=None):
     """Define the tableau coefficients as emitted constants; returns
-    ``[(a_sym|None, c_sym|None, beta_sym|None), ...]`` (None where the
+    `[(a_sym|None, c_sym|None, beta_sym|None), ...]` (None where the
     coefficient is the identity value and the statement is simplified)."""
     prefix = prefix or f"c_{scheme.name}"
     out = []
@@ -58,7 +58,7 @@ def scheme_constants(scheme: ShuOsher, ctx: BuildContext, prefix=None):
 
 def stage_sequence(scheme: ShuOsher, stage_proc: Procedure, ctx: BuildContext,
                    o1: str = "o1") -> list:
-    """The unrolled Shu-Osher stages; binds ``Q``, ``Qaux`` and ``troubled``."""
+    """The unrolled Shu-Osher stages; binds `Q`, `Qaux` and `troubled`."""
     coeffs = scheme_constants(scheme, ctx)
     body = []
     for k, (a_s, c_s, b_s) in enumerate(coeffs):
@@ -91,11 +91,11 @@ D1_GUARD_MSG = ("MOOD (D1): the whole-step order-1 candidate is not admissible "
 
 def build_step(scheme: ShuOsher, stage: Stage, ctx: BuildContext, *,
                mood: str = "d1", repair=None, name: str = "step") -> Procedure:
-    """One step at a frozen ``dt``.
+    """One step at a frozen `dt`.
 
-    ``mood``: ``d1`` (default; D1 ladder when ``repair``), ``guard`` (no
-    repair, a troubled step is fatal), ``off`` (no detection).  ``repair``
-    defaults to ``stage.supports_o1`` and the ``recon_order >= 2`` build
+    `mood`: `d1` (default; D1 ladder when `repair`), `guard` (no
+    repair, a troubled step is fatal), `off` (no detection).  `repair`
+    defaults to `stage.supports_o1` and the `recon_order >= 2` build
     option: at order 1 the order-1 rungs would recompute the same step, so
     the ladder reduces to the guard."""
     if mood not in MOOD_MODES:
@@ -144,12 +144,12 @@ def build_step(scheme: ShuOsher, stage: Stage, ctx: BuildContext, *,
 
 def build_split_step(compose, ctx: BuildContext, *, mood: str = "d1",
                      name: str = "step") -> Procedure:
-    """Operator splitting (:class:`~.scheme.Compose`), unrolled.
+    """Operator splitting (`Compose`), unrolled.
 
-    Each part is a ``(ShuOsher, Stage)`` pair advanced over ``frac * dt`` by
+    Each part is a `(ShuOsher, Stage)` pair advanced over `frac * dt` by
     its own sub-step procedure.  Every distinct part keeps its OWN clock
-    (starting at ``time``, advanced by its sub-steps), so Strang
-    ``((A, .5), (B, 1), (A, .5))`` runs A on [t, t+dt/2] and
+    (starting at `time`, advanced by its sub-steps), so Strang
+    `((A, .5), (B, 1), (A, .5))` runs A on [t, t+dt/2] and
     [t+dt/2, t+dt] and B on [t, t+dt]."""
     from zoomy_core.solver.template.scheme import Compose
     if not isinstance(compose, Compose):

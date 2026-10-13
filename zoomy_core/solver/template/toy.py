@@ -1,22 +1,22 @@
 """A toy template using EVERY statement kind -- worked example and gate fixture.
 
-Model: 1-D scalar advection-reaction-diffusion on ``n`` cells of [0, 1]
-(state ``u`` of kind ``cell_state`` with one row), parameters
-``p = (a, k, nu, u_trouble)``:
+Model: 1-D scalar advection-reaction-diffusion on `n` cells of [0, 1]
+(state `u` of kind `cell_state` with one row), parameters
+`p = (a, k, nu, u_trouble)`:
 
     explicit:  u_t + a u_x = 0            (upwind, periodic)       Call
     implicit:  x + dt k x^3 = u           (cellwise Newton)        Root
     implicit:  (I - dt nu L) x = u        (L: Dirichlet-0 Laplacian) LinSolve
 
-The march has an adaptive dt (depends on the state and on ``a``), the D4 clamp
-to ``time_end``, a D9 ``Guard`` on dt, a ``Select`` that halves the explicit
-increment where the state exceeds ``u_trouble`` (a MOOD-shaped redo), an
-idempotent output ``Callback``, a ``returns`` Callback, an observer-like
-accumulator, a ``Hook``, an ``IfStatic``, a ``Repeat`` and a ``ForEachFace``.
-``stateful=True`` wraps the time loop in a host window loop driven by a
+The march has an adaptive dt (depends on the state and on `a`), the D4 clamp
+to `time_end`, a D9 `Guard` on dt, a `Select` that halves the explicit
+increment where the state exceeds `u_trouble` (a MOOD-shaped redo), an
+idempotent output `Callback`, a `returns` Callback, an observer-like
+accumulator, a `Hook`, an `IfStatic`, a `Repeat` and a `ForEachFace`.
+`stateful=True` wraps the time loop in a host window loop driven by a
 STATEFUL callback (the coupling-window shape).
 
-The bodies are written once over an array namespace ``xp`` (numpy or
+The bodies are written once over an array namespace `xp` (numpy or
 jax.numpy).
 """
 from __future__ import annotations
@@ -169,8 +169,8 @@ def march_proc(*, stateful=False, linsolve="krylov"):
 
 
 def toy_bodies(xp, *, record=None, window_calls=None):
-    """Bodies over ``xp``.  ``record`` (list) receives idempotent writes,
-    ``window_calls`` (list) the stateful window calls."""
+    """Bodies over `xp`.  `record` (list) receives idempotent writes,
+    `window_calls` (list) the stateful window calls."""
 
     def toy_dt(u, p, cfl):
         dx = 1.0 / u.shape[-1]
@@ -231,11 +231,11 @@ def toy_inputs(xp, n=16, a=1.0, k=0.5, nu=0.01, trouble=1.15):
 
 
 def advection_bodies(xp, *, order=2, limiter="none", record=None):
-    """Bodies of the template's hyperbolic blocks for ``u_t + a u_x = 0`` on
-    [0, 1], periodic, ``p = (a, u_min)``: upwind flux (a > 0), piecewise-linear
-    reconstruction at ``order`` 2 (``limiter`` ``none`` = unlimited central
-    slopes, which overshoot at steps, or ``minmod``), admissibility
-    ``u >= u_min``.  ``Qaux`` holds du/dx.  The same physics is implemented in
+    """Bodies of the template's hyperbolic blocks for `u_t + a u_x = 0` on
+    [0, 1], periodic, `p = (a, u_min)`: upwind flux (a > 0), piecewise-linear
+    reconstruction at `order` 2 (`limiter` `none` = unlimited central
+    slopes, which overshoot at steps, or `minmod`), admissibility
+    `u >= u_min`.  `Qaux` holds du/dx.  The same physics is implemented in
     C++ by the C-walker gate."""
 
     def halo_bc(Q, Qaux, p, time, geom):

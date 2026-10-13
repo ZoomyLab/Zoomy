@@ -1,15 +1,15 @@
-"""Generic linearisation around a base state for a :class:`SystemModel`.
+"""Generic linearisation around a base state for a `SystemModel`.
 
-Replaces every state slot ``q`` in the SystemModel's operator-form
-residual ``M·∂_t Q + ∂_x F + ∂_x P + B·∂_x Q − S`` with
-``q_0 + ε δq``, expands to first order in ε, and returns a new
-:class:`SystemModel` whose state is the perturbation vector ``δq``.
+Replaces every state slot `q` in the SystemModel's operator-form
+residual `M·∂_t Q + ∂_x F + ∂_x P + B·∂_x Q − S` with
+`q_0 + ε δq`, expands to first order in ε, and returns a new
+`SystemModel` whose state is the perturbation vector `δq`.
 
 Works for arbitrary state shapes — differential or algebraic rows
 (zero mass-matrix rows pass through unchanged in form).  The base
-values ``q_0`` may themselves be expressions in coordinates (useful
+values `q_0` may themselves be expressions in coordinates (useful
 when the steady state is non-uniform, e.g. a varying bottom profile
-``b(x)``).
+`b(x)`).
 """
 from __future__ import annotations
 
@@ -19,25 +19,25 @@ import sympy as sp
 
 
 def linearise(sm, base_state: Dict, *, eps=None, simplify=True):
-    """Insert ``Q = Q_0 + ε δQ``, expand, return O(ε) SystemModel.
+    """Insert `Q = Q_0 + ε δQ`, expand, return O(ε) SystemModel.
 
     Parameters
     ----------
     sm : SystemModel
         Input operator-form system.
     base_state : dict
-        Maps each entry in ``sm.state`` to its base value (a scalar
+        Maps each entry in `sm.state` to its base value (a scalar
         or an expression in coordinates).
     eps : sympy Symbol, optional
         Small parameter; created internally if None.
     simplify : bool
-        Apply ``sp.expand`` to each linearised operator entry.
+        Apply `sp.expand` to each linearised operator entry.
 
     Returns
     -------
     SystemModel
-        New SystemModel whose state is ``[δq_0, …, δq_{n-1}]`` and
-        whose operator matrices are linearised around ``base_state``.
+        New SystemModel whose state is `[δq_0, …, δq_{n-1}]` and
+        whose operator matrices are linearised around `base_state`.
     """
     from zoomy_core.systemmodel.system_model import SystemModel
 

@@ -1,6 +1,6 @@
 """Classifies the additive terms of a derivation Model's residuals into SystemModel slots (mass
 matrix, flux, hydrostatic pressure, nonconservative matrix, source, diffusion matrix). It is the
-bridge from the derivation Model to ``SystemModel.from_model``.
+bridge from the derivation Model to `SystemModel.from_model`.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ __all__ = ["extract_system_operators", "HydrostaticPressure", "ViscousDiffusion"
 class ViscousDiffusion(sp.Function):
     """Opaque provenance marker wrapping a viscous diffusive flux ``d_x(ViscousDiffusion(D d_x
     Q_j))``. It routes the whole rank-4 compound, including foreign-state cross pieces, into
-    ``diffusion_matrix`` rather than ``flux``.
+    `diffusion_matrix` rather than `flux`.
     """
 
     nargs = 1
@@ -30,8 +30,8 @@ class ViscousDiffusion(sp.Function):
 
 
 class HydrostaticPressure(sp.Function):
-    """Opaque marker wrapping a pressure-flux argument; ``d_x(HydrostaticPressure(P))`` routes to
-    ``hydrostatic_pressure`` while any other conservative ``d_x(F)`` routes to ``flux``. The model
+    """Opaque marker wrapping a pressure-flux argument; `d_x(HydrostaticPressure(P))` routes to
+    `hydrostatic_pressure` while any other conservative `d_x(F)` routes to `flux`. The model
     applies it explicitly, never inferred from gravity.
     """
 
@@ -58,8 +58,8 @@ _SIGN_PREDICATES = ("zero", "positive", "negative",
 
 
 def head_assumptions(field) -> dict:
-    """Assumptions declared on a field's Function head (``real`` plus its strongest sign predicate),
-    so that e.g. ``h > 0`` survives into the SystemModel. Only declared fields inherit; derived aux
+    """Assumptions declared on a field's Function head (`real` plus its strongest sign predicate),
+    so that e.g. `h > 0` survives into the SystemModel. Only declared fields inherit; derived aux
     symbols do not.
     """
     head = field.func if hasattr(field, "func") else field
@@ -72,7 +72,7 @@ def head_assumptions(field) -> dict:
 
 
 def _state_symbol(field):
-    """State/aux Symbol of a modal field: ``q(0,t,x)`` becomes ``q_0``, ``h(t,x)`` becomes ``h``,
+    """State/aux Symbol of a modal field: `q(0,t,x)` becomes `q_0`, `h(t,x)` becomes `h`,
     with the head's assumptions.
     """
     name = _field_name(field)
@@ -84,7 +84,7 @@ def _state_symbol(field):
 
 
 def _collect_fields(expr, param_names):
-    """All undefined-Function field applications in ``expr``, excluding parameters, basis heads and
+    """All undefined-Function field applications in `expr`, excluding parameters, basis heads and
     sympy builtins.
     """
     from sympy.core.function import AppliedUndef
@@ -106,20 +106,20 @@ def _collect_fields(expr, param_names):
 
 def extract_system_operators(model, Q, Qaux=None, dae=False):
     """Extract the operator matrices (mass, flux, hydrostatic pressure, nonconservative, source,
-    diffusion) from a Model's residuals, one evolution row per state field. Raises ``ValueError``
-    for fields outside ``Q`` and ``Qaux``, unresolved integrals, unroutable terms, and (unless
-    ``dae``) a mass matrix that is not the identity.
+    diffusion) from a Model's residuals, one evolution row per state field. Raises `ValueError`
+    for fields outside `Q` and `Qaux`, unresolved integrals, unroutable terms, and (unless
+    `dae`) a mass matrix that is not the identity.
 
     Args:
         model: Model after the full closure pipeline.
         Q: Applied state fields, one per evolution row.
-        Qaux: Applied auxiliary fields; ``None`` takes every field not in ``Q``.
+        Qaux: Applied auxiliary fields; `None` takes every field not in `Q`.
         dae: Keep a non-diagonal or singular mass matrix (index-1 DAE) instead of raising.
 
     Returns:
-        Dict of ``SystemModel`` keyword arguments (``time, space, state, aux_state, parameters,
+        Dict of `SystemModel` keyword arguments (``time, space, state, aux_state, parameters,
         flux, hydrostatic_pressure, nonconservative_matrix, source, mass_matrix,
-        diffusion_matrix, ...``) plus the ``unclassified`` remainders.
+        diffusion_matrix, ...``) plus the `unclassified` remainders.
     """
     t = model.coords[0]
     # ``space`` = the spatial coordinates the STATE fields actually depend on, in
@@ -190,7 +190,7 @@ def extract_system_operators(model, Q, Qaux=None, dae=False):
     # ``space == horiz``) get ``(t,*space)`` for every field, byte-identical to
     # the former uniform mapping.
     def _canon(s, f):
-        """State/aux Function of ``(t, *space)`` limited to the coordinates of ``f``."""
+        """State/aux Function of `(t, *space)` limited to the coordinates of `f`."""
         used_sp = [c for c in space if c in getattr(f, "args", ())]
         return sp.Function(str(s), real=True)(t, *used_sp)
 
@@ -321,14 +321,14 @@ def _classification_remainder(residuals, state_funcs, t, space,
     nonzero remainder is a silently dropped term.
 
     Returns:
-        List of ``(row, remainder)`` for nonzero rows (empty if every term is accounted for).
+        List of `(row, remainder)` for nonzero rows (empty if every term is accounted for).
     """
     n_eq = len(residuals)
     n_state = len(state_funcs)
     n_dim = len(space)
 
     def _unwrap(expr):
-        """Strip the ``HydrostaticPressure`` and ``ViscousDiffusion`` markers."""
+        """Strip the `HydrostaticPressure` and `ViscousDiffusion` markers."""
         expr = expr.replace(
             lambda e: isinstance(e, HydrostaticPressure), lambda e: e.args[0])
         expr = expr.replace(
@@ -366,7 +366,7 @@ def _classification_remainder(residuals, state_funcs, t, space,
 
 def _classify_row(residual, i, state, state_funcs, t, space, gravity_param,
                   F, P, B, S, M, A):
-    """Split one row residual term by term into the ``M / F / P / B / S / A`` slots, filling them in
+    """Split one row residual term by term into the `M / F / P / B / S / A` slots, filling them in
     place.
     """
     from zoomy_core.model.derivation.tag_extraction import (
@@ -526,7 +526,7 @@ def _second_order_dirs(deriv, space):
     """Outer and inner spatial direction indices of a second-order spatial derivative.
 
     Returns:
-        ``(outer, inner)`` or ``None``.
+        `(outer, inner)` or `None`.
     """
     v = deriv.variables
     # Pure second derivative ``∂_{x_d} ∂_{x_e}`` (covers ``∂_{x_d}²``).
@@ -561,8 +561,8 @@ def _is_self_diffusion(deriv, own_func, space):
 
 
 def _route_diffusion(term, i, deriv, coeff, state_funcs, space, A):
-    """Route ``coeff d_xd(D d_xe Q_j)`` into ``A[i, j, d, e]`` with the sign of the residual side
-    (minus the coefficient); raises if no ``D d_x Q`` reading exists.
+    """Route `coeff d_xd(D d_xe Q_j)` into `A[i, j, d, e]` with the sign of the residual side
+    (minus the coefficient); raises if no `D d_x Q` reading exists.
     """
     v = deriv.variables
     # Bare second derivative ``coeff · ∂_{x_d}∂_{x_e} Q_j``: identical to
@@ -604,10 +604,10 @@ def _route_diffusion(term, i, deriv, coeff, state_funcs, space, A):
 
 
 def _split_inner_x_derivative(term, space):
-    """Split a term into ``coeff * d_xe Q``.
+    """Split a term into `coeff * d_xe Q`.
 
     Returns:
-        ``(coeff, derivative, e)`` or ``(None, None, None)``.
+        `(coeff, derivative, e)` or `(None, None, None)`.
     """
     factors = term.args if isinstance(term, sp.Mul) else [term]
     deriv = None
@@ -624,7 +624,7 @@ def _split_inner_x_derivative(term, space):
 
 
 def _route_nonconservative_product(term, i, state, state_funcs, space, d, B, S):
-    """Route ``coeff(state) d_xd(F(state))`` into the nonconservative matrix ``B`` via the product
+    """Route `coeff(state) d_xd(F(state))` into the nonconservative matrix `B` via the product
     rule, or to the source if it is not a clean coupling.
     """
     from zoomy_core.model.derivation.tag_extraction import (
@@ -662,13 +662,13 @@ def _route_nonconservative_product(term, i, state, state_funcs, space, d, B, S):
 
 
 def _assign_rows(model, Q, field_to_fn, state, state_fn, t):
-    """Order the equations so that row ``i`` is the one whose time derivative carries ``state[i]``,
+    """Order the equations so that row `i` is the one whose time derivative carries `state[i]`,
     falling back to declaration order for algebraic rows.
     """
     eqs = list(model._equations.values())
 
     def _has_dt_of(expr, sf):
-        """True iff ``expr`` has a time-derivative term of ``c * sf``, including a constant inside
+        """True iff `expr` has a time-derivative term of `c * sf`, including a constant inside
         the derivative.
         """
         for der in expr.atoms(sp.Derivative):

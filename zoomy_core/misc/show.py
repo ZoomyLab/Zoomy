@@ -2,22 +2,24 @@
 
 A case is executed in at least three places and they disagree about output:
 
-* a **Jupyter / GUI kernel** — rich output, ``display`` is an IPython builtin;
-* **plain** ``python case.py`` — there is no IPython at all, so ``display`` is
-  simply undefined and a cell using it dies with ``NameError``;
+* a **Jupyter / GUI kernel** — rich output, `display` is an IPython builtin;
+* **plain** `python case.py` — there is no IPython at all, so `display` is
+  simply undefined and a cell using it dies with `NameError`;
 * a **headless worker** — importable IPython may exist, but no kernel.
 
-On top of that, sympy renders as LaTeX only through its ``_repr_latex_`` hook,
+On top of that, sympy renders as LaTeX only through its `_repr_latex_` hook,
 which is not reliably active: equations came out as plain text inside a
-notebook.  Routing through ``IPython.display.Math(sympy.latex(...))`` renders
+notebook.  Routing through `IPython.display.Math(sympy.latex(...))` renders
 via MathJax unconditionally.
 
-So cases call :func:`show` and stop carrying their own shim::
+So cases call `show` and stop carrying their own shim:
 
+```
     from zoomy_core.misc.show import show
 
     show(model.describe())                      # any object
     show(eq=(sympy.Symbol("h^*"), h_expr))      # a rendered equation
+```
 
 Keeping this here rather than pasted into each case is the same rule the rest
 of the framework follows: a case selects behaviour, it does not reimplement it.
@@ -30,10 +32,10 @@ __all__ = ["show", "in_notebook"]
 class _Latex:
     """A LaTeX payload that renders without IPython being installed.
 
-    ``IPython.display.Math`` is only a thin wrapper around ``_repr_latex_``, and
+    `IPython.display.Math` is only a thin wrapper around `_repr_latex_`, and
     depending on it made rendering fail in exactly the environment that matters:
-    a lean kernel (Pyodide, a bare venv) has a working ``display`` but no
-    IPython, so importing ``Math`` failed and equations fell back to ASCII
+    a lean kernel (Pyodide, a bare venv) has a working `display` but no
+    IPython, so importing `Math` failed and equations fell back to ASCII
     pretty-print -- the very bug this module exists to fix.  Rich-repr hooks are
     a protocol, not a library, so implement them directly.
     """
@@ -55,15 +57,15 @@ class _Latex:
 
 
 def _host_display():
-    """A ``display`` provided by the HOST, if there is one.
+    """A `display` provided by the HOST, if there is one.
 
     Checked BEFORE IPython because the Theia/Pyodide GUI runs its own kernel:
-    it injects ``display`` into the cell namespace but provides no
-    ``get_ipython()``, so an IPython-only probe reported "not a notebook" and
+    it injects `display` into the cell namespace but provides no
+    `get_ipython()`, so an IPython-only probe reported "not a notebook" and
     equations came out as ASCII pretty-print in the GUI.
 
     Looked for in the caller's frames (where the GUI injects it) and in
-    builtins.  ``ZOOMY_DISPLAY=rich|plain`` overrides everything, for a host
+    builtins.  `ZOOMY_DISPLAY=rich|plain` overrides everything, for a host
     that wants to state the answer rather than be sniffed."""
     import builtins
     import os
@@ -99,7 +101,7 @@ def _host_display():
 def in_notebook() -> bool:
     """True when SOMETHING can render rich output.
 
-    A host-injected ``display`` counts (the GUI kernel), as does a live
+    A host-injected `display` counts (the GUI kernel), as does a live
     IPython instance.  Importable IPython alone does not — a headless worker
     can import it without a kernel."""
     if _host_display() is not None:
@@ -115,10 +117,10 @@ def in_notebook() -> bool:
 
 
 def show(obj=None, *, eq=None, precision: int = 6):
-    """Render ``obj``, or the equation ``eq=(lhs, rhs)``, wherever we are.
+    """Render `obj`, or the equation `eq=(lhs, rhs)`, wherever we are.
 
-    ``eq`` is rendered as real LaTeX in a kernel and pretty-printed otherwise.
-    ``precision`` rounds sympy floats for display only — an un-rounded
+    `eq` is rendered as real LaTeX in a kernel and pretty-printed otherwise.
+    `precision` rounds sympy floats for display only — an un-rounded
     manufactured source prints 15-digit rationals and is unreadable.
     """
     if eq is not None:

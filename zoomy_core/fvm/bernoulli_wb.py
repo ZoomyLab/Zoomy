@@ -1,14 +1,14 @@
 """Moving-equilibrium (Bernoulli) well-balanced reconstruction for the moment
 hierarchy (SME).  Used by HyperbolicSolver when a model sets
-``equilibrium_reconstruction='bernoulli'``.
+`equilibrium_reconstruction='bernoulli'`.
 
-Per face, each cell state is reconstructed to the common interface bed ``b*``
-preserving the discharge ``q = h·α_0`` and the per-streamline Bernoulli head
-``H(s) = ½u² + g(b+h)`` (s = discharge fraction).  The numerical flux + the
+Per face, each cell state is reconstructed to the common interface bed `b*`
+preserving the discharge `q = h·α_0` and the per-streamline Bernoulli head
+`H(s) = ½u² + g(b+h)` (s = discharge fraction).  The numerical flux + the
 moment-coupling NCP (NonconservativeRusanov) then act on the reconstructed
 states (vanishing on an equilibrium where neighbours reconstruct to the SAME
 state), and the solver adds the full conservative-flux-jump source
-``Fc(Q) − Fc(Q*)``.  Reduces to lake-at-rest / SWE when the velocity is uniform
+`Fc(Q) − Fc(Q*)`.  Reduces to lake-at-rest / SWE when the velocity is uniform
 over depth (higher moments zero).
 """
 from __future__ import annotations
@@ -24,17 +24,17 @@ _LOG = logging.getLogger(__name__)
 
 
 def _gauss_on_unit(n):
-    """Gauss-Legendre nodes/weights of order ``n`` mapped from [-1,1] to [0,1]."""
+    """Gauss-Legendre nodes/weights of order `n` mapped from [-1,1] to [0,1]."""
     x, w = leggauss(n)
     return 0.5 * (x + 1.0), 0.5 * w
 
 
 def _cumulative_weight_matrix(nodes):
-    """Spectral cumulative-weight matrix ``C`` for the Lagrange basis through
-    ``nodes`` (on [0,1]).  ``C[j,i] = ∫₀^{σ_j} ℓ_i(σ) dσ`` so that, for any
-    integrand sampled at the nodes, ``cum = thick @ C.T`` gives its cumulative
-    integral at the nodes in O(n) evals (NO fine sub-grid).  Each ``ℓ_i`` is
-    integrated exactly via ``numpy.polynomial`` (degree n−1 → exact)."""
+    """Spectral cumulative-weight matrix `C` for the Lagrange basis through
+    `nodes` (on [0,1]).  `C[j,i] = ∫₀^{σ_j} ℓ_i(σ) dσ` so that, for any
+    integrand sampled at the nodes, `cum = thick @ C.T` gives its cumulative
+    integral at the nodes in O(n) evals (NO fine sub-grid).  Each `ℓ_i` is
+    integrated exactly via `numpy.polynomial` (degree n−1 → exact)."""
     n = len(nodes)
     C = np.zeros((n, n))
     for i in range(n):
@@ -48,22 +48,22 @@ def _cumulative_weight_matrix(nodes):
 def build_bernoulli_config(model, mode="bernoulli", quadrature="trapezoid", n_sigma=200):
     """Resolve indices, basis and the conservative flux Fc=flux+pressure.
 
-    ``mode`` selects the equilibrium reconstruction: 'audusse' (lake-at-rest:
+    `mode` selects the equilibrium reconstruction: 'audusse' (lake-at-rest:
     h*=max(0,h+b−b*), velocity preserved), 'bernoulli' (moving: preserve the
     discharge q and the per-streamline Bernoulli head H(s) via the discharge-
     fraction streamline label), or 'projected_bernoulli' (layered moving WB:
     σ-parameterized |u| thickness weighting + signed velocity, handles sign
     reversal over depth).
 
-    ``quadrature`` selects how the ``projected_bernoulli`` σ-integrals (Newton on
+    `quadrature` selects how the `projected_bernoulli` σ-integrals (Newton on
     eps and the moment reprojection) are evaluated; it is ignored by the other
     modes:
 
-      * 'trapezoid' (default) — uniform trapezoid over ``n_sigma`` σ-edges, the
+      * 'trapezoid' (default) — uniform trapezoid over `n_sigma` σ-edges, the
         original committed behaviour (O(1/n²), floors L1(u) ~1e-6 for L≥4).
-      * 'gauss' — Gauss-Legendre with ``n = 2·(level+1)`` nodes/weights; the
+      * 'gauss' — Gauss-Legendre with `n = 2·(level+1)` nodes/weights; the
         cumulative σ*-remap uses the precomputed spectral cumulative-weight
-        matrix ``C`` (O(n) integrand evals, spectral accuracy, NO fine grid).
+        matrix `C` (O(n) integrand evals, spectral accuracy, NO fine grid).
       * 'exact' — at level 0 the SWE specific-energy cubic is solved in closed
         form (machine precision, NO quadrature); for level≥1 no elementary
         closed form exists (√ over a degree-L polynomial) so it falls back to
@@ -170,24 +170,24 @@ def _rcumtrap(y, x):                       # row-wise cumulative trapezoid, lead
 def reconstruct_bernoulli_level0(Qf, bstar, h_idx, b_idx, q0_idx, g,
                                  xp, newton_solve, n_iter=60):
     """Level-0 (SWE) moving-equilibrium reconstruction to the common bed
-    ``bstar`` — the BACKEND-AGNOSTIC core kernel shared by numpy and jax.
+    `bstar` — the BACKEND-AGNOSTIC core kernel shared by numpy and jax.
 
-    With a depth-uniform velocity ``u = q/h`` the per-streamline Bernoulli head
-    collapses to the cell specific energy ``E = ½u² + g(b+h)``.  Reconstructing
-    to ``b*`` with the discharge ``q`` preserved, the new surface ``η*`` solves
+    With a depth-uniform velocity `u = q/h` the per-streamline Bernoulli head
+    collapses to the cell specific energy `E = ½u² + g(b+h)`.  Reconstructing
+    to `b*` with the discharge `q` preserved, the new surface `η*` solves
     the scalar per-face equation
 
         q / √(2(E − g·η*))  =  η* − b*        ( = h*, since u* = q/h* )
 
     i.e. the SWE specific-energy relation (equivalent to the cubic
-    ``g·h*³ + (g·b*−E)·h*² + ½q² = 0``, subcritical root).  The loop is the
-    backend's ``newton_solve`` opaque kernel (``xp`` = numpy | jax.numpy); the
+    `g·h*³ + (g·b*−E)·h*² + ½q² = 0`, subcritical root).  The loop is the
+    backend's `newton_solve` opaque kernel (`xp` = numpy | jax.numpy); the
     residual/guess are built here, in core.  Dry / zero-discharge lanes pass
-    through (``h* = h``, bed unchanged) so their Fc jump vanishes.
+    through (`h* = h`, bed unchanged) so their Fc jump vanishes.
 
-    Returns a NEW ``(n_vars, nf)`` array (functional — no in-place, so it is
-    valid under jax tracing): row ``h_idx → h*``, ``b_idx → b*`` (wet lanes),
-    every other row (incl. the discharge ``q0_idx``) unchanged."""
+    Returns a NEW `(n_vars, nf)` array (functional — no in-place, so it is
+    valid under jax tracing): row `h_idx → h*`, `b_idx → b*` (wet lanes),
+    every other row (incl. the discharge `q0_idx`) unchanged."""
     h = Qf[h_idx]; b = Qf[b_idx]; q = Qf[q0_idx]
     hsafe = xp.maximum(h, 1e-12)
     u = q / hsafe
@@ -216,24 +216,24 @@ def _minmod(a, b, xp):
 
 def make_steady_ode_slope(quasilinear_fn, source_fn, b_idx, solve_op, xp,
                           n_state, ndim=0):
-    """Build the local-stationary-ODE slope closure ``G(U, H_x)`` for the FULLY
+    """Build the local-stationary-ODE slope closure `G(U, H_x)` for the FULLY
     well-balanced moving-equilibrium reconstruction (Pimentel-García, HYP2022).
 
-    BACKEND-AGNOSTIC: ``quasilinear_fn(U) → A`` ``(n_eq, n_state, n_dim, nf)`` and
-    ``source_fn(U) → Sfr`` ``(n_eq, nf)`` are the EMITTED operators the caller
-    binds to its runtime (``A = J_F + B`` incl. the bed column, ``Sfr`` the
-    friction source ``-R``); ``solve_op`` is the EXISTING ``solve`` opaque linear
-    kernel (``solve_op(*A_flat, *b) → A⁻¹b``, the whole solution vector); ``xp``
-    is ``numpy``/``jax.numpy``.
+    BACKEND-AGNOSTIC: `quasilinear_fn(U) → A` `(n_eq, n_state, n_dim, nf)` and
+    `source_fn(U) → Sfr` `(n_eq, nf)` are the EMITTED operators the caller
+    binds to its runtime (`A = J_F + B` incl. the bed column, `Sfr` the
+    friction source `-R`); `solve_op` is the EXISTING `solve` opaque linear
+    kernel (`solve_op(*A_flat, *b) → A⁻¹b`, the whole solution vector); `xp`
+    is `numpy`/`jax.numpy`.
 
-    The topography row ``b_idx`` is dropped from the invert (``b`` is passive,
-    ``b_t=0``) and its column carried to the RHS as the paper's ``S(U)·H_x``:
+    The topography row `b_idx` is dropped from the invert (`b` is passive,
+    `b_t=0`) and its column carried to the RHS as the paper's `S(U)·H_x`:
 
         G_V = A_VV(U)⁻¹ ( Sfr_V(U) − A[V,b](U)·H_x )
 
-    (Zoomy ``source = −R``, so this equals the paper's ``−(J_F+B)⁻¹(S H_x + R)``
-    exactly).  The full slope has the ``b`` row set to ``H_x`` so ``b`` integrates
-    to the interface bed; returns ``(n_state, nf)``."""
+    (Zoomy `source = −R`, so this equals the paper's `−(J_F+B)⁻¹(S H_x + R)`
+    exactly).  The full slope has the `b` row set to `H_x` so `b` integrates
+    to the interface bed; returns `(n_state, nf)`."""
     V = [i for i in range(n_state) if i != b_idx]
     nV = len(V)
 
@@ -263,22 +263,22 @@ def moving_equilibrium_cells(Q, hx, dx, b_idx, slope, solve_steady_ode, xp,
     """Per-cell fully-WB moving-equilibrium reconstruction (Pimentel-García eq
     20-27), BACKEND-AGNOSTIC.
 
-    ``Q`` ``(n_state, nc)`` cell states, ``hx`` ``(nc,)`` bed gradient ``H'(x_i)``,
-    ``dx`` ``(nc,)`` cell width, ``slope(U, hx) → G`` the steady-ODE closure
-    (:func:`make_steady_ode_slope`), ``solve_steady_ode`` the opaque implicit-
+    `Q` `(n_state, nc)` cell states, `hx` `(nc,)` bed gradient `H'(x_i)`,
+    `dx` `(nc,)` cell width, `slope(U, hx) → G` the steady-ODE closure
+    (`make_steady_ode_slope`), `solve_steady_ode` the opaque implicit-
     midpoint integrator.
 
-    Returns ``(Ustar_L, Ustar_R, sigma)``:
+    Returns `(Ustar_L, Ustar_R, sigma)`:
 
-    * ``Ustar_R = U_i + (Δx/2)K_i``, ``Ustar_L = U_i − (Δx/2)K_i`` — the local
+    * `Ustar_R = U_i + (Δx/2)K_i`, `Ustar_L = U_i − (Δx/2)K_i` — the local
       stationary solution extrapolated to the cell's right / left intercells
-      (paper eq 21), ``K_i = G(U_i)`` the collocation slope at the node (which is
+      (paper eq 21), `K_i = G(U_i)` the collocation slope at the node (which is
       the cell midpoint, so this one step needs no iteration and is WB-exact);
-    * ``sigma`` — the minmod-limited slope of the FLUCTUATION ``V=U−U*`` (paper
+    * `sigma` — the minmod-limited slope of the FLUCTUATION `V=U−U*` (paper
       eq 27), zero at a discrete stationary state so the reconstruction reduces
       to the pure equilibrium there (⇒ WB).  Needs the neighbour cell states
-      ``Q_left``/``Q_right`` and the neighbour-node equilibrium extensions
-      (paper eq 25/26) via ``solve_steady_ode``; ``order < 2`` returns ``0``."""
+      `Q_left`/`Q_right` and the neighbour-node equilibrium extensions
+      (paper eq 25/26) via `solve_steady_ode`; `order < 2` returns `0`."""
     half = 0.5 * dx
     K = slope(Q, hx)                                   # (n_state, nc)
     Ustar_R = Q + half * K
@@ -298,13 +298,13 @@ def reconstruct(Qf, bstar, cfg, xp=np):
     """Reconstruct face states Qf (n_vars, nf) to the common bed bstar (nf,).
     Dispatches on cfg['mode'] ('audusse' | 'bernoulli' | 'projected_bernoulli').
 
-    ``xp`` is the array module (numpy | jax.numpy), so a backend consumes THIS
+    `xp` is the array module (numpy | jax.numpy), so a backend consumes THIS
     kernel rather than reimplementing the reconstruction locally (cid 214).
 
     At level 0 the moving-equilibrium modes ('bernoulli' / 'projected_bernoulli')
     both collapse to the SWE specific-energy root, so they route through the
-    backend-agnostic :func:`reconstruct_bernoulli_level0` (numpy + the
-    ``newton_solve`` opaque kernel) — the SAME core kernel the jax solver
+    backend-agnostic `reconstruct_bernoulli_level0` (numpy + the
+    `newton_solve` opaque kernel) — the SAME core kernel the jax solver
     consumes.  Level ≥ 1 keeps the σ-quadrature streamline kernels below."""
     if cfg["mode"] == "audusse":
         return _reconstruct_audusse(Qf, bstar, cfg, xp)
@@ -321,9 +321,9 @@ def _reconstruct_audusse(Qf, bstar, cfg, xp=np):
     """Lake-at-rest hydrostatic reconstruction: h*=max(0,h+b−b*), velocity
     preserved (q_k rescaled by h*/h), b→b*.
 
-    BACKEND-AGNOSTIC (cid 214), like :func:`reconstruct_bernoulli_level0` beside
-    it: ``xp`` is numpy or jax.numpy and the result is ASSEMBLED rather than
-    mutated, because jax arrays reject the ``out[i] = ...`` item assignment the
+    BACKEND-AGNOSTIC (cid 214), like `reconstruct_bernoulli_level0` beside
+    it: `xp` is numpy or jax.numpy and the result is ASSEMBLED rather than
+    mutated, because jax arrays reject the `out[i] = ...` item assignment the
     original used.  Written this way so jax consumes this kernel instead of
     carrying its own copy of the reconstruction — the backend supplies the loop,
     core supplies the scheme."""
@@ -387,12 +387,14 @@ def _reconstruct_projected_bernoulli(Qf, bstar, cfg):
     Per wet column with bed b, depth h, free surface η=b+h and velocity profile
     u(σ)=Σ_k α_k P_k(2σ−1) on a σ-edge grid, each streamline carries the SAME
     full hydrostatic head H(σ)=½u²+gη.  Reconstructing to the common bed b*
-    solves ONE scalar Newton for the new surface η*::
+    solves ONE scalar Newton for the new surface η*:
 
+    ```
         h·∫₀¹ |u| / √(u² + 2g(η−η*)) dσ  =  η* − b*
+    ```
 
     (σ-parameterized with |u| thickness weighting — monotone and sign-reversal
-    safe, unlike the discharge-fraction label of ``_reconstruct_bernoulli``).
+    safe, unlike the discharge-fraction label of `_reconstruct_bernoulli`).
     The reconstructed velocity keeps its sign, u*(σ)=sign(u)·√(u²+2g(η−η*)), the
     new depth coordinate σ*(σ) is the normalized cumulative thickness, and the
     signed profile is reprojected onto Legendre moments
@@ -400,7 +402,7 @@ def _reconstruct_projected_bernoulli(Qf, bstar, cfg):
     (h*=η*−b*); q_0*=h*α_0* equals the original discharge by construction.
     Dry / zero-discharge columns pass through.
 
-    Dispatches on ``cfg['quadrature']`` ('trapezoid' | 'gauss'); 'exact' (level 0
+    Dispatches on `cfg['quadrature']` ('trapezoid' | 'gauss'); 'exact' (level 0
     only) is routed to the closed-form SWE cubic before reaching this kernel.
     The trapezoid path is byte-identical to the original committed behaviour.
     """
@@ -428,9 +430,9 @@ def _reconstruct_projected_bernoulli(Qf, bstar, cfg):
 
 
 def _projected_bernoulli_core(Qf, bstar, cfg, PHI, integral, cumulative):
-    """Quadrature-generic projected-Bernoulli kernel.  ``PHI`` is the Legendre
-    basis sampled at the quadrature abscissae; ``integral(y)`` returns the
-    row-wise ∫₀¹ y dσ; ``cumulative(thick)`` returns (cumulative-at-abscissae,
+    """Quadrature-generic projected-Bernoulli kernel.  `PHI` is the Legendre
+    basis sampled at the quadrature abscissae; `integral(y)` returns the
+    row-wise ∫₀¹ y dσ; `cumulative(thick)` returns (cumulative-at-abscissae,
     total) for the σ*-remap.  trapezoid and gauss differ only in these three."""
     h_idx, b_idx, q_idx, g = cfg["h"], cfg["b"], cfg["q"], cfg["g"]
     nq = len(q_idx)

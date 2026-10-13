@@ -1,16 +1,16 @@
 """BC-aware cell→vertex (point) data interpolation for post-processing.
 
-:func:`interpolate_point_data_with_bcs` lifts cell-centred ``Q`` (and ``Qaux``)
+`interpolate_point_data_with_bcs` lifts cell-centred `Q` (and `Qaux`)
 fields to mesh vertices while honouring the boundary conditions: each boundary
-face contributes its BC-consistent face value (via the BC's ``face_value``
+face contributes its BC-consistent face value (via the BC's `face_value`
 kernel) to its vertices, instead of every vertex seeing only interior cells.
 
-For a straight ``Wall`` this makes the boundary vertex's normal momentum vanish
-(no-penetration): the wall ``face_value`` returns the reflected ghost state
+For a straight `Wall` this makes the boundary vertex's normal momentum vanish
+(no-penetration): the wall `face_value` returns the reflected ghost state
 (normal momentum negated), so averaging it with the single interior cell cancels
 the normal component exactly.  Interior vertices are untouched (no incident
 boundary face) — identical to the plain unweighted cell→vertex mean used
-elsewhere (``zoomy_plotting.mesh.faces.cell_to_vert_values``), so C0 continuity
+elsewhere (`zoomy_plotting.mesh.faces.cell_to_vert_values`), so C0 continuity
 is preserved.
 
 This is a reusable post-processing primitive (3-D reconstruction generator, 2-D
@@ -50,8 +50,8 @@ def _infer_mesh_type(mesh) -> str:
 def _boundary_face_vertices(mesh, mesh_type):
     """For each boundary face, the global vertex indices lying on it.
 
-    Recovered exactly from the mesh's own ``cell_faces`` map and the local
-    face→vertex template ``_local_faces_for_type`` (the same template the
+    Recovered exactly from the mesh's own `cell_faces` map and the local
+    face→vertex template `_local_faces_for_type` (the same template the
     topology builder used), so the per-face vertex set is consistent with the
     mesh's stored face indexing — no geometric tolerance needed.
     """
@@ -75,9 +75,9 @@ def _boundary_face_vertices(mesh, mesh_type):
 
 
 def _resolve_bc_dict(bcs, state_names, aliases):
-    """Return ``{tag_name: BC}`` with numpy ``face_value`` kernels, from a
-    resolved :class:`BoundaryConditions`, a ``{tag: BC}`` dict, or a raw
-    per-field list (resolved via :func:`resolve_per_field`)."""
+    """Return `{tag_name: BC}` with numpy `face_value` kernels, from a
+    resolved `BoundaryConditions`, a `{tag: BC}` dict, or a raw
+    per-field list (resolved via `resolve_per_field`)."""
     if bcs is None:
         return {}
     if isinstance(bcs, BoundaryConditions):
@@ -98,46 +98,46 @@ def interpolate_point_data_with_bcs(
     time=0.0,
     aliases=None,
 ):
-    """Lift cell-centred ``Q`` (and optionally ``Qaux``) to vertices, BC-aware.
+    """Lift cell-centred `Q` (and optionally `Qaux`) to vertices, BC-aware.
 
     Parameters
     ----------
     cell_Q : array (n_state, n_inner_cells)
-        Cell-centred state.  Full state vector per cell — the BC ``face_value``
-        kernels reflect/replace whole-state slots (a ``Wall`` needs all momentum
+        Cell-centred state.  Full state vector per cell — the BC `face_value`
+        kernels reflect/replace whole-state slots (a `Wall` needs all momentum
         components together to reflect the face normal).
     mesh : BaseMesh / FVMMesh / LSQMesh
-        Unstructured mesh with ``cell_vertices`` / ``cell_faces`` /
-        ``boundary_face_*`` connectivity.
+        Unstructured mesh with `cell_vertices` / `cell_faces` /
+        `boundary_face_*` connectivity.
     boundary_conditions : BoundaryConditions | dict | list
         The Q boundary conditions.  A raw per-field list (e.g.
-        ``[Wall("wall", on="momentum"), ...]``) is resolved via
-        :func:`resolve_per_field` against ``state_names`` (default alias
-        ``{"momentum": "q"}``, matching ``resolve_and_attach``).
+        `[Wall("wall", on="momentum"), ...]`) is resolved via
+        `resolve_per_field` against `state_names` (default alias
+        `{"momentum": "q"}`, matching `resolve_and_attach`).
     state_names : sequence of str
-        ``[str(s) for s in sm.state]`` — needed to resolve a raw BC list.
+        `[str(s) for s in sm.state]` — needed to resolve a raw BC list.
     cell_Qaux : array (n_aux, n_inner_cells), optional
-        Cell-centred aux state.  Required by the Q ``face_value`` signature; if
+        Cell-centred aux state.  Required by the Q `face_value` signature; if
         omitted an empty aux vector is used (fine when no BC consumes aux).
     aux_names : sequence of str, optional
         Aux state names; needed only to resolve a raw aux BC list.
     aux_boundary_conditions : BoundaryConditions | dict | list, optional
-        The Qaux boundary conditions.  If ``None`` the aux is extrapolated at
+        The Qaux boundary conditions.  If `None` the aux is extrapolated at
         the boundary (interior value copied) — the framework default.
     parameters : array, optional
         Parameter vector the BC kernels may need (pass the solver's parameter
-        array; ``sm.parameter_values`` is a Zstruct, not an array — convert
+        array; `sm.parameter_values` is a Zstruct, not an array — convert
         first).  Defaults to an empty array.
     time : float, optional
         Evaluation time for time-dependent BCs.
     aliases : dict, optional
-        ``on=`` alias map for resolving raw BC lists (default ``{"momentum": "q"}``).
+        `on=` alias map for resolving raw BC lists (default `{"momentum": "q"}`).
 
     Returns
     -------
     vertex_Q : ndarray (n_state, n_vertices)
     vertex_Qaux : ndarray (n_aux, n_vertices)
-        BC-aware vertex data.  ``vertex_Qaux`` has zero rows if no aux was given.
+        BC-aware vertex data.  `vertex_Qaux` has zero rows if no aux was given.
     """
     cell_Q = np.asarray(cell_Q, dtype=float)
     if cell_Q.ndim != 2:

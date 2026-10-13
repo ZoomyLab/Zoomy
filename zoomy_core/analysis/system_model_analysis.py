@@ -1,31 +1,31 @@
 """SystemModel-based analysis: linearise + dispersion + eigenvalues.
 
-Operates directly on :class:`zoomy_core.systemmodel.system_model.SystemModel`
-— no ``PDESystem`` wrapper, no ``linearise``-on-equation-tree machinery.
+Operates directly on `zoomy_core.systemmodel.system_model.SystemModel`
+— no `PDESystem` wrapper, no `linearise`-on-equation-tree machinery.
 The model's stored sympy matrices already encode the operator surface;
 analysis is straightforward symbolic substitution + eigenvalue solve.
 
 Three entry points:
 
-* :func:`linearise_system_model` — substitute a base state into the
+* `linearise_system_model` — substitute a base state into the
   flux / NCP / source / hydrostatic-pressure / mass matrices and
-  return a new ``SystemModel`` whose matrices are constant in the
+  return a new `SystemModel` whose matrices are constant in the
   state Symbols (only depend on coordinates and parameters).
 
-* :func:`plane_wave_dispersion` — given a constant-coefficient
+* `plane_wave_dispersion` — given a constant-coefficient
   linearised SystemModel, build the principal-symbol pencil
-  ``(M_t, M_x[axis], M_0)`` and return the symbolic eigenvalues
-  ``ω(k)`` (or equivalently ``λ = ω/k`` solving
-  ``det(M_x − λ M_t) = 0``).
+  `(M_t, M_x[axis], M_0)` and return the symbolic eigenvalues
+  `ω(k)` (or equivalently `λ = ω/k` solving
+  `det(M_x − λ M_t) = 0`).
 
-* :func:`hyperbolic_eigenvalues` — same pencil but returning the
-  generalized eigenvalues of ``(M_x[axis], M_t)`` directly via
-  :func:`zoomy_core.analysis.pencil.generalised_eigenvalues`.
+* `hyperbolic_eigenvalues` — same pencil but returning the
+  generalized eigenvalues of `(M_x[axis], M_t)` directly via
+  `zoomy_core.analysis.pencil.generalised_eigenvalues`.
 
-For shapes where the analyst wants ``Sum``/``Indexed`` form (linear
-stability with symbolic ``k``, parameter-sweep hyperbolicity, etc.)
-the substitution dict accepts any sympy values — ``base_state[h] = h0``
-keeps ``h0`` symbolic.
+For shapes where the analyst wants `Sum`/`Indexed` form (linear
+stability with symbolic `k`, parameter-sweep hyperbolicity, etc.)
+the substitution dict accepts any sympy values — `base_state[h] = h0`
+keeps `h0` symbolic.
 """
 
 from __future__ import annotations
@@ -44,8 +44,8 @@ def linearise_system_model(
     *,
     parameters: Optional[Dict[Any, Any]] = None,
 ) -> SystemModel:
-    """Substitute ``base_state`` into every operator matrix; return a
-    new ``SystemModel`` whose matrices are constant in the state.
+    """Substitute `base_state` into every operator matrix; return a
+    new `SystemModel` whose matrices are constant in the state.
 
     Parameters
     ----------
@@ -55,8 +55,8 @@ def linearise_system_model(
         Map of state Symbol → base value.  Missing entries are left
         symbolic.  Aux-state Symbols may also be substituted.
     parameters : dict, optional
-        Additional parameter substitutions (e.g. ``{ez: 1, g: 9.81}``).
-        Combined with ``base_state`` for the substitution.
+        Additional parameter substitutions (e.g. `{ez: 1, g: 9.81}`).
+        Combined with `base_state` for the substitution.
     """
     sub = dict(base_state)
     if parameters:
@@ -110,31 +110,31 @@ def plane_wave_dispersion(
     parameters: Optional[Dict[Any, Any]] = None,
     return_omega_k: bool = True,
 ) -> Dict[str, Any]:
-    """Compute the dispersion of ``sm`` linearised at ``base_state``.
+    """Compute the dispersion of `sm` linearised at `base_state`.
 
-    Two output modes are supported (controlled by ``return_omega_k``):
+    Two output modes are supported (controlled by `return_omega_k`):
 
-    * ``return_omega_k=True`` (default, **fixes G7** from the plan):
-      assemble the full plane-wave matrix ``M(ω, k)`` from the
-      linearised system and solve ``det M(ω, k) = 0`` for the true
-      ``ω(k)`` curves — symbolic functions of ``k`` rather than just
+    * `return_omega_k=True` (default, **fixes G7** from the plan):
+      assemble the full plane-wave matrix `M(ω, k)` from the
+      linearised system and solve `det M(ω, k) = 0` for the true
+      `ω(k)` curves — symbolic functions of `k` rather than just
       eigenvalues at a fixed base state.
-    * ``return_omega_k=False`` (legacy): return only generalised
-      eigenvalues of ``(M_x, M_t)`` — phase velocities at the base
-      state, no ``k``-dependence.
+    * `return_omega_k=False` (legacy): return only generalised
+      eigenvalues of `(M_x, M_t)` — phase velocities at the base
+      state, no `k`-dependence.
 
     Returns a dict with:
 
-    * ``M_t`` — mass matrix at base state.
-    * ``M_x`` — quasilinear matrix at base state in direction ``axis``.
-    * ``M_0`` — ``-∂S/∂Q`` at base state.
-    * ``eigenvalues`` — generalised eigenvalues (legacy, always present).
-    * ``omega_solutions`` (only when ``return_omega_k=True``) — list of
-      symbolic ``ω(k)`` solutions of ``det M(ω, k) = 0``.
-    * ``phase_velocity_solutions`` (only when ``return_omega_k=True``)
-      — ``[ω/k for ω in omega_solutions]``.
-    * ``k`` (only when ``return_omega_k=True``) — the wavenumber symbol.
-    * ``omega`` (only when ``return_omega_k=True``) — the angular‑frequency
+    * `M_t` — mass matrix at base state.
+    * `M_x` — quasilinear matrix at base state in direction `axis`.
+    * `M_0` — `-∂S/∂Q` at base state.
+    * `eigenvalues` — generalised eigenvalues (legacy, always present).
+    * `omega_solutions` (only when `return_omega_k=True`) — list of
+      symbolic `ω(k)` solutions of `det M(ω, k) = 0`.
+    * `phase_velocity_solutions` (only when `return_omega_k=True`)
+      — `[ω/k for ω in omega_solutions]`.
+    * `k` (only when `return_omega_k=True`) — the wavenumber symbol.
+    * `omega` (only when `return_omega_k=True`) — the angular‑frequency
       symbol.
     """
     sub = dict(base_state)
@@ -215,7 +215,7 @@ def hyperbolic_eigenvalues(
     parameters: Optional[Dict[Any, Any]] = None,
 ) -> List[sp.Expr]:
     """Convenience: return only the eigenvalues from
-    :func:`plane_wave_dispersion`.
+    `plane_wave_dispersion`.
 
     Useful for hyperbolicity sampling: real eigenvalues = hyperbolic;
     complex conjugate pairs = elliptic mode = ill-posed initial-value

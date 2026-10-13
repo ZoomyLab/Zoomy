@@ -1,21 +1,23 @@
 """Linear-stability workflows on a SystemModel.
 
-The intended reading of a case driver is four lines::
+The intended reading of a case driver is four lines:
 
+```
     P    = NumericPencil(sm)                                   # once per system
     mats = P.at_equilibrium(params, fixed={"b": 0, "h": 1},
                             guess=q0, drop=("b",))             # base state
     T    = temporal_branch(mats, k_grid, c_seed=c0)            # omega(k)
     S    = spatial_branch(mats, omega_grid, c_seed=c0)         # k(omega)
+```
 
-plus :func:`growth_cutoff` / :func:`critical_parameter` for derived scalars.
+plus `growth_cutoff` / `critical_parameter` for derived scalars.
 
 Everything is generic over the SystemModel: state size, parameter set and
 layout come from the model; nothing here knows SME/VAM/Bingham.
 
-Why ``lambdify`` lives HERE and not in a case: analysis needs the symbolic
-pencil (from :func:`extract_quasilinear_pencil`) as fast numeric callables
-over ``state + parameters``.  ``sympy.lambdify`` *is* sympy's numpy code
+Why `lambdify` lives HERE and not in a case: analysis needs the symbolic
+pencil (from `extract_quasilinear_pencil`) as fast numeric callables
+over `state + parameters`.  `sympy.lambdify` *is* sympy's numpy code
 printer; this module is the single place it is applied, so cases never
 touch it.  (Solver kernels go through the per-backend printers instead —
 different target, same idea.)
@@ -57,10 +59,10 @@ def _aux_list(sm):
 class NumericPencil:
     """Numeric evaluator of a SystemModel's quasilinear pencil.
 
-    Lambdifies ``(M_t, A, J_S, source)`` over ``state + parameters`` once at
-    construction; :meth:`at_equilibrium` then produces the base-state
+    Lambdifies `(M_t, A, J_S, source)` over `state + parameters` once at
+    construction; `at_equilibrium` then produces the base-state
     matrices for the branch solvers.  Construct it once per system and reuse
-    it across parameter sweeps (e.g. inside :func:`critical_parameter`).
+    it across parameter sweeps (e.g. inside `critical_parameter`).
     """
 
     def __init__(self, sm):
@@ -84,10 +86,10 @@ class NumericPencil:
     def equilibrium(self, params, fixed, guess=None):
         """Uniform base state: source rows of the FREE states vanish.
 
-        ``fixed`` pins states by name (e.g. ``{"b": 0.0, "h": 1.0}``); the
-        remaining (free) states are solved with ``fsolve`` from ``guess``
+        `fixed` pins states by name (e.g. `{"b": 0.0, "h": 1.0}`); the
+        remaining (free) states are solved with `fsolve` from `guess`
         (zeros by default — pass a guess only if the solve demonstrably
-        needs one).  Returns ``(Q_full, max_residual)``.
+        needs one).  Returns `(Q_full, max_residual)`.
         """
         pv = self._pvals(params)
         free = [i for i, n in enumerate(self.state_names) if n not in fixed]
@@ -114,9 +116,9 @@ class NumericPencil:
     def at_equilibrium(self, params, fixed, guess=None, drop=()):
         """Base-state matrices for the branch solvers.
 
-        Solves the equilibrium, evaluates ``A, J_S, M_t`` there and drops the
-        rows/columns of the states named in ``drop`` (static fields, e.g. the
-        bed).  Returns ``Zstruct(A, JS, Mt, Q, Qfree, residual)``.
+        Solves the equilibrium, evaluates `A, J_S, M_t` there and drops the
+        rows/columns of the states named in `drop` (static fields, e.g. the
+        bed).  Returns `Zstruct(A, JS, Mt, Q, Qfree, residual)`.
         """
         Q, rmax = self.equilibrium(params, fixed, guess)
         pv = self._pvals(params)
@@ -134,8 +136,8 @@ class NumericPencil:
 def _track(eigs, seed_row, seed_idx):
     """Follow one mode through an eigenvalue table by nearest-continuity.
 
-    ``eigs``: (n_grid, n_modes) complex table; the branch is seeded at
-    ``eigs[seed_row, seed_idx]`` and continued forward and backward.
+    `eigs`: (n_grid, n_modes) complex table; the branch is seeded at
+    `eigs[seed_row, seed_idx]` and continued forward and backward.
     """
     tr = np.zeros(len(eigs), complex)
     tr[seed_row] = eigs[seed_row, seed_idx]
@@ -149,12 +151,12 @@ def _track(eigs, seed_row, seed_idx):
 def temporal_branch(mats, k, viscous=None, c_seed=None, anchor=3):
     """Temporal branch omega(k): real wavenumbers, complex frequencies.
 
-    Solves ``omega = -i eig(i k A - J_S + k^2 V, M_t)`` over the grid ``k``
-    and tracks the mode whose phase speed at ``k[anchor]`` is nearest
-    ``c_seed`` (defaults to the fastest-growing mode there).  Returns
-    ``Zstruct(k, omega, sigma, c, cg, alpha)`` with growth rate ``sigma``,
-    phase speed ``c``, group speed ``cg`` and Gaster spatial growth
-    ``alpha = sigma / cg``.
+    Solves `omega = -i eig(i k A - J_S + k^2 V, M_t)` over the grid `k`
+    and tracks the mode whose phase speed at `k[anchor]` is nearest
+    `c_seed` (defaults to the fastest-growing mode there).  Returns
+    `Zstruct(k, omega, sigma, c, cg, alpha)` with growth rate `sigma`,
+    phase speed `c`, group speed `cg` and Gaster spatial growth
+    `alpha = sigma / cg`.
     """
     k = np.asarray(k, float)
     om = np.zeros((len(k), mats.A.shape[0]), complex)
@@ -178,8 +180,8 @@ def _spatial_eig_table(mats, omega):
 
     Since k enters the pencil linearly the spatial problem is again a
     generalized eigenproblem with k as the eigenvalue:
-    ``k = -i eig(i omega M_t + J_S, A)`` — no root chasing.  Accepts
-    complex ``omega`` (the round-trip validation feeds a complex temporal
+    `k = -i eig(i omega M_t + J_S, A)` — no root chasing.  Accepts
+    complex `omega` (the round-trip validation feeds a complex temporal
     frequency back in; physical spatial analysis uses real omega)."""
     omega = np.asarray(omega, complex)
     return np.array([-1j * eig(1j * w * mats.Mt + mats.JS, mats.A, right=False)
@@ -187,8 +189,8 @@ def _spatial_eig_table(mats, omega):
 
 
 def _spatial_select(k_table, omega, c_seed):
-    """Seed on the downstream mode (Re k > 0) nearest ``c_seed`` at
-    ``omega[0]`` and continue it through the table by nearest-continuity.
+    """Seed on the downstream mode (Re k > 0) nearest `c_seed` at
+    `omega[0]` and continue it through the table by nearest-continuity.
     Shared by the numeric and analytic spatial branches so both return the
     SAME mode.  Returns the complex tracked branch."""
     k_table = np.asarray(k_table, complex)
@@ -203,9 +205,9 @@ def _spatial_select(k_table, omega, c_seed):
 def spatial_branch(mats, omega, c_seed=None):
     """Spatial branch k(omega) from pre-evaluated base-state matrices.
 
-    Lower-level numeric primitive; prefer :func:`spatial_dispersion` for the
-    SystemModel-in entry point.  Returns ``Zstruct(omega, k, alpha)`` with
-    spatial growth ``alpha = -Im k``.
+    Lower-level numeric primitive; prefer `spatial_dispersion` for the
+    SystemModel-in entry point.  Returns `Zstruct(omega, k, alpha)` with
+    spatial growth `alpha = -Im k`.
     """
     omega = np.asarray(omega, float)
     tr = _spatial_select(_spatial_eig_table(mats, omega), omega, c_seed)
@@ -231,9 +233,9 @@ def _norm_base(sm, base_state):
 
 def _analytic_k_table(sm, base_state, omega, *, params, axis, drop):
     """Symbolic k(omega): build the quasilinear pencil from
-    :func:`extract_quasilinear_pencil`, solve ``det = 0`` for k, substitute
+    `extract_quasilinear_pencil`, solve `det = 0` for k, substitute
     the parameters and evaluate over the omega grid.  Returns
-    ``(k_table, k_symbolic)``."""
+    `(k_table, k_symbolic)`."""
     by_sym, _ = _norm_base(sm, base_state)
     missing = set(sm.state) - set(by_sym)
     if missing:
@@ -275,15 +277,15 @@ def _analytic_k_table(sm, base_state, omega, *, params, axis, drop):
 def spatial_dispersion(sm, base_state, omega, *, params=None, numeric=False,
                        axis=0, drop=(), c_seed=None, guess=None):
     """Spatial dispersion branch k(omega) of a SystemModel — the real-omega,
-    complex-k companion of :func:`temporal_branch`.
+    complex-k companion of `temporal_branch`.
 
-    One entry point; the ``numeric`` switch selects how the SAME quasilinear
-    pencil ``det(-i omega M_t + i k A + M_0) = 0`` is solved for k:
+    One entry point; the `numeric` switch selects how the SAME quasilinear
+    pencil `det(-i omega M_t + i k A + M_0) = 0` is solved for k:
 
-    * ``numeric=False`` (DEFAULT, analytic): the plane-wave ansatz stays
+    * `numeric=False` (DEFAULT, analytic): the plane-wave ansatz stays
       symbolic — solve the determinant for k(omega) in closed form, then
       evaluate over the grid.  Feasible for small systems (SWE, SME(1)).
-    * ``numeric=True``: evaluate the pencil at the base state and take k as
+    * `numeric=True`: evaluate the pencil at the base state and take k as
       the generalized eigenvalue.  The only feasible route once the symbolic
       determinant blows up (SME(N>=2)).
 
@@ -305,9 +307,9 @@ def spatial_dispersion(sm, base_state, omega, *, params=None, numeric=False,
     Returns
     -------
     Zstruct(omega, k, alpha, c, k_symbolic, residual)
-        complex ``k`` (tracked branch), spatial growth ``alpha = -Im k``,
-        phase speed ``c = Re(omega)/Re(k)``; ``k_symbolic`` is the closed
-        form (analytic only), ``residual`` the equilibrium residual
+        complex `k` (tracked branch), spatial growth `alpha = -Im k`,
+        phase speed `c = Re(omega)/Re(k)`; `k_symbolic` is the closed
+        form (analytic only), `residual` the equilibrium residual
         (numeric only).
     """
     om_arr = np.asarray(omega, complex)
@@ -329,9 +331,9 @@ def spatial_dispersion(sm, base_state, omega, *, params=None, numeric=False,
 
 
 def spatial_cutoff(branch):
-    """Spatial cutoff frequency: first ``omega`` where the spatial growth
-    ``alpha`` crosses from + to - (amplification -> decay) on the tracked
-    branch of a :func:`spatial_dispersion` result.  ``nan`` if it never
+    """Spatial cutoff frequency: first `omega` where the spatial growth
+    `alpha` crosses from + to - (amplification -> decay) on the tracked
+    branch of a `spatial_dispersion` result.  `nan` if it never
     restabilizes."""
     a = np.asarray(branch.alpha, float)
     w = np.asarray(branch.omega)
@@ -341,10 +343,10 @@ def spatial_cutoff(branch):
 
 
 def growth_cutoff(branch):
-    """First frequency where the temporal growth ``sigma`` crosses + -> -.
+    """First frequency where the temporal growth `sigma` crosses + -> -.
 
-    Takes a :func:`temporal_branch` result; returns ``omega`` at the
-    crossing, or ``nan`` if the branch never restabilizes.
+    Takes a `temporal_branch` result; returns `omega` at the
+    crossing, or `nan` if the branch never restabilizes.
     """
     s = branch.sigma
     zc = np.where((s[:-1] > 0) & (s[1:] <= 0))[0]
@@ -354,9 +356,9 @@ def growth_cutoff(branch):
 def critical_parameter(build, lo, hi, k=None, xtol=0.03):
     """Neutral value of a scalar parameter: max-over-k temporal growth = 0.
 
-    ``build(x)`` maps the parameter value to ``(mats, viscous_or_None)``
-    (typically a closure over a reusable :class:`NumericPencil`).  Root via
-    ``brentq`` on ``max_k max_modes Im omega``; ``nan`` when the bracket
+    `build(x)` maps the parameter value to `(mats, viscous_or_None)`
+    (typically a closure over a reusable `NumericPencil`).  Root via
+    `brentq` on `max_k max_modes Im omega`; `nan` when the bracket
     does not change sign.
     """
     k = np.linspace(1e-3, 4.0, 400) if k is None else np.asarray(k, float)
@@ -374,13 +376,13 @@ def critical_parameter(build, lo, hi, k=None, xtol=0.03):
 
 
 def viscous_operator(mats_or_sm, params=None, Q=None):
-    """Second-order (diffusive) pencil contribution ``V`` from a SystemModel
-    whose derivation retains the viscous terms (``diffusion_matrix`` set):
-    plane waves turn ``d_x(D d_x Q)`` into ``-k^2 D``, so ``V = -D(Q)``.
+    """Second-order (diffusive) pencil contribution `V` from a SystemModel
+    whose derivation retains the viscous terms (`diffusion_matrix` set):
+    plane waves turn `d_x(D d_x Q)` into `-k^2 D`, so `V = -D(Q)`.
 
     Models that drop the streamwise stress in the derivation (pre-REQ-176(4))
-    have no ``diffusion_matrix``; their cases must build ``V`` from closure
-    knowledge and pass it to :func:`temporal_branch` directly.
+    have no `diffusion_matrix`; their cases must build `V` from closure
+    knowledge and pass it to `temporal_branch` directly.
     """
     sm = mats_or_sm
     D = getattr(sm, "diffusion_matrix", None)

@@ -2,28 +2,28 @@
 FACE-CONSISTENT vertical velocity ω.
 
 This is the *reference* numerical solver for
-:class:`zoomy_core.model.models.sigma3d.Sigma3D`.  It realises the
+`zoomy_core.model.models.sigma3d.Sigma3D`.  It realises the
 dimensional split the model is built for:
 
-* a 2-D (here 1-D-x) BAROTROPIC system for ``h`` driven by the column mass flux,
-* a 3-D (x, ζ) BAROCLINIC system for ``mom = h·ũ`` carried as genuine layers,
+* a 2-D (here 1-D-x) BAROTROPIC system for `h` driven by the column mass flux,
+* a 3-D (x, ζ) BAROCLINIC system for `mom = h·ũ` carried as genuine layers,
 
-coupled by the contravariant vertical velocity ``ω``.
+coupled by the contravariant vertical velocity `ω`.
 
-Why a dedicated structured solver (not the generic ``HyperbolicSolver``)
+Why a dedicated structured solver (not the generic `HyperbolicSolver`)
 --------------------------------------------------------------------------
-``ω`` is *not* a local algebraic function of the cell-centre state — it is a
+`ω` is *not* a local algebraic function of the cell-centre state — it is a
 vertical integral diagnosed from continuity.  A pointwise aux fill that
 central-differences the cell-centre column integral (the previous prototype)
 de-couples ω from the FV face fluxes: ω ∝ ∂ₓ(state) then amplifies the
-grid-scale mode by 1/Δx and ``∂_ζ(mom·ω)`` feeds it back — a dispersive
+grid-scale mode by 1/Δx and `∂_ζ(mom·ω)` feeds it back — a dispersive
 instability that *worsens* under refinement (verified non-convergent on
 inviscid BBSM13/AHS26).
 
 The fix is to assemble ω from the SAME numerical horizontal mass fluxes the
 height and momentum equations use, as a running partial sum over ζ:
 
-    φ_{i+½,k}  = per-layer horizontal mass flux (Rusanov on ``mom``,
+    φ_{i+½,k}  = per-layer horizontal mass flux (Rusanov on `mom`,
                  with the SHARED column wave speed a_{i+½})
     M_{i+½}    = Σ_k φ_{i+½,k} Δζ   (== the Rusanov height flux — telescopes)
     G_{i,k+½}  = G_{i,k-½} − Δζ·( ∂_t h_i + (φ_{i+½,k} − φ_{i-½,k})/Δx )   ,  G_{i,-½}=0
@@ -34,16 +34,16 @@ Two exact discrete properties this gives, which the central difference did not:
 1.  **ω(0)=ω(1)=0 to machine precision** — because Σ_k φ Δζ = M *by
     construction*, the top partial sum telescopes to 0 on every grid.
 2.  **discretely divergence-free ω** (DGCL / freestream preservation) — a
-    uniform ``mom`` is preserved by the vertical advection, and the ω↔mom loop
+    uniform `mom` is preserved by the vertical advection, and the ω↔mom loop
     inherits the FV upwind dissipation instead of central anti-diffusion.
 
-Result: ``|ω|max`` stays bounded under refinement and the error decays at
+Result: `|ω|max` stays bounded under refinement and the error decays at
 O(Δx) at the standard CFL, for all times (verified on BBSM13/AHS26).
 
-Scope (v1): one horizontal direction (``dimension=2`` ⇒ coords (t,x,ζ)),
+Scope (v1): one horizontal direction (`dimension=2` ⇒ coords (t,x,ζ)),
 structured grid, Rusanov horizontal flux, explicit RK1/RK2.  Handles the
 inviscid case and the viscous + Navier-slip / stress-free closures.  Horizontal
-BCs: ``Extrapolation`` (transmissive), ``Wall`` (reflective), ``Periodic``.
+BCs: `Extrapolation` (transmissive), `Wall` (reflective), `Periodic`.
 """
 from __future__ import annotations
 
@@ -58,9 +58,9 @@ class Sigma3DSplitSolver:
     nx, ny : int
         Horizontal cells and vertical (ζ) layers.
     domain : (x0, x1, z0, z1)
-        ζ runs over ``[z0, z1]`` (normally 0..1); only its extent is used.
+        ζ runs over `[z0, z1]` (normally 0..1); only its extent is used.
     cfl : float
-        Advective CFL on ``max(|u| + √(gh))``.
+        Advective CFL on `max(|u| + √(gh))`.
     rk : {1, 2}
         Forward-Euler (1) or SSP-RK2 / Heun (2).
     """
@@ -75,7 +75,7 @@ class Sigma3DSplitSolver:
     # ------------------------------------------------------------------ params
     @staticmethod
     def _params(model):
-        """Resolve the physical parameters exactly like ``derive_model``."""
+        """Resolve the physical parameters exactly like `derive_model`."""
         values = {"g": 9.81, "rho": 1.0, "nu": 0.0, "lambda_s": 0.0, "e_x": 0.0}
         user = getattr(model, "parameter_values", None)
         if user is not None and hasattr(user, "items"):
@@ -118,17 +118,17 @@ class Sigma3DSplitSolver:
 
     # ------------------------------------------------------------------- solve
     def solve(self, model, ic, t_end, snapshots=None):
-        """Run to ``t_end``.
+        """Run to `t_end`.
 
-        ``ic(x, zeta)`` → ``(b, h, mom)`` per (cell-centre x, layer-centre ζ).
+        `ic(x, zeta)` → `(b, h, mom)` per (cell-centre x, layer-centre ζ).
 
-        ``snapshots`` : int | sequence | None
-            If an int ``n``, record ``n`` evenly spaced frames over ``[0, t_end]``
-            (including ``t=0``); if a sequence, record at (just after) each listed
-            time.  Captured frames land in the result under ``"frames"`` as a list
-            of ``{"t", "h", "mom", "u"}`` dicts (for animations / time series).
+        `snapshots` : int | sequence | None
+            If an int `n`, record `n` evenly spaced frames over `[0, t_end]`
+            (including `t=0`); if a sequence, record at (just after) each listed
+            time.  Captured frames land in the result under `"frames"` as a list
+            of `{"t", "h", "mom", "u"}` dicts (for animations / time series).
 
-        Returns a dict: ``x, zeta, b, h, mom, u, t`` (+ ``frames`` if requested).
+        Returns a dict: `x, zeta, b, h, mom, u, t` (+ `frames` if requested).
         """
         NX, NY = self.nx, self.ny
         x0, x1, z0, z1 = self.domain

@@ -1,6 +1,6 @@
 """Viscous wet/dry SWE with Manning friction (the Malpasset variant), derived from
-:class:`~zoomy_core.model.models.swe.SWE`. Used by the Firedrake dam-break and Malpasset cases;
-``SystemModel.from_model`` picks its operators up by name.
+`SWE`. Used by the Firedrake dam-break and Malpasset cases;
+`SystemModel.from_model` picks its operators up by name.
 """
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ __all__ = ["MalpassetSWE"]
 
 
 class MalpassetSWE(SWE):
-    """Viscous wetting/drying SWE with state ``[b, h, hu, hv]`` and aux ``[hinv]``, dissipation
-    closed by ``closures``. The pressure ``g h^2/2`` is a separate operator so the well-balanced
+    """Viscous wetting/drying SWE with state `[b, h, hu, hv]` and aux `[hinv]`, dissipation
+    closed by `closures`. The pressure `g h^2/2` is a separate operator so the well-balanced
     Riemann solvers can reconstruct it.
     """
 
@@ -43,8 +43,8 @@ class MalpassetSWE(SWE):
         """Build the model.
 
         Args:
-            eps: wet/dry depth threshold (declared as ``wet_dry_eps``).
-            h_friction_floor: depth floor in the Manning ``h^(-1/3)``.
+            eps: wet/dry depth threshold (declared as `wet_dry_eps`).
+            h_friction_floor: depth floor in the Manning `h^(-1/3)`.
             ev_gate: zero the eigenvalues of dry cells (default on).
             closures: bottom / horizontal closures; default Manning friction + eddy viscosity.
         """
@@ -93,7 +93,7 @@ class MalpassetSWE(SWE):
     # from SWE) and is unaffected.
     def _build_function_groups(self):
         """No function groups: the Firedrake path takes boundary conditions through
-        ``boundary_conditions``.
+        `boundary_conditions`.
         """
         return {}
 
@@ -104,14 +104,14 @@ class MalpassetSWE(SWE):
         return self.parameters
 
     def _primitives(self):
-        """Return the symbols ``(b, h, hu, hv, hinv)``."""
+        """Return the symbols `(b, h, hu, hv, hinv)`."""
         v = self.variables
         a = self.aux_variables
         return v.b, v.h, v.hu, v.hv, a.hinv
 
     # -- operators -------------------------------------------------------
     def flux(self):
-        """Convective momentum flux ``hu (x) u`` via the bounded ``hinv``, without pressure."""
+        """Convective momentum flux `hu (x) u` via the bounded `hinv`, without pressure."""
         _, h, hu, hv, hinv = self._primitives()
         F = sp.Matrix.zeros(4, 2)
         # mass equation
@@ -125,7 +125,7 @@ class MalpassetSWE(SWE):
         return ZArray(F)
 
     def hydrostatic_pressure(self):
-        """Hydrostatic pressure ``g h^2/2`` on the momentum diagonal, added by the positive
+        """Hydrostatic pressure `g h^2/2` on the momentum diagonal, added by the positive
         nonconservative Riemann solvers.
         """
         # ½ g h² on the momentum diagonal, as a SEPARATE operator (not
@@ -143,7 +143,7 @@ class MalpassetSWE(SWE):
         return P
 
     def nonconservative_matrix(self):
-        """Bed-slope product ``g h d_d b`` only; the pressure must not be folded in here."""
+        """Bed-slope product `g h d_d b` only; the pressure must not be folded in here."""
         # Bed-slope coupling ONLY (``g h ∂_d b``).  The pressure term must
         # NOT be encoded here as ``g h ∂_d h``: the NCP path-integral in
         # the WB Riemann solvers is evaluated over hydrostatically
@@ -158,7 +158,7 @@ class MalpassetSWE(SWE):
         return N
 
     def source(self):
-        """Bed-friction momentum sink ``rate * u_i``, with ``rate`` summed over the ``bottom``
+        """Bed-friction momentum sink `rate * u_i`, with `rate` summed over the `bottom`
         closures; zero at rest.
         """
         _, h, hu, hv, hinv = self._primitives()
@@ -169,8 +169,8 @@ class MalpassetSWE(SWE):
         return ZArray([sp.S.Zero, sp.S.Zero, rate * u, rate * w])
 
     def diffusion_matrix_explicit(self):
-        """Explicit eddy-viscosity tensor of ``div(D h grad u)`` (``D`` summed over the
-        ``horizontal`` closures), diagonal on the momentum rows plus a cross term on ``h``.
+        """Explicit eddy-viscosity tensor of `div(D h grad u)` (`D` summed over the
+        `horizontal` closures), diagonal on the momentum rows plus a cross term on `h`.
         """
         _, h, hu, hv, hinv = self._primitives()
         u, w = hu * hinv, hv * hinv
@@ -187,7 +187,7 @@ class MalpassetSWE(SWE):
 
     # -- state hygiene (SystemModel update_variables / aux slots) --------
     def update_variables(self):
-        """Cap ``hu`` and ``hv`` to ``max(h - wet_dry_eps, 0) * U_MAX``; ``b`` and ``h`` are
+        """Cap `hu` and `hv` to `max(h - wet_dry_eps, 0) * U_MAX`; `b` and `h` are
         never modified.
         """
         v = self.variables
@@ -203,13 +203,13 @@ class MalpassetSWE(SWE):
         max_hu = h_wet * u_max
 
         def cap(c):
-            """Clip ``c`` to ``[-max_hu, max_hu]``."""
+            """Clip `c` to `[-max_hu, max_hu]`."""
             return sp.Max(-max_hu, sp.Min(c, max_hu))
 
         return ZArray([v.b, h, cap(hu), cap(hv)])
 
     def update_variables_jacobian_wrt_variables(self):
-        """Zero Jacobian of ``update_variables`` (the cap is not differentiated)."""
+        """Zero Jacobian of `update_variables` (the cap is not differentiated)."""
         # The Min/Max cap would differentiate to non-serialisable
         # Piecewise/sign; this Jacobian is only used by IMEX implicit-update
         # Newton (which the Firedrake backend does not run on
@@ -218,8 +218,8 @@ class MalpassetSWE(SWE):
         return ZArray.zeros(n, n)
 
     def eigenvalues(self):
-        """Eigenvalues ``[0, un, un -/+ c]`` from the bounded ``hinv``, with an optional wet/dry
-        gate (``ev_gate``).
+        """Eigenvalues `[0, un, un -/+ c]` from the bounded `hinv`, with an optional wet/dry
+        gate (`ev_gate`).
         """
         _, h, hu, hv, hinv = self._primitives()
         p = self._parameter_symbols
@@ -244,8 +244,8 @@ class MalpassetSWE(SWE):
         return ZArray(gated)
 
     def update_aux_variables(self):
-        """Desingularised inverse depth ``hinv = sqrt(2) h / sqrt(h^4 + max(h, eps)^4)``: equals
-        ``1/h`` for ``h >= eps`` and tends to zero as ``h -> 0``.
+        """Desingularised inverse depth `hinv = sqrt(2) h / sqrt(h^4 + max(h, eps)^4)`: equals
+        `1/h` for `h >= eps` and tends to zero as `h -> 0`.
 
         References:
             Kurganov & Petrova 2007, https://doi.org/10.4310/CMS.2007.v5.n1.a6

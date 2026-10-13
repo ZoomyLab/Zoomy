@@ -55,7 +55,7 @@ class Function(param.Parameterized):
 
 class KernelRef(sp.Symbol):
     """A registered function used as a VALUE (e.g. handed to a solver block
-    that maps it over cells or faces): printed as ``<owner>.<name>``; the
+    that maps it over cells or faces): printed as `<owner>.<name>`; the
     backend resolves the name to its compiled kernel."""
 
     def __new__(cls, owner, name):
@@ -71,10 +71,10 @@ class KernelRef(sp.Symbol):
 
 
 def placeholder_call(full_name, definition, *input_args):
-    """The opaque call ``full_name(*args)`` standing for a registered
+    """The opaque call `full_name(*args)` standing for a registered
     function: one element read per entry when the definition is an array.
     The printer emits it as a call, or splices the definition back in
-    (``resolve_opaque``).  No arguments -> the definition itself."""
+    (`resolve_opaque`).  No arguments -> the definition itself."""
     if not input_args:
         return definition
     final_args = []
@@ -99,12 +99,12 @@ def placeholder_call(full_name, definition, *input_args):
 
 
 class KernelCall:
-    """An entry of a registrar's ``call`` namespace; wraps one registered
-    ``Function`` (looked up by name, so a refreshed registry is seen).
+    """An entry of a registrar's `call` namespace; wraps one registered
+    `Function` (looked up by name, so a refreshed registry is seen).
 
     * called with symbolic arguments -> the placeholder call;
     * used as a value in a sympy expression -> the printable reference
-      ``KernelRef('<owner>.<name>')`` (sympy's ``_sympy_`` hook).  This is
+      `KernelRef('<owner>.<name>')` (sympy's `_sympy_` hook).  This is
       how a solver template hands a kernel to a block."""
 
     def __init__(self, owner, functions, name, call_name=None):
@@ -125,7 +125,7 @@ class KernelCall:
 class SymbolicRegistrar:
     """SymbolicRegistrar. (class)."""
     def register_symbolic_function(self, name, method_ref, sig_struct):
-        """``functions[name]`` holds the definition, ``call[name]`` the
+        """`functions[name]` holds the definition, `call[name]` the
         placeholder caller / kernel reference."""
         self.functions[name] = Function(
             name=name, definition=method_ref(), args=sig_struct

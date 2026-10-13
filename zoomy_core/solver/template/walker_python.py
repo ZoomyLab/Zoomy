@@ -1,13 +1,13 @@
 """Python walker: template IR -> readable Python SOURCE for one backend.
 
 The walker writes a module to the generated-code cache
-(``<cache>/<hash>/<solver>_<proc>_<backend>.py``) and imports it with
-importlib.  Every emitted line ends in a comment ``[procedure:path] Kind ...``
+(`<cache>/<hash>/<solver>_<proc>_<backend>.py`) and imports it with
+importlib.  Every emitted line ends in a comment `[procedure:path] Kind ...`
 naming the template statement it lowers, so a traceback ends in a readable
 generated line that says where in the template the failure happened.
 
-Lowering goes through a backend primitive object ``B`` (injected into the
-module at load time together with the block bodies ``blocks``):
+Lowering goes through a backend primitive object `B` (injected into the
+module at load time together with the block bodies `blocks`):
 
     B.xp            array namespace (numpy / jax.numpy)
     B.jit           compile a unit (identity on numpy)
@@ -25,15 +25,15 @@ module at load time together with the block bodies ``blocks``):
 
 Two lowering modes, chosen per procedure:
 
-* ``traced``: loops and branches become ``B.while_loop`` / ``B.cond`` /
-  ``B.repeat`` over nested functions with an explicit carry -- the form a
+* `traced`: loops and branches become `B.while_loop` / `B.cond` /
+  `B.repeat` over nested functions with an explicit carry -- the form a
   tracing backend (jax) compiles.  The entry procedure is wrapped in
-  ``B.jit`` (one compiled unit).
-* ``host``: plain Python ``while`` / ``if`` / ``for``.  Used for a whole
+  `B.jit` (one compiled unit).
+* `host`: plain Python `while` / `if` / `for`.  Used for a whole
   program on a non-compiling backend (numpy), and on a compiling backend for
   every procedure that contains a STATEFUL callback (the host/compiled
   boundary rule): there, maximal runs of statements free of stateful
-  callbacks are emitted as separate ``B.jit``-compiled units, so the innermost
+  callbacks are emitted as separate `B.jit`-compiled units, so the innermost
   loop free of them is ONE compiled unit.
 """
 from __future__ import annotations
@@ -75,7 +75,7 @@ class MissingBodyError(LookupError):
 
 
 class PyExprPrinter(PythonCodePrinter):
-    """sympy -> Python source over ``xp`` (array namespace) and ``B``."""
+    """sympy -> Python source over `xp` (array namespace) and `B`."""
 
     def __init__(self, rename=lambda n: n):
         super().__init__({"fully_qualified_modules": False,
@@ -439,7 +439,7 @@ class _Emitter:
 
     def unit(self, pi, block, prefix, idxs, ind) -> list:
         """A maximal run of statements free of stateful callbacks, emitted as
-        a module-level function compiled with ``B.jit``."""
+        a module-level function compiled with `B.jit`."""
         stmts = [block[i] for i in idxs]
         first = pi.info(prefix + (idxs[0],))
         last = pi.info(prefix + (idxs[-1],))
@@ -746,8 +746,8 @@ def _write_atomic(path, text):
 class PythonWalker:
     """Emit, write and load the generated Python for one backend.
 
-    ``lowering``: ``"auto"`` (traced on compiling backends, host otherwise,
-    with the host/compiled boundary rule), ``"host"`` or ``"traced"``
+    `lowering`: `"auto"` (traced on compiling backends, host otherwise,
+    with the host/compiled boundary rule), `"host"` or `"traced"`
     (force one mode everywhere -- used to test both lowerings on numpy)."""
 
     def __init__(self, backend, *, lowering: str = "auto",
@@ -760,7 +760,7 @@ class PythonWalker:
 
     def emit(self, root: Procedure, *, registry=None, constants=None,
              flags=None, solver_name: str = "template"):
-        """Resolve, check and emit; returns ``(source, info, modes)``."""
+        """Resolve, check and emit; returns `(source, info, modes)`."""
         if flags is not None:
             root = resolve_static(root, flags)
         info = check_program(root, registry, constants)

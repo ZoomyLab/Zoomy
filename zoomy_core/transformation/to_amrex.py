@@ -28,8 +28,8 @@ class AmrexCore:
         return f"{base}({indices[0]}, 0)"
 
     def _callee(self, e):
-        """AMReX wrappers are not templated: strip the ``<T>`` from the function
-        namespace (``Model<T>::flux`` -> ``Model::flux``)."""
+        """AMReX wrappers are not templated: strip the `<T>` from the function
+        namespace (`Model<T>::flux` -> `Model::flux`)."""
         name = super()._callee(e)
         return name if getattr(self, "_is_template_class", True) else name.replace("<T>", "")
 
