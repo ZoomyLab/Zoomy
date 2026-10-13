@@ -198,7 +198,7 @@ def package_viscous(expr, nu, states, space):
             Coef = sp.cancel(term / D2); de = sp.Derivative(Q, v[1])
             out += (sp.Derivative(ViscousDiffusion(Coef * de), v[0],
                                   evaluate=False)
-                    - sp.Derivative(Coef, v[0]) * de)
+                    - sp.diff(Coef, v[0]) * de)
         else:
             out += term
     return rest + out

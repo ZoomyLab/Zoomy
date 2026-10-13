@@ -351,7 +351,7 @@ def _classification_remainder(residuals, state_funcs, t, space,
                     recon += B[i, j, d] * sp.Derivative(state_funcs[j], space[d])
                 for e in range(n_dim):
                     if A[i, j, d, e] != 0:
-                        recon += sp.Derivative(
+                        recon -= sp.Derivative(
                             A[i, j, d, e] * sp.Derivative(state_funcs[j],
                                                           space[e]),
                             space[d])

@@ -5,7 +5,7 @@
 == VAM(level=1, dimension=2) + NewtonianInPlane (REQ-176(4): retain form + live nu*q*db/dx topography couplings) ==
 class: SystemModel
 state: [Symbol('b'), Symbol('h'), Symbol('q_0'), Symbol('q_1'), Symbol('r_0'), Symbol('r_1'), Symbol('P_0'), Symbol('P_1')]
-aux_state: [Symbol('b_x'), Symbol('h_x'), Symbol('q_0_x'), Symbol('q_1_x'), Symbol('nu*q_0/h_x'), Symbol('nu*q_1/h_x'), Symbol('dbdx')]
+aux_state: [Symbol('b_x'), Symbol('h_x'), Symbol('q_0_x'), Symbol('q_1_x'), Symbol('dbdx')]
 parameters: [g, rho, nu, lambda_s, e_x]
 symbol_assumptions:
   b : {complex, extended_real, finite, hermitian, real}
@@ -20,8 +20,6 @@ symbol_assumptions:
   h_x : {complex, extended_real, finite, hermitian, real}
   q_0_x : {complex, extended_real, finite, hermitian, real}
   q_1_x : {complex, extended_real, finite, hermitian, real}
-  nu*q_0/h_x : {complex, extended_real, finite, hermitian, real}
-  nu*q_1/h_x : {complex, extended_real, finite, hermitian, real}
   dbdx : {complex, extended_real, finite, hermitian, real}
   g : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
   rho : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
@@ -67,8 +65,8 @@ nonconservative_matrix[6,3,0] = Rational(1, 3)
 nonconservative_matrix[7,0,0] = Mul(Integer(2), Pow(Symbol('h'), Integer(-1)), Symbol('q_1'))
 nonconservative_matrix[7,1,0] = Add(Mul(Pow(Symbol('h'), Integer(-1)), Symbol('q_0')), Mul(Pow(Symbol('h'), Integer(-1)), Symbol('q_1')))
 source: shape=(8, 1)
-source[2,0] = Add(Mul(Integer(4), Symbol('b_x'), Symbol('nu*q_1/h_x')), Mul(Integer(-1), Integer(8), Symbol('b_x'), Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_1_x')), Mul(Integer(16), Symbol('b_x'), Pow(Symbol('h'), Integer(-2)), Symbol('h_x'), Symbol('nu'), Symbol('q_1')), Mul(Symbol('e_x'), Symbol('g'), Symbol('h')), Mul(Integer(2), Symbol('h_x'), Symbol('nu*q_0/h_x')), Mul(Integer(2), Symbol('h_x'), Symbol('nu*q_1/h_x')), Mul(Integer(-1), Integer(4), Pow(Symbol('h'), Integer(-1)), Symbol('h_x'), Symbol('nu'), Symbol('q_0_x')), Mul(Integer(-1), Integer(4), Pow(Symbol('h'), Integer(-1)), Symbol('h_x'), Symbol('nu'), Symbol('q_1_x')), Mul(Integer(-1), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_0'), Pow(Symbol('rho'), Integer(-1))), Mul(Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_1'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(4), Pow(Symbol('h'), Integer(-2)), Pow(Symbol('h_x'), Integer(2)), Symbol('nu'), Symbol('q_0')), Mul(Integer(8), Pow(Symbol('h'), Integer(-2)), Pow(Symbol('h_x'), Integer(2)), Symbol('nu'), Symbol('q_1')))
-source[3,0] = Add(Mul(Integer(4), Symbol('h_x'), Symbol('nu*q_1/h_x')), Mul(Integer(-1), Integer(8), Pow(Symbol('h'), Integer(-1)), Symbol('h_x'), Symbol('nu'), Symbol('q_1_x')), Mul(Integer(3), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_0'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(3), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_1'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(12), Pow(Symbol('h'), Integer(-2)), Pow(Symbol('h_x'), Integer(2)), Symbol('nu'), Symbol('q_1')), Mul(Integer(-1), Integer(12), Pow(Symbol('h'), Integer(-2)), Symbol('nu'), Symbol('q_1')))
+source[2,0] = Add(Mul(Integer(-1), Integer(4), Symbol('b_x'), Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_1_x')), Mul(Integer(12), Symbol('b_x'), Pow(Symbol('h'), Integer(-2)), Symbol('h_x'), Symbol('nu'), Symbol('q_1')), Mul(Symbol('e_x'), Symbol('g'), Symbol('h')), Mul(Integer(-1), Integer(2), Pow(Symbol('h'), Integer(-1)), Symbol('h_x'), Symbol('nu'), Symbol('q_0_x')), Mul(Integer(-1), Integer(2), Pow(Symbol('h'), Integer(-1)), Symbol('h_x'), Symbol('nu'), Symbol('q_1_x')), Mul(Integer(-1), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_0'), Pow(Symbol('rho'), Integer(-1))), Mul(Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_1'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(2), Pow(Symbol('h'), Integer(-2)), Pow(Symbol('h_x'), Integer(2)), Symbol('nu'), Symbol('q_0')), Mul(Integer(6), Pow(Symbol('h'), Integer(-2)), Pow(Symbol('h_x'), Integer(2)), Symbol('nu'), Symbol('q_1')))
+source[3,0] = Add(Mul(Integer(-1), Integer(4), Pow(Symbol('h'), Integer(-1)), Symbol('h_x'), Symbol('nu'), Symbol('q_1_x')), Mul(Integer(3), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_0'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(3), Pow(Symbol('h'), Integer(-1)), Symbol('lambda_s'), Symbol('q_1'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(8), Pow(Symbol('h'), Integer(-2)), Pow(Symbol('h_x'), Integer(2)), Symbol('nu'), Symbol('q_1')), Mul(Integer(-1), Integer(12), Pow(Symbol('h'), Integer(-2)), Symbol('nu'), Symbol('q_1')))
 source[4,0] = Mul(Integer(-1), Integer(2), Symbol('P_1'), Pow(Symbol('rho'), Integer(-1)))
 source[5,0] = Add(Mul(Integer(6), Symbol('P_0'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(6), Symbol('P_1'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Rational(1, 5), Symbol('b_x'), Pow(Symbol('h'), Integer(-1)), Symbol('q_0'), Symbol('q_1_x')), Mul(Rational(1, 5), Symbol('b_x'), Pow(Symbol('h'), Integer(-1)), Symbol('q_1'), Symbol('q_1_x')))
 source[6,0] = Mul(Integer(2), Pow(Symbol('h'), Integer(-1)), Symbol('r_0'))
@@ -121,6 +119,4 @@ aux_registry:
   {atom=Derivative(Symbol('h'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('h_x'), kind='derivative', multi_index=(1,), name='h_x', row=1, state_index=1, target_kind='state', target_name='h'}
   {atom=Derivative(Symbol('q_0'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('q_0_x'), kind='derivative', multi_index=(1,), name='q_0_x', row=2, state_index=2, target_kind='state', target_name='q_0'}
   {atom=Derivative(Symbol('q_1'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('q_1_x'), kind='derivative', multi_index=(1,), name='q_1_x', row=3, state_index=3, target_kind='state', target_name='q_1'}
-  {atom=Derivative(Mul(Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_0')), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('nu*q_0/h_x'), kind='derivative', multi_index=(1,), name='nu*q_0/h_x', row=4, target_kind='unknown', target_name='nu*q_0/h'}
-  {atom=Derivative(Mul(Pow(Symbol('h'), Integer(-1)), Symbol('nu'), Symbol('q_1')), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('nu*q_1/h_x'), kind='derivative', multi_index=(1,), name='nu*q_1/h_x', row=5, target_kind='unknown', target_name='nu*q_1/h'}
-  {atom=None, aux_symbol=Symbol('dbdx'), kind='derivative', multi_index=(1,), name='dbdx', row=6, state_index=0, target_kind='state', target_name='b'}
+  {atom=None, aux_symbol=Symbol('dbdx'), kind='derivative', multi_index=(1,), name='dbdx', row=4, state_index=0, target_kind='state', target_name='b'}
