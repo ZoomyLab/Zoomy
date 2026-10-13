@@ -1,34 +1,36 @@
 """ChorinSplitVAMSolverJax — JAX port of the NumPy ChorinSplitVAMSolver.
 
-Three-step Chorin projection split for the VAM(1,2,2) chain::
+Three-step Chorin projection split for the VAM(1,2,2) chain:
 
+```
     hyperbolic (Euler) → pressure → corrector
+```
 
-wrapped, when ``time_order == 2``, in the OUTER two-stage SSP-RK2 of
+wrapped, when `time_order == 2`, in the OUTER two-stage SSP-RK2 of
 Escalante et al. 2024 (JCP 504:112882, "Time stepping"): the full
 projection-correction cycle runs ONCE PER STAGE, the Poisson system is
 re-solved in each stage (P is stage-indexed), and the step closes with
-``U^{n+1} = ½ U^(0) + ½ U^(2)``.  The per-stage hyperbolic update is a single
+`U^{n+1} = ½ U^(0) + ½ U^(2)`.  The per-stage hyperbolic update is a single
 Euler step in time (eq. 11) — second order comes from the SPATIAL
 reconstruction, not from an inner RK.
 
-Each substep is driven by its own ``JaxRuntime`` over the corresponding
-sub-SystemModel (``sm_pred`` / ``sm_press`` / ``sm_corr``).  The
+Each substep is driven by its own `JaxRuntime` over the corresponding
+sub-SystemModel (`sm_pred` / `sm_press` / `sm_corr`).  The
 pressure step is matrix-free Newton-GMRES via
-:func:`jax.scipy.sparse.linalg.gmres`; the corrector is one
-``state_update`` call on ``sm_corr``'s runtime.
+`jax.scipy.sparse.linalg.gmres`; the corrector is one
+`state_update` call on `sm_corr`'s runtime.
 
 Reuses the pure-symbolic helpers from the NumPy implementation
-(``_pad_to_square``, ``_substitute_dt``) — those are backend-agnostic.
+(`_pad_to_square`, `_substitute_dt`) — those are backend-agnostic.
 
 Status
 ------
 - Predictor: JAX HyperbolicSolver flux loop (symbolic Riemann via
-  ``JaxRuntime``).
-- Pressure: matrix-free GMRES (``jax.scipy.sparse.linalg.gmres``).
-- Corrector: lambdified ``state_update`` from ``sm_corr``.
+  `JaxRuntime`).
+- Pressure: matrix-free GMRES (`jax.scipy.sparse.linalg.gmres`).
+- Corrector: lambdified `state_update` from `sm_corr`.
 - Aux pools: per-sub-system, refreshed via LSQ stencils on the mesh
-  (mirrors NumPy ``update_aux_variables``).
+  (mirrors NumPy `update_aux_variables`).
 """
 from __future__ import annotations
 
@@ -73,8 +75,8 @@ def _elliptic_accept(c_elliptic_tol: float) -> float:
     """Residual above which the elliptic stage is declared FAILED.
 
     MIRRORS the numpy reference's gate
-    (``solver_chorin_vam_numpy.py``: ``max(1e-6, 10.0 * c_elliptic_tol)``).
-    The solve TARGETS ``c_elliptic_tol``; it is only declared BROKEN an order
+    (`solver_chorin_vam_numpy.py`: `max(1e-6, 10.0 * c_elliptic_tol)`).
+    The solve TARGETS `c_elliptic_tol`; it is only declared BROKEN an order
     of magnitude past that, with a floor — because this operator is
     unpreconditioned with an O(1/h²) condition number, so in float64 it cannot
     reliably reach 1e-10 and a gate sitting exactly AT the target turns
@@ -84,9 +86,9 @@ def _elliptic_accept(c_elliptic_tol: float) -> float:
 
     ⚠ DIVERGENCE FLAG, deliberately surfaced rather than buried: this
     expression is a LITERAL in core as well.  It belongs in the EMITTED set
-    beside ``c_elliptic_tol`` / ``c_elliptic_restart`` (mandate 6a) and this is
-    the second copy of it.  ``zoomy_core`` is another steward's tree, so the
-    fix is a core-side ``c_elliptic_accept`` with both backends reading it —
+    beside `c_elliptic_tol` / `c_elliptic_restart` (mandate 6a) and this is
+    the second copy of it.  `zoomy_core` is another steward's tree, so the
+    fix is a core-side `c_elliptic_accept` with both backends reading it —
     filed, not silently forked."""
     return max(1e-6, 10.0 * float(c_elliptic_tol))
 
@@ -103,7 +105,7 @@ class EllipticSolveError(RuntimeError):
 
 
 class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
-    """JAX port of ``ChorinSplitVAMSolver``.
+    """JAX port of `ChorinSplitVAMSolver`.
 
     Parameters
     ----------
@@ -115,23 +117,23 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
     pressure_tol : float
     pressure_maxit : int
     pressure_restart : int, optional
-        GMRES restart; ``None`` ⇒ resolved from the block size via the emitted
-        ``elliptic_constants``.
+        GMRES restart; `None` ⇒ resolved from the block size via the emitted
+        `elliptic_constants`.
     time_order : int
         Number of OUTER SSP-RK2 stages, each running a full
         hyperbolic-Euler → Poisson → correction cycle.  1 = one cycle;
         2 = the paper's two-stage scheme.
     cfl : float, optional
-        Adaptive Chorin CFL (see :meth:`compute_timestep`); ``None`` ⇒ the
-        ``compute_dt`` strategy.
+        Adaptive Chorin CFL (see `compute_timestep`); `None` ⇒ the
+        `compute_dt` strategy.
 
     Driving the march
     -----------------
-    The solver runs on the base :class:`HyperbolicSolverJax` time loop:
-    ``Q0 = setup_simulation(mesh)``, inject the initial state into ``Q0``,
-    then ``run_simulation(Q0, parameters=..., time0=...)`` / ``run_observed``
-    / ``solve(mesh)``.  ``ad_mode`` is honoured there (forward ``jvp`` or
-    reverse ``grad``).  :meth:`run_jit_steps` is the forward-only fixed
+    The solver runs on the base `HyperbolicSolverJax` time loop:
+    `Q0 = setup_simulation(mesh)`, inject the initial state into `Q0`,
+    then `run_simulation(Q0, parameters=..., time0=...)` / `run_observed`
+    / `solve(mesh)`.  `ad_mode` is honoured there (forward `jvp` or
+    reverse `grad`).  `run_jit_steps` is the forward-only fixed
     step-count fast path.
     """
 
@@ -246,12 +248,12 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
 
     @param.depends("cfl", watch=True)
     def _drop_compiled_loops(self):
-        """``cfl`` is read while TRACING the time loop; a changed value must
+        """`cfl` is read while TRACING the time loop; a changed value must
         not reuse a loop compiled with the old one."""
         self._time_loop_cache = {}
 
     def _detect_dt_symbol(self) -> Optional[sp.Symbol]:
-        """Find ``dt`` symbol in ``sm_press`` / ``sm_corr`` (same logic
+        """Find `dt` symbol in `sm_press` / `sm_corr` (same logic
         as NumPy ChorinSplitVAMSolver)."""
         candidates = set()
         for sm in (self.sm_press, self.sm_corr):
@@ -279,18 +281,18 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
 
     def setup_simulation(self, mesh):
         """Build the predictor (base solver) and the pressure / corrector
-        runtimes on ``mesh``.  Returns the initial state ``Q`` (inner cells).
+        runtimes on `mesh`.  Returns the initial state `Q` (inner cells).
 
         The sub-models were bound at construction, so unlike the base
-        ``setup_simulation(mesh, model)`` there is no model argument.  The
+        `setup_simulation(mesh, model)` there is no model argument.  The
         split sub-models carry no initial condition: the caller writes its
-        initial state into the returned ``Q`` and hands it to
-        :meth:`run_simulation` (``Qaux=None`` rebuilds the predictor aux from
-        it) or :meth:`run_jit_steps`.
+        initial state into the returned `Q` and hands it to
+        `run_simulation` (`Qaux=None` rebuilds the predictor aux from
+        it) or `run_jit_steps`.
 
-        Also stores the run_jit_steps entry handles ``_sim_Q``,
-        ``_sim_Qaux``, ``Qaux_press``, ``Qaux_corr`` (refresh them after
-        writing ``_sim_Q`` with :meth:`update_aux_variables`)."""
+        Also stores the run_jit_steps entry handles `_sim_Q`,
+        `_sim_Qaux`, `Qaux_press`, `Qaux_corr` (refresh them after
+        writing `_sim_Q` with `update_aux_variables`)."""
         t0 = _time.time()
         self._run_step_cache = {}
 
@@ -500,11 +502,11 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         return Q
 
     def solve(self, mesh, write_output=True, parameters=None):
-        """``setup_simulation(mesh)`` then :meth:`run_simulation` from the
-        state it returns.  Returns the final ``(Q, Qaux)``.  The split
+        """`setup_simulation(mesh)` then `run_simulation` from the
+        state it returns.  Returns the final `(Q, Qaux)`.  The split
         sub-models carry no initial condition, so this marches the setup state;
         a driver with an initial condition writes it into the
-        ``setup_simulation`` state and calls :meth:`run_simulation`."""
+        `setup_simulation` state and calls `run_simulation`."""
         Q = self.setup_simulation(mesh)
         return self.run_simulation(Q, write_output=write_output,
                                    parameters=parameters)
@@ -516,9 +518,9 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
     # ── Aux refresh ───────────────────────────────────────────────
 
     def _param_gather_index(self, rt):
-        """Index array mapping ``rt``'s parameter vector onto
-        ``concat(pred_parameters, [dt])``, by name.  A sub-system parameter
-        that is neither a predictor parameter nor ``dt`` cannot be fed from
+        """Index array mapping `rt`'s parameter vector onto
+        `concat(pred_parameters, [dt])`, by name.  A sub-system parameter
+        that is neither a predictor parameter nor `dt` cannot be fed from
         the predictor vector and is refused."""
         pred = list(self._rt_model.parameter_names)
         idx = []
@@ -538,17 +540,17 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
     @staticmethod
     def _sub_parameters(src, parameters, dt):
         """The pressure / corrector parameter vector: ``concat(parameters,
-        [dt])[src]``.  Traceable in ``parameters`` and ``dt``."""
+        [dt])[src]``.  Traceable in `parameters` and `dt`."""
         p = jnp.asarray(parameters)
         dt = jnp.reshape(jnp.asarray(dt, dtype=p.dtype), (1,))
         return jnp.concatenate([p, dt])[src]
 
     def _runtime_for_sm(self, sm):
-        """The :class:`JaxRuntime` that lambdified ``sm`` (REQ-151 DEFECT D).
+        """The `JaxRuntime` that lambdified `sm` (REQ-151 DEFECT D).
 
         The pressure/corrector sub-systems get their own runtimes in
-        ``setup_simulation``; the predictor rides the parent ``HyperbolicSolver``
-        runtime (``_rt_model``, built on ``SM_pred``)."""
+        `setup_simulation`; the predictor rides the parent `HyperbolicSolver`
+        runtime (`_rt_model`, built on `SM_pred`)."""
         if sm is getattr(self, "sm_press", None):
             return getattr(self, "rt_press", None)
         if sm is getattr(self, "sm_corr", None):
@@ -556,31 +558,31 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         return getattr(self, "_rt_model", None)
 
     def _refresh_aux_for_sm(self, Qaux, sm, Q, parameters):
-        """Refresh ``sm``'s aux pool: the ALGEBRAIC ``update_aux_variables``
+        """Refresh `sm`'s aux pool: the ALGEBRAIC `update_aux_variables`
         rule first, then every state-derivative entry — mirroring the base
-        :meth:`HyperbolicSolver.update_qaux` order.  Pure function — returns a
-        new Qaux array.  Safe inside ``jax.jit`` / ``jax.lax.scan``.
-        ``parameters`` is ``sm``'s OWN parameter vector (the predictor vector
-        for ``sm_pred``, :meth:`_sub_parameters` for the other two).
+        `HyperbolicSolver.update_qaux` order.  Pure function — returns a
+        new Qaux array.  Safe inside `jax.jit` / `jax.lax.scan`.
+        `parameters` is `sm`'s OWN parameter vector (the predictor vector
+        for `sm_pred`, `_sub_parameters` for the other two).
 
         REQ-151 DEFECT D: this used to walk ONLY the derivative kinds, so a
-        plain-Symbol aux (``hinv = KP(h)``, which every velocity scales by:
-        ``u = hu·hinv``) was NEVER evaluated — it sat at its init value 0 and
+        plain-Symbol aux (`hinv = KP(h)`, which every velocity scales by:
+        `u = hu·hinv`) was NEVER evaluated — it sat at its init value 0 and
         silently zeroed every velocity.  That is a wrong-answer bug, not a
-        crash.  ``zoomy_core@676ed2d`` fixed the SYMBOLIC half (``hinv`` now
-        survives into ``SM_pred``/``SM_press`` WITH its update rule); this is
-        the solver-side half.  The rule is a FULL-LENGTH ``(n_aux, ·)`` vector
+        crash.  `zoomy_core@676ed2d` fixed the SYMBOLIC half (`hinv` now
+        survives into `SM_pred`/`SM_press` WITH its update rule); this is
+        the solver-side half.  The rule is a FULL-LENGTH `(n_aux, ·)` vector
         whose non-algebraic rows pass their own aux symbol through, so applying
         it before the derivative walk is safe (the walk then refreshes the
         derivative rows).
 
-        Walks BOTH registries: since the splitter's ``_partition_pressure_aux``
+        Walks BOTH registries: since the splitter's `_partition_pressure_aux`
         (zoomy_core@44bdfca, REQ-94) the pressure sub-model keeps only the
-        LIVE pressure-derivative entries in ``aux_registry`` and moves the
-        frozen predictor-state derivatives (``h_x``, ``q_k_x``, ``b_x`` …) to
-        ``aux_input_registry`` — the documented contract is that a runtime
+        LIVE pressure-derivative entries in `aux_registry` and moves the
+        frozen predictor-state derivatives (`h_x`, `q_k_x`, `b_x` …) to
+        `aux_input_registry` — the documented contract is that a runtime
         with a private pressure pool fills it from both, once per stage.
-        Walking only ``aux_registry`` left every input derivative at 0, so the
+        Walking only `aux_registry` left every input derivative at 0, so the
         elliptic RHS was IDENTICALLY zero and P (hence r) never activated on
         flat beds (task 0039: confluence VAM inert → blow-up)."""
         # (1) ALGEBRAIC aux leg (REQ-151 DEFECT D) — e.g. the KP-desingularized
@@ -604,8 +606,8 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
             registry=reg or None)
 
     def update_aux_variables(self):
-        """Host-side: rebuild the run_jit_steps entry pools ``_sim_Qaux``,
-        ``Qaux_press``, ``Qaux_corr`` from ``_sim_Q`` (after a driver wrote
+        """Host-side: rebuild the run_jit_steps entry pools `_sim_Qaux`,
+        `Qaux_press`, `Qaux_corr` from `_sim_Q` (after a driver wrote
         its initial state there).  The traced march never reads them."""
         p = self._rt_parameters
         self._sim_Qaux = self._qaux_from_q(self._sim_Q, p)
@@ -617,9 +619,9 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
             self._sub_parameters(self._corr_param_src, p, 0.0))
 
     def _qaux_from_q(self, Q, parameters):
-        """The predictor aux pool of ``Q``: the Chorin refresh of the aux
-        initial condition stored at setup.  Traceable in ``Q`` and
-        ``parameters``; used by ``run_simulation(Q0, Qaux=None)``."""
+        """The predictor aux pool of `Q`: the Chorin refresh of the aux
+        initial condition stored at setup.  Traceable in `Q` and
+        `parameters`; used by `run_simulation(Q0, Qaux=None)`."""
         return self._refresh_aux_for_sm(
             self._rt_qaux_ic, self.sm_pred, Q, parameters)
 
@@ -629,8 +631,8 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         """The stage's HYPERBOLIC substep: one path-conservative flux update
         advanced by a SINGLE EULER step in time, plus the algebraic source.
 
-        This is the parent's :meth:`HyperbolicSolverJax.step` with
-        ``time_euler=True``: same reconstruction (order ≥ 2 stays order ≥ 2 in
+        This is the parent's `HyperbolicSolverJax.step` with
+        `time_euler=True`: same reconstruction (order ≥ 2 stays order ≥ 2 in
         SPACE), same MOOD, same halo wrap, same RK1 source — only the time
         advance is Euler instead of the parent's internal Heun.
 
@@ -638,7 +640,7 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         two-stage SSP-RK2 on the OUTSIDE and runs the full projection-correction
         cycle once per stage; the per-stage hyperbolic update is a single Euler
         step (eq. 11), second order coming from the SPATIAL reconstruction.
-        Calling the parent ``step`` here instead nests the RK2 INSIDE the
+        Calling the parent `step` here instead nests the RK2 INSIDE the
         predictor — the exact inverse of the prescribed nesting — which is what
         this solver did before, and it makes the pressure projection a
         once-per-step correction of a state that already took two flux stages
@@ -654,21 +656,21 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
 
     def chorin_stage(self, dt, time, Q, Qaux_pred, parameters):
         """ONE projection-correction stage: hyperbolic Euler → Poisson →
-        correction.  Pure: ``(Q, Qaux_pred)`` in, ``(Q, Qaux_pred)`` out,
-        ``parameters`` = the predictor parameter vector (the pressure and
-        corrector vectors are built from it + ``dt`` by
-        :meth:`_sub_parameters`).
+        correction.  Pure: `(Q, Qaux_pred)` in, `(Q, Qaux_pred)` out,
+        `parameters` = the predictor parameter vector (the pressure and
+        corrector vectors are built from it + `dt` by
+        `_sub_parameters`).
 
-        This is the paper's per-stage cycle.  ``chorin_cycle`` wraps
-        ``time_order`` of these into the outer SSP-RK2.
+        This is the paper's per-stage cycle.  `chorin_cycle` wraps
+        `time_order` of these into the outer SSP-RK2.
 
-        The predictor pool is re-derived from the INCOMING ``Q`` before the
+        The predictor pool is re-derived from the INCOMING `Q` before the
         predictor runs.  That is not belt-and-braces: the predictor consumes
-        ``Qaux_pred`` (``b_x``, ``h_x``, ``q_Uk_x``, ``hinv`` …) as its FIRST
+        `Qaux_pred` (`b_x`, `h_x`, `q_Uk_x`, `hinv` …) as its FIRST
         act, so whatever the caller hands in is what the predictor integrates
         with.  A driver that captured the setup pool once and passed the same
         handle back every step (the shape
-        ``thesis/cases/escalante_vam_bump/run_jax.py`` had) pinned the
+        `thesis/cases/escalante_vam_bump/run_jax.py` had) pinned the
         predictor's derivatives at their step-0 values for the whole march.
         Measured consequence on the Escalante bump, 60 cells, CFL 0.4: the
         elliptic RHS goes inconsistent, GMRES stalls at rel_resid 7.9e-06, and
@@ -676,9 +678,9 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         staleness grows with step COUNT, not with dt.  For a correctly-threaded
         caller the refresh is idempotent, so it changes no answer.
 
-        The pressure and corrector pools are rebuilt from ``Q`` right before
+        The pressure and corrector pools are rebuilt from `Q` right before
         their substep (refresh of the all-zero setup templates — see
-        ``setup_simulation``), so they are not carried between steps."""
+        `setup_simulation`), so they are not carried between steps."""
         p_press = self._sub_parameters(self._press_param_src, parameters, dt)
         p_corr = self._sub_parameters(self._corr_param_src, parameters, dt)
         Qaux_pred = self._refresh_aux_for_sm(
@@ -702,28 +704,30 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
 
     def chorin_cycle(self, dt, time, Q, Qaux_pred, parameters):
         """One full TIME STEP: the outer SSP-RK2 (Shu–Osher) over
-        :meth:`chorin_stage`.  Pure: ``(Q, Qaux_pred)`` in, ``(Q,
+        `chorin_stage`.  Pure: `(Q, Qaux_pred)` in, ``(Q,
         Qaux_pred)`` out.
 
-        ``time_order == 1``  ⇒  U^{n+1} = S(U^n), one stage.
+        `time_order == 1`  ⇒  U^{n+1} = S(U^n), one stage.
 
-        ``time_order == 2``  ⇒  the paper's scheme (Escalante et al. 2024,
-        JCP 504:112882, "Time stepping")::
+        `time_order == 2`  ⇒  the paper's scheme (Escalante et al. 2024,
+        JCP 504:112882, "Time stepping"):
 
+        ```
             U^(1)   = S(U^(0), t)          # hyp Euler → Poisson → correct
             U^(2)   = S(U^(1), t + dt)     # the FULL cycle again; P is
                                            # stage-indexed, re-solved here
             U^{n+1} = ½ U^(0) + ½ U^(2)
+        ```
 
         The RK2 used to sit INSIDE the predictor (the parent's
-        ``_explicit_hyperbolic_step``) while the projection ran once per step —
+        `_explicit_hyperbolic_step`) while the projection ran once per step —
         the inverse of the prescribed nesting.
 
         The Shu–Osher average is taken on the STATE.  The predictor pool is
         then RE-DERIVED from the averaged state rather than averaged: the
         derivative rows are exact linear functionals of Q so averaging would
-        agree, but the ALGEBRAIC rows (the KP-desingularized ``hinv`` above
-        all) are nonlinear in Q and an averaged ``hinv`` is not ``hinv`` of the
+        agree, but the ALGEBRAIC rows (the KP-desingularized `hinv` above
+        all) are nonlinear in Q and an averaged `hinv` is not `hinv` of the
         averaged h."""
         if int(self.time_order) == 1:
             return self.chorin_stage(dt, time, Q, Qaux_pred, parameters)
@@ -740,12 +744,12 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
     # ── base time-loop contract ───────────────────────────────────
 
     def step(self, dt, time, Q, Qaux, parameters=None, coupled=None):
-        """One Chorin time step (:meth:`chorin_cycle`), the base ``step``
-        contract: ``Qaux`` is the predictor aux pool, ``parameters`` the
-        predictor parameter vector (``None`` ⇒ :attr:`parameters`).  Returns
-        the new ``Q``; :meth:`post_step` rebuilds the pool.  Pure — nothing on
-        ``self`` changes.  Interface coupling is not implemented for the split
-        solver; ``coupled`` must be ``None``."""
+        """One Chorin time step (`chorin_cycle`), the base `step`
+        contract: `Qaux` is the predictor aux pool, `parameters` the
+        predictor parameter vector (`None` ⇒ `parameters`).  Returns
+        the new `Q`; `post_step` rebuilds the pool.  Pure — nothing on
+        `self` changes.  Interface coupling is not implemented for the split
+        solver; `coupled` must be `None`."""
         if coupled is not None:
             raise NotImplementedError(
                 "ChorinSplitVAMSolverJax.step: interface coupling (coupled=...) "
@@ -755,26 +759,28 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         return Q
 
     def post_step(self, time, dt, Q, Qold, Qaux, parameters=None):
-        """The predictor aux pool of the stepped ``Q``.  Returns ``(Q,
-        Qaux)``.  The predictor's ``update_variables`` is NOT applied: the
+        """The predictor aux pool of the stepped `Q`.  Returns ``(Q,
+        Qaux)``.  The predictor's `update_variables` is NOT applied: the
         Chorin cycle never applied it (the corrector owns the projected rows)."""
         parameters = self._rt_parameters if parameters is None else parameters
         return Q, self._refresh_aux_for_sm(Qaux, self.sm_pred, Q, parameters)
 
     def _cfl_dt(self, Q, Qaux, parameters, cfl, dt_cap):
         """The Chorin local-CFL step, the SAME law as
-        ``zoomy_core.fvm.timestepping.adaptive`` with the mesh dimension and
-        ``degree = order - 1``::
+        `zoomy_core.fvm.timestepping.adaptive` with the mesh dimension and
+        `degree = order - 1`:
 
+        ```
             dt = min( min_f cfl·2·r_f / (dim·(2·deg+1)·|λ|_f), dt_cap )
+        ```
 
         paired per face, so each face is limited by its OWN size and wave
         speed.  Wave-free faces (|λ| = 0) impose no limit; when every face is
-        wave-free the step is ``dt_cap`` (REQ-190).  The division runs on a
+        wave-free the step is `dt_cap` (REQ-190).  The division runs on a
         safe denominator (|λ| → 1 on wave-free faces) so the reverse-mode
         cotangent of the discarded branch is 0, not 0·inf = NaN.
 
-        A NaN wave speed propagates into dt: ``nan > 0`` is False, so it would
+        A NaN wave speed propagates into dt: `nan > 0` is False, so it would
         otherwise be read as wave-free, replaced by +inf, drop out of the min,
         and the step would SNAP BACK to dt_max — masking a blow-up and then
         accelerating it (observed: t frozen at 0.270 for 800 steps, then
@@ -791,8 +797,8 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         return jnp.minimum(jnp.min(local), dt_cap)
 
     def compute_timestep(self, Q, Qaux, parameters=None):
-        """``cfl`` set ⇒ :meth:`_cfl_dt` capped by the NSM ``dt_max``;
-        ``cfl=None`` ⇒ the ``compute_dt`` strategy, as in the base solver."""
+        """`cfl` set ⇒ `_cfl_dt` capped by the NSM `dt_max`;
+        `cfl=None` ⇒ the `compute_dt` strategy, as in the base solver."""
         if self.cfl is None:
             return super().compute_timestep(Q, Qaux, parameters)
         parameters = self._rt_parameters if parameters is None else parameters
@@ -802,26 +808,26 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
     def run_jit_steps(self, dt, n_steps, Q, Qaux_pred=None, Qaux_press=None,
                       Qaux_corr=None, t_start=0.0, cfl=None, dt_max=None,
                       parameters=None):
-        """Forward-only fast path: exactly ``n_steps`` steps
-        (:meth:`step` → :meth:`post_step`) in one jitted ``jax.lax.scan``,
-        no ``time_end`` clamp.  Returns ``(Q, Qaux_pred, Qaux_press,
+        """Forward-only fast path: exactly `n_steps` steps
+        (`step` → `post_step`) in one jitted `jax.lax.scan`,
+        no `time_end` clamp.  Returns ``(Q, Qaux_pred, Qaux_press,
         Qaux_corr, time)``; the pressure / corrector pools are those of the
-        final ``Q``.  ``Qaux_pred=None`` rebuilds the predictor pool from
-        ``Q``; the pressure / corrector pools passed in only fix their shape
-        (``None`` ⇒ the setup templates), since every step rebuilds them.
+        final `Q`.  `Qaux_pred=None` rebuilds the predictor pool from
+        `Q`; the pressure / corrector pools passed in only fix their shape
+        (`None` ⇒ the setup templates), since every step rebuilds them.
 
         The compiled scan is **cached per (n_steps, adaptive)** on the solver
-        and reused across calls; ``dt``, ``cfl``, ``dt_max``, ``t_start`` and
-        ``parameters`` are traced, so a chunked driver pays the compile ONCE,
+        and reused across calls; `dt`, `cfl`, `dt_max`, `t_start` and
+        `parameters` are traced, so a chunked driver pays the compile ONCE,
         not every chunk (REQ-122).
 
-        ``cfl`` given ⇒ **adaptive**: ``dt`` is recomputed from the state every
-        step with :meth:`_cfl_dt` (the law ``run_simulation`` uses with the
-        ``cfl`` param), capped by ``dt_max`` (default ``dt``).  ``cfl=None`` ⇒
-        the constant step ``dt``.
+        `cfl` given ⇒ **adaptive**: `dt` is recomputed from the state every
+        step with `_cfl_dt` (the law `run_simulation` uses with the
+        `cfl` param), capped by `dt_max` (default `dt`).  `cfl=None` ⇒
+        the constant step `dt`.
 
-        ``ad_mode`` must be ``"forward"``; reverse mode is
-        :meth:`run_simulation`'s."""
+        `ad_mode` must be `"forward"`; reverse mode is
+        `run_simulation`'s."""
         self._require_forward_ad("jax.lax.scan (run_jit_steps)")
         if parameters is None:
             parameters = self._rt_parameters
@@ -873,13 +879,13 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
 
     def _step_pressure_pure(self, Q, Qaux_press, dt, time, parameters):
         """Pure-functional pressure step: matrix-free GMRES on the
-        elliptic block.  ``parameters`` is the PRESSURE sub-system's vector
-        (:meth:`_sub_parameters`).  Returns ``Q`` with the pressure rows
+        elliptic block.  `parameters` is the PRESSURE sub-system's vector
+        (`_sub_parameters`).  Returns `Q` with the pressure rows
         solved.
 
-        The matvec is a JVP of the lambdified residual at ``p = 0`` —
+        The matvec is a JVP of the lambdified residual at `p = 0` —
         custom_linear_solve transposes the JVP as a VJP natively
-        (the symbolic-linearity check inside ``linear_transpose``
+        (the symbolic-linearity check inside `linear_transpose`
         can't peel apart the closure-captured frozen state from the
         linear p_vec in the scatter + lambdified-source pipeline,
         but the explicit JVP sidesteps that)."""
@@ -894,21 +900,21 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
         pdir = self._press_dir_j          # declared P Dirichlet BCs, or None
 
         def _u_bf_ghost(k, p_mat):
-            """Boundary samples for mode ``k``'s LSQ derivative stencil (REQ-174).
+            """Boundary samples for mode `k`'s LSQ derivative stencil (REQ-174).
 
-            ⚠ jax's ``u_bf`` is NOT numpy's ``u_boundary_face``.  core's
-            ``compute_derivatives`` takes FACE values and converts internally
-            (``_resolve_u_boundary_face``: ``ghost = 2·u_face − u_cell``);
-            ``lsq_gradient_per_field`` takes the **ghost/boundary-neighbour**
-            value DIRECTLY (``u_bf_delta = u_bf_i − u_i``, no conversion).  So
-            the ``2·u_face − u_cell`` lift is ours to apply.  Passing the bare
+            ⚠ jax's `u_bf` is NOT numpy's `u_boundary_face`.  core's
+            `compute_derivatives` takes FACE values and converts internally
+            (`_resolve_u_boundary_face`: `ghost = 2·u_face − u_cell`);
+            `lsq_gradient_per_field` takes the **ghost/boundary-neighbour**
+            value DIRECTLY (`u_bf_delta = u_bf_i − u_i`, no conversion).  So
+            the `2·u_face − u_cell` lift is ours to apply.  Passing the bare
             face value here puts a face-valued sample at the ghost position and
             silently caps the boundary gradient at 1st order — measured 4.16 vs
-            0.024 in ``test_mesh_derivatives_recent.py``.
+            0.024 in `test_mesh_derivatives_recent.py`.
 
-            ``None`` ⇒ Neumann-zero (∂ₙP = 0), the standard Chorin pressure BC.
+            `None` ⇒ Neumann-zero (∂ₙP = 0), the standard Chorin pressure BC.
             Non-Dirichlet faces take the inner-cell value, for which
-            ``2·u_cell − u_cell = u_cell`` reproduces that path exactly."""
+            `2·u_cell − u_cell = u_cell` reproduces that path exactly."""
             if pdir is None or not pdir["modes"][k]:
                 return None
             bf_cells = pdir["bf_cells"]
@@ -1082,14 +1088,14 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
 
     def _step_corrector_pure(self, Q, Qaux_corr, parameters):
         """Pure-functional corrector: ``Q[corr_e2s] ← update(Q, Qaux_corr,
-        parameters)``, ``parameters`` the CORRECTOR sub-system's vector
-        (:meth:`_sub_parameters`, which carries dt).
+        parameters)``, `parameters` the CORRECTOR sub-system's vector
+        (`_sub_parameters`, which carries dt).
 
         The splitter's "self-contained sub-models" refactor
         (zoomy_core@44bdfca) moved the corrector's projection formula from
-        the ``state_update`` slot onto ``update_variables`` — accept either
-        (older splits carry ``state_update``, current ones
-        ``update_variables``).  Neither present is a HARD error: silently
+        the `state_update` slot onto `update_variables` — accept either
+        (older splits carry `state_update`, current ones
+        `update_variables`).  Neither present is a HARD error: silently
         skipping the corrector leaves the momenta/r unprojected (the solved
         pressure is never applied — task 0039's second half)."""
         rt = self.rt_corr

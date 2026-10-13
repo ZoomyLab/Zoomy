@@ -1,7 +1,7 @@
 """Minimal 1D FFT spectral mix demo (uniform cell ordering).
 
-Runs a forward pass of :func:`fourier_1d.apply_fourier_linear_mix_1d` on random
-``(n_fields, n_cells)`` data. Use this to sanity-check JAX FFT + dtypes on CPU/GPU.
+Runs a forward pass of `fourier_1d.apply_fourier_linear_mix_1d` on random
+`(n_fields, n_cells)` data. Use this to sanity-check JAX FFT + dtypes on CPU/GPU.
 """
 
 from __future__ import annotations

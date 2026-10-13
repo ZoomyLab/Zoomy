@@ -1,14 +1,15 @@
 """The v6 march blocks, with the design's names and signatures.
 
 Every block below is a thin SHELL over kernels that already exist in
-``zoomy_jax`` — the JaxRuntime slots and the ``reconstruction_jax`` classes.
+`zoomy_jax` — the JaxRuntime slots and the `reconstruction_jax` classes.
 No scheme decision is hand-written here: well-balancing, positivity and
 truncation all live in the symbolic/core layer (the WB face transform inside
-``numerical_fluctuations``, the KP ``hinv`` sweep inside ``update_aux``, the
+`numerical_fluctuations`, the KP `hinv` sweep inside `update_aux`, the
 limiter inside the reconstruction object).
 
-Block list (design §2 + v5 amendments + v6 dt ruling)::
+Block list (design §2 + v5 amendments + v6 dt ruling):
 
+```
     dt_pass(Q, Qaux, p, MeshRT, Ops)        -> lam_lo_f(F), lam_hi_f(F)
     reduce_dt(lam_lo_f, lam_hi_f, inradius_f, dt_max, t_remaining|dt_window)
     halo_bc(Q, Qaux, p, MeshRT, t, Ops)     -> Q, Qaux, bf_values
@@ -19,9 +20,10 @@ Block list (design §2 + v5 amendments + v6 dt ruling)::
     mood_resolve(troubled, Q0, Q_cand, Qaux, p, t, dt, MeshRT, Ops) -> Q_next
     update_variables(Q, Qaux, p, time, dt, MeshRT, Ops)
     update_aux(Q, Qaux, p, time, dt, MeshRT, Ops)
+```
 
 Signature deviations from the design text, all minor and deliberate, are
-listed in the package ``__init__`` docstring.
+listed in the package `__init__` docstring.
 """
 
 from __future__ import annotations
@@ -34,17 +36,17 @@ import numpy as np
 # ══ STEP HEAD: dt (v6 §1 — computed BEFORE the stage loop, then FROZEN) ═════
 
 def dt_pass(Q, Qaux, p, MeshRT, Ops):
-    """Evaluate the EXISTING ``eigenvalues`` slot at the CELL states on both
+    """Evaluate the EXISTING `eigenvalues` slot at the CELL states on both
     sides of every face and store TWO scalars per face.
 
-    Returns ``(lam_lo_f, lam_hi_f)``, each ``(n_faces,)`` — the signed lower
+    Returns `(lam_lo_f, lam_hi_f)`, each `(n_faces,)` — the signed lower
     and upper wave-speed bounds of the face.  That is exactly what Rusanov
-    (``|lam|max``), HLL (``S_L``/``S_R``) and Kurganov-Petrova (``a±``) need.
+    (`|lam|max`), HLL (`S_L`/`S_R`) and Kurganov-Petrova (`a±`) need.
     Roe-class schemes needing full eigenvector matrices are not served by the
     store and recompute internally (none in production).
 
     Boundary faces carry the OWNER cell on both sides (see
-    :func:`~zoomy_jax.fvm.solver2.context.prepare_mesh`), so no gather ever
+    `prepare_mesh`), so no gather ever
     leaves the inner block.
     """
     iA, iB = MeshRT.face_owner, MeshRT.face_neigh
@@ -65,15 +67,15 @@ def reduce_dt(lam_lo_f, lam_hi_f, inradius_f, dt_max, *,
               CFL, dimension, degree=0, t_remaining=None, dt_window=None):
     """The single dt reduction (design §2, v6 §1).
 
-    ``dt <= CFL * 2 r_in / (d (2k+1) |lam|max)`` per face, minimised over
-    faces, then capped by ``dt_max`` and by EITHER the remaining time to
-    ``t_end`` OR the coupling window remainder — **never both**: D7 /
-    amendment 7 (``dt_window`` REPLACES the ``t_end`` clamp; the min-combined
+    `dt <= CFL * 2 r_in / (d (2k+1) |lam|max)` per face, minimised over
+    faces, then capped by `dt_max` and by EITHER the remaining time to
+    `t_end` OR the coupling window remainder — **never both**: D7 /
+    amendment 7 (`dt_window` REPLACES the `t_end` clamp; the min-combined
     form is the measured preCICE abort).
 
-    A wave-free face has ``|lam|max == 0`` and therefore a local limit of
-    ``+inf`` — it drops out of the minimum instead of imposing a floor
-    (REQ-190); an all-dry domain steps at exactly ``dt_max``.
+    A wave-free face has `|lam|max == 0` and therefore a local limit of
+    `+inf` — it drops out of the minimum instead of imposing a floor
+    (REQ-190); an all-dry domain steps at exactly `dt_max`.
 
     The CFL safety factor is the USER LAW (0.9 in 1-D, 0.45 in 2-D) and is
     passed in, never adjusted here.  There is no dt-halving and no retry.
@@ -97,7 +99,7 @@ def reduce_dt(lam_lo_f, lam_hi_f, inradius_f, dt_max, *,
 
 def assert_dt_admissible(dt, lam_lo_f, lam_hi_f, inradius_f, *, time,
                          iteration):
-    """March honesty guard (v6 §1).  ``dt <= 0`` or non-finite is **FATAL**.
+    """March honesty guard (v6 §1).  `dt <= 0` or non-finite is **FATAL**.
 
     Host-side on purpose: the failure mode this exists to kill is an amrex run
     that spun 3800+ zero-progress steps and exited 0.  Aborts with a
@@ -131,14 +133,14 @@ def halo_bc(Q, Qaux, p, MeshRT, t, Ops):
 
     On an unstructured single-device jax mesh there are no ghost CELLS: the
     boundary state is synthesised as per-boundary-face values from the indexed
-    BC kernel.  Returns ``(Q, Qaux, bf_values)`` with ``bf_values`` of shape
-    ``(n_state, n_boundary_faces)`` — consumed by :func:`reconstruct` for the
-    limiter bounds and the boundary ``Q_R``.  An SPMD backend puts its
-    ``ppermute`` halo exchange here; amrex puts its time-interpolated
-    FillPatch here (``t`` is carried for exactly that reason).
+    BC kernel.  Returns `(Q, Qaux, bf_values)` with `bf_values` of shape
+    `(n_state, n_boundary_faces)` — consumed by `reconstruct` for the
+    limiter bounds and the boundary `Q_R`.  An SPMD backend puts its
+    `ppermute` halo exchange here; amrex puts its time-interpolated
+    FillPatch here (`t` is carried for exactly that reason).
 
     vmapped over the boundary-face axis: the generated BC kernel is a sympy
-    ``Piecewise`` over ``i_bc_func`` and vectorises cleanly.  A python loop
+    `Piecewise` over `i_bc_func` and vectorises cleanly.  A python loop
     unrolls one copy of the whole kernel per boundary face (quadratic compile).
     """
     n_bf = MeshRT.n_boundary_faces
@@ -160,13 +162,13 @@ def halo_bc(Q, Qaux, p, MeshRT, t, Ops):
 def reconstruct(Q, Qaux, MeshRT, Ops, bf_values, *, o1=False):
     """Face-state reconstruction (design §2, amendment 10).
 
-    Returns ``(Q_L, Q_R, lim_grad)`` with ``Q_L/Q_R`` of shape
-    ``(n_state, n_faces)`` and ``lim_grad`` the LIMITED cell gradient
-    ``(n_state, dim, n_cells)`` — or ``None`` at order 1 / on the MOOD
+    Returns `(Q_L, Q_R, lim_grad)` with `Q_L/Q_R` of shape
+    `(n_state, n_faces)` and `lim_grad` the LIMITED cell gradient
+    `(n_state, dim, n_cells)` — or `None` at order 1 / on the MOOD
     fallback, where the slope is identically zero.
 
-    ``o1=True`` forces the piecewise-constant object: that is the whole-step
-    order-1 redo of :func:`mood_resolve`, and the reason the order-1 path
+    `o1=True` forces the piecewise-constant object: that is the whole-step
+    order-1 redo of `mood_resolve`, and the reason the order-1 path
     needs no separate code.  The reconstruction OBJECT owns the limiter and
     any well-balanced / positivity variable change — none of that is decided
     here.
@@ -185,22 +187,24 @@ def reconstruct(Q, Qaux, MeshRT, Ops, bf_values, *, o1=False):
 def flux_pass(Q, Qaux, p, MeshRT, Ops, t_stage, faces):
     """Per-face numerical flux + fluctuations — **STORED** (design §1).
 
-    ``faces = (Q_L, Q_R)`` from :func:`reconstruct`.  Returns three arrays of
-    shape ``(n_state, n_faces)``::
+    `faces = (Q_L, Q_R)` from `reconstruct`.  Returns three arrays of
+    shape `(n_state, n_faces)`:
 
+    ```
         Fface  conservative numerical flux
         Dp     the +side fluctuation  (path-conservative NCP jump)
         Dm     the -side fluctuation
+    ```
 
     Each face is evaluated exactly ONCE; the arrays live until
-    :func:`gather_update` consumes them (a serial backend MAY fuse the two —
+    `gather_update` consumes them (a serial backend MAY fuse the two —
     the contract is that they are available).
 
-    ``bc_face`` fires HERE, at ``t_stage`` (amendment 11): the boundary ``Q_R``
+    `bc_face` fires HERE, at `t_stage` (amendment 11): the boundary `Q_R`
     is recomputed from the RECONSTRUCTED inner face state so limiter and BC
     stay consistent at the face centre, and stage 2 evaluates its BCs at
-    ``t + dt``.  At a periodic seam ``Q_R`` is the partner cell's state
-    instead (REQ-116) — the pass-through BC kernel fed ``Q_L`` would silently
+    `t + dt`.  At a periodic seam `Q_R` is the partner cell's state
+    instead (REQ-116) — the pass-through BC kernel fed `Q_L` would silently
     degrade the wrap to extrapolation.
     """
     Q_L, Q_R = faces
@@ -243,16 +247,18 @@ def gather_update(Q0, Fface, Dp, Dm, MeshRT, dt, a_stage, source=None,
     """Consume the stored face arrays into a candidate cell state, flagging
     troubled cells **while writing** (design §1, the fused detection).
 
-    ``Q0`` is the STAGE BASE (the state the residual was evaluated at, kept
-    for the RK average and for the MOOD rollback); ``a_stage`` is the
-    Shu-Osher ``beta`` coefficient::
+    `Q0` is the STAGE BASE (the state the residual was evaluated at, kept
+    for the RK average and for the MOOD rollback); `a_stage` is the
+    Shu-Osher `beta` coefficient:
 
+    ```
         Q_cand = Q0 + a_stage * dt * ( -div(F + D) + cell_term + source )
+    ```
 
-    ``cell_term`` is the optional per-cell contribution of amendment 10 — the
+    `cell_term` is the optional per-cell contribution of amendment 10 — the
     cell-interior non-conservative integral, WB-critical at order >= 2.
-    ``troubled`` is ``(n_cells,)`` bool: ``h < 0`` (when the model declares an
-    ``h`` row) or any non-finite component.  Detection costs one comparison in
+    `troubled` is `(n_cells,)` bool: `h < 0` (when the model declares an
+    `h` row) or any non-finite component.  Detection costs one comparison in
     a pass that exists anyway.
 
     Owner and neighbour contributions are two scatters, boundary faces
@@ -290,9 +296,9 @@ def gather_update(Q0, Fface, Dp, Dm, MeshRT, dt, a_stage, source=None,
 def flag_troubled(Q_cand, h_index):
     """PAD + CAD troubled predicate (core inventory: "troubled predicate").
 
-    ``h < 0`` (physical admissibility) OR any non-finite component (computed
+    `h < 0` (physical admissibility) OR any non-finite component (computed
     admissibility).  No relaxed-DMP: it is invalid in the presence of a
-    source.  Nothing is floored or clipped — a negative ``h`` is *detected*,
+    source.  Nothing is floored or clipped — a negative `h` is *detected*,
     never repaired in place (user law).
     """
     bad = ~jnp.isfinite(Q_cand).all(axis=0)
@@ -313,7 +319,7 @@ def mood_resolve(troubled, Q0, Q_cand, Qaux, p, t, dt, MeshRT, Ops,
     first-order XZS lemma; the per-cell variant was measured to leak 14 % of
     the mass in amrex, which is why the whole-step redo is the sanctioned one.
 
-    ``stage_loop(Q0, Qaux, p, t, dt, o1)`` is the step's own stage loop,
+    `stage_loop(Q0, Qaux, p, t, dt, o1)` is the step's own stage loop,
     handed in so MOOD owns no scheme logic of its own.
     """
     return jax.lax.cond(
@@ -326,7 +332,7 @@ def mood_resolve(troubled, Q0, Q_cand, Qaux, p, t, dt, MeshRT, Ops,
 # ══ POST-STEP BLOCKS ════════════════════════════════════════════════════════
 
 def update_variables(Q, Qaux, p, time, dt, MeshRT, Ops):
-    """The model's per-cell ``update_variables`` slot (identity when the model
+    """The model's per-cell `update_variables` slot (identity when the model
     declares none — the derived SWE does, which is exactly why it carries no
     wet/dry momentum cap)."""
     if Ops.update_variables is None:
@@ -335,14 +341,14 @@ def update_variables(Q, Qaux, p, time, dt, MeshRT, Ops):
 
 
 def update_aux(Q, Qaux, p, time, dt, MeshRT, Ops):
-    """The aux leg: the model's algebraic ``update_aux_variables`` (e.g. the
-    KP-desingularised ``hinv``) followed by the LSQ-gradient rows of
-    ``aux_registry`` (amendment 9 gives this block ``dt``).
+    """The aux leg: the model's algebraic `update_aux_variables` (e.g. the
+    KP-desingularised `hinv`) followed by the LSQ-gradient rows of
+    `aux_registry` (amendment 9 gives this block `dt`).
 
     Both legs are the EXISTING kernels; the derivative walk is
-    ``HyperbolicSolver._walk_derivative_aux`` reused verbatim.  The
+    `HyperbolicSolver._walk_derivative_aux` reused verbatim.  The
     full-length contract on the algebraic vector is enforced here for the
-    same reason it is enforced in ``solver_jax``: a prefix write silently
+    same reason it is enforced in `solver_jax`: a prefix write silently
     mis-places algebraic rows and degenerates SME(>=1) to SWE.
     """
     out = Qaux

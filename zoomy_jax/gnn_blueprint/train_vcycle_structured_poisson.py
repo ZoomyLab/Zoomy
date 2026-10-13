@@ -3,21 +3,25 @@
 Requires even interior size (nx-2, ny-2 both even). Uses strict 2x2 coarsening and
 Jacobi iterations on the coarsest level (no unstructured meshes).
 
-With ``--bump-amplitude > 0``, smoothers see a fourth input channel: a Gaussian bump on the
-2D structured interior, restricted to each multigrid level (same ``R`` as the residual). The
+With `--bump-amplitude > 0`, smoothers see a fourth input channel: a Gaussian bump on the
+2D structured interior, restricted to each multigrid level (same `R` as the residual). The
 RHS is modulated by that bump so supervision is not independent of bathymetry-like geometry.
 This is the V-cycle architecture used for plain Poisson, extended for a 2D bump; wiring into
 full Green–Naghdi IMEX waits on a 2D GN JAX residual in this repo.
 
-Example::
+Example:
 
+```
     python -m zoomy_jax.gnn_blueprint.train_vcycle_structured_poisson --nx 34 --ny 34 \\
         --epochs 80 --gmres-trials 24
+```
 
-Bump-conditioned V-cycle::
+Bump-conditioned V-cycle:
 
+```
     python -m zoomy_jax.gnn_blueprint.train_vcycle_structured_poisson --nx 34 --ny 34 \\
         --bump-amplitude 0.12 --bump-sigma 0.15 --rhs-bump-scale 0.5
+```
 """
 
 from __future__ import annotations
@@ -70,9 +74,9 @@ def gmres_benchmark_vcycle(
     maxiter: int,
     n_warmup: int,
 ) -> dict[str, Any]:
-    """GMRES stats: matvecs, SciPy ``pr_norm`` callback counts, and wall times.
+    """GMRES stats: matvecs, SciPy `pr_norm` callback counts, and wall times.
 
-    ``iter_*`` counts residual-norm callbacks from SciPy's GMRES (one per inner step
+    `iter_*` counts residual-norm callbacks from SciPy's GMRES (one per inner step
     in the restarted cycle, up to one matvec each; totals track solver progress).
     """
     n = a_np.shape[0]

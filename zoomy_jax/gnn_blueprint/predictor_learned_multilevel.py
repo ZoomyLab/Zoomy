@@ -1,4 +1,4 @@
-"""Shared multilevel learned ``deltaQ`` predictor (optional 1D FFT global coupling).
+"""Shared multilevel learned `deltaQ` predictor (optional 1D FFT global coupling).
 
 Shared by the training scripts.
 """
@@ -32,9 +32,9 @@ def predict_delta_q_learned(
     message_steps: int,
     return_diagnostics: bool = False,
 ):
-    """Predict ``deltaQ`` on inner cells; optional FFT_1D mix after multilevel state.
+    """Predict `deltaQ` on inner cells; optional FFT_1D mix after multilevel state.
 
-    ``params`` matches bundles from ``train_deltaq.py`` / ``train_multilevel_fft1d.py``.
+    `params` matches bundles from `train_deltaq.py` / `train_multilevel_fft1d.py`.
     """
     n_fields, _n_cells = Qc.shape
     n_inner = class_id.shape[0]

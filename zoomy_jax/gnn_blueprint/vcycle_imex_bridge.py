@@ -1,13 +1,13 @@
 """Load a trained 1D Poisson V-cycle checkpoint and build GMRES x0 for GN-style stacked Q.
 
-GN ``Q`` is shaped ``(n_vars, n_cells)`` with C-order ravel **variable-major**
-(``flat = Q.ravel()`` is all cells for var 0, then var 1, …).  The V-cycle uses **cell-major**
-stacking ``[cell0: v0,v1,…, cell1: …]``.  We convert, run ``forward_vcycle(b_p)`` on **inner**
-cells only (columns ``0 .. n_inner-1``), embed the result into a full-length vector with **zeros
-on ghost columns**, and scale by ``guess_scale``.
+GN `Q` is shaped `(n_vars, n_cells)` with C-order ravel **variable-major**
+(`flat = Q.ravel()` is all cells for var 0, then var 1, …).  The V-cycle uses **cell-major**
+stacking `[cell0: v0,v1,…, cell1: …]`.  We convert, run `forward_vcycle(b_p)` on **inner**
+cells only (columns `0 .. n_inner-1`), embed the result into a full-length vector with **zeros
+on ghost columns**, and scale by `guess_scale`.
 
-The learned operator is still the **synthetic** :math:`L\\otimes I` Poisson proxy; using GMRES RHS
-as its ``f`` is a **heuristic** initial guess for the GN Newton Jacobian, not an exact solve.
+The learned operator is still the **synthetic** $L\\otimes I$ Poisson proxy; using GMRES RHS
+as its `f` is a **heuristic** initial guess for the GN Newton Jacobian, not an exact solve.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ def poisson_flat_to_inner_var_major(p: np.ndarray, n_inner: int, n_vars: int) ->
 
 @dataclass
 class VcycleImexContext:
-    """JIT’d V-cycle + hierarchy; ``guess_x0`` maps full GMRES ``b`` and current ``Q``."""
+    """JIT’d V-cycle + hierarchy; `guess_x0` maps full GMRES `b` and current `Q`."""
 
     n_interior: int
     n_components: int
@@ -210,7 +210,7 @@ def save_vcycle_checkpoint(
     coarsest_iters: int = 40,
     coarsest_omega: float = 0.5,
 ) -> None:
-    """Pickle training hyperparameters and ``params`` as NumPy arrays (host tree)."""
+    """Pickle training hyperparameters and `params` as NumPy arrays (host tree)."""
     params_np = jax.tree.map(lambda a: np.asarray(a), params)
     bundle = {
         "params": params_np,

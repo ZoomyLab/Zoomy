@@ -1,8 +1,8 @@
 """Module `zoomy_jax.mesh` — SPMD mesh partitioning (accessible entry points).
 
 Partitioners chop a global mesh into per-device padded slabs for the
-``shard_map`` + halo-exchange SPMD path (see :mod:`zoomy_jax.fvm.spmd_jax`),
-verified by ``tests/unit/zoomy_jax/test_spmd_*`` / ``test_partition_jax``.
+`shard_map` + halo-exchange SPMD path (see `zoomy_jax.fvm.spmd_jax`),
+verified by `tests/unit/zoomy_jax/test_spmd_*` / `test_partition_jax`.
 """
 
 from zoomy_jax.mesh.partition_jax import (

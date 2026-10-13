@@ -1,13 +1,15 @@
 """Train (1) 3-branch graph MP + gated fusion on physics-split Poisson data, and/or
-(2) a single-tower ``r ↦ z`` map for ``z ≈ A^{-1} r`` on the same mesh.
+(2) a single-tower `r ↦ z` map for `z ≈ A^{-1} r` on the same mesh.
 
-Evaluates **MSE on test** and **GMRES matvec counts** (``x0 = z(f)`` or fused model as ``u0`` for ``A u = f``).
+Evaluates **MSE on test** and **GMRES matvec counts** (`x0 = z(f)` or fused model as `u0` for `A u = f`).
 
-Example::
+Example:
 
+```
     python dataset_2d_mg_multibranch.py --out-dir outputs/gnn_blueprint/dataset_2d_mg
     python train_2d_mg_benchmark.py --data-dir outputs/gnn_blueprint/dataset_2d_mg \\
         --epochs 120 --n-trials-gmres 32
+```
 """
 
 from __future__ import annotations
@@ -195,7 +197,7 @@ def gmres_mean_matvec(
     rtol: float,
     maxiter: int,
 ) -> tuple[float, float]:
-    """``x0 = z(f)`` from trained z-model."""
+    """`x0 = z(f)` from trained z-model."""
     n = a_np.shape[0]
     counts_z = []
     counts_0 = []
@@ -235,7 +237,7 @@ def gmres_mean_matvec_multibranch(
     rtol: float,
     maxiter: int,
 ) -> tuple[float, float]:
-    """``x0 = fused(f)`` as initial guess for ``A u = f``."""
+    """`x0 = fused(f)` as initial guess for `A u = f`."""
 
     def apply_u(fv):
         fu, _, _, _ = forward_multibranch(

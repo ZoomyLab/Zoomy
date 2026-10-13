@@ -1,6 +1,6 @@
 """JAX runtime of the symbolic solvers: what each name of a printed solver means on JAX.  The
-printed template (solver template -> ``PyPrinter``) is plain Python calling this name table: ``nsm``
-is the vmapped JaxRuntime of the kernels, every other entry a ``zoomy_core.symsolver`` block.
+printed template (solver template -> `PyPrinter`) is plain Python calling this name table: `nsm`
+is the vmapped JaxRuntime of the kernels, every other entry a `zoomy_core.symsolver` block.
 
 References:
     Bradbury et al. 2018, https://github.com/jax-ml/jax
@@ -35,8 +35,8 @@ from zoomy_jax.fvm.solver_jax import (
     HyperbolicSolver as _Reference)
 
 class Geometry(NamedTuple):
-    """The ``mesh`` argument of a printed solver, computed from the vertex coordinates inside the
-    traced function so that ``jax.grad`` reaches the vertices.  Topology (indices, stencils) is
+    """The `mesh` argument of a printed solver, computed from the vertex coordinates inside the
+    traced function so that `jax.grad` reaches the vertices.  Topology (indices, stencils) is
     static and lives in the runtime's closures.
     """
     cell_volumes: jnp.ndarray
@@ -50,13 +50,13 @@ class Geometry(NamedTuple):
 
 
 def geometry_of(topo, X):
-    """All solver geometry from vertex coordinates ``X`` ``(dim, n_vertices)``."""
+    """All solver geometry from vertex coordinates `X` `(dim, n_vertices)`."""
     g = compute_geometry(topo, X)
     return Geometry(*(g[f] for f in Geometry._fields))
 
 
 def _with_geometry(R, g, mesh_np, nc):
-    """A copy of reconstruction ``R`` that reads the traced geometry ``g`` instead of the arrays
+    """A copy of reconstruction `R` that reads the traced geometry `g` instead of the arrays
     precomputed from the static mesh.
     """
     if not hasattr(R, "_lsq_gradQ"):              # first order: no geometry
@@ -78,19 +78,19 @@ def _with_geometry(R, g, mesh_np, nc):
 def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64, on_write=None,
             on_save=None, on_load=None, couple=None, implicit=None, systems=None, partition=None):
     """Build the name table (dict of callables) a printed solver runs against: the JAX
-    implementation of every ``zoomy_core.symsolver`` block on this mesh.  Called by the JAX solver
-    driver's ``_setup``.
+    implementation of every `zoomy_core.symsolver` block on this mesh.  Called by the JAX solver
+    driver's `_setup`.
 
     Args:
-        topo: static topology (:func:`geometry_xp.build_topology`) with the boundary-closure classes
-        ad_mode: 'forward', or 'reverse' for a time loop with ``checkpoints`` checkpoints
-        on_write: ``on_write(time, Q, Qaux)`` snapshot callback (forward mode)
+        topo: static topology (`geometry_xp.build_topology`) with the boundary-closure classes
+        ad_mode: 'forward', or 'reverse' for a time loop with `checkpoints` checkpoints
+        on_write: `on_write(time, Q, Qaux)` snapshot callback (forward mode)
         on_save, on_load: the restart pair (host), `on_save(time, Q, Qaux)` (forward mode) and
             `on_load(time, Q, Qaux) -> (time, Q, Qaux)`; None: no restart file / not restarting
-        couple: preCICE settings ``dict(adapter=, tag=, side=)``
-        implicit: Newton and linear-solver settings of ``root`` and ``linsolve``
-        systems: further ``{name: (nsm, JaxRuntime)}`` a template uses besides ``nsm``
-        partition: this rank's piece of a distributed run; its ``halo`` and global reductions
+        couple: preCICE settings `dict(adapter=, tag=, side=)`
+        implicit: Newton and linear-solver settings of `root` and `linsolve`
+        systems: further `{name: (nsm, JaxRuntime)}` a template uses besides `nsm`
+        partition: this rank's piece of a distributed run; its `halo` and global reductions
             replace the serial ones
     Returns:
         dict name -> callable
@@ -146,12 +146,12 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     # ── kernels on cells and faces ─────────────────────────────────────────
     def cells(k, Q, Qaux, p, time, dt, mesh):
-        """Kernel ``k`` in every cell (with time, dt and the cell centre)."""
+        """Kernel `k` in every cell (with time, dt and the cell centre)."""
         return k(Q, Qaux, p, time=time, dt=dt,
                  position=mesh.cell_centers[:, :Q.shape[-1]])
 
     def faces(k, QL, QR, AL, AR, p, mesh):
-        """Face kernel ``k`` on every face with its unit normal."""
+        """Face kernel `k` on every face with its unit normal."""
         return k(QL, QR, AL, AR, p, mesh.face_normals)
 
     def face_aux(Qaux, mesh):
@@ -175,8 +175,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     # ── boundary ───────────────────────────────────────────────────────────
     def _bc_at(bc, states, Qaux, p, time, mesh, cells_of_face, ghost=True):
-        """The BC kernel ``bc`` on every non-cut boundary face: the ghost kernel at the mirror image
-        of the cell centre, or (``ghost=False``) the face kernel at the face centre.
+        """The BC kernel `bc` on every non-cut boundary face: the ghost kernel at the mirror image
+        of the cell centre, or (`ghost=False`) the face kernel at the face centre.
         """
         # ``ghost=True``: the GHOST kernel (boundary_ghost_state) of the inner
         # cell, at the mirror image of the cell centre -- evaluated at the
@@ -194,7 +194,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         dist = dn if ghost else jnp.linalg.norm(r, axis=1)
 
         def per_bf(k, i):
-            """BC kernel of branch ``k`` on boundary face ``i``."""
+            """BC kernel of branch `k` on boundary face `i`."""
             f = j(bf_face)[i]
             return bc(branch[k], time, pos[i], dist[i], states[:, i],
                       Qaux[:, j(cells_of_face)[i]], p, n[:, f])
@@ -206,7 +206,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return states.at[:, j(phys)].set(out)
 
     def boundary_ghosts(ghost, Q, Qaux, p, time, mesh):
-        """The GHOST (``boundary_ghost_state``) per boundary face."""
+        """The GHOST (`boundary_ghost_state`) per boundary face."""
         return _bc_at(ghost, Q[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells)
 
     def boundary_states(ghost, Q, Qaux, p, time, mesh):
@@ -217,8 +217,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                 Qaux[:, j(inner)])
 
     def boundary_traces(bc, Q, QL, QR, Qaux, p, time, mesh):
-        """``QR`` with the outer FACE state ``bc(QL)`` on the boundary faces (periodic seam: the
-        partner face's ``QL``).
+        """`QR` with the outer FACE state `bc(QL)` on the boundary faces (periodic seam: the
+        partner face's `QL`).
         """
         if n_bf == 0:
             return QR
@@ -229,11 +229,11 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     # ── reconstruction and assembly ────────────────────────────────────────
     def pointwise(k, X, Xaux, p):
-        """Kernel ``k`` in every column of ``X``."""
+        """Kernel `k` in every column of `X`."""
         return k(X, Xaux, p)
 
     def _inner_outside(WL, WR):
-        """A boundary face's outer slot holds the inner trace until ``boundary_traces`` sets the BC
+        """A boundary face's outer slot holds the inner trace until `boundary_traces` sets the BC
         state.
         """
         # a boundary face's outer slot holds the inner trace until
@@ -251,8 +251,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
     recon_classes = topo.lsq_closure_class.get((owner, "reconstruction"), ())
 
     def closed(D, U, Ug, classes, cols, mesh):
-        """``D`` ``(rows, len(cols), cells)`` with the closure fits written at the closure cells for
-        the rows that have a class (monomial columns ``cols``).
+        """`D` `(rows, len(cols), cells)` with the closure fits written at the closure cells for
+        the rows that have a class (monomial columns `cols`).
         """
         rows, Dc = lsq_closure_derivatives(topo, mesh.lsq_closure, U, Ug, classes)
         if not rows:
@@ -263,8 +263,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                     c[None, None, :]].set(vals)
 
     def gradient(W, Wg, mesh):
-        """LSQ gradient of every row of ``W`` per cell, closed at the boundary by constraints or by
-        the ghost samples ``Wg``.
+        """LSQ gradient of every row of `W` per cell, closed at the boundary by constraints or by
+        the ghost samples `Wg`.
 
         References:
             Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
@@ -276,7 +276,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return closed(G, W, Wg, recon_classes, topo.lsq_grad_cols, mesh)
 
     def ghost_bounds(R, u, ug):
-        """Min and max of ``u`` over the face neighbours and the boundary ghosts ``ug`` (a ghost
+        """Min and max of `u` over the face neighbours and the boundary ghosts `ug` (a ghost
         bounds its face's owner).
         """
         # min/max over the face neighbours and the boundary ghosts ``ug``
@@ -288,7 +288,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return lo.at[R._iInner_bnd].min(ug), hi.at[R._iInner_bnd].max(ug)
 
     def limiter(name):
-        """Limiter factory for the reconstruction method ``name``; the factors lie in [0, 1],
+        """Limiter factory for the reconstruction method `name`; the factors lie in [0, 1],
         bounded by the face neighbours and the ghosts.
 
         References:
@@ -297,7 +297,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
             Sweby 1984, https://doi.org/10.1137/0721062
         """
         def factors(rows, W, Wg, G, mesh):
-            """Limiter factors for the state ``rows`` (1 elsewhere)."""
+            """Limiter factors for the state `rows` (1 elsewhere)."""
             R = _with_geometry(lsq, mesh, mesh_np, nc)
             fn = getattr(R, name)
             phi = jnp.ones((W.shape[0], nc), dtype=W.dtype)
@@ -308,7 +308,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return factors
 
     def extrapolate(W, G, phi, mesh):
-        """Each cell's ``W`` moved to the face centres by ``phi * G`` (MUSCL).
+        """Each cell's `W` moved to the face centres by `phi * G` (MUSCL).
 
         References:
             van Leer 1979, https://doi.org/10.1016/0021-9991(79)90145-1
@@ -323,7 +323,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
     nbr = np.where(is_bnd, nc, fc1)
 
     def divergence(Wm, Wp, mesh):
-        """Per cell the sum of ``Wm`` over the faces it owns and ``Wp`` over the faces it
+        """Per cell the sum of `Wm` over the faces it owns and `Wp` over the faces it
         neighbours, times |face| / |cell|.
 
         References:
@@ -336,7 +336,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                                      mode="drop")
 
     def edge_source(k, Q, QL, QR, Qaux, p, mesh):
-        """Per cell the interior nonconservative edge integral of kernel ``k`` over its faces,
+        """Per cell the interior nonconservative edge integral of kernel `k` over its faces,
         divided by the volume (order >= 2).
         """
         fv, cv, n = mesh.face_volumes, mesh.cell_volumes, mesh.face_normals
@@ -354,8 +354,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     # ── whole-domain operations ────────────────────────────────────────────
     def derivative_aux(spec, Q, Qaux, mesh, Qg=None, rows=None):
-        """``Qaux`` with the derivative rows of ``spec`` refilled from mesh gradients; with ``Qg``
-        and ``rows`` only the derivatives of those state rows, their boundary faces from the ghosts.
+        """`Qaux` with the derivative rows of `spec` refilled from mesh gradients; with `Qg`
+        and `rows` only the derivatives of those state rows, their boundary faces from the ghosts.
         """
         # stencils are static topology; the LSQ matrices are traced geometry
         traced = dataclasses.replace(mesh_j, lsq_gradQ=mesh.lsq_gradQ)
@@ -378,27 +378,27 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return Qaux
 
     def clean_round_off(Q, rows, tol):
-        """Entries of the state ``rows`` in ``[-tol, 0)`` set to 0."""
+        """Entries of the state `rows` in `[-tol, 0)` set to 0."""
         r = jnp.asarray(rows)
         X = Q[r]
         return Q.at[r].set(jnp.where((X < 0) & (X >= -tol), 0.0, X))
 
     def put(Q, rows, values):
-        """``Q`` with the state ``rows`` replaced by ``values``."""
+        """`Q` with the state `rows` replaced by `values`."""
         return Q.at[jnp.asarray(rows), :].set(values)
 
     def zeros(n, mesh):
-        """An ``(n, cells)`` array of zeros."""
+        """An `(n, cells)` array of zeros."""
         return jnp.zeros((int(n), nc), dtype=mesh.cell_volumes.dtype)
 
     def inadmissible(k, Q, Qaux, p):
-        """Cell mask: an admissibility row of kernel ``k`` below 0, or a non-finite state."""
+        """Cell mask: an admissibility row of kernel `k` below 0, or a non-finite state."""
         adm = k(Q, Qaux, p)
         return (jnp.any(adm < 0.0, axis=0)
                 | ~jnp.isfinite(Q).all(axis=0))
 
     def select(mask, A, B):
-        """``A`` where ``mask`` else ``B``, per cell or per face."""
+        """`A` where `mask` else `B`, per cell or per face."""
         mask, A, B = jnp.asarray(mask), jnp.asarray(A), jnp.asarray(B)
         if mask.ndim == 1 and max(A.ndim, B.ndim) == 2:
             mask = mask[None, :]
@@ -406,8 +406,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     # ── control ────────────────────────────────────────────────────────────
     def while_loop(c, b, init):
-        """``lax.while_loop``; with ``ad_mode='reverse'`` a binomially checkpointed loop that
-        ``jax.grad`` can differentiate.
+        """`lax.while_loop`; with `ad_mode='reverse'` a binomially checkpointed loop that
+        `jax.grad` can differentiate.
 
         References:
             Griewank 1992, https://doi.org/10.1080/10556789208805505
@@ -421,14 +421,14 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return lax.while_loop(cf, bf, init)
 
     def cond(p, a, b):
-        """``lax.cond`` of the two branches."""
+        """`lax.cond` of the two branches."""
         return lax.cond(p, a, b)
 
     imp = {**dict(tol=1e-8, maxiter=6, gmres_tol=1e-7, gmres_maxiter=30),
            **(implicit or {})}
 
     def root(f, x0):
-        """Newton on ``f(x) = 0`` with a per-cell (block-diagonal) Jacobian; differentiable through
+        """Newton on `f(x) = 0` with a per-cell (block-diagonal) Jacobian; differentiable through
         the converged root (custom_root).
         """
         return newton_root(f, x0, lambda x, v: jax.jvp(f, (x,), (v,))[1],
@@ -438,7 +438,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                                      maxiter=imp["gmres_maxiter"], accept=None)
 
     def _ls_gmres(A, b):
-        """Matrix-free restarted GMRES of ``A x = b`` with the configured tolerances.
+        """Matrix-free restarted GMRES of `A x = b` with the configured tolerances.
 
         References:
             Saad, Schultz 1986, https://doi.org/10.1137/0907058
@@ -447,7 +447,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                          maxiter=ls["maxiter"])[0]
 
     def _ls_reject(r):
-        """Raise when the relative residual ``r`` exceeds the accept gate."""
+        """Raise when the relative residual `r` exceeds the accept gate."""
         if float(r) > ls["accept"]:
             raise RuntimeError(
                 f"linsolve: relative residual {float(r):.3e} > accept gate "
@@ -462,8 +462,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                 if amgx is not None or pyamg is not None or hyp is not None else None)
 
     def assembled(op, n, ncells=nc, n_rows=None):
-        """Values of the linear operator ``op`` on the cell pattern of the first ``ncells`` cells
-        (rows: the first ``n_rows`` cells, default all), by colouring: one traced evaluation per
+        """Values of the linear operator `op` on the cell pattern of the first `ncells` cells
+        (rows: the first `n_rows` cells, default all), by colouring: one traced evaluation per
         colour.
 
         References:
@@ -497,7 +497,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     def host_vcycle(rows, cols, n, k, transpose):
         """Host preconditioner: one smoothed-aggregation V-cycle on the block-scaled matrix, with a
-        lagged hierarchy rebuilt after ``amg_rebuild`` new matrices.
+        lagged hierarchy rebuilt after `amg_rebuild` new matrices.
 
         References:
             Bell, Olson, Schroder 2022, https://doi.org/10.21105/joss.04142
@@ -508,7 +508,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         rebuild = int(ls.get("amg_rebuild", 1))
 
         def apply(vals, rhs):
-            """Apply the V-cycle for the matrix values ``vals`` to ``rhs``."""
+            """Apply the V-cycle for the matrix values `vals` to `rhs`."""
             vals = np.asarray(vals)
             if c["vals"] is None or not np.array_equal(vals, c["vals"]):
                 c["vals"], c["age"] = vals.copy(), c["age"] + 1
@@ -536,7 +536,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     def _amgx_mpi(A, b):
         """Distributed 'amgx': one global AmgX solve across the ranks, each handing over its owned
-        rows with globally numbered columns.  Called by ``linsolve`` for a partitioned run.
+        rows with globally numbered columns.  Called by `linsolve` for a partitioned run.
 
         References:
             Naumov et al. 2015, https://doi.org/10.1137/140980260
@@ -593,10 +593,10 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return x
 
     def _hypre_solve(A, b):
-        """'hypre': one host call per solve (:class:`zoomy_jax.symsolver.hypre.BlockRows`,
+        """'hypre': one host call per solve (`zoomy_jax.symsolver.hypre.BlockRows`,
         collective on all ranks), FlexGMRES + BoomerAMG on the cell-block-scaled rows to the true
-        relative residual ``tol``; the owned rows with global columns by colouring (as
-        :func:`_amgx_mpi`); differentiable via ``custom_linear_solve``.
+        relative residual `tol`; the owned rows with global columns by colouring (as
+        `_amgx_mpi`); differentiable via `custom_linear_solve`.
 
         References:
             Henson, Yang 2002, https://doi.org/10.1016/S0168-9274(01)00115-5
@@ -629,9 +629,9 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         out = jax.ShapeDtypeStruct((k * n_r,), b.dtype)
 
         def solver(transpose):
-            """The host solve for ``custom_linear_solve`` (``transpose``: the adjoint)."""
+            """The host solve for `custom_linear_solve` (`transpose`: the adjoint)."""
             def host(v, r, nb2):
-                """Solve with matrix values ``v``, owned right-hand side ``r``, ``|r|^2 = nb2``."""
+                """Solve with matrix values `v`, owned right-hand side `r`, `|r|^2 = nb2`."""
                 return system.solve(v, r, transpose, nb=float(np.sqrt(nb2)))
 
             def solve(_, rhs):
@@ -706,7 +706,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
             def coarse(transpose):
                 """Coarse-correction solve on the space of one constant per rank and row."""
                 def column(c, _):
-                    """Column ``c`` of the coarse matrix: the operator applied to that coarse basis
+                    """Column `c` of the coarse matrix: the operator applied to that coarse basis
                     vector, restricted.
                     """
                     q, i = c // k, c % k
@@ -727,7 +727,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
                 block(transpose), coarse(transpose)))
 
         def solver(transpose):
-            """FGMRES solve for ``custom_linear_solve`` (``transpose``: the adjoint)."""
+            """FGMRES solve for `custom_linear_solve` (`transpose`: the adjoint)."""
             M = precond(transpose)
             # Krylov vectors cost memory per rank: a short restart, as many
             # cycles as the serial budget (restart x maxiter iterations)
@@ -750,10 +750,10 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return x.reshape(shape)
 
     def linsolve(A, b):
-        """Solve ``A x = b`` for the linear map ``A`` (linearized once at 0) by GMRES, AmgX, hypre
-        or AMG-preconditioned GMRES, as configured; differentiable via ``custom_linear_solve``.
-        Aborts above the accept gate; a partitioned run uses :func:`_hypre_solve`,
-        :func:`_dlinsolve` or :func:`_amgx_mpi`.
+        """Solve `A x = b` for the linear map `A` (linearized once at 0) by GMRES, AmgX, hypre
+        or AMG-preconditioned GMRES, as configured; differentiable via `custom_linear_solve`.
+        Aborts above the accept gate; a partitioned run uses `_hypre_solve`,
+        `_dlinsolve` or `_amgx_mpi`.
 
         References:
             Saad, Schultz 1986, https://doi.org/10.1137/0907058
@@ -792,7 +792,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
             out = jax.ShapeDtypeStruct(b.shape, b.dtype)
 
             def amg(transpose):
-                """Host AMG solve (``transpose``: the adjoint)."""
+                """Host AMG solve (`transpose`: the adjoint)."""
                 f = host_amg(rows, cols, n, k, transpose)
                 return lambda _, rhs: to_row(jax.pure_callback(f, out, vals, to_cell(rhs)))
             x = lax.custom_linear_solve(
@@ -819,7 +819,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
     def _operator():
         """The TPFA operator and the static geometry of its interior faces: owner, neighbour,
-        normal, unit cell-to-cell vector ``e``, distance, floored ``|n.e|``, ``|f| / |V|`` of both.
+        normal, unit cell-to-cell vector `e`, distance, floored `|n.e|`, `|f| / |V|` of both.
         """
         if not tpfa:
             op = DenseDiffusionOperatorJAX(mesh_np, mesh_np.dimension, rt.n_state)
@@ -838,8 +838,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return tpfa[0]
 
     def _state_gradient(X, Xg, mesh):
-        """``(rows, dim, cells)`` LSQ gradient of the rows of ``X``: the derivative-aux fit
-        (``lsq_gradQ``), the boundary faces sampled at the ghosts ``Xg``.
+        """`(rows, dim, cells)` LSQ gradient of the rows of `X`: the derivative-aux fit
+        (`lsq_gradQ`), the boundary faces sampled at the ghosts `Xg`.
         """
         traced = dataclasses.replace(mesh_j, lsq_gradQ=mesh.lsq_gradQ)
         mis = [tuple(int(v) for v in topo.lsq_monomial_multi_index[c])
@@ -850,12 +850,12 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return halo(G.reshape(-1, nc), mesh).reshape(G.shape)
 
     def _div(k, bc, X, Qaux, p, time, mesh, correction=True):
-        """``(D, C)`` per cell of ``div(A(X) : grad X)``: ``D`` the two-point fluxes (TPFA on
-        interior faces, to the BC ghost of ``bc`` or the periodic partner on boundary faces),
-        ``C`` the rest of the flux ``n.A.grad_f`` (zero without ``correction`` or in 1-D).
+        """`(D, C)` per cell of `div(A(X) : grad X)`: `D` the two-point fluxes (TPFA on
+        interior faces, to the BC ghost of `bc` or the periodic partner on boundary faces),
+        `C` the rest of the flux `n.A.grad_f` (zero without `correction` or in 1-D).
 
-        ``grad_f`` is the mean of the two cells' LSQ gradients plus the normal correction
-        ``((X_b - X_a) / |d| - mean.e) e``, ``e`` the unit cell-to-cell vector (``n`` on boundary
+        `grad_f` is the mean of the two cells' LSQ gradients plus the normal correction
+        `((X_b - X_a) / |d| - mean.e) e`, `e` the unit cell-to-cell vector (`n` on boundary
         faces: the tangential part of the cell gradients).
 
         References:
@@ -887,7 +887,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         fc, cc, nrm = mesh.face_centers, mesh.cell_centers, mesh.face_normals
 
         def dn(faces, cells):
-            """Normal distance from the cell centres ``cells`` to the faces ``faces``."""
+            """Normal distance from the cell centres `cells` to the faces `faces`."""
             return jnp.sum((fc[faces, :] - cc[:, cells].T) * nrm[:, faces].T, axis=1)
         d = dn(f, c) + dn(j(outer_face[flux_bf]), o)
         n = nrm[:dim, f]
@@ -903,20 +903,20 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return D, C
 
     def diffusion(k, bc, Q, Qaux, p, time, mesh):
-        """Explicit ``div(A : grad Q)`` per cell (RHS sign, A > 0 diffuses)."""
+        """Explicit `div(A : grad Q)` per cell (RHS sign, A > 0 diffuses)."""
         D, C = _div(k, bc, Q, Qaux, p, time, mesh)
         return D + C
 
     def _norm(r):
-        """Euclidean norm of ``r`` (distributed: over the owned cells of all ranks)."""
+        """Euclidean norm of `r` (distributed: over the owned cells of all ranks)."""
         if partition is None:
             return jnp.linalg.norm(r)
         return jnp.sqrt(gsum(jnp.sum(jnp.where(own_cell, r, 0.0) ** 2)))
 
     def implicit_diffusion(k, bc, Q, Qaux, p, time, dt, mesh):
-        """One Crank-Nicolson step of the two-point part of ``div(A(X) : grad X)`` from ``time``
-        to ``time + dt``, A at the new state, solved by Newton with a ``linsolve`` per update; the
-        correction explicit at ``Q`` (deferred). Differentiable through the root.
+        """One Crank-Nicolson step of the two-point part of `div(A(X) : grad X)` from `time`
+        to `time + dt`, A at the new state, solved by Newton with a `linsolve` per update; the
+        correction explicit at `Q` (deferred). Differentiable through the root.
 
         References:
             Knoll, Keyes 2004, https://doi.org/10.1016/j.jcp.2003.08.010
@@ -926,7 +926,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         b = Q + 0.5 * dt * (D + 2.0 * C)
 
         def R(X):
-            """Crank-Nicolson residual ``X - b - dt/2 D(X)`` at ``time + dt``."""
+            """Crank-Nicolson residual `X - b - dt/2 D(X)` at `time + dt`."""
             X = halo(X, mesh)
             return X - b - 0.5 * dt * _div(k, bc, X, Qaux, p, time + dt, mesh,
                                            correction=False)[0]
@@ -938,7 +938,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
     warned = []
 
     def check_cfl(tok, dt_cfl, dt):
-        """Warn once (host callback) when ``dt`` exceeds the CFL step ``dt_cfl``; returns the next
+        """Warn once (host callback) when `dt` exceeds the CFL step `dt_cfl`; returns the next
         order token.
         """
         def host(a, b):
@@ -953,7 +953,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return (tok + 1,)
 
     def io_write(tok, time, Q, Qaux):
-        """Forward mode: write a snapshot through ``on_write``; returns the next order token."""
+        """Forward mode: write a snapshot through `on_write`; returns the next order token."""
         if on_write is not None and ad_mode == "forward":
             jax.debug.callback(on_write, time, Q, Qaux, ordered=True)
         return (tok + 1,)
@@ -993,7 +993,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
         return (tok + 1, *io_callback(host, shapes, *args, ordered=True))
 
     def with_closure(name, sub):
-        """The derivative-aux spec of system ``name``, each state entry tagged with its
+        """The derivative-aux spec of system `name`, each state entry tagged with its
         boundary-closure class.
         """
         # the spec, each state entry with its row's closure class
@@ -1035,8 +1035,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
 
 
 def _fgmres(A, b, dots, M, tol, restart, maxiter):
-    """Restarted flexible GMRES of ``A x = b`` with right preconditioner ``M`` (may vary per
-    iteration) and global inner products ``dots(V, w)``.
+    """Restarted flexible GMRES of `A x = b` with right preconditioner `M` (may vary per
+    iteration) and global inner products `dots(V, w)`.
 
     References:
         Saad 1993, https://doi.org/10.1137/0914028
@@ -1048,7 +1048,7 @@ def _fgmres(A, b, dots, M, tol, restart, maxiter):
     target = tol * jnp.where(bn > 0, bn, 1.0)
 
     def cycle(c):
-        """One restart cycle: Arnoldi steps until ``|r| <= tol |b|`` or ``restart`` iterations, then
+        """One restart cycle: Arnoldi steps until `|r| <= tol |b|` or `restart` iterations, then
         the least-squares update.
         """
         x, r, it, _ = c
@@ -1070,7 +1070,7 @@ def _fgmres(A, b, dots, M, tol, restart, maxiter):
             h = (h + h2).at[j + 1].set(hn)
 
             def rot(i, h):                       # the earlier rotations
-                """Apply the ``i``-th earlier Givens rotation to ``h``."""
+                """Apply the `i`-th earlier Givens rotation to `h`."""
                 a, b_ = h[i], h[i + 1]
                 return h.at[i].set(cs[i] * a + sn[i] * b_).at[i + 1].set(
                     -sn[i] * a + cs[i] * b_)
@@ -1141,7 +1141,7 @@ def _pyamg():
 
 
 def _hypre():
-    """Import the hypre binding (:mod:`zoomy_jax.symsolver.hypre`) and load its library, with a
+    """Import the hypre binding (`zoomy_jax.symsolver.hypre`) and load its library, with a
     clear error when it is missing.
 
     References:
@@ -1153,8 +1153,8 @@ def _hypre():
 
 
 def _face_kernel(rt, name):
-    """Set ``rt.<name>`` for a Numerics face function JaxRuntime does not build, lambdified like
-    ``numerical_flux`` and vmapped over the faces.
+    """Set `rt.<name>` for a Numerics face function JaxRuntime does not build, lambdified like
+    `numerical_flux` and vmapped over the faces.
     """
     num = getattr(rt, "_numerics", None)
     if getattr(rt, name, None) is not None or num is None:
@@ -1176,7 +1176,7 @@ def _face_kernel(rt, name):
     def kernel(qL, qR, qauxL, qauxR, parameters, normal):
         """The face function vmapped over the faces."""
         def one(a, b, c, d, n):
-            """One face (the ``_speed`` variant returns the two sides and the speed)."""
+            """One face (the `_speed` variant returns the two sides and the speed)."""
             out = per_face(a, b, c, d, parameters, n)
             return (out[0], out[1], out[2, 0]) if speed else out
         return jax.vmap(one, in_axes=(1, 1, 1, 1, 1), out_axes=-1)(
@@ -1186,17 +1186,17 @@ def _face_kernel(rt, name):
 
 # ── preCICE ─────────────────────────────────────────────────────────────────
 class PreciceAdapter:
-    """Host side of the ``couple_*`` effects: the preCICE API calls only.  ``comm`` (mpi4py) makes a
+    """Host side of the `couple_*` effects: the preCICE API calls only.  `comm` (mpi4py) makes a
     distributed participant, one preCICE process per rank, so it must span the world (one
-    ``mpiexec`` per participant).
+    `mpiexec` per participant).
 
     References:
         Chourdakis et al. 2022, https://doi.org/10.12688/openreseurope.14445.2
     """
 
     def __init__(self, name, config, mesh_name, write, read, comm=None):
-        """Open participant ``name`` from ``config`` on mesh ``mesh_name``, writing the data
-        ``write`` and reading ``read``.
+        """Open participant `name` from `config` on mesh `mesh_name`, writing the data
+        `write` and reading `read`.
         """
         import petsc4py  # noqa: F401  (must precede precice)
         import precice
@@ -1210,12 +1210,12 @@ class PreciceAdapter:
         self.p = precice.Participant(name, config, rank, size)
 
     def set_vertices(self, coords):
-        """The coupling vertices ``(n, >= dim)``, in the order of the data."""
+        """The coupling vertices `(n, >= dim)`, in the order of the data."""
         dim = self.p.get_mesh_dimensions(self.mesh)
         self.ids = self.p.set_mesh_vertices(self.mesh, np.asarray(coords)[:, :dim])
 
     def _write(self, q):
-        """Write the rows of ``q`` as the write data."""
+        """Write the rows of `q` as the write data."""
         for i, n in enumerate(self.wn):
             self.p.write_data(self.mesh, n, self.ids, np.asarray(q[i]))
 
@@ -1236,12 +1236,12 @@ class PreciceAdapter:
                          for n in self.rn])
 
     def write(self, q):
-        """Write ``q``; returns an empty tuple."""
+        """Write `q`; returns an empty tuple."""
         self._write(q)
         return ()
 
     def advance(self, dt):
-        """Advance by ``dt``; returns whether coupling is ongoing."""
+        """Advance by `dt`; returns whether coupling is ongoing."""
         self.p.advance(float(dt))
         return np.bool_(self.p.is_coupling_ongoing())
 
@@ -1251,7 +1251,7 @@ class PreciceAdapter:
 
 
 def coupled_face_indices(mesh_np, tag):
-    """Boundary faces carrying boundary tag ``tag`` (by name)."""
+    """Boundary faces carrying boundary tag `tag` (by name)."""
     names = list(mesh_np.boundary_conditions_sorted_names)
     nums = np.asarray(mesh_np.boundary_face_function_numbers, dtype=int)
     bf_face = np.asarray(mesh_np.boundary_face_face_indices, dtype=int)
@@ -1261,7 +1261,7 @@ def coupled_face_indices(mesh_np, tag):
 
 
 def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
-    """Coupling blocks and ``couple_*`` effects of one preCICE participant, on the tagged faces of
+    """Coupling blocks and `couple_*` effects of one preCICE participant, on the tagged faces of
     the owned cells.  Each host call takes and returns an order token (distributed: bracketed by an
     MPI reduction), so XLA cannot reorder the calls and all ranks meet their collectives in the same
     order.
@@ -1316,7 +1316,7 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
     def eff(host, *outs):
         """Effect body: the host call takes the token and returns the next one plus its outputs."""
         def body(tok, *args):
-            """The ordered ``io_callback`` of the host call."""
+            """The ordered `io_callback` of the host call."""
             def call(k, *x):
                 """Host call; returns the incremented token and the outputs."""
                 r = host(*x)
@@ -1334,7 +1334,7 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
 
 
 def hoisted_jit(fn):
-    """``jax.jit(fn)`` with the constants ``fn`` captures (the mesh index arrays) passed as
+    """`jax.jit(fn)` with the constants `fn` captures (the mesh index arrays) passed as
     arguments, so compile time and program size stay independent of the mesh.
     """
     cache = {}
@@ -1354,7 +1354,7 @@ def hoisted_jit(fn):
 
 
 def build(src, name, module):
-    """Execute printed source against the name table and return the function ``name``; raises if the
+    """Execute printed source against the name table and return the function `name`; raises if the
     source uses a block the table lacks.
     """
     missing = [n for n in contract() if n not in module and n in src]

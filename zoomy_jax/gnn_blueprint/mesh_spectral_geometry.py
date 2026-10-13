@@ -6,9 +6,9 @@ import numpy as np
 
 
 def laplacian_1d_nonuniform_vertex(x_int: np.ndarray, x_left: float = 0.0, x_right: float = 1.0) -> np.ndarray:
-    """Dense interior Poisson stencil ``-u'' ≈ f`` with Dirichlet ``u=0`` at ``x_left, x_right``.
+    """Dense interior Poisson stencil `-u'' ≈ f` with Dirichlet `u=0` at `x_left, x_right`.
 
-    Interior unknowns at sorted ``x_int`` (strictly inside ``(x_left, x_right)``).
+    Interior unknowns at sorted `x_int` (strictly inside `(x_left, x_right)`).
     """
     x_int = np.asarray(x_int, dtype=np.float64).reshape(-1)
     n = x_int.size
@@ -32,7 +32,7 @@ def laplacian_1d_nonuniform_vertex(x_int: np.ndarray, x_left: float = 0.0, x_rig
 
 
 def morton_z_order_perm(xy: np.ndarray, grid_bits: int = 10) -> np.ndarray:
-    """Z-order (Morton) sort of points in ``[0,1]^2`` for a 1D line relaxation ordering."""
+    """Z-order (Morton) sort of points in `[0,1]^2` for a 1D line relaxation ordering."""
     xy = np.asarray(xy, dtype=np.float64)
     if xy.ndim != 2 or xy.shape[1] != 2:
         raise ValueError("xy must be (n, 2)")
@@ -50,9 +50,9 @@ def delaunay_centroid_adjacency(
     n_points: int,
     seed: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Random Delaunay in ``[0,1]^2``: triangle centroids and **binary adjacency** (shared edge).
+    """Random Delaunay in `[0,1]^2`: triangle centroids and **binary adjacency** (shared edge).
 
-    Returns ``(centroids (n_tri,2), adj (n_tri,n_tri), points (n_points,2), simplices)``.
+    Returns `(centroids (n_tri,2), adj (n_tri,n_tri), points (n_points,2), simplices)`.
     """
     rng = np.random.default_rng(seed)
     pts = rng.random((n_points, 2))
@@ -82,7 +82,7 @@ def delaunay_triangle_centroids_laplacian(
     seed: int,
     ridge: float = 0.02,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """``A = L_graph + ridge * I`` on centroid adjacency (SPD if ridge>0)."""
+    """`A = L_graph + ridge * I` on centroid adjacency (SPD if ridge>0)."""
     centroids, adj, pts, S = delaunay_centroid_adjacency(n_points, seed)
     n_c = centroids.shape[0]
     deg = adj.sum(axis=1)

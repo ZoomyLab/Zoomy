@@ -2,8 +2,8 @@
 
 Provides graph-based partitioning (via pymetis when available) and
 local sub-mesh extraction with ghost-cell bookkeeping.  All routines
-operate on the NumPy-level mesh classes (``BaseMesh`` / ``LSQMesh``)
-so that they run *before* the JAX conversion step.  If ``pymetis`` is
+operate on the NumPy-level mesh classes (`BaseMesh` / `LSQMesh`)
+so that they run *before* the JAX conversion step.  If `pymetis` is
 not installed, a simple contiguous splitter is used instead.
 """
 
@@ -46,15 +46,15 @@ class PartitionInfo:
     local_faces : np.ndarray[int]
         Global face indices where at least one adjacent cell is owned.
     send_map : dict[int, np.ndarray[int]]
-        ``{neighbor_rank: local cell indices to send}``.  These are
+        `{neighbor_rank: local cell indices to send}`.  These are
         owned cells that are ghosts on a neighbouring rank.
     recv_map : dict[int, np.ndarray[int]]
-        ``{neighbor_rank: local indices where received data goes}``.
+        `{neighbor_rank: local indices where received data goes}`.
         Local indices point into the ghost region of the local array
-        (i.e. offset by ``len(owned_cells)``).
+        (i.e. offset by `len(owned_cells)`).
     global_to_local : np.ndarray[int]
         Mapping from global cell index to local cell index.  Only
-        entries for ``owned_cells`` and ``ghost_cells`` are meaningful;
+        entries for `owned_cells` and `ghost_cells` are meaningful;
         all others are set to -1.
     """
 
@@ -77,8 +77,8 @@ def _build_cell_adjacency(face_cells: np.ndarray, n_inner_cells: int):
 
     Parameters
     ----------
-    face_cells : ndarray, shape ``(2, n_faces)``
-        ``face_cells[0, f]`` and ``face_cells[1, f]`` are the two cells
+    face_cells : ndarray, shape `(2, n_faces)`
+        `face_cells[0, f]` and `face_cells[1, f]` are the two cells
         sharing face *f*.
     n_inner_cells : int
         Number of inner (non-ghost) cells.  Only inner-to-inner edges
@@ -87,8 +87,8 @@ def _build_cell_adjacency(face_cells: np.ndarray, n_inner_cells: int):
     Returns
     -------
     adjacency : list[list[int]]
-        ``adjacency[i]`` is the sorted list of inner-cell neighbours of
-        cell *i* (length ``n_inner_cells``).
+        `adjacency[i]` is the sorted list of inner-cell neighbours of
+        cell *i* (length `n_inner_cells`).
     """
     adjacency: List[List[int]] = [[] for _ in range(n_inner_cells)]
     n_faces = face_cells.shape[1]
@@ -150,10 +150,10 @@ def partition_mesh(mesh, n_parts: int) -> List[PartitionInfo]:
     ----------
     mesh : BaseMesh (or FVMMesh / LSQMesh)
         The full (global) Zoomy mesh.  Only topology arrays
-        (``face_cells``, ``n_inner_cells``, ``n_cells``, ``n_faces``)
+        (`face_cells`, `n_inner_cells`, `n_cells`, `n_faces`)
         are used.
     n_parts : int
-        Number of partitions (typically ``MPI comm size``).
+        Number of partitions (typically `MPI comm size`).
 
     Returns
     -------
@@ -207,9 +207,9 @@ def _partition_single(mesh) -> List[PartitionInfo]:
 def _build_partition_infos(
     mesh, membership: np.ndarray, n_parts: int
 ) -> List[PartitionInfo]:
-    """Build full :class:`PartitionInfo` objects from a membership vector.
+    """Build full `PartitionInfo` objects from a membership vector.
 
-    ``membership`` maps inner cell *i* -> partition rank.  Ghost cells in
+    `membership` maps inner cell *i* -> partition rank.  Ghost cells in
     the original mesh (indices >= n_inner_cells) are boundary ghosts and
     are replicated on every partition that needs them.
     """
@@ -344,16 +344,16 @@ def _get_geometry(mesh, name):
 
 def extract_local_mesh(mesh, partition: PartitionInfo):
     """Build a local mesh for one rank from the global mesh and its
-    :class:`PartitionInfo`.
+    `PartitionInfo`.
 
-    * Owned cells come first (indices ``0 .. n_owned-1``)
-    * Ghost cells follow   (indices ``n_owned .. n_owned+n_ghost-1``)
+    * Owned cells come first (indices `0 .. n_owned-1`)
+    * Ghost cells follow   (indices `n_owned .. n_owned+n_ghost-1`)
     * All topology arrays are remapped to local numbering.
     * Boundary-face bookkeeping is restricted to faces that touch an
       owned cell.
 
-    The returned mesh is an ``LSQMesh`` (if available) or ``FVMMesh``
-    with precomputed geometry, ready for ``convert_mesh_to_jax``.
+    The returned mesh is an `LSQMesh` (if available) or `FVMMesh`
+    with precomputed geometry, ready for `convert_mesh_to_jax`.
     """
     from zoomy_core.mesh.lsq_mesh import LSQMesh
     from zoomy_core.mesh.lsq_reconstruction import (

@@ -1,10 +1,10 @@
 """One structured V-cycle: learned graph smoothers + Galerkin coarse + Jacobi coarsest.
 
-Scalar per cell: ``n_components=1``, ``n_in`` in ``{3,4}`` (optional bump).  Vector stacked
-unknown (e.g. :math:`L\\otimes I`): set ``n_components=d`` and ``init_vcycle_smoothers(...,
-use_bump=...)`` so each graph node has a :math:`d`-channel correction; pass ``n_components``
-through ``forward_vcycle*``.  Pass ``b_list`` (one scalar bump per cell per level) aligned with
-cell counts in ``edges_list``.
+Scalar per cell: `n_components=1`, `n_in` in `{3,4}` (optional bump).  Vector stacked
+unknown (e.g. $L\\otimes I$): set `n_components=d` and ``init_vcycle_smoothers(...,
+use_bump=...)`` so each graph node has a $d$-channel correction; pass `n_components`
+through `forward_vcycle*`.  Pass `b_list` (one scalar bump per cell per level) aligned with
+cell counts in `edges_list`.
 """
 
 from __future__ import annotations
@@ -52,12 +52,12 @@ def init_vcycle_smoothers(
 ) -> dict[str, Any]:
     """One smoother per level; coarsest level params are unused (Jacobi-only bottom).
 
-    **Legacy (2D / scalar 1D):** pass ``n_in`` in ``{3, 4}`` (no bump / bump). Per-node output
+    **Legacy (2D / scalar 1D):** pass `n_in` in `{3, 4}` (no bump / bump). Per-node output
     is a single scalar correction.
 
-    **Vector unknowns (``d`` components per cell, Poisson on each):** omit ``n_in`` and set
-    ``n_components=d`` and ``use_bump``. Then ``n_in = 3*d + (1 if use_bump else 0)`` and
-    ``n_out = d`` (one learned update per component at each graph node).
+    **Vector unknowns (`d` components per cell, Poisson on each):** omit `n_in` and set
+    `n_components=d` and `use_bump`. Then `n_in = 3*d + (1 if use_bump else 0)` and
+    `n_out = d` (one learned update per component at each graph node).
     """
     if n_in is not None:
         in_dim = int(n_in)

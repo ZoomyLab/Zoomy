@@ -1,4 +1,4 @@
-"""``prepare_mesh`` / ``build_operators`` — the two translation blocks.
+"""`prepare_mesh` / `build_operators` — the two translation blocks.
 
 Design §2:
 
@@ -6,18 +6,18 @@ Design §2:
     build_operators(kernels, MeshRT) -> Ops
 
 These are the ONLY blocks that touch the backend's own containers; everything
-downstream speaks ``(Q, Qaux, p, t, dt)``.  Both are pure re-packaging of the
+downstream speaks `(Q, Qaux, p, t, dt)`.  Both are pure re-packaging of the
 arrays and callables the existing jax solver already builds — no new physics,
 no new kernels.  In particular:
 
-* the per-face index arrays are exactly the ones ``solver_jax.get_flux_operator``
-  precomputes (``interior_faces`` by set-difference, ``bf_face_idx``,
+* the per-face index arrays are exactly the ones `solver_jax.get_flux_operator`
+  precomputes (`interior_faces` by set-difference, `bf_face_idx`,
   the periodic-seam mask of REQ-116, the boundary face-to-cell distance);
-* ``Ops`` holds the *unchanged* :class:`~zoomy_jax.transformation.jax_runtime.JaxRuntime`
-  slots (``numerical_flux``, ``numerical_fluctuations``, ``eigenvalues``,
-  ``source``, ``boundary_conditions``, ``nonconservative_matrix``,
-  ``update_variables``, ``update_aux_variables``) and the *unchanged*
-  reconstruction objects from ``reconstruction_jax``.
+* `Ops` holds the *unchanged* `JaxRuntime`
+  slots (`numerical_flux`, `numerical_fluctuations`, `eigenvalues`,
+  `source`, `boundary_conditions`, `nonconservative_matrix`,
+  `update_variables`, `update_aux_variables`) and the *unchanged*
+  reconstruction objects from `reconstruction_jax`.
 """
 
 from __future__ import annotations
@@ -99,7 +99,7 @@ class Ops:
 
 
 def prepare_mesh(mesh, nsm, mesh_np=None) -> MeshRT:
-    """Translate a :class:`MeshJAX` into the contract's ``MeshRT``."""
+    """Translate a `MeshJAX` into the contract's `MeshRT`."""
     fc0 = np.asarray(mesh.face_cells[0])
     fc1 = np.asarray(mesh.face_cells[1])
     n_faces = int(mesh.n_faces)
@@ -168,7 +168,7 @@ def prepare_mesh(mesh, nsm, mesh_np=None) -> MeshRT:
 
 def build_operators(runtime, MeshRT_, *, reconstruct, order, h_index,
                     aux_registry_walk) -> Ops:
-    """Bundle the EXISTING runtime slots + reconstruction into ``Ops``."""
+    """Bundle the EXISTING runtime slots + reconstruction into `Ops`."""
     from zoomy_jax.fvm.reconstruction_jax import ConstantReconstruction
 
     rt_ncm = getattr(runtime, "nonconservative_matrix", None)

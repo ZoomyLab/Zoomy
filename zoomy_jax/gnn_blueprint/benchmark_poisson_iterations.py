@@ -1,9 +1,9 @@
 """GMRES matvec counts for Poisson 1D with neural initial guesses (architecture ablation).
 
-Expects one ``weights_deltaq.npz`` per run (from :mod:`train_poisson_arch_benchmark`) or
-``--scan-root`` to aggregate all subfolders.
+Expects one `weights_deltaq.npz` per run (from `train_poisson_arch_benchmark`) or
+`--scan-root` to aggregate all subfolders.
 
-Uses ``scipy.sparse.linalg.gmres`` on dense ``A u = f`` with ``x0 = pred[0]`` from the
+Uses `scipy.sparse.linalg.gmres` on dense `A u = f` with `x0 = pred[0]` from the
 learned predictor (same layout as training).
 """
 

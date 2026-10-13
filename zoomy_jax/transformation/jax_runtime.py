@@ -4,33 +4,33 @@ This is the *new* JAX runtime: the documented workflow is
 
     Model → SystemModel → NumericalSystemModel → JaxRuntime
 
-Every operator stored on the underlying SystemModel (``flux``, ``source``,
-``hydrostatic_pressure``, ``nonconservative_matrix``,
-``quasilinear_matrix``, ``mass_matrix``, ``eigenvalues``, the indexed BC
+Every operator stored on the underlying SystemModel (`flux`, `source`,
+`hydrostatic_pressure`, `nonconservative_matrix`,
+`quasilinear_matrix`, `mass_matrix`, `eigenvalues`, the indexed BC
 kernels) is lambdified once with the JAX module, then wrapped in
-``jax.jit(jax.vmap(...))`` so a single call evaluates the operator at
+`jax.jit(jax.vmap(...))` so a single call evaluates the operator at
 every cell (or every face) in one shot.
 
-The Riemann ``Numerics`` (built from ``nsm.build_numerics()``) is
-lambdified the same way and exposes per-face ``numerical_flux`` /
-``numerical_fluctuations`` vmapped over the face axis.
+The Riemann `Numerics` (built from `nsm.build_numerics()`) is
+lambdified the same way and exposes per-face `numerical_flux` /
+`numerical_fluctuations` vmapped over the face axis.
 
 Design choices:
 
 * **No source-Model dependency.**  JaxRuntime consumes only the NSM
   (and its embedded SystemModel).  The legacy path that required
-  ``Kernel(model)`` + ``JaxRuntimeModel(model, kernel=...)`` is gone.
-* **Parameters are live.**  ``self.parameters`` is a property that
-  reads ``nsm.sm.parameter_values`` fresh on every access, so user
-  mutations (e.g. ``nsm.sm.parameter_values.g = 12.0``) flow through
-  without a runtime rebuild.  ``jax.grad`` can be taken against the
+  `Kernel(model)` + `JaxRuntimeModel(model, kernel=...)` is gone.
+* **Parameters are live.**  `self.parameters` is a property that
+  reads `nsm.sm.parameter_values` fresh on every access, so user
+  mutations (e.g. `nsm.sm.parameter_values.g = 12.0`) flow through
+  without a runtime rebuild.  `jax.grad` can be taken against the
   parameter axis of any operator.
 * **No broadcast hack.**  Operators are vmap'd over the cell/face axis
-  explicitly — no ``ones_like(anchor)`` wrapping; each lambdified
+  explicitly — no `ones_like(anchor)` wrapping; each lambdified
   function takes pure scalar inputs.
 
-Replaces the legacy ``JaxRuntimeModel`` (Model-based) and
-``JaxRuntimeSymbolic`` (Numerics-based, broadcast-tricked).
+Replaces the legacy `JaxRuntimeModel` (Model-based) and
+`JaxRuntimeSymbolic` (Numerics-based, broadcast-tricked).
 """
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ def _jax_module_base() -> dict:
 
 def _to_array_of_exprs(definition) -> sp.Array:
     """Coerce a SystemModel operator entry (Matrix / ZArray /
-    NDimArray / None) to an ``sp.Array`` with concrete shape.  None
+    NDimArray / None) to an `sp.Array` with concrete shape.  None
     becomes a length-0 1-D Array so the lambdified callable returns
     an empty result without raising."""
     if definition is None:
@@ -94,20 +94,20 @@ def _shape(arr: sp.Array) -> tuple:
 
 
 def _slot_is_structurally_zero(sm, flag: str) -> bool:
-    """Core's structural-zero verdict for one operator slot, or ``False`` when
+    """Core's structural-zero verdict for one operator slot, or `False` when
     this SystemModel cannot answer.
 
-    SHAPE IS NOT THE QUESTION.  ``_shape(_to_array_of_exprs(...))`` only asks
-    "does the slot have entries"; SWE's ``diffusion_matrix`` is a correctly
-    shaped ``(4, 4, 2, 2)`` tensor of literal ZEROS, so a shape gate lowers it,
-    the solver then builds a ``DenseDiffusionOperatorJAX``, and that walks
+    SHAPE IS NOT THE QUESTION.  `_shape(_to_array_of_exprs(...))` only asks
+    "does the slot have entries"; SWE's `diffusion_matrix` is a correctly
+    shaped `(4, 4, 2, 2)` tensor of literal ZEROS, so a shape gate lowers it,
+    the solver then builds a `DenseDiffusionOperatorJAX`, and that walks
     every face in Python — 2287 s of a 2539 s LowerTriangle catchment run
     assembling an identically-zero operator.
 
-    The verdict is READ from ``zoomy_core`` (``NumericalSystemModel``'s
-    ``operator_is_zero`` family), never re-derived here: one criterion, one
+    The verdict is READ from `zoomy_core` (`NumericalSystemModel`'s
+    `operator_is_zero` family), never re-derived here: one criterion, one
     implementation.  An SM that does not carry the property (an older core, a
-    duck-typed stand-in) answers ``False``, i.e. exactly today's shape-only
+    duck-typed stand-in) answers `False`, i.e. exactly today's shape-only
     behaviour — the safe direction, since a spurious operator only costs time.
     """
     return getattr(sm, flag, None) is True
@@ -123,9 +123,9 @@ def _flat_symbols(zstruct_like) -> List[sp.Symbol]:
 
 def _group_symbols(group) -> List[sp.Symbol]:
     """Flatten ONE declared signature group from
-    ``sm.operator_signature(name)`` to an ordered symbol list.  Vector
+    `sm.operator_signature(name)` to an ordered symbol list.  Vector
     groups (variables / aux_variables / parameters / normal / position)
-    are Zstructs; the scalar groups (``time`` / ``dt``) are bare
+    are Zstructs; the scalar groups (`time` / `dt`) are bare
     Symbols."""
     if isinstance(group, sp.Symbol):
         return [group]
@@ -141,10 +141,10 @@ def _lambdify_array(arr: sp.Array, arg_lists: Sequence[Sequence[sp.Symbol]],
     sympy shape.
 
     The runtime arg lengths must match the signature's declared scalar
-    counts.  Each runtime arg is sliced to ``len(group_syms)`` scalars
+    counts.  Each runtime arg is sliced to `len(group_syms)` scalars
     — this matters when the JAX mesh stores 3D-padded vectors for
     fields the signature declares as 1D (e.g. SWE1D normal is just
-    ``n0``, but ``mesh.face_normals`` is shape ``(3, n_faces)``).
+    `n0`, but `mesh.face_normals` is shape `(3, n_faces)`).
     """
     shape = _shape(arr)
     # REQ-84: shared constant-entry rank-normalization seam
@@ -203,48 +203,48 @@ def _lambdify_array(arr: sp.Array, arg_lists: Sequence[Sequence[sp.Symbol]],
 
 
 class JaxRuntime:
-    """JIT-vmapped JAX runtime over a :class:`NumericalSystemModel`.
+    """JIT-vmapped JAX runtime over a `NumericalSystemModel`.
 
     Parameters
     ----------
     nsm : NumericalSystemModel
-        The NSM whose embedded ``sm`` (and the
-        :class:`~zoomy_core.fvm.riemann_solvers.Numerics` built from
+        The NSM whose embedded `sm` (and the
+        `Numerics` built from
         the NSM's riemann class) provide every operator.  A bare
-        ``SystemModel`` (or ``Model``) is auto-promoted via
-        :meth:`NumericalSystemModel.from_system_model`.
+        `SystemModel` (or `Model`) is auto-promoted via
+        `NumericalSystemModel.from_system_model`.
 
     Operators exposed
     -----------------
 
-    Per-cell (vmap over the cell axis of ``Q`` and ``Qaux``):
+    Per-cell (vmap over the cell axis of `Q` and `Qaux`):
 
-    * ``flux(Q, Qaux, parameters)``  →  ``(n_eq, n_dim, n_cells)``
-    * ``hydrostatic_pressure(Q, Qaux, parameters)`` →  ``(n_eq, n_dim, n_cells)``
-    * ``source(Q, Qaux, parameters[, time, dt, position])`` →  ``(n_eq, n_cells)``
-    * ``mass_matrix(Q, Qaux, parameters)`` → ``(n_eq, n_state, n_cells)``
-    * ``nonconservative_matrix(Q, Qaux, parameters)`` → ``(n_eq, n_state, n_dim, n_cells)``
-    * ``quasilinear_matrix(Q, Qaux, parameters)`` → same shape as NCP
-    * ``eigenvalues(Q, Qaux, parameters, normal)`` →  ``(n_eq, n_cells)``
+    * `flux(Q, Qaux, parameters)`  →  `(n_eq, n_dim, n_cells)`
+    * `hydrostatic_pressure(Q, Qaux, parameters)` →  `(n_eq, n_dim, n_cells)`
+    * `source(Q, Qaux, parameters[, time, dt, position])` →  `(n_eq, n_cells)`
+    * `mass_matrix(Q, Qaux, parameters)` → `(n_eq, n_state, n_cells)`
+    * `nonconservative_matrix(Q, Qaux, parameters)` → `(n_eq, n_state, n_dim, n_cells)`
+    * `quasilinear_matrix(Q, Qaux, parameters)` → same shape as NCP
+    * `eigenvalues(Q, Qaux, parameters, normal)` →  `(n_eq, n_cells)`
 
     All registry-slot signatures are DERIVED from the SystemModel's
-    declared ``operator_signature`` (REQ-185); trailing groups beyond
-    ``(Q, Qaux, parameters)`` bind positionally in declared order or by
-    keyword, with ``time`` / ``dt`` defaulting to 0 and ``position`` to
+    declared `operator_signature` (REQ-185); trailing groups beyond
+    `(Q, Qaux, parameters)` bind positionally in declared order or by
+    keyword, with `time` / `dt` defaulting to 0 and `position` to
     the origin (exact for operators that don't reference them).
 
     Per-face (vmap over the face axis):
 
-    * ``numerical_flux(qL, qR, qauxL, qauxR, parameters, normal)``
-      →  ``(n_eq, n_faces)``
-    * ``numerical_fluctuations(qL, qR, qauxL, qauxR, parameters, normal)``
-      →  ``(2*n_eq, n_faces)`` (Dp and Dm stacked)
+    * `numerical_flux(qL, qR, qauxL, qauxR, parameters, normal)`
+      →  `(n_eq, n_faces)`
+    * `numerical_fluctuations(qL, qR, qauxL, qauxR, parameters, normal)`
+      →  `(2*n_eq, n_faces)` (Dp and Dm stacked)
 
     Boundary kernel (indexed):
 
     * ``boundary_conditions(i_bc, time, position, distance, q_cell,
-       qaux_cell, parameters, normal)`` →  ``(n_state,)`` ghost cell value.
-      Invoke this inside the solver's ``fori_loop`` over boundary
+       qaux_cell, parameters, normal)` →  `(n_state,)`` ghost cell value.
+      Invoke this inside the solver's `fori_loop` over boundary
       faces — it is *not* itself vmap'd because the BC index varies
       per face.
     """
@@ -312,10 +312,10 @@ class JaxRuntime:
     @property
     def parameters(self) -> jnp.ndarray:
         """Live numeric parameter array, read fresh from
-        ``self.sm.parameter_values`` on every access.  Mutating
-        ``nsm.sm.parameter_values.g = 12.0`` is reflected on the next
+        `self.sm.parameter_values` on every access.  Mutating
+        `nsm.sm.parameter_values.g = 12.0` is reflected on the next
         call — no runtime rebuild needed.  Pass this array (or a
-        ``jax.grad``-tracked clone) as the parameter argument of any
+        `jax.grad`-tracked clone) as the parameter argument of any
         operator to take AD w.r.t. parameters."""
         return jnp.asarray(
             [float(v) for v in self.sm.parameter_values.values()],
@@ -620,14 +620,14 @@ class JaxRuntime:
             self.eigenvalues = _eig_full_num
 
     def _vmap_cell(self, per_cell_fn, *, n_extra=0, squeeze_trailing=False):
-        """Wrap a per-cell ``fn(q, qaux, p, *extra)`` into a JIT'd
-        full-grid callable.  ``Q`` and ``Qaux`` are vmapped over the
-        cell axis (axis 1); ``parameters`` and ``extra`` are broadcast.
+        """Wrap a per-cell `fn(q, qaux, p, *extra)` into a JIT'd
+        full-grid callable.  `Q` and `Qaux` are vmapped over the
+        cell axis (axis 1); `parameters` and `extra` are broadcast.
 
-        ``squeeze_trailing``: SystemModel column operators (source) are
-        stored as ``(n_eq, 1)`` matrices; we drop the size-1 axis so
-        downstream code gets ``(n_eq, n_cells)`` not
-        ``(n_eq, 1, n_cells)``."""
+        `squeeze_trailing`: SystemModel column operators (source) are
+        stored as `(n_eq, 1)` matrices; we drop the size-1 axis so
+        downstream code gets `(n_eq, n_cells)` not
+        `(n_eq, 1, n_cells)`."""
         @jax.jit
         def full_grid(Q, Qaux, parameters):
             def per_cell(q, qaux):
@@ -648,16 +648,16 @@ class JaxRuntime:
     _PER_CELL_GROUPS = ("variables", "aux_variables", "normal", "position")
 
     def _slot_arg_lists(self, name):
-        """``(keys, arg_lists)`` for registry-slot operator ``name``, read off
-        the DECLARED signature ``sm.operator_signature(name)`` — the REQ-185
-        boundary API, the same ``Function.args`` the C-family and numpy
+        """`(keys, arg_lists)` for registry-slot operator `name`, read off
+        the DECLARED signature `sm.operator_signature(name)` — the REQ-185
+        boundary API, the same `Function.args` the C-family and numpy
         printers consume.  The symbols come from the signature groups
         themselves, so this runtime translates SYNTAX only and never
         re-declares arg lists.
 
         One jax lowering-SYNTAX constraint, mirroring numpy's
-        ``NumpyRuntimeModel._op_sig``: when a split sub-system baked ``dt``
-        in as a model PARAMETER (Chorin/VAM), the declared ``dt`` group is
+        `NumpyRuntimeModel._op_sig`: when a split sub-system baked `dt`
+        in as a model PARAMETER (Chorin/VAM), the declared `dt` group is
         the SAME symbol as the parameter and must be dropped from the
         lambdify args (duplicate argument) — a lowering constraint, not a
         signature difference."""
@@ -669,24 +669,24 @@ class JaxRuntime:
     def _build_slot_operator(self, name, definition, *, squeeze_trailing=False):
         """Build a registry-slot operator whose lambdify signature carries
         the DECLARED groups (variables, aux_variables, parameters, [normal],
-        [time], [dt], [position]) from ``_slot_arg_lists(name)`` — no local
+        [time], [dt], [position]) from `_slot_arg_lists(name)` — no local
         arg-list re-declaration (REQ-185).  Generalizes the coord-operator
-        builder to EVERY slot: ``(Q, Qaux, p)``-only slots reduce exactly to
+        builder to EVERY slot: `(Q, Qaux, p)`-only slots reduce exactly to
         the classic per-cell vmap.
 
         The returned callable is backward-compatible:
-        ``fn(Q, Qaux, parameters, *extras, **extras)``.  Trailing declared
+        `fn(Q, Qaux, parameters, *extras, **extras)`.  Trailing declared
         groups bind positionally in FULL declared-signature order (so
-        ``eigenvalues(Q, Qaux, p, n)`` and ``source(Q, Qaux, p, t, dt, x)``
-        read naturally, and a positionally-passed ``dt`` still lands on the
+        `eigenvalues(Q, Qaux, p, n)` and `source(Q, Qaux, p, t, dt, x)`
+        read naturally, and a positionally-passed `dt` still lands on the
         dt slot even when the Chorin drop removed it) or by keyword.
-        ``time`` / ``dt`` default to 0 and ``position`` to the coordinate
-        origin ``zeros((3, n_cells))`` — EXACT for operators that don't
+        `time` / `dt` default to 0 and `position` to the coordinate
+        origin `zeros((3, n_cells))` — EXACT for operators that don't
         reference them, so existing 3-arg solver call sites are unchanged;
-        ``position`` follows the mesh's 3-padded convention.  Extras passed
+        `position` follows the mesh's 3-padded convention.  Extras passed
         to a slot that doesn't declare them are accepted and IGNORED
-        (mirrors the numpy flattener's trailing-``dt`` tolerance).
-        ``uniform_rank`` anchoring stays on the ``variables`` group — always
+        (mirrors the numpy flattener's trailing-`dt` tolerance).
+        `uniform_rank` anchoring stays on the `variables` group — always
         first in every declared slot."""
         keys, arg_lists = self._slot_arg_lists(name)
         per_cell_fn = _lambdify_array(
@@ -891,8 +891,8 @@ class JaxRuntime:
     # Lazy (built on first use): the old solvers never touch them.
 
     def admissible(self, Q, Qaux, parameters):
-        """The admissibility list per cell, ``(n_constraints, n_cells)`` —
-        every row must stay ``>= 0`` (decision D1); ``(0, n_cells)`` for a
+        """The admissibility list per cell, `(n_constraints, n_cells)` —
+        every row must stay `>= 0` (decision D1); `(0, n_cells)` for a
         system that declares none."""
         fn = getattr(self, "_admissible_fn", None)
         if fn is None:
@@ -922,7 +922,7 @@ class JaxRuntime:
     def boundary_ghost_state(self, bc_idx, time, position, distance, q, qaux,
                              parameters, normal, bdata=None):
         """The indexed D5 ghost kernel for ONE face (vmap it for many):
-        ``(n_state,)``.  ``bdata=None`` means the BC input state."""
+        `(n_state,)`.  `bdata=None` means the BC input state."""
         fn = getattr(self, "_ghost_face_fn", None)
         if fn is None:
             sym, branches, a, keys, arg_lists = self._ghost_symbolic()
@@ -946,13 +946,13 @@ class JaxRuntime:
                   normal, q if bdata is None else bdata)
 
     def boundary_ghost(self, bc_idx):
-        """BATCHED ghost kernel for a STATIC branch vector ``bc_idx`` (numpy
+        """BATCHED ghost kernel for a STATIC branch vector `bc_idx` (numpy
         ints, one per boundary face, routed by tag NAME — see
-        :func:`zoomy_core.model.boundary_conditions.boundary_face_branches`).
+        `zoomy_core.model.boundary_conditions.boundary_face_branches`).
 
         Returns ``ghost(time, position, distance, Q_in, Qaux_in, parameters,
         normal, bdata=None) -> (Q_ghost, Qaux_ghost)``; face arrays carry a
-        trailing face axis.  Every BC branch is ``vmap``-ed over ITS faces
+        trailing face axis.  Every BC branch is `vmap`-ed over ITS faces
         only (static index groups — a branch is never evaluated on a foreign
         face, so no NaN of an inactive branch can leak into a gradient).  The
         ghost aux is the model's aux update rule applied to the ghost state
@@ -996,11 +996,11 @@ class JaxRuntime:
 
     def _build_bc(self):
         """Lambdify the indexed BC kernel that lives on
-        ``sm.boundary_conditions``.  The definition is typically a
-        sympy ``Piecewise`` over ``i_bc_func`` whose branches are
-        ``sp.Array`` ghost-state vectors of length ``n_state``.
+        `sm.boundary_conditions`.  The definition is typically a
+        sympy `Piecewise` over `i_bc_func` whose branches are
+        `sp.Array` ghost-state vectors of length `n_state`.
 
-        We delegate to the proven NumPy ``_lambdify_function``
+        We delegate to the proven NumPy `_lambdify_function`
         infrastructure (handles Piecewise-of-vectors, vectorized
         broadcast, flatten/extract) and just JIT-wrap the result so
         JAX sees it as one fused kernel.  No vmap — the BC index
@@ -1025,8 +1025,8 @@ class JaxRuntime:
 
 class _StubSymbolicRegistrar:
     """Minimal SymbolicRegistrar look-alike: exposes a single named
-    function via ``.functions``.  ``NumpyRuntimeSymbolic`` iterates
-    ``symbolic_obj.functions`` and lambdifies each entry — we feed it
+    function via `.functions`.  `NumpyRuntimeSymbolic` iterates
+    `symbolic_obj.functions` and lambdifies each entry — we feed it
     one function at a time so each BC kernel becomes its own jit'd
     callable."""
 
@@ -1040,8 +1040,8 @@ class _StubSymbolicRegistrar:
 
 def _flatten_with_structure(sig):
     """Walk a Zstruct-style signature and return (flat_arg_syms,
-    structure).  ``structure`` is a list of ("key", "leaf-or-vector")
-    entries used by ``_gather_flat`` to reassemble call args from the
+    structure).  `structure` is a list of ("key", "leaf-or-vector")
+    entries used by `_gather_flat` to reassemble call args from the
     runtime arguments."""
     flat_args: List[sp.Symbol] = []
     structure: List[tuple] = []
@@ -1089,8 +1089,8 @@ def _flatten_node(node):
 
 def _flatten_with_structure(sig):
     """Walk a Zstruct-style signature and return (flat_arg_syms,
-    structure).  ``structure`` is a list of ``(key, expected_count)``
-    pairs used by ``_gather_flat`` to slice the runtime arrays to
+    structure).  `structure` is a list of `(key, expected_count)`
+    pairs used by `_gather_flat` to slice the runtime arrays to
     the right length."""
     flat_args: List[sp.Symbol] = []
     structure: List[tuple] = []
@@ -1111,8 +1111,8 @@ def _flatten_with_structure(sig):
 def _gather_flat(structure, i_bc, time, position, distance, q_cell,
                  qaux_cell, parameters, normal):
     """Map runtime args (named) to the flat list the lambdified BC
-    function expects.  Each ``structure`` entry is ``(key, count)`` —
-    we take exactly ``count`` scalars from the matching runtime arg."""
+    function expects.  Each `structure` entry is `(key, count)` —
+    we take exactly `count` scalars from the matching runtime arg."""
     named = {
         "i_bc_func": i_bc, "i_bc": i_bc,
         "time": time, "t": time,

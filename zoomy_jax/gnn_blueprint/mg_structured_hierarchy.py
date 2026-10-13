@@ -51,9 +51,9 @@ def restriction_prolongation_2x2(ni_x: int, ni_y: int) -> tuple[np.ndarray, np.n
 def build_poisson_hierarchy(nx: int, ny: int) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray], list[np.ndarray], list[tuple[int, int]]]:
     """Returns (A_list, R_list, P_list, edges_list, shapes).
 
-    ``A_list[0]`` is the 5-point Laplacian on the finest interior; coarser ``A_list[ell]``
-    are Galerkin triple products. ``R_list[ell]`` maps level ell → ell+1 (coarser);
-    ``P_list[ell]`` maps ell+1 → ell. The coarsest level has no trailing R/P.
+    `A_list[0]` is the 5-point Laplacian on the finest interior; coarser `A_list[ell]`
+    are Galerkin triple products. `R_list[ell]` maps level ell → ell+1 (coarser);
+    `P_list[ell]` maps ell+1 → ell. The coarsest level has no trailing R/P.
     """
     ni_x, ni_y, _ = _shape_interior(nx, ny)
     _require_even_interior(ni_x, ni_y)

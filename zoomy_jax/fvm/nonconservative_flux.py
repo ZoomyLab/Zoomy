@@ -188,11 +188,11 @@ class Rusanov(NonconservativeFlux):
 class NonconservativeRusanov(Rusanov):
     """Rusanov fluctuations using only the nonconservative matrix.
 
-    Mirrors the NumPy ``NonconservativeRusanov``: the path integral
-    is computed over ``nonconservative_matrix`` (not ``quasilinear_matrix``),
+    Mirrors the NumPy `NonconservativeRusanov`: the path integral
+    is computed over `nonconservative_matrix` (not `quasilinear_matrix`),
     so the fluctuations contain only the nonconservative contribution plus
     Rusanov dissipation.  The conservative flux is handled separately by
-    the flux operator (``CenteredFlux``).
+    the flux operator (`CenteredFlux`).
     """
 
     def _get_A(self, model):

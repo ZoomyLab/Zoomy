@@ -18,8 +18,8 @@ def _legacy_module() -> dict:
     """The jax UserFunctions table (REQ-168) — ONE source; this dict used to be
     duplicated verbatim across both classes below.
 
-    Lazy import: ``zoomy_jax.fvm`` imports this module, so a module-level import
-    of ``zoomy_jax.fvm.userfunctions`` would be circular."""
+    Lazy import: `zoomy_jax.fvm` imports this module, so a module-level import
+    of `zoomy_jax.fvm.userfunctions` would be circular."""
     from zoomy_jax.fvm.userfunctions import jax_userfunctions
     m = jax_userfunctions()
     m["max_wavespeed"] = None      # orphaned; see jax_runtime._jax_module_base
@@ -29,7 +29,7 @@ def _legacy_module() -> dict:
 class _LazyUserFunctions:
     """Descriptor: build the table on FIRST ACCESS, not at import.
 
-    ``_legacy_module``'s *import* is lazy — but a class body that CALLS it runs
+    `_legacy_module`'s *import* is lazy — but a class body that CALLS it runs
     it at **import** time regardless, which recreated the exact cycle the lazy
     import exists to avoid:
 
@@ -57,8 +57,8 @@ class _LazyUserFunctions:
 class JaxRuntimeModel(NumpyRuntimeModel):
     """JAX-backed runtime model compiled from symbolic functions.
 
-    LEGACY — superseded by :class:`zoomy_jax.transformation.jax_runtime.JaxRuntime`,
-    the live runtime every solver builds via ``JaxRuntime.from_nsm``."""
+    LEGACY — superseded by `zoomy_jax.transformation.jax_runtime.JaxRuntime`,
+    the live runtime every solver builds via `JaxRuntime.from_nsm`."""
 
     module = _LazyUserFunctions()
     printer = "jax"
@@ -67,7 +67,7 @@ class JaxRuntimeModel(NumpyRuntimeModel):
 class JaxRuntimeSymbolic(NumpyRuntimeSymbolic):
     """JAX-backed runtime wrapper for symbolic registrars (e.g. Numerics, Kernel).
 
-    LEGACY — see :class:`JaxRuntimeModel`."""
+    LEGACY — see `JaxRuntimeModel`."""
 
     module = _LazyUserFunctions()
     printer = "jax"

@@ -1,16 +1,16 @@
 """Non-uniform and mesh-agnostic spectral global coupling (NUFFT-style NUDFT + kernel RFF).
 
 **NUDFT** (non-uniform discrete Fourier transform): fixed low-frequency exponentials
-``exp(2π i (k·x))`` evaluated at node coordinates, analysis ``c = Φᴴ u``, learned
-per-mode complex weights, synthesis ``u' = Re(Φ (w ⊙ c))``. This is a dense
+`exp(2π i (k·x))` evaluated at node coordinates, analysis `c = Φᴴ u`, learned
+per-mode complex weights, synthesis `u' = Re(Φ (w ⊙ c))`. This is a dense
 low-mode *type-1 / type-2* NUFFT surrogate (equispaced frequency grid, non-uniform
 spatial samples) and is differentiable in JAX.
 
-**RFF kernel mix** (kernel / random Fourier feature view): ``cos(2π (ω_m·x) + φ_m)``
-with frozen ``ω, φ`` and learned linear readout + blend — stationary-kernel
+**RFF kernel mix** (kernel / random Fourier feature view): `cos(2π (ω_m·x) + φ_m)`
+with frozen `ω, φ` and learned linear readout + blend — stationary-kernel
 approximation on arbitrary point sets.
 
-Coordinates must lie in ``[0, 1]`` (per dimension) for conditioning.
+Coordinates must lie in `[0, 1]` (per dimension) for conditioning.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import jax.numpy as jnp
 
 
 def nudft_phi_matrix_1d(x: jnp.ndarray, n_modes: int) -> jnp.ndarray:
-    """``Phi[j,m] = exp(2π i m x_j) / sqrt(n)``, ``x`` shape ``(n,)``."""
+    """`Phi[j,m] = exp(2π i m x_j) / sqrt(n)`, `x` shape `(n,)`."""
     n = x.shape[0]
     m = jnp.arange(n_modes, dtype=jnp.float64)[None, :]
     phase = 2.0 * jnp.pi * x[:, None] * m
@@ -29,7 +29,7 @@ def nudft_phi_matrix_1d(x: jnp.ndarray, n_modes: int) -> jnp.ndarray:
 
 
 def nudft_mode_pairs_2d(kmax: int) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Integer wavevectors ``(kx, ky)`` with ``|kx|,|ky| <= kmax``."""
+    """Integer wavevectors `(kx, ky)` with `|kx|,|ky| <= kmax`."""
     ks = []
     for kx in range(-kmax, kmax + 1):
         for ky in range(-kmax, kmax + 1):
@@ -41,7 +41,7 @@ def nudft_mode_pairs_2d(kmax: int) -> tuple[jnp.ndarray, jnp.ndarray]:
 
 
 def nudft_phi_matrix_2d(xy: jnp.ndarray, kx: jnp.ndarray, ky: jnp.ndarray) -> jnp.ndarray:
-    """``Phi[j,m] = exp(2π i (kx_m x_j + ky_m y_j)) / sqrt(n)``."""
+    """`Phi[j,m] = exp(2π i (kx_m x_j + ky_m y_j)) / sqrt(n)`."""
     n = xy.shape[0]
     phase = 2.0 * jnp.pi * (xy[:, 0:1] * kx[None, :] + xy[:, 1:2] * ky[None, :])
     scale = jnp.sqrt(jnp.asarray(max(n, 1), dtype=jnp.float64))
@@ -112,7 +112,7 @@ def apply_rff_kernel_mix_1d(
     w_lin: jnp.ndarray,
     blend_logits: jnp.ndarray,
 ) -> jnp.ndarray:
-    """``x`` (n,), ``omega`` (M,), ``phase`` (M,), ``w_lin`` (n_fields, M)."""
+    """`x` (n,), `omega` (M,), `phase` (M,), `w_lin` (n_fields, M)."""
     z = 2.0 * jnp.pi * x[:, None] * omega[None, :] + phase[None, :]
     feats = jnp.cos(z)
     n_fields = q_mp.shape[0]
@@ -136,7 +136,7 @@ def apply_rff_kernel_mix_2d(
     w_lin: jnp.ndarray,
     blend_logits: jnp.ndarray,
 ) -> jnp.ndarray:
-    """``xy`` (n,2), ``omega`` (M,2), ``phase`` (M,), ``w_lin`` (n_fields, M)."""
+    """`xy` (n,2), `omega` (M,2), `phase` (M,), `w_lin` (n_fields, M)."""
     z = 2.0 * jnp.pi * jnp.sum(xy[:, None, :] * omega[None, :, :], axis=-1) + phase[None, :]
     feats = jnp.cos(z)
     n_fields = q_mp.shape[0]

@@ -1,22 +1,22 @@
-"""Differentiable implicit solves for the template's ``Root`` / ``LinSolve``.
+"""Differentiable implicit solves for the template's `Root` / `LinSolve`.
 
 Moved (semantics kept, old file untouched) from
-:mod:`zoomy_jax.fvm.implicit_ad` and extended:
+`zoomy_jax.fvm.implicit_ad` and extended:
 
-* :func:`newton_root` -- Newton inside ``jax.lax.custom_root``: the loop is not
+* `newton_root` -- Newton inside `jax.lax.custom_root`: the loop is not
   differentiated, the root's derivative follows from the implicit function
   theorem with the exact AD linearisation of the residual, solved with the
-  same linear solver (``custom_linear_solve`` with a transpose solve, so it is
+  same linear solver (`custom_linear_solve` with a transpose solve, so it is
   forward AND reverse differentiable).  Returns the solver statistics
-  ``(rnorm, iters)`` as non-differentiable aux.
-* :func:`gmres` -- restarted GMRES with an INJECTABLE inner product (SPMD:
-  a ``psum``-ed inner product makes every norm global), right
-  preconditioning, returns ``(x, rel_resid, iters)``.
-* :func:`cellwise_solve` (block-diagonal over the trailing cell axis),
-  :func:`dense_solve`, :func:`banded_solve` (block-banded over the cell axis,
+  `(rnorm, iters)` as non-differentiable aux.
+* `gmres` -- restarted GMRES with an INJECTABLE inner product (SPMD:
+  a `psum`-ed inner product makes every norm global), right
+  preconditioning, returns `(x, rel_resid, iters)`.
+* `cellwise_solve` (block-diagonal over the trailing cell axis),
+  `dense_solve`, `banded_solve` (block-banded over the cell axis,
   read off by graph-coloured probing).
-* :func:`make_solver` -- the ``LinSolveOpts.kind`` dispatch, with the
-  ``constant`` / ``constant_per_row`` null-space projections.
+* `make_solver` -- the `LinSolveOpts.kind` dispatch, with the
+  `constant` / `constant_per_row` null-space projections.
 """
 from __future__ import annotations
 
@@ -44,9 +44,9 @@ def project(v, mode):
 
 def gmres(matvec, b, *, tol, maxiter, restart=30, inner=default_inner,
           precond=None):
-    """Right-preconditioned restarted GMRES: ``x`` with
-    ``||b - A x|| <= tol ||b||`` (norms from ``inner``) or after ``maxiter``
-    restart cycles.  ``x0 = 0``.  Returns ``(x, rel_resid, iters)``."""
+    """Right-preconditioned restarted GMRES: `x` with
+    `||b - A x|| <= tol ||b||` (norms from `inner`) or after `maxiter`
+    restart cycles.  `x0 = 0`.  Returns `(x, rel_resid, iters)`."""
     shape, dtype = b.shape, b.dtype
     bf = jnp.ravel(b)
     n = bf.size
@@ -114,7 +114,7 @@ def _cells(b):
 
 
 def cellwise_solve(matvec, b):
-    """``x`` with ``matvec(x) = b`` for an operator BLOCK-DIAGONAL over the
+    """`x` with `matvec(x) = b` for an operator BLOCK-DIAGONAL over the
     trailing (cell) axis: one probe per leading row reads every cell block."""
     B2 = _cells(b)
     nv = B2.shape[0]
@@ -136,8 +136,8 @@ def dense_solve(matvec, b, nullspace=None):
 
 
 def banded_solve(matvec, b, bw):
-    """Operator block-banded over the cell axis with half-bandwidth ``bw``
-    cells: read off with ``nv*(2bw+1)`` coloured probes, assembled in
+    """Operator block-banded over the cell axis with half-bandwidth `bw`
+    cells: read off with `nv*(2bw+1)` coloured probes, assembled in
     cell-major order and solved densely (correct for any size; a dedicated
     banded factorisation is a performance refinement)."""
     B2 = _cells(b)
@@ -171,8 +171,8 @@ def banded_solve(matvec, b, bw):
 def make_solver(*, kind, tol, restart=30, maxiter=50, precond=None,
                 nullspace=None, bandwidth=None, inner=default_inner,
                 symmetric=False):
-    """``solve(matvec, b) -> (x, (rel_resid, iters))`` for one LinSolve kind.
-    Carries no AD rule: wrap it in ``custom_linear_solve``."""
+    """`solve(matvec, b) -> (x, (rel_resid, iters))` for one LinSolve kind.
+    Carries no AD rule: wrap it in `custom_linear_solve`."""
 
     def solve(matvec, b):
         rhs = project(b, nullspace)
@@ -214,15 +214,15 @@ def fd_jvp(residual):
 
 def newton_root(residual, x0, jvp, solve, *, tol, maxiter,
                 inner=default_inner):
-    """Root of ``residual`` by Newton, differentiable by the implicit function
-    theorem (``custom_root``).
+    """Root of `residual` by Newton, differentiable by the implicit function
+    theorem (`custom_root`).
 
-    ``jvp(x, v)``: Jacobian action of the NEWTON updates (AD, FD or
+    `jvp(x, v)`: Jacobian action of the NEWTON updates (AD, FD or
     analytic); derivatives always use the exact AD linearisation.
-    ``solve(matvec, b) -> (x, aux)`` (see :func:`make_solver`).
-    Stops when ``||R|| <= tol`` or after ``maxiter`` updates (a NaN residual
-    stops too).  Returns ``(x, (rnorm, iters))``; the template guards on
-    ``rnorm <= tol`` (D9)."""
+    `solve(matvec, b) -> (x, aux)` (see `make_solver`).
+    Stops when `||R|| <= tol` or after `maxiter` updates (a NaN residual
+    stops too).  Returns `(x, (rnorm, iters))`; the template guards on
+    `rnorm <= tol` (D9)."""
 
     def norm(r):
         return jnp.sqrt(inner(r, r))

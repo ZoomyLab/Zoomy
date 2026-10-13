@@ -3,29 +3,35 @@
 Uses pairwise (2:1) coarsening, chain-graph message passing, Galerkin coarse operators, and
 Jacobi on the coarsest level—same smoother stack as the 2D structured V-cycle, on a 1D grid.
 
-With ``--n-components d`` (default 1), the linear system is :math:`(L \\otimes I_d) u = f` on the
-stacked unknown in :math:`\\mathbb{R}^{n_{\\mathrm{cell}} d}` (cell-major ordering). The graph
-still has one node per cell; smoothers see :math:`3d` features :math:`(u,r,f)` per cell (plus
-optional bump). GMRES uses the full :math:`(n_{\\mathrm{cell}}d)\\times(n_{\\mathrm{cell}}d)`
-matrix—the vector-level Poisson analogue for a field with :math:`d` components per cell.
+With `--n-components d` (default 1), the linear system is $(L \\otimes I_d) u = f$ on the
+stacked unknown in $\\mathbb{R}^{n_{\\mathrm{cell}} d}$ (cell-major ordering). The graph
+still has one node per cell; smoothers see $3d$ features $(u,r,f)$ per cell (plus
+optional bump). GMRES uses the full $(n_{\\mathrm{cell}}d)\\times(n_{\\mathrm{cell}}d)$
+matrix—the vector-level Poisson analogue for a field with $d$ components per cell.
 
 Requires an **even** finest interior size so halving continues until a small coarsest (e.g.
-``n_interior=64`` → levels 64, 32, 16, 8, 4, 2, 1).
+`n_interior=64` → levels 64, 32, 16, 8, 4, 2, 1).
 
-Example::
+Example:
 
+```
     python -m zoomy_jax.gnn_blueprint.train_vcycle_structured_poisson_1d --n-interior 128 \\
         --epochs 80 --gmres-trials 24
+```
 
-Three components (GN-like DoF count per cell, decoupled Poisson blocks)::
+Three components (GN-like DoF count per cell, decoupled Poisson blocks):
 
+```
     python -m zoomy_jax.gnn_blueprint.train_vcycle_structured_poisson_1d --n-interior 128 \\
         --n-components 3 --epochs 80 --gmres-trials 24
+```
 
-Bump channel (1D Gaussian on the line, restricted each level)::
+Bump channel (1D Gaussian on the line, restricted each level):
 
+```
     python -m zoomy_jax.gnn_blueprint.train_vcycle_structured_poisson_1d --n-interior 128 \\
         --bump-amplitude 0.12 --bump-sigma 0.15 --rhs-bump-scale 0.5
+```
 """
 
 from __future__ import annotations

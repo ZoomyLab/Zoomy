@@ -1,8 +1,8 @@
 """Build NPZ datasets for 2D Poisson multibranch + Poisson-z experiments.
 
-**Physics split (linear):** Sample three random forcings ``fd, fa, fs``, ``f = fd+fa+fs``,
-``ud = A^{-1} fd``, etc., ``ut = ud+ua+us`` (exact). Branches can be supervised on
-``ud,ua,us`` and fused to match ``ut``.
+**Physics split (linear):** Sample three random forcings `fd, fa, fs`, `f = fd+fa+fs`,
+`ud = A^{-1} fd`, etc., `ut = ud+ua+us` (exact). Branches can be supervised on
+`ud,ua,us` and fused to match `ut`.
 
 Saves one file per mesh configuration.
 """

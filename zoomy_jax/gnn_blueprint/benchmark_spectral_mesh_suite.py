@@ -1,7 +1,7 @@
-"""GMRES matvec counts for :mod:`train_spectral_mesh_suite` checkpoints.
+"""GMRES matvec counts for `train_spectral_mesh_suite` checkpoints.
 
-Rebuilds the discrete operator ``A`` from ``mesh_suite`` + ``dataset_seed`` metadata
-and compares learned ``x0 = pred u`` to zero initial guess.
+Rebuilds the discrete operator `A` from `mesh_suite` + `dataset_seed` metadata
+and compares learned `x0 = pred u` to zero initial guess.
 """
 
 from __future__ import annotations

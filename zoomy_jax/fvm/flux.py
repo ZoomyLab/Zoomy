@@ -29,7 +29,7 @@ class CenteredFlux(Flux):
 
     No Rusanov dissipation -- that is handled by the nonconservative
     fluctuation operator.  This mirrors the NumPy NonconservativeRusanov
-    where ``get_viscosity_identity_flux()`` returns zero.
+    where `get_viscosity_identity_flux()` returns zero.
     """
 
     def get_flux_operator(self, model):

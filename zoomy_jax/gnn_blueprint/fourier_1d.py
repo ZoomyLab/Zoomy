@@ -1,7 +1,7 @@
 """1D real-FFT linear mixing (FNO-style global coupling) for uniform cell ordering.
 
-For 1D FV lines (e.g. Green–Naghdi): ``q`` shape ``(n_fields, n_cells)``. Each field
-uses ``rfft``, pointwise complex multiply with learned weights, then ``irfft``. A
+For 1D FV lines (e.g. Green–Naghdi): `q` shape `(n_fields, n_cells)`. Each field
+uses `rfft`, pointwise complex multiply with learned weights, then `irfft`. A
 per-field sigmoid blend mixes the result with the input (identity when blend → 0).
 """
 
@@ -19,8 +19,8 @@ def apply_fourier_linear_mix_1d(
 ) -> jnp.ndarray:
     """Spectral linear map per field + blend with identity.
 
-    ``w_r``, ``w_i``: ``(n_fields, max_modes)``; only ``rfft`` length is used.
-    ``blend_logits``: ``(n_fields,)``.
+    `w_r`, `w_i`: `(n_fields, max_modes)`; only `rfft` length is used.
+    `blend_logits`: `(n_fields,)`.
     """
     n_fields, n_cells = q_mp.shape
 

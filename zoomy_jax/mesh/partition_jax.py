@@ -1,34 +1,34 @@
-"""SPMD partitioning for ``MeshJAX`` — produces per-device padded
+"""SPMD partitioning for `MeshJAX` — produces per-device padded
 meshes with halo-shifted indices and remapped LSQ stencils.
 
-Each device gets a :class:`MeshJAX` whose ``cell_*`` arrays carry
-``n_local + 2*halo`` cells in this layout:
+Each device gets a `MeshJAX` whose `cell_*` arrays carry
+`n_local + 2*halo` cells in this layout:
 
   [  halo_left  |  n_local owned cells  |  halo_right  ]
      |←  halo →|                        |←  halo →|
 
 The padded slab matches the convention used by
-:func:`~zoomy_jax.fvm.halo_exchange_jax.halo_exchange_inplace`.
+`halo_exchange_inplace`.
 
 LSQ stencil remapping
 ---------------------
-The per-cell LSQ A-matrix (``mesh.lsq_gradQ[g]``) is **invariant** —
+The per-cell LSQ A-matrix (`mesh.lsq_gradQ[g]`) is **invariant** —
 it depends only on local geometry, which is identical between the
 global cell and its padded-slab image.  What changes is the **index
-pointers** (``lsq_neighbors``, ``lsq_boundary_face_neighbors``).
+pointers** (`lsq_neighbors`, `lsq_boundary_face_neighbors`).
 
-For each owned cell at local index ``i = halo + j`` (global
-``g = p*n_local + j``):
-  - ``part.lsq_gradQ[i] = mesh.lsq_gradQ[g]`` (copied unchanged).
-  - ``part.lsq_neighbors[i, k]`` = local-padded index of
-    ``mesh.lsq_neighbors[g, k]``, via the simple offset map
-    ``g_idx − p*n_local + halo``.
-  - ``part.lsq_boundary_face_neighbors[i, k]`` remaps the global
+For each owned cell at local index `i = halo + j` (global
+`g = p*n_local + j`):
+  - `part.lsq_gradQ[i] = mesh.lsq_gradQ[g]` (copied unchanged).
+  - `part.lsq_neighbors[i, k]` = local-padded index of
+    `mesh.lsq_neighbors[g, k]`, via the simple offset map
+    `g_idx − p*n_local + halo`.
+  - `part.lsq_boundary_face_neighbors[i, k]` remaps the global
     boundary-face index to the per-partition boundary-face index
     (each interior partition has 0; rank-0 has the global left,
     rank-(N-1) has the global right).
 
-Halo cells (``i ∈ [0, halo) ∪ [halo+n_local, halo+n_local+halo)``)
+Halo cells (`i ∈ [0, halo) ∪ [halo+n_local, halo+n_local+halo)`)
 also get an LSQ entry: if the cell's stencil fits in the padded
 slab (i.e., halo is wide enough), the real LSQ data is copied;
 otherwise the cell falls back to a **self-stencil** (gradient
@@ -36,14 +36,14 @@ evaluates to zero — first-order at that cell), and only the owned-
 cell + first-halo-cell faces are bit-identical to single-device.
 
 For linear LSQ (radius 1), bit-identical second-order at inter-
-partition faces needs ``halo ≥ 2``; ``halo = 1`` is fine for
+partition faces needs `halo ≥ 2`; `halo = 1` is fine for
 first-order constant reconstruction but degrades MUSCL reconstruction
 to mixed order at the partition boundary.
 
 Partition layout: contiguous block along the cell axis — the only
 partition strategy that makes physical sense for a regular
 structured 1D mesh.  For unstructured / 2D-3D meshes use the
-existing graph-based ``zoomy_jax.mesh.partition.partition_mesh``.
+existing graph-based `zoomy_jax.mesh.partition.partition_mesh`.
 """
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ from zoomy_jax.mesh.mesh import MeshJAX, convert_mesh_to_jax
 
 def _g2l(g_idx: int, p: int, n_local: int, halo: int) -> int:
     """Map a global cell index to a local padded index in partition
-    ``p``.  Returns -1 if the global cell is outside the padded slab."""
+    `p`.  Returns -1 if the global cell is outside the padded slab."""
     rel = g_idx - p * n_local
     if 0 <= rel < n_local:
         return halo + rel
@@ -87,19 +87,19 @@ def _bdy_global_to_local(
 def partition_1d_contiguous(
     mesh: MeshJAX, n_parts: int, halo: int
 ) -> List[MeshJAX]:
-    """Split a 1D ``MeshJAX`` into ``n_parts`` contiguous chunks, each
-    padded with ``halo`` cells on both sides; LSQ stencils remapped.
+    """Split a 1D `MeshJAX` into `n_parts` contiguous chunks, each
+    padded with `halo` cells on both sides; LSQ stencils remapped.
 
     Per-partition layout (cell axis):
         local cell index 0 .. halo-1            : LEFT halo
         local cell index halo .. halo+n_local-1 : owned
         local cell index halo+n_local .. +halo  : RIGHT halo
 
-    ``part.n_inner_cells = n_local + 2*halo`` so the reconstruction
+    `part.n_inner_cells = n_local + 2*halo` so the reconstruction
     classes iterate over the full padded slab.  The flux operator is
     responsible for restricting cell updates to owned cells
-    ``[halo .. halo+n_local)`` — halo cells get refreshed by
-    :func:`halo_exchange_inplace` at the next step.
+    `[halo .. halo+n_local)` — halo cells get refreshed by
+    `halo_exchange_inplace` at the next step.
 
     Parameters
     ----------
@@ -114,7 +114,7 @@ def partition_1d_contiguous(
     Returns
     -------
     list of MeshJAX
-        ``n_parts`` per-partition meshes with padded layout and
+        `n_parts` per-partition meshes with padded layout and
         remapped LSQ data.
     """
     if mesh.dimension != 1:
@@ -222,7 +222,7 @@ def partition_1d_contiguous(
 
         def _remap_cell(local_i: int, g: int) -> bool:
             """Try to remap LSQ data for the cell whose global index
-            is ``g`` into per-partition slot ``local_i``.  Returns
+            is `g` into per-partition slot `local_i`.  Returns
             False if the stencil reaches outside the padded slab
             (caller falls back to self-stencil)."""
             if not (0 <= g < nc_global):
@@ -335,48 +335,48 @@ def partition_xaxis_structured(
     shape: Tuple[int, ...],
 ) -> List[MeshJAX]:
     """SPMD x-axis decomposition for a uniform structured mesh in
-    1D, 2D, or 3D.  Generalises :func:`partition_1d_contiguous` —
+    1D, 2D, or 3D.  Generalises `partition_1d_contiguous` —
     each rank gets a padded x-strip / x-slab whose faces, geometry,
-    and (interior) LSQ stencils are built via ``LSQMesh.create_Nd``;
+    and (interior) LSQ stencils are built via `LSQMesh.create_Nd`;
     boundary-aware LSQ data for cells whose stencil fits in the
     slab is then OVERRIDDEN with the global mesh's data
     (index-remapped) so face reconstruction at inter-partition faces
     is bit-identical to a single-device run.
 
     Cell ordering follows the LSQMesh convention:
-      * 1D: ``ic = ix``
-      * 2D: ``ic = ix * ny + iy``
-      * 3D: ``ic = ix * ny * nz + iy * nz + iz``
+      * 1D: `ic = ix`
+      * 2D: `ic = ix * ny + iy`
+      * 3D: `ic = ix * ny * nz + iy * nz + iz`
 
     The padded slab's cells are contiguous in this linear cell index,
-    so :func:`halo_exchange_inplace` works UNCHANGED — pass
-    ``halo_cell = halo * x_stride`` where ``x_stride = ny`` in 2D and
-    ``ny * nz`` in 3D.
+    so `halo_exchange_inplace` works UNCHANGED — pass
+    `halo_cell = halo * x_stride` where `x_stride = ny` in 2D and
+    `ny * nz` in 3D.
 
     Parameters
     ----------
     global_mesh : MeshJAX
         Global uniform structured mesh.  Must satisfy
-        ``shape[0] % n_parts == 0``.
+        `shape[0] % n_parts == 0`.
     n_parts : int
         Number of x-partitions.
     halo : int
-        Halo width in **x cells** on each side.  ``halo >= 2`` is
+        Halo width in **x cells** on each side.  `halo >= 2` is
         needed to keep order-2 LSQ-MUSCL reconstruction bit-identical
         at inter-partition x-faces.
     domain : tuple of float
-        Global domain extent.  ``(x_min, x_max)`` for 1D,
-        ``(x_min, x_max, y_min, y_max)`` for 2D,
-        ``(x_min, x_max, y_min, y_max, z_min, z_max)`` for 3D.
+        Global domain extent.  `(x_min, x_max)` for 1D,
+        `(x_min, x_max, y_min, y_max)` for 2D,
+        `(x_min, x_max, y_min, y_max, z_min, z_max)` for 3D.
     shape : tuple of int
-        Global structured mesh shape.  ``(nx,)`` for 1D,
-        ``(nx, ny)`` for 2D, ``(nx, ny, nz)`` for 3D.
+        Global structured mesh shape.  `(nx,)` for 1D,
+        `(nx, ny)` for 2D, `(nx, ny, nz)` for 3D.
 
     Returns
     -------
     list of MeshJAX
-        ``n_parts`` per-partition padded slabs.  The slab geometry is
-        built via ``LSQMesh.create_Nd`` so face_cells / face_centers /
+        `n_parts` per-partition padded slabs.  The slab geometry is
+        built via `LSQMesh.create_Nd` so face_cells / face_centers /
         normals are automatically correct.  ``n_inner_cells =
         n_padded_x * x_stride`` (the full slab); the flux operator is
         responsible for restricting cell updates to owned cells.
@@ -384,8 +384,8 @@ def partition_xaxis_structured(
     Limitations (current)
     ---------------------
     * Owned cells whose global LSQ stencil reaches a global y- or
-      z-boundary have their ``lsq_boundary_face_neighbors`` set to
-      ``-1`` rather than mapped to the slab's y/z BC face index.  For
+      z-boundary have their `lsq_boundary_face_neighbors` set to
+      `-1` rather than mapped to the slab's y/z BC face index.  For
       ICs that are constant in y/z this has no effect; for true
       cross-axis BC-aware reconstruction at owned cells, a per-cell
       face-position lookup is needed (TODO).

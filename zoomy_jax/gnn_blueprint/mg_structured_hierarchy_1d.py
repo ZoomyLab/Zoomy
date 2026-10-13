@@ -10,8 +10,8 @@ from zoomy_jax.gnn_blueprint.mesh_1d_poisson import edge_list_chain, laplacian_1
 def restriction_prolongation_1d_pair(n_f: int) -> tuple[np.ndarray, np.ndarray]:
     """Full-weighting restriction and piecewise-constant prolongation.
 
-    Fine length ``n_f`` must be even and >= 2. Coarse length ``n_c = n_f // 2``.
-    Shapes: ``R`` is ``(n_c, n_f)``, ``P`` is ``(n_f, n_c)``.
+    Fine length `n_f` must be even and >= 2. Coarse length `n_c = n_f // 2`.
+    Shapes: `R` is `(n_c, n_f)`, `P` is `(n_f, n_c)`.
     """
     if n_f < 2 or n_f % 2 != 0:
         raise ValueError(f"1D pairwise coarsening requires even n_f >= 2; got {n_f=}")
@@ -30,9 +30,9 @@ def restriction_prolongation_1d_pair(n_f: int) -> tuple[np.ndarray, np.ndarray]:
 def build_poisson_hierarchy_1d(
     n_interior: int,
 ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray], list[np.ndarray], list[int]]:
-    """Returns ``(A_list, R_list, P_list, edges_list, shapes)``.
+    """Returns `(A_list, R_list, P_list, edges_list, shapes)`.
 
-    ``shapes[k]`` is the number of interior unknowns at level ``k``. Halving continues
+    `shapes[k]` is the number of interior unknowns at level `k`. Halving continues
     while the current length is even and at least 2, down to a single coarse unknown.
     """
     if n_interior < 1:
@@ -68,13 +68,13 @@ def build_poisson_hierarchy_1d_vector(
     n_interior: int,
     n_components: int,
 ) -> tuple[list[np.ndarray], list[np.ndarray], list[np.ndarray], list[np.ndarray], list[int]]:
-    """Same graph as scalar 1D, but unknowns are ``d`` per cell (ordering: cell-major).
+    """Same graph as scalar 1D, but unknowns are `d` per cell (ordering: cell-major).
 
-    Fine operator :math:`A = L \\otimes I_d` with :math:`L` the tridiagonal 1D interior
-    Laplacian (``np.kron(L, np.eye(d))``). Restriction / prolongation
-    :math:`R = R_{1\\mathrm{d}} \\otimes I_d`, :math:`P = P_{1\\mathrm{d}} \\otimes I_d`.
+    Fine operator $A = L \\otimes I_d$ with $L$ the tridiagonal 1D interior
+    Laplacian (`np.kron(L, np.eye(d))`). Restriction / prolongation
+    $R = R_{1\\mathrm{d}} \\otimes I_d$, $P = P_{1\\mathrm{d}} \\otimes I_d$.
     GMRES and Jacobi operate on the stacked vector in
-    :math:`\\mathbb{R}^{n_\\ell d}` at each level :math:`\\ell`.
+    $\\mathbb{R}^{n_\\ell d}$ at each level $\\ell$.
     """
     if n_components < 1:
         raise ValueError("n_components must be >= 1")

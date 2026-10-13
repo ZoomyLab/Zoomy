@@ -2,13 +2,13 @@
 
 Two options:
 
-1. **Polynomial filter** ``sum_k c_k L_sym^k u`` with symmetric normalized Laplacian
-   ``L_sym = I - D^{-1/2} A D^{-1/2}``. Forward cost **O(K)** dense matmuls per field
-   (or O(K·nnz) if ``L_sym`` is sparse later). No eigendecomposition at run time.
+1. **Polynomial filter** `sum_k c_k L_sym^k u` with symmetric normalized Laplacian
+   `L_sym = I - D^{-1/2} A D^{-1/2}`. Forward cost **O(K)** dense matmuls per field
+   (or O(K·nnz) if `L_sym` is sparse later). No eigendecomposition at run time.
 
-2. **Low-frequency eigenbasis** (graph Fourier): fixed columns ``U`` from ``eigh(L_sym)``
-   (computed **once** per mesh offline), forward ``u ↦ U ( w ⊙ U^T u )`` — **O(n·K)** per
-   field; setup **O(n³)** for dense ``eigh``, so intended for modest ``n`` or batched
+2. **Low-frequency eigenbasis** (graph Fourier): fixed columns `U` from `eigh(L_sym)`
+   (computed **once** per mesh offline), forward `u ↦ U ( w ⊙ U^T u )` — **O(n·K)** per
+   field; setup **O(n³)** for dense `eigh`, so intended for modest `n` or batched
    offline bases.
 
 These respect **holes and complex boundaries** as long as the adjacency graph does
@@ -23,7 +23,7 @@ import numpy as np
 
 
 def symmetric_normalized_laplacian_dense(adj: np.ndarray) -> np.ndarray:
-    """Unweighted symmetric adjacency ``A`` (0/1, zero diagonal). Returns dense ``L_sym``."""
+    """Unweighted symmetric adjacency `A` (0/1, zero diagonal). Returns dense `L_sym`."""
     a = np.asarray(adj, dtype=np.float64)
     n = a.shape[0]
     deg = a.sum(axis=1)
@@ -37,7 +37,7 @@ def symmetric_normalized_laplacian_dense(adj: np.ndarray) -> np.ndarray:
 
 
 def path_graph_adjacency(n: int) -> np.ndarray:
-    """Path graph on ``n`` vertices (line connectivity in cell order)."""
+    """Path graph on `n` vertices (line connectivity in cell order)."""
     adj = np.zeros((n, n), dtype=np.float64)
     if n >= 2:
         for i in range(n - 1):
@@ -47,7 +47,7 @@ def path_graph_adjacency(n: int) -> np.ndarray:
 
 
 def graph_first_k_eigenvectors(L_sym: np.ndarray, k: int, skip_constant: bool = True) -> np.ndarray:
-    """Return ``U`` with ``k`` columns (low eigenmodes). Skip trivial constant if requested."""
+    """Return `U` with `k` columns (low eigenmodes). Skip trivial constant if requested."""
     n = L_sym.shape[0]
     if k <= 0 or n == 0:
         return np.zeros((n, 0), dtype=np.float64)
@@ -66,7 +66,7 @@ def apply_graph_polynomial_laplacian_mix(
     coeffs: jnp.ndarray,
     blend_logits: jnp.ndarray,
 ) -> jnp.ndarray:
-    """``coeffs`` shape ``(n_fields, K+1)`` for ``sum_{k=0}^K c_k L^k u``."""
+    """`coeffs` shape `(n_fields, K+1)` for `sum_{k=0}^K c_k L^k u`."""
     n_fields = q_mp.shape[0]
     kmax = coeffs.shape[1] - 1
     l_sym = l_sym.astype(jnp.float64)
@@ -92,7 +92,7 @@ def apply_graph_eigen_diag_mix(
     w_eig: jnp.ndarray,
     blend_logits: jnp.ndarray,
 ) -> jnp.ndarray:
-    """``u_basis`` ``(n, K)``, ``w_eig`` ``(n_fields, K)``."""
+    """`u_basis` `(n, K)`, `w_eig` `(n_fields, K)`."""
     if u_basis.shape[1] == 0:
         return q_mp
     n_fields = q_mp.shape[0]

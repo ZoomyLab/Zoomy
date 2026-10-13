@@ -1,9 +1,9 @@
 """Train Poisson 1D predictors for architecture ablation (multilevel / FFT / smooth inputs).
 
-Supervised target: first channel predicts interior solution ``u`` (``u_init=0``).
-Optional loss term: discrete Poisson residual ``||A u_pred - f||^2``.
+Supervised target: first channel predicts interior solution `u` (`u_init=0`).
+Optional loss term: discrete Poisson residual `||A u_pred - f||^2`.
 
-Saves ``weights_deltaq.npz`` per architecture for :func:`benchmark_poisson_iterations.run_gmres_benchmark`.
+Saves `weights_deltaq.npz` per architecture for `benchmark_poisson_iterations.run_gmres_benchmark`.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ def _box_smooth_np(x: np.ndarray, radius: int) -> np.ndarray:
 
 
 def _build_q_np(f_row: np.ndarray, radii: tuple[int, ...]) -> np.ndarray:
-    """Channels: ``u(0), f, su1, sf1, su2, sf2, ...``."""
+    """Channels: `u(0), f, su1, sf1, su2, sf2, ...`."""
     n = f_row.shape[0]
     u = np.zeros(n, dtype=np.float64)
     rows = [u, f_row.copy()]

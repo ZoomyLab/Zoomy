@@ -1,27 +1,27 @@
-"""The jax backend primitive object ``B`` for the template walker.
+"""The jax backend primitive object `B` for the template walker.
 
-``JaxBackend(mode="forward")``  loops lower to ``lax.while_loop``
+`JaxBackend(mode="forward")`  loops lower to `lax.while_loop`
                                 (forward-mode AD: jvp).
-``JaxBackend(mode="reverse", checkpoints=K)``  loops lower to
+`JaxBackend(mode="reverse", checkpoints=K)`  loops lower to
                                 ``equinox.internal.while_loop(kind=
                                 "checkpointed")`` (reverse-mode AD: grad/vjp).
 
 Lowerings:
-  Select    -> ``lax.cond`` (Python ``if`` on a concrete predicate)
-  Repeat    -> ``lax.fori_loop`` with a static trip count (a scan)
-  Root      -> :func:`.linalg.newton_root` (``custom_root``, IFT AD)
-  LinSolve  -> ``custom_linear_solve`` + the kind's solver (GMRES with the
-               injectable inner product ``B.inner``)
-  Guard     -> ``eqx.error_if`` attached to live values, preceded by an
+  Select    -> `lax.cond` (Python `if` on a concrete predicate)
+  Repeat    -> `lax.fori_loop` with a static trip count (a scan)
+  Root      -> `.linalg.newton_root` (`custom_root`, IFT AD)
+  LinSolve  -> `custom_linear_solve` + the kind's solver (GMRES with the
+               injectable inner product `B.inner`)
+  Guard     -> `eqx.error_if` attached to live values, preceded by an
                ordered debug print of the reported values (failing branch
                only); a raise on concrete values
-  Callback  -> idempotent / returns: ordered ``io_callback`` inside a
-               ``custom_jvp`` with a zero tangent (replayed by reverse-mode
+  Callback  -> idempotent / returns: ordered `io_callback` inside a
+               `custom_jvp` with a zero tangent (replayed by reverse-mode
                recomputation, hence only replay-safe kinds); stateful: a
                direct HOST call (forward backend only -- the reverse backend
                has NO lowering for it)
-  reduce_min -> ``jnp.min`` (AD-safe); under SPMD (``axis_name``) an
-               ``all_gather`` + ``min`` (``lax.pmin`` has no AD rule)
+  reduce_min -> `jnp.min` (AD-safe); under SPMD (`axis_name`) an
+               `all_gather` + `min` (`lax.pmin` has no AD rule)
 """
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def _strong(tree):
 
 
 def _like(out, ref):
-    """Strip weak types of ``out`` where its dtype matches ``ref``."""
+    """Strip weak types of `out` where its dtype matches `ref`."""
     def f(o, r):
         o = jnp.asarray(o)
         r = jnp.asarray(r)

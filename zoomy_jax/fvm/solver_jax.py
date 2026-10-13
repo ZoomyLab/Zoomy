@@ -10,7 +10,7 @@ Solver hierarchy (mirrors NumPy):
                           every step (fvm/observers.py)
       solve             — init + setup + run
 
-Inherits param definitions from NumPy ``HyperbolicSolverNumpy`` but
+Inherits param definitions from NumPy `HyperbolicSolverNumpy` but
 overrides all computational methods with JAX implementations.
 """
 
@@ -42,12 +42,12 @@ from zoomy_core.model.boundary_conditions import boundary_face_branches
 
 
 def _write_field_names(filepath, names):
-    """Stamp ``/fields@names`` (state names in ``Q`` row order) on the store at
-    ``filepath`` (absolute), byte-identical to what
-    ``zoomy_core.misc.io.write_mesh_to_hdf5(..., names=...)`` writes for the
-    numpy solvers -- the convention ``zoomy_plotting.read_hdf5`` resolves.
+    """Stamp `/fields@names` (state names in `Q` row order) on the store at
+    `filepath` (absolute), byte-identical to what
+    `zoomy_core.misc.io.write_mesh_to_hdf5(..., names=...)` writes for the
+    numpy solvers -- the convention `zoomy_plotting.read_hdf5` resolves.
     Written once at setup; the per-snapshot writer appends into the same
-    ``/fields`` group."""
+    `/fields` group."""
     with h5py.File(filepath, "a") as f:
         f.require_group("fields").attrs["names"] = np.array(
             [str(n) for n in names], dtype="S")
@@ -61,15 +61,15 @@ def _write_field_names(filepath, names):
 # Nothing produced it.  These two functions do.
 
 def interlevel_pad_low_state(q_low, n_high):
-    """Lift a LOW participant's interface state ``(n_low, n_faces)`` into the
-    HIGH space ``(n_high, n_faces)`` by zero-padding the missing moments.
+    """Lift a LOW participant's interface state `(n_low, n_faces)` into the
+    HIGH space `(n_high, n_faces)` by zero-padding the missing moments.
 
     The padding is a FORMALITY at run time: the emitted kernel already had
-    literal ``sp.Integer(0)`` substituted into rows ``[n_low, n_high)`` at
-    BUILD time (``Numerics._zero_padded_low_state``), so those inputs are dead
+    literal `sp.Integer(0)` substituted into rows `[n_low, n_high)` at
+    BUILD time (`Numerics._zero_padded_low_state`), so those inputs are dead
     and CSE deleted every subtree they fed.  The array is padded anyway
-    because the emitted signature is sized from ``n_dof_q`` on every backend
-    (foam/amrex size ``Q_minus`` from it, and the C printers' argument
+    because the emitted signature is sized from `n_dof_q` on every backend
+    (foam/amrex size `Q_minus` from it, and the C printers' argument
     whitelists carry exactly six face keys) — so a short array is not
     passable, while a padded one costs nothing.
     """
@@ -87,18 +87,18 @@ def interlevel_pad_low_state(q_low, n_high):
 
 
 def assert_interface_bed_is_flat(q_low, q_high, bed_index, *, tol=0.0):
-    """ASSERT ``Δb = 0`` across a coupling interface — the scope condition of
+    """ASSERT `Δb = 0` across a coupling interface — the scope condition of
     the discharge ledger, checked rather than assumed.
 
-    The ``q_0`` row telescopes across an inter-level face ONLY on a flat bed:
-    its nonconservative row carries the live bed column ``B[q_0][b] = g·h``,
-    so the two sides' contributions sum to ``-B[q_0][b]·Δb``, which is zero
-    iff ``Δb = 0``.  MEASURED on SME(0)↔SME(1): residual ``0.0`` exactly with
-    a flat bed, ``7.0e-01`` across a 0.4 m step, while ``h`` stays ``0.0`` in
+    The `q_0` row telescopes across an inter-level face ONLY on a flat bed:
+    its nonconservative row carries the live bed column `B[q_0][b] = g·h`,
+    so the two sides' contributions sum to `-B[q_0][b]·Δb`, which is zero
+    iff `Δb = 0`.  MEASURED on SME(0)↔SME(1): residual `0.0` exactly with
+    a flat bed, `7.0e-01` across a 0.4 m step, while `h` stays `0.0` in
     both.  So this is not a formality — it is the difference between a
     conservation claim that holds and one that is simply false.
 
-    Raises ``ValueError`` naming the worst face.  A no-op on traced (jit)
+    Raises `ValueError` naming the worst face.  A no-op on traced (jit)
     inputs, where a data-dependent check cannot be made; call it from the
     window driver, which holds concrete arrays.
     """
@@ -125,16 +125,16 @@ def interlevel_face_contribution(rt_flux, rt_fluctuations, side, q_low, q_high,
                                  aux_low, aux_high, parameters, normal,
                                  *, n_low=None, flat_bed_row=None):
     """THE SHARED INTERFACE FACE CONTRIBUTION, for ONE side of an inter-level
-    coupling — the ``coupled_dm`` that ``flux_operator`` consumes.
+    coupling — the `coupled_dm` that `flux_operator` consumes.
 
-    ``rt_flux`` / ``rt_fluctuations`` are the HIGH participant's registered
-    ``numerical_flux`` / ``numerical_fluctuations`` runtime kernels — BOTH arms
+    `rt_flux` / `rt_fluctuations` are the HIGH participant's registered
+    `numerical_flux` / `numerical_fluctuations` runtime kernels — BOTH arms
     of the interface are evaluated with the HIGH model's operator, which is the
-    whole content of the fix.  ``side`` is ``"low"`` or ``"high"``.
+    whole content of the fix.  `side` is `"low"` or `"high"`.
 
-    Returns an array of shape ``(rows_of_this_participant, n_faces)``, aligned
-    to the boundary-face axis exactly as ``coupled_mask`` is — i.e. directly
-    the ``coupled_dm`` argument of ``step(..., coupled=(coupled_dm,
+    Returns an array of shape `(rows_of_this_participant, n_faces)`, aligned
+    to the boundary-face axis exactly as `coupled_mask` is — i.e. directly
+    the `coupled_dm` argument of ``step(..., coupled=(coupled_dm,
     coupled_mask))``.
 
     ONE EVALUATION, TWO PROJECTIONS — AND THIS IS THE WHOLE POINT.
@@ -145,40 +145,40 @@ def interlevel_face_contribution(rt_flux, rt_fluctuations, side, q_low, q_high,
         side="high"  ->  ( -F + D_plus )
 
     which is precisely the interior-face convention this solver already uses
-    (``dQ[A] -= (F + Dm)``, ``dQ[B] -= (-F + Dp)``), so a coupled face is
+    (`dQ[A] -= (F + Dm)`, `dQ[B] -= (-F + Dp)`), so a coupled face is
     discretised identically to an interior one.
 
     DO NOT "let both participants build the identical pair with their own
     outward normal".  That is the trap this function exists to close, and the
-    older comment on the consumer said exactly the wrong thing.  ``nHat`` is
-    normalised as ``n/(|n| + SMALL)``, so on an x-normal face ``nHat.x()`` is
-    ``1 - 2.2e-16`` rather than ``1.0``, and ``0.5·(a+b)·nx`` then differs from
-    ``0.5·(a·nx + b·nx)`` in the last bit — MEASURED to break bit-equality on
-    ~62% of states (``swePreciceCoupling.C``).  Two independent evaluations of
+    older comment on the consumer said exactly the wrong thing.  `nHat` is
+    normalised as `n/(|n| + SMALL)`, so on an x-normal face `nHat.x()` is
+    `1 - 2.2e-16` rather than `1.0`, and `0.5·(a+b)·nx` then differs from
+    `0.5·(a·nx + b·nx)` in the last bit — MEASURED to break bit-equality on
+    ~62% of states (`swePreciceCoupling.C`).  Two independent evaluations of
     "the same" Riemann problem are not bit-identical; one evaluation and two
     sign projections is.
 
-    THE TRUNCATION IS FREE.  The low participant reads rows ``0:n_low`` of the
+    THE TRUNCATION IS FREE.  The low participant reads rows `0:n_low` of the
     high-space answer and nothing else: no second kernel, no restriction
     operator, no projection matrix.  That is legitimate because of the
     hierarchy identity (V&K eq 3.66) — the high model's flux at the zero-padded
-    low state restricted to the first ``n_L`` rows IS the low model's own flux.
+    low state restricted to the first `n_L` rows IS the low model's own flux.
 
     NO NEW EMITTED KERNEL.  This calls the participant's ALREADY-REGISTERED
-    ``numerical_flux`` / ``numerical_fluctuations``, which take an explicit
+    `numerical_flux` / `numerical_fluctuations`, which take an explicit
     face pair; the zero-padding is a pure caller-side action.  So the whole
     construction needs no printer change, no new registered operator, and no
     new SystemModel API.  Proved in
-    ``zoomy_core/tests/fvm/test_interlevel_telescoping.py`` over a state sweep.
+    `zoomy_core/tests/fvm/test_interlevel_telescoping.py` over a state sweep.
 
     CONSERVATION IS ROW-SCOPED — AND THE SCOPE IS CHECKED, NOT ASSUMED.
-    The two contributions sum to ``-(D_plus + D_minus) = -A_int·ΔQ``, which
+    The two contributions sum to `-(D_plus + D_minus) = -A_int·ΔQ`, which
     vanishes exactly on the rows whose nonconservative row is identically zero.
-    For the K&T SME family that is ``h`` (and the stationary ``b``): ``h``
-    telescopes across ANY bed, but the discharge row ``q_0`` telescopes only
+    For the K&T SME family that is `h` (and the stationary `b`): `h`
+    telescopes across ANY bed, but the discharge row `q_0` telescopes only
     across a FLAT bed, because its nonconservative row carries the live bed
-    column ``B[q_0][b] = g·h``.  Pass ``flat_bed_row=<index of b>`` to have that
-    asserted here per window (see :func:`assert_interface_bed_is_flat`);
+    column `B[q_0][b] = g·h`.  Pass `flat_bed_row=<index of b>` to have that
+    asserted here per window (see `assert_interface_bed_is_flat`);
     without it the mass ledger still holds and the discharge one is not
     claimed.
     """
@@ -466,14 +466,14 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
     # ── Runtime creation ────────────────────────────────────────────────
 
     def initialize(self, mesh, model):
-        """Allocate state arrays of shape ``(n_var, n_inner_cells)`` —
+        """Allocate state arrays of shape `(n_var, n_inner_cells)` —
         no ghost cells.  Boundary values are computed inline inside
         the flux operator from the indexed BC kernel; the LSQ-MUSCL
         reconstruction sees them via the LSQ-augmented stencil
-        (``lsq_boundary_face_neighbors``) and uses the BC face values
-        as ``Q_R`` at boundary faces (NumPy parity).
+        (`lsq_boundary_face_neighbors`) and uses the BC face values
+        as `Q_R` at boundary faces (NumPy parity).
 
-        Matches the NumPy contract: ``Q.shape[1] == mesh.n_inner_cells``.
+        Matches the NumPy contract: `Q.shape[1] == mesh.n_inner_cells`.
         """
         Q, Qaux = super().initialize(mesh, model)
         return Q, Qaux
@@ -481,9 +481,9 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
     def create_runtime(self, Q, Qaux, mesh, model):
         """Create the JAX runtime over the NSM.
 
-        ``model`` here is ``self.nsm.sm`` — the SystemModel inside the
-        NSM that ``setup_simulation`` resolved.  Builds a
-        :class:`JaxRuntime` (jit-vmapped per-cell + per-face operators)
+        `model` here is `self.nsm.sm` — the SystemModel inside the
+        NSM that `setup_simulation` resolved.  Builds a
+        `JaxRuntime` (jit-vmapped per-cell + per-face operators)
         and converts the LSQ mesh to its JAX form.
         """
         jax_mesh = convert_mesh_to_jax(mesh)
@@ -497,14 +497,14 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
     # ── State update (vmap over cells) ──────────────────────────────────
 
     def update_q(self, Q, Qaux, mesh, model, parameters):
-        """Apply the SystemModel's per-cell ``update_variables`` to every cell.
+        """Apply the SystemModel's per-cell `update_variables` to every cell.
 
-        Uses ``model.update_variables`` as a **full-grid** callable —
+        Uses `model.update_variables` as a **full-grid** callable —
         the JaxRuntime now lambdifies + vmaps that slot once at
         construction time, so this is a single JIT'd call (was: a
-        Python-side ``jax.vmap`` per invocation that retraces every step).
-        ``None`` on the runtime means the SystemModel had no
-        ``update_variables`` slot ⇒ identity; we short-circuit.
+        Python-side `jax.vmap` per invocation that retraces every step).
+        `None` on the runtime means the SystemModel had no
+        `update_variables` slot ⇒ identity; we short-circuit.
         """
         fn = getattr(model, "update_variables", None)
         if fn is None:
@@ -513,18 +513,18 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
 
     def update_qaux(self, Q, Qaux, Qold, Qauxold, mesh, model,
                     parameters, time, dt):
-        """Apply the SystemModel's per-cell ``update_aux_variables`` to every
-        cell — the aux leg of ``post_step``, symmetric to :meth:`update_q`.
+        """Apply the SystemModel's per-cell `update_aux_variables` to every
+        cell — the aux leg of `post_step`, symmetric to `update_q`.
 
-        The JaxRuntime lambdifies + vmaps the ``update_aux_variables`` slot
+        The JaxRuntime lambdifies + vmaps the `update_aux_variables` slot
         once at construction (a single JIT'd, traceable call), so e.g. the
-        KP-desingularized ``hinv = √2·h/√(h⁴+max(h,eps)⁴)`` is recomputed from
-        the current ``h`` every step.  ``None`` on the runtime ⇒ the model
+        KP-desingularized `hinv = √2·h/√(h⁴+max(h,eps)⁴)` is recomputed from
+        the current `h` every step.  `None` on the runtime ⇒ the model
         declared no per-cell aux formula ⇒ identity; short-circuit.
 
-        This OVERRIDES the inherited NumPy ``Solver.update_qaux`` registry
-        walker, which is a guaranteed no-op on JAX (no ``self.sm`` /
-        ``_chain_systemmodel``) and is not JIT-traceable.  The other
+        This OVERRIDES the inherited NumPy `Solver.update_qaux` registry
+        walker, which is a guaranteed no-op on JAX (no `self.sm` /
+        `_chain_systemmodel`) and is not JIT-traceable.  The other
         post_step/residual call-sites (setup, predictor, Newton) all route
         through this one method, so they pick the aux update up uniformly.
         """
@@ -570,14 +570,14 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
     def _walk_derivative_aux(sm, Qaux, Q, mesh, *, kinds=("derivative",),
                              target_kinds=("state", "function"),
                              registry=None):
-        """Fill ``aux_registry`` derivative rows of ONE SystemModel via the
+        """Fill `aux_registry` derivative rows of ONE SystemModel via the
         shared BC-aware LSQ kernel — the single source the canonical
-        :meth:`update_qaux` AND ``ChorinSplitVAMSolverJax._refresh_aux_for_sm``
-        both call.  ``kinds`` / ``target_kinds`` keep each caller's exact scope
-        (canonical: spatial ``derivative``, state+function; Chorin: also
-        ``limited_derivative``, state only).  ``registry`` overrides the entry
-        list (the Chorin caller passes ``aux_registry + aux_input_registry`` —
-        see the splitter's ``_partition_pressure_aux``).  jit-traceable — the
+        `update_qaux` AND `ChorinSplitVAMSolverJax._refresh_aux_for_sm`
+        both call.  `kinds` / `target_kinds` keep each caller's exact scope
+        (canonical: spatial `derivative`, state+function; Chorin: also
+        `limited_derivative`, state only).  `registry` overrides the entry
+        list (the Chorin caller passes `aux_registry + aux_input_registry` —
+        see the splitter's `_partition_pressure_aux`).  jit-traceable — the
         registry is static so the loop unrolls at trace time."""
         out = Qaux
         if registry is None:
@@ -605,10 +605,10 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         is itself jit-vmap'd over the cell axis).
 
         REQ-185: the timestepping calls this as
-        ``(dt, time, Q, Qaux, parameters, dQ)`` and threads the current
-        simulation ``time``, the step ``dt`` and the inner-cell centre
-        positions into ``JaxRuntime.source`` (declared
-        ``source(Q, Qaux, p, time, dt, position)``), so a time/space-dependent
+        `(dt, time, Q, Qaux, parameters, dQ)` and threads the current
+        simulation `time`, the step `dt` and the inner-cell centre
+        positions into `JaxRuntime.source` (declared
+        `source(Q, Qaux, p, time, dt, position)`), so a time/space-dependent
         source binds them.  An autonomous source ignores the extra args
         (the runtime defaults are the coordinate origin — bit-identical)."""
         nc = mesh.n_inner_cells
@@ -666,10 +666,10 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
 
     def get_compute_max_abs_eigenvalue(self, mesh, runtime):
         """PER-FACE max |eigenvalue|, using JaxRuntime.eigenvalues
-        (jit-vmap'd per cell).  Returns an ``(n_faces,)`` array (NOT a global
+        (jit-vmap'd per cell).  Returns an `(n_faces,)` array (NOT a global
         scalar) so the CFL couples each face's wave speed to its LOCAL cell
-        size; ``compute_dt`` takes the min over faces -> ``min_f(h/λ)``, instead
-        of the over-conservative ``global_min(h)/global_max(λ)``."""
+        size; `compute_dt` takes the min over faces -> `min_f(h/λ)`, instead
+        of the over-conservative `global_min(h)/global_max(λ)`."""
         # cid 210: the dt spectrum is an NSM OUTPUT, not a backend decision.
         # ``eigenvalues_cfl`` is what ``gate_eigenvalues_dry`` publishes — dry
         # cells zeroed for the timestep, with the Rusanov dissipation left
@@ -716,23 +716,23 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         """Build JAX face reconstruction.
 
         First-order: piecewise-constant.  Second-order: the LSQ-augmented
-        MUSCL (``LSQMUSCLReconstructionJAX``) — mirrors NumPy
-        ``LSQMUSCLReconstruction``, takes ``Q`` of shape
-        ``(n_var, n_inner_cells)`` and uses the BC-provided
-        ``bf_face_values`` for both the limiter bounds and ``Q_R`` at
+        MUSCL (`LSQMUSCLReconstructionJAX`) — mirrors NumPy
+        `LSQMUSCLReconstruction`, takes `Q` of shape
+        `(n_var, n_inner_cells)` and uses the BC-provided
+        `bf_face_values` for both the limiter bounds and `Q_R` at
         boundary faces.
 
         Free-surface / positivity-preserving path: when
-        ``self.free_surface_h_index`` is set the order≥2 branch
-        instead uses :class:`PositivityPreservingLSQMUSCLJAX`, which
+        `self.free_surface_h_index` is set the order≥2 branch
+        instead uses `PositivityPreservingLSQMUSCLJAX`, which
         adds a per-cell Xing–Zhang 2013 slope-scaling pass on top of
-        the standard limiter so the reconstructed ``h`` at every face
-        of every cell stays ``≥ 0``.  Combined with the standard CFL
-        bound (``dt · α / h_inradius ≤ 1/(2k+1)`` for degree-``k``
-        reconstruction, so ``1/3`` for linear LSQ-MUSCL), this is
-        sufficient to keep the cell-mean ``h`` non-negative over each
+        the standard limiter so the reconstructed `h` at every face
+        of every cell stays `≥ 0`.  Combined with the standard CFL
+        bound (`dt · α / h_inradius ≤ 1/(2k+1)` for degree-`k`
+        reconstruction, so `1/3` for linear LSQ-MUSCL), this is
+        sufficient to keep the cell-mean `h` non-negative over each
         explicit step — the gap that the face-clamp + dry-cell-
-        fallback in :class:`FreeSurfaceLSQMUSCLJAX` leaves open over
+        fallback in `FreeSurfaceLSQMUSCLJAX` leaves open over
         long horizons on real wet/dry meshes (Malpasset T = 100 s).
         """
         from zoomy_jax.fvm.reconstruction_jax import (
@@ -833,11 +833,11 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
     def get_flux_operator(self, mesh, runtime):
         """Flux operator — literal NumPy parity (S5b).
 
-        * ``Q`` has shape ``(n_var, n_inner_cells)`` — no ghost cells.
+        * `Q` has shape `(n_var, n_inner_cells)` — no ghost cells.
         * Boundary face values are evaluated inline from the BC kernel
           (vmap'd over the boundary face axis).
-        * The LSQ-MUSCL reconstruction is fed ``Q + bf_values`` so its
-          limiter bounds and ``Q_R`` at boundary faces are physically
+        * The LSQ-MUSCL reconstruction is fed `Q + bf_values` so its
+          limiter bounds and `Q_R` at boundary faces are physically
           consistent.
         * Interior + boundary faces are accumulated in separate
           accumulators (split loops).
@@ -1488,17 +1488,17 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
     def setup_simulation(self, mesh, model):
         """Build all JAX operators from mesh and model.
 
-        ``model`` may be a :class:`Model`, a :class:`SystemModel`, or a
-        :class:`NumericalSystemModel`.  All numerical knobs
-        (``reconstruction.order``, ``reconstruction.limiter``,
-        ``regularization.eigenvalue_eps``) live on the NSM; the mesh
-        stencil uses ``nsm.resolved_lsq_degree()``.
+        `model` may be a `Model`, a `SystemModel`, or a
+        `NumericalSystemModel`.  All numerical knobs
+        (`reconstruction.order`, `reconstruction.limiter`,
+        `regularization.eigenvalue_eps`) live on the NSM; the mesh
+        stencil uses `nsm.resolved_lsq_degree()`.
 
         Until the JAX runtime is wired through
-        ``JaxRuntimeModel.from_system_model`` (S4b), callers passing a
+        `JaxRuntimeModel.from_system_model` (S4b), callers passing a
         bare SystemModel or an NSM built from one must do so with a
-        source Model — JAX's :class:`Kernel` + Model-based
-        ``JaxRuntimeModel`` paths still need it.
+        source Model — JAX's `Kernel` + Model-based
+        `JaxRuntimeModel` paths still need it.
 
         Returns
         -------
@@ -1591,9 +1591,9 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         return Q, Qaux
 
     def _qaux_from_q(self, Q, parameters):
-        """The initial aux state of ``Q``: ``update_qaux`` applied to the aux
-        initial condition stored at setup (``self._rt_qaux_ic``), at t = 0.
-        Traceable in ``Q`` and ``parameters``."""
+        """The initial aux state of `Q`: `update_qaux` applied to the aux
+        initial condition stored at setup (`self._rt_qaux_ic`), at t = 0.
+        Traceable in `Q` and `parameters`."""
         return self.update_qaux(
             Q, self._rt_qaux_ic, Q, self._rt_qaux_ic, self._rt_mesh,
             self._rt_model, parameters, 0.0, 1.0)
@@ -1601,8 +1601,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
     @property
     def parameters(self):
         """The runtime physical-parameter vector (read-only), available after
-        ``setup_simulation``.  This is the default ``parameters`` of
-        ``step`` / ``run_simulation``; pass a modified or traced copy there to
+        `setup_simulation`.  This is the default `parameters` of
+        `step` / `run_simulation`; pass a modified or traced copy there to
         differentiate with respect to it."""
         return self._rt_parameters
 
@@ -1610,41 +1610,41 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                                   *, time_euler=False, aux_of_q=None,
                                   source=None):
         """The explicit hyperbolic (flux) sub-step, MOOD-aware.  Factored out of
-        ``step`` so the IMEX solver's explicit stage reuses the SAME a-priori
+        `step` so the IMEX solver's explicit stage reuses the SAME a-priori
         front pre-detector (which rides inside the reconstruction) AND
-        a-posteriori MOOD corrector (the ``lax.cond`` re-run here).  ``flux`` is
-        the ``(dt, time, Q, Qaux, p, dQ, force_o1)`` operator; ``nc`` = #inner
+        a-posteriori MOOD corrector (the `lax.cond` re-run here).  `flux` is
+        the `(dt, time, Q, Qaux, p, dQ, force_o1)` operator; `nc` = #inner
         cells (for the troubled-cell mask).  order≥2 = SSP-RK2 (Heun); order 1 =
         explicit Euler.
 
-        ``source`` (optional, ``(dt, time, Q, Qaux, p, dQ)`` operator): when
+        `source` (optional, `(dt, time, Q, Qaux, p, dQ)` operator): when
         given, its contribution is folded into the RK RHS at EACH stage
-        (mirroring ``solver_numpy`` ``rhs = flux + source``) so a source-carrying
+        (mirroring `solver_numpy` `rhs = flux + source`) so a source-carrying
         row reaches the flux's design order instead of the 1st-order Godunov
         split a separate explicit-Euler source sub-step would impose (cid 151).
-        The base explicit ``step`` passes the source here; the IMEX loop leaves
-        it ``None`` and steps the source IMPLICITLY afterwards; the Chorin-VAM
-        predictor leaves it ``None`` and adds the source in its own splitting
-        cycle (Escalante eq. 11).  ``None`` ⇒ flux-only, byte-identical to
-        before.  The point-implicit ``source_treatment="linearized"`` update is
-        baked INTO the source operator itself (NSM rewrites ``sm.source`` into
-        ``(I − dt·J)⁻¹ S``), so folding it here linearizes inside each RK stage —
+        The base explicit `step` passes the source here; the IMEX loop leaves
+        it `None` and steps the source IMPLICITLY afterwards; the Chorin-VAM
+        predictor leaves it `None` and adds the source in its own splitting
+        cycle (Escalante eq. 11).  `None` ⇒ flux-only, byte-identical to
+        before.  The point-implicit `source_treatment="linearized"` update is
+        baked INTO the source operator itself (NSM rewrites `sm.source` into
+        `(I − dt·J)⁻¹ S`), so folding it here linearizes inside each RK stage —
         no second split.
 
-        ``time_euler=True`` keeps the order-≥2 SPATIAL reconstruction (and the
+        `time_euler=True` keeps the order-≥2 SPATIAL reconstruction (and the
         whole MOOD apparatus) but advances with a SINGLE Euler step in time.
         That is the shape a projection/splitting scheme needs: the outer RK
         stages live in the *splitting* driver, and each stage's hyperbolic
         substep must be one Euler step or the split operators are applied at
         the wrong nesting (Escalante et al. 2024, JCP 504:112882, eq. 11 — the
         per-stage hyperbolic update is Euler, second order coming from the
-        reconstruction).  Default ``False`` ⇒ every pre-existing caller keeps
+        reconstruction).  Default `False` ⇒ every pre-existing caller keeps
         the RK2-inside-the-step behaviour, bit-identically.
 
         SPMD: the flux is halo-wrapped here (once), so EVERY solver that reuses
-        this sub-step — the base explicit ``step`` AND the IMEX explicit stage —
+        this sub-step — the base explicit `step` AND the IMEX explicit stage —
         gets across-partition halo exchange before each flux evaluation with no
-        extra wiring.  Identity when not sharded (``_halo_exchange`` unset).
+        extra wiring.  Identity when not sharded (`_halo_exchange` unset).
         """
         flux = self._halo_wrap(flux)
         if self.nsm.reconstruction.order >= 2:
@@ -1753,14 +1753,14 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         return Q + dt * dQ
 
     def _halo_wrap(self, flux):
-        """SPMD hook.  When ``self._halo_exchange`` is set (the solver is being
-        run inside a ``jax.shard_map`` over a partitioned mesh), refresh the
-        halo slabs of ``Q`` **and** ``Qaux`` before *every* flux evaluation —
+        """SPMD hook.  When `self._halo_exchange` is set (the solver is being
+        run inside a `jax.shard_map` over a partitioned mesh), refresh the
+        halo slabs of `Q` **and** `Qaux` before *every* flux evaluation —
         so the reconstruction + Riemann across the partition boundary see the
-        neighbor cells (``ppermute``).  Because the wrap sits on the flux op
+        neighbor cells (`ppermute`).  Because the wrap sits on the flux op
         itself, every stage (order-1 Euler, both SSP-RK2 stages, a MOOD re-run)
-        gets fresh halos with no change to the RK logic.  ``None`` (single
-        device) ⇒ returns ``flux`` unchanged: identity, zero cost, no behaviour
+        gets fresh halos with no change to the RK logic.  `None` (single
+        device) ⇒ returns `flux` unchanged: identity, zero cost, no behaviour
         change on the non-sharded path."""
         he = getattr(self, "_halo_exchange", None)
         if he is None:
@@ -1772,8 +1772,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         return wrapped
 
     def _require_forward_ad(self, loop):
-        """Refuse ``ad_mode != 'forward'`` in a subclass that drives its OWN
-        ``loop`` instead of :meth:`run_simulation`: the inherited ``ad_mode``
+        """Refuse `ad_mode != 'forward'` in a subclass that drives its OWN
+        `loop` instead of `run_simulation`: the inherited `ad_mode`
         would otherwise be silently ignored."""
         if self.ad_mode != "forward":
             raise NotImplementedError(
@@ -1784,12 +1784,12 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
     def step(self, dt, time, Q, Qaux, parameters=None, coupled=None):
         """Perform a single explicit time step.
 
-        ``coupled`` (optional) = ``(coupled_dm, coupled_mask)`` for
-        conservative characteristic interface coupling: ``coupled_dm`` is the
-        shared high-fidelity Riemann face flux ``F + D_minus`` (state rows x
-        boundary faces) and ``coupled_mask`` (boundary faces) flags the coupled
+        `coupled` (optional) = `(coupled_dm, coupled_mask)` for
+        conservative characteristic interface coupling: `coupled_dm` is the
+        shared high-fidelity Riemann face flux `F + D_minus` (state rows x
+        boundary faces) and `coupled_mask` (boundary faces) flags the coupled
         faces.  Threaded into the jitted flux operator so a coupled boundary
-        face uses this RP flux instead of its ghost flux.  ``None`` (all
+        face uses this RP flux instead of its ghost flux.  `None` (all
         existing callers) => uncoupled, bit-identical to before.
 
         Each RK stage starts by refreshing the boundary ghost cells from
@@ -1854,7 +1854,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
     def post_step(self, time, dt, Q, Qold, Qaux, parameters=None):
         """Post-step processing: BCs, update_q, update_qaux.
 
-        Separated from ``step`` so that subclasses (e.g. IMEX) can insert
+        Separated from `step` so that subclasses (e.g. IMEX) can insert
         implicit solves between the explicit step and the post-processing.
 
         Parameters
@@ -1897,13 +1897,13 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
     # coupled (preCICE) subclass share the SAME physics per step
     # (``_advance``) and differ only in the loop wrapper + the two hooks.
     def _advance(self, time, Q, Qaux, *, time_end, parameters=None):
-        """One time step: adaptive dt → explicit RK ``step`` → ``post_step``,
+        """One time step: adaptive dt → explicit RK `step` → `post_step`,
         with coupling hooks interleaved.
 
         The reusable per-step building block.  Uncoupled, the hooks are
         no-ops/identity so this is the plain physics step; a coupled
         (preCICE) subclass fills the hooks and reuses everything else.
-        Returns ``(time_new, dt, Q, Qaux)``.
+        Returns `(time_new, dt, Q, Qaux)`.
         """
         Qold = Q
         dt = self.compute_timestep(Q, Qaux, parameters)
@@ -1936,17 +1936,17 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         return Q
 
     def _couple_face_contribution(self, time, dt, Q, Qaux):
-        """The ``(coupled_dm, coupled_mask)`` pair for THIS window, or ``None``.
+        """The `(coupled_dm, coupled_mask)` pair for THIS window, or `None`.
 
-        A coupled subclass builds it with :func:`interlevel_face_contribution`
+        A coupled subclass builds it with `interlevel_face_contribution`
         — ONE evaluation of the shared inter-level face at the canonical
         low→high orientation, projected to this participant's side — and
-        returns ``(coupled_dm, coupled_mask)`` with shapes
-        ``(rows_of_this_participant, n_boundary_faces)`` and
-        ``(n_boundary_faces,)``.
+        returns `(coupled_dm, coupled_mask)` with shapes
+        `(rows_of_this_participant, n_boundary_faces)` and
+        `(n_boundary_faces,)`.
 
-        ``None`` uncoupled, which is what every existing caller gets: ``step``
-        keeps its ``coupled=None`` path and ``flux_operator`` drops the whole
+        `None` uncoupled, which is what every existing caller gets: `step`
+        keeps its `coupled=None` path and `flux_operator` drops the whole
         injection branch at trace time, so an uncoupled march is bit-identical
         to before this hook existed."""
         return None
@@ -1957,14 +1957,14 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         return None
 
     def _couple_proceed(self, time, time_end):
-        """Loop-continue predicate.  ``time < time_end`` uncoupled; a coupled
+        """Loop-continue predicate.  `time < time_end` uncoupled; a coupled
         subclass returns 'coupling ongoing'."""
         return time < time_end
 
     def compute_timestep(self, Q, Qaux, parameters=None):
         """Compute the adaptive time step using the stored eigenvalue operator.
 
-        JIT-compatible. Uses ``self.compute_dt`` (from param) with the
+        JIT-compatible. Uses `self.compute_dt` (from param) with the
         precomputed eigenvalue operator and min inradius.
 
         Returns
@@ -1981,33 +1981,33 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                        time0=0.0):
         """JIT-compiled time loop.
 
-        Calls ``compute_timestep`` -> ``step`` -> ``post_step`` in a while
-        loop from ``time0`` until ``time >= time_end``.  The loop primitive
-        follows ``ad_mode``: ``jax.lax.while_loop`` (forward) or
-        ``equinox.internal.while_loop(kind="checkpointed")`` (reverse).
+        Calls `compute_timestep` -> `step` -> `post_step` in a while
+        loop from `time0` until `time >= time_end`.  The loop primitive
+        follows `ad_mode`: `jax.lax.while_loop` (forward) or
+        `equinox.internal.while_loop(kind="checkpointed")` (reverse).
 
         Parameters
         ----------
         Q : jnp.ndarray
-            Initial state (from ``setup_simulation``).
+            Initial state (from `setup_simulation`).
         Qaux : jnp.ndarray, optional
-            Initial aux state.  ``None`` → rebuilt from ``Q`` with the same
-            aux update ``setup_simulation`` applies, INSIDE the
-            differentiable path, so a derivative w.r.t. ``Q`` includes
-            ``dQaux0/dQ0``.  Pass the ``Qaux`` from ``setup_simulation`` (or a
+            Initial aux state.  `None` → rebuilt from `Q` with the same
+            aux update `setup_simulation` applies, INSIDE the
+            differentiable path, so a derivative w.r.t. `Q` includes
+            `dQaux0/dQ0`.  Pass the `Qaux` from `setup_simulation` (or a
             restart) to use it verbatim.
         write_output : bool
             Whether to write snapshots to HDF5.
         parameters : jnp.ndarray, optional
-            Physical-parameter vector.  ``None`` → :attr:`parameters` (the
+            Physical-parameter vector.  `None` → `parameters` (the
             runtime vector built at setup).  Pass a traced array to
             differentiate the run w.r.t. the parameters.
         time0 : float
-            Start time of the march; ``time_end`` stays absolute.  A chunked
-            driver continues a run with ``time0`` = the previous chunk's end
-            and a larger ``time_end``.  Traced (not part of the compiled-loop
+            Start time of the march; `time_end` stays absolute.  A chunked
+            driver continues a run with `time0` = the previous chunk's end
+            and a larger `time_end`.  Traced (not part of the compiled-loop
             cache key).  Output snapshots are spread evenly over
-            ``[time0, time_end]``.
+            `[time0, time_end]`.
 
         Returns
         -------
@@ -2019,40 +2019,40 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
 
     def run_observed(self, Q, observer, Qaux=None, parameters=None,
                      write_output=False, time0=0.0):
-        """The :meth:`run_simulation` march, plus an observer accumulated
+        """The `run_simulation` march, plus an observer accumulated
         over every step.
 
-        ``observer`` is an :class:`zoomy_jax.fvm.observers.Observer`:
-        ``observer.init(Q0, Qaux0, parameters)`` gives the initial
+        `observer` is an `zoomy_jax.fvm.observers.Observer`:
+        `observer.init(Q0, Qaux0, parameters)` gives the initial
         accumulator, and after every step
-        ``acc = observer.update(acc, time, dt, Q, Qaux, parameters)`` with the
-        post-step state at the new ``time``.  The accumulator rides in the loop
+        `acc = observer.update(acc, time, dt, Q, Qaux, parameters)` with the
+        post-step state at the new `time`.  The accumulator rides in the loop
         state, so it is differentiable like the final state, in either
-        ``ad_mode``.
+        `ad_mode`.
 
         The observer is part of the compiled-loop cache key (by its hash /
-        equality; an :class:`Observer` compares by the identity of its two
+        equality; an `Observer` compares by the identity of its two
         functions).  Reusing the SAME observer object reuses the compiled
-        loop; a fresh one (e.g. a new ``running_max(...)`` call) compiles a
+        loop; a fresh one (e.g. a new `running_max(...)` call) compiles a
         new loop.
 
-        Parameters are those of :meth:`run_simulation` (``time0`` included);
-        ``write_output`` defaults to False here.
+        Parameters are those of `run_simulation` (`time0` included);
+        `write_output` defaults to False here.
 
         Returns
         -------
         Q, Qaux : jnp.ndarray
-            Final state, bitwise equal to :meth:`run_simulation`'s.
+            Final state, bitwise equal to `run_simulation`'s.
         acc : pytree
             The final accumulator.
         """
         return self._run(Q, Qaux, write_output, parameters, observer, time0)
 
     def _run(self, Q, Qaux, write_output, parameters, observer, time0):
-        """The time loop behind :meth:`run_simulation` and
-        :meth:`run_observed`, from ``time0`` to ``time_end``.
-        ``observer=None`` carries the empty accumulator ``()``.  Returns
-        ``(Q, Qaux, acc)``."""
+        """The time loop behind `run_simulation` and
+        `run_observed`, from `time0` to `time_end`.
+        `observer=None` carries the empty accumulator `()`.  Returns
+        `(Q, Qaux, acc)`."""
         parameters = (self._rt_parameters if parameters is None
                       else parameters)
         if Qaux is None:
@@ -2170,7 +2170,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
     def _compile_time_loop(_advance, _couple_proceed, save_fields, _while_loop,
                            *, time_end, n_intervals, log_every, observer):
         """The jitted march ``(time0, iteration, i_snapshot, last_written, Q,
-        Qaux, parameters) -> (Q, Qaux, acc)``; ``acc = ()`` when ``observer``
+        Qaux, parameters) -> (Q, Qaux, acc)``; `acc = ()` when `observer`
         is None.  Snapshot stamps are ``time0 + i * (time_end - time0) /
         n_intervals``."""
         _log_every = log_every
@@ -2268,9 +2268,9 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         """Full solve: initialize -> setup -> run.
 
         This is the main entry point, compatible with the NumPy solver
-        interface. Calls ``setup_simulation`` then ``run_simulation``;
-        ``parameters`` (``None`` → :attr:`parameters`) is passed through to
-        ``run_simulation``.
+        interface. Calls `setup_simulation` then `run_simulation`;
+        `parameters` (`None` → `parameters`) is passed through to
+        `run_simulation`.
         """
         time_start = gettime()
         Q, Qaux = self.setup_simulation(mesh, model)

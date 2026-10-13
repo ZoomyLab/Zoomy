@@ -6,7 +6,7 @@ import numpy as np
 
 
 def laplacian_1d_interior_dense(n: int) -> np.ndarray:
-    """Interior Dirichlet stencil, same sign as ``poisson_1d.laplacian_1d_dense`` (diag -2, off +1)."""
+    """Interior Dirichlet stencil, same sign as `poisson_1d.laplacian_1d_dense` (diag -2, off +1)."""
     if n < 1:
         return np.zeros((0, 0), dtype=np.float64)
     a = np.zeros((n, n), dtype=np.float64)
@@ -37,7 +37,7 @@ def gaussian_bump_1d(
     sigma: float = 0.15,
     cx: float = 0.5,
 ) -> np.ndarray:
-    """Gaussian bump on interior nodes ``i = 0..n-1`` in normalized coordinate ``(i+0.5)/n``."""
+    """Gaussian bump on interior nodes `i = 0..n-1` in normalized coordinate `(i+0.5)/n`."""
     out = np.zeros(n, dtype=np.float64)
     denom = 2.0 * sigma**2
     for i in range(n):

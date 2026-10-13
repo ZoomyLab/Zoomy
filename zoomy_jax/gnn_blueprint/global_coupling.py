@@ -2,24 +2,24 @@
 
 The blueprint supports three architectural choices for long-range information flow:
 
-- ``MULTIGRID`` (0): Multilevel restriction / prolongation + local smoothing (default).
-- ``FFT_1D`` (1): After multilevel propagation, apply a per-field real-FFT linear
+- `MULTIGRID` (0): Multilevel restriction / prolongation + local smoothing (default).
+- `FFT_1D` (1): After multilevel propagation, apply a per-field real-FFT linear
   spectral mix on uniform 1D cell ordering (prototype for GN 1D line meshes).
-- ``NUFFT_STUB`` (2): Legacy placeholder; runtime still maps to ``MULTIGRID``.
-- ``NUDFT_1D`` (3): Dense low-mode non-uniform DFT (NUFFT-style) on 1D coordinates.
-- ``RFF_KERNEL_1D`` (4): Random Fourier feature global mix on 1D coordinates.
-- ``NUDFT_2D`` (5): Same as ``NUDFT_1D`` but with 2D wavevectors on ``(x,y)``.
-- ``RFF_KERNEL_2D`` (6): RFF global mix on 2D coordinates.
-- ``GRAPH_POLY_LAPL`` (7): Learned polynomial ``sum_k c_k L_sym^k`` of the **mesh graph**
-  Laplacian (cheap: ``K`` matmuls per field; connectivity-respecting).
-- ``GRAPH_EIGEN_LOW`` (8): Diagonal filter in the first low **eigenvectors** of ``L_sym``
-  (graph Fourier prototype; ``eigh`` once per mesh offline, forward ``O(nK)``).
+- `NUFFT_STUB` (2): Legacy placeholder; runtime still maps to `MULTIGRID`.
+- `NUDFT_1D` (3): Dense low-mode non-uniform DFT (NUFFT-style) on 1D coordinates.
+- `RFF_KERNEL_1D` (4): Random Fourier feature global mix on 1D coordinates.
+- `NUDFT_2D` (5): Same as `NUDFT_1D` but with 2D wavevectors on `(x,y)`.
+- `RFF_KERNEL_2D` (6): RFF global mix on 2D coordinates.
+- `GRAPH_POLY_LAPL` (7): Learned polynomial `sum_k c_k L_sym^k` of the **mesh graph**
+  Laplacian (cheap: `K` matmuls per field; connectivity-respecting).
+- `GRAPH_EIGEN_LOW` (8): Diagonal filter in the first low **eigenvectors** of `L_sym`
+  (graph Fourier prototype; `eigh` once per mesh offline, forward `O(nK)`).
 
-See ``README.md`` section on global coupling for rationale.
+See `README.md` section on global coupling for rationale.
 
-**Note:** ``MULTIGRID`` here is **not** classical AMG — it is learned local smoothing plus
-heuristic 1D coarsening along a cell ordering. ``GRAPH_*`` modes use the **same adjacency**
-as the mesh graph (suitable for holes / irregular boundaries when ``A`` reflects them).
+**Note:** `MULTIGRID` here is **not** classical AMG — it is learned local smoothing plus
+heuristic 1D coarsening along a cell ordering. `GRAPH_*` modes use the **same adjacency**
+as the mesh graph (suitable for holes / irregular boundaries when `A` reflects them).
 """
 
 from __future__ import annotations

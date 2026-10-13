@@ -1,7 +1,7 @@
 """hypre through ctypes: FlexGMRES with one BoomerAMG V-cycle on the cell-block-scaled owned rows of
-an operator; the JAX Chorin pressure solve on CPUs (``pressure_linear_solver="hypre"``,
-:mod:`zoomy_jax.symsolver.runtime`).  The library is the shared build of
-``containers/zoomy_amrex/build_hypre_cuda.sh cpu-env`` (or ``ZOOMY_HYPRE_LIB``); it must link the
+an operator; the JAX Chorin pressure solve on CPUs (`pressure_linear_solver="hypre"`,
+`zoomy_jax.symsolver.runtime`).  The library is the shared build of
+`containers/zoomy_amrex/build_hypre_cuda.sh cpu-env` (or `ZOOMY_HYPRE_LIB`); it must link the
 MPI that mpi4py uses.
 
 References:
@@ -27,8 +27,8 @@ _LIB = []
 
 
 def library_path():
-    """The hypre shared library: ``ZOOMY_HYPRE_LIB``, else the cpu-env build under
-    ``ZOOMY_HYPRE_CACHE`` (default ``~/.cache/zoomy``).
+    """The hypre shared library: `ZOOMY_HYPRE_LIB`, else the cpu-env build under
+    `ZOOMY_HYPRE_CACHE` (default `~/.cache/zoomy`).
     """
     if os.environ.get("ZOOMY_HYPRE_LIB"):
         return Path(os.environ["ZOOMY_HYPRE_LIB"])
@@ -42,10 +42,10 @@ def available():
 
 
 class _Lib:
-    """The loaded library, its integer types and the ``MPI_Comm`` handle type."""
+    """The loaded library, its integer types and the `MPI_Comm` handle type."""
 
     def __init__(self, path):
-        """Load ``path``, declare the signatures used here and initialize hypre (MPI is up)."""
+        """Load `path`, declare the signatures used here and initialize hypre (MPI is up)."""
         from mpi4py import MPI                     # MPI initialized before hypre
         cfg = path.resolve().parent.parent / "include" / "HYPRE_config.h"
         text = cfg.read_text() if cfg.is_file() else ""
@@ -100,7 +100,7 @@ class _Lib:
         self("Initialize")
 
     def __call__(self, name, *args, ok=()):
-        """``HYPRE_<name>(*args)``; a nonzero error flag not in ``ok`` raises (all are cleared)."""
+        """`HYPRE_<name>(*args)`; a nonzero error flag not in `ok` raises (all are cleared)."""
         err = getattr(self.lib, "HYPRE_" + name)(*args)
         if err:
             self.lib.HYPRE_ClearAllErrors()
@@ -109,7 +109,7 @@ class _Lib:
         return err
 
     def comm(self, comm):
-        """The ``MPI_Comm`` handle of the mpi4py communicator ``comm``."""
+        """The `MPI_Comm` handle of the mpi4py communicator `comm`."""
         from mpi4py import MPI
         return self.comm_t(MPI._handleof(comm))
 
@@ -128,23 +128,23 @@ def load():
 
 
 def _ptr(a):
-    """Address of the contiguous array ``a``."""
+    """Address of the contiguous array `a`."""
     return ctypes.c_void_p(a.ctypes.data)
 
 
 class BlockRows:
-    """The owned rows of an operator on ``k`` unknowns per cell (row ``c k + p`` of owned cell
-    ``c``), its columns by global unknown number, solved by hypre with matrix values given per call.
-    Every ``k x k`` block of a (cell, stencil cell) pair must be present.  Used by
-    :mod:`zoomy_jax.symsolver.runtime` (``pressure_linear_solver="hypre"``).
+    """The owned rows of an operator on `k` unknowns per cell (row `c k + p` of owned cell
+    `c`), its columns by global unknown number, solved by hypre with matrix values given per call.
+    Every `k x k` block of a (cell, stencil cell) pair must be present.  Used by
+    `zoomy_jax.symsolver.runtime` (`pressure_linear_solver="hypre"`).
 
     Args:
-        comm: mpi4py communicator of the ranks (used as is; collective calls in ``solve``)
+        comm: mpi4py communicator of the ranks (used as is; collective calls in `solve`)
         k: unknowns per cell
-        n_own: owned cells; ``lo``: the global number of the first
-        rows, gcols: local row (``< k n_own``) and global column of every entry
-        tol: target of the true relative residual ``|b - A x| / |b|``
-        restart, maxiter: FlexGMRES Krylov space ``min(restart, 50)``, ``restart * maxiter``
+        n_own: owned cells; `lo`: the global number of the first
+        rows, gcols: local row (`< k n_own`) and global column of every entry
+        tol: target of the true relative residual `|b - A x| / |b|`
+        restart, maxiter: FlexGMRES Krylov space `min(restart, 50)`, `restart * maxiter`
             iterations at most
         rebuild: rebuild the BoomerAMG hierarchy at least every this many solves (1: every
             solve; in between the lagged hierarchy preconditions the new matrix)
@@ -154,7 +154,7 @@ class BlockRows:
 
     def __init__(self, comm, k, n_own, lo, rows, gcols, tol, restart, maxiter, rebuild=1,
                  growth=2.0):
-        """Index the ``k x k`` blocks and the cell blocks; no hypre object yet."""
+        """Index the `k x k` blocks and the cell blocks; no hypre object yet."""
         self.h = load()
         self.mpi, self.comm = comm, self.h.comm(comm)
         self.k, self.n = int(k), int(n_own)
@@ -186,7 +186,7 @@ class BlockRows:
         self.lag = {}                     # transpose -> lagged FlexGMRES + BoomerAMG and its age
 
     def _matrix(self, S, keep, transpose):
-        """The IJ matrix of the scaled values ``S`` (entries ``keep``), or of its transpose."""
+        """The IJ matrix of the scaled values `S` (entries `keep`), or of its transpose."""
         h, Int = self.h, self.h.Int
         M = ctypes.c_void_p()
         h("IJMatrixCreate", self.comm, self.ilo, self.ihi, self.ilo, self.ihi, ctypes.byref(M))
@@ -212,7 +212,7 @@ class BlockRows:
         return M, PA
 
     def _vector(self, values):
-        """An IJ vector of the owned rows holding ``values``; returns ``(ij, par)``."""
+        """An IJ vector of the owned rows holding `values`; returns `(ij, par)`."""
         h = self.h
         V, PV = ctypes.c_void_p(), ctypes.c_void_p()
         h("IJVectorCreate", self.comm, self.ilo, self.ihi, ctypes.byref(V))
@@ -225,14 +225,14 @@ class BlockRows:
         return V, PV
 
     def _get(self, V):
-        """The owned values of IJ vector ``V``."""
+        """The owned values of IJ vector `V`."""
         out = np.empty(self.k * self.n)
         self.h("IJVectorGetValues", V, len(out), _ptr(self.ids), _ptr(out))
         return out
 
     def _solver(self):
         """FlexGMRES preconditioned by one BoomerAMG V-cycle, the settings of foam's and AMReX's
-        CPU ``hypre_solve`` (HMIS, ext+i, hybrid symmetric Gauss-Seidel); returns ``(gmres, amg)``.
+        CPU `hypre_solve` (HMIS, ext+i, hybrid symmetric Gauss-Seidel); returns `(gmres, amg)`.
         """
         h = self.h
         g, a = ctypes.c_void_p(), ctypes.c_void_p()
@@ -251,7 +251,7 @@ class BlockRows:
         return g, a
 
     def _release(self, transpose):
-        """Destroy the lagged solver of ``transpose`` and the matrix it was set up with."""
+        """Destroy the lagged solver of `transpose` and the matrix it was set up with."""
         L = self.lag.pop(transpose, None)
         if L is not None:
             self.h("BoomerAMGDestroy", L["amg"])
@@ -259,11 +259,11 @@ class BlockRows:
             self.h("IJMatrixDestroy", L["M"])
 
     def solve(self, vals, b, transpose=False, nb=None):
-        """Solve ``A x = b`` (``transpose``: ``A^T x = b``) for the matrix values ``vals`` and the
-        owned right-hand side ``b`` (global norm ``nb``, if known); collective on ``comm``.
-        FlexGMRES on ``S = D^-1 A`` (``D`` the ``k x k`` cell blocks; transposed: ``S^T z = b``,
-        ``x = D^-T z``) to 0.1 ``tol``, re-entered with a tighter tolerance until the true relative
-        residual is below ``tol``.
+        """Solve `A x = b` (`transpose`: `A^T x = b`) for the matrix values `vals` and the
+        owned right-hand side `b` (global norm `nb`, if known); collective on `comm`.
+        FlexGMRES on `S = D^-1 A` (`D` the `k x k` cell blocks; transposed: `S^T z = b`,
+        `x = D^-T z`) to 0.1 `tol`, re-entered with a tighter tolerance until the true relative
+        residual is below `tol`.
         """
         h, k, t0 = self.h, self.k, time.perf_counter()
         vals, b = np.asarray(vals, np.float64), np.asarray(b, np.float64)

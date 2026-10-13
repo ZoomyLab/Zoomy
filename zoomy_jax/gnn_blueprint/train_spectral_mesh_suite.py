@@ -1,16 +1,16 @@
 """Train spectral global-coupling predictors on three mesh families:
 
-1. **1D uniform** — standard second-difference Laplacian, ``x`` equispaced in ``[0,1]``.
-2. **1D non-uniform** — vertex Laplacian on random interior nodes, true ``x`` for NUDFT/RFF.
+1. **1D uniform** — standard second-difference Laplacian, `x` equispaced in `[0,1]`.
+2. **1D non-uniform** — vertex Laplacian on random interior nodes, true `x` for NUDFT/RFF.
 3. **2D triangular** — Delaunay triangles, graph Laplacian on centroids + ridge, Morton-ordered
-   columns for the existing 1D multilevel smoother; 2D NUDFT/RFF use centroid ``(x,y)``.
+   columns for the existing 1D multilevel smoother; 2D NUDFT/RFF use centroid `(x,y)`.
 
-Architectures compared per mesh (where valid): ``FFT_1D``, ``NUDFT`` / ``RFF`` on coordinates,
-``graph_poly`` (polynomial of symmetric graph Laplacian — mesh-native, cheap forward),
-``graph_eigen`` (low eigenvector basis — graph Fourier prototype; ``eigh`` once per mesh).
+Architectures compared per mesh (where valid): `FFT_1D`, `NUDFT` / `RFF` on coordinates,
+`graph_poly` (polynomial of symmetric graph Laplacian — mesh-native, cheap forward),
+`graph_eigen` (low eigenvector basis — graph Fourier prototype; `eigh` once per mesh).
 
-Outputs under ``--out-root/<mesh>_<arch>/weights_deltaq.npz``. Use
-:mod:`benchmark_spectral_mesh_suite` to compare GMRES matvecs.
+Outputs under `--out-root/<mesh>_<arch>/weights_deltaq.npz`. Use
+`benchmark_spectral_mesh_suite` to compare GMRES matvecs.
 """
 
 from __future__ import annotations

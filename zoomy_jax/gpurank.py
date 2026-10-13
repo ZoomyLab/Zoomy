@@ -2,12 +2,12 @@
 
     mpiexec -n 4 python -m zoomy_jax.gpurank run.py [args ...]
 
-Sets ``CUDA_VISIBLE_DEVICES`` from the node-local rank (round robin over the
+Sets `CUDA_VISIBLE_DEVICES` from the node-local rank (round robin over the
 node's GPUs), then runs the script.  Every CUDA user in the process -- JAX,
 AmgX, mpi4jax's copies -- sees only that GPU.  A launcher that binds GPUs
-itself (``srun --gpus-per-task=1``, an existing ``CUDA_VISIBLE_DEVICES``) is
+itself (`srun --gpus-per-task=1`, an existing `CUDA_VISIBLE_DEVICES`) is
 left alone.  Binding later, inside the run, is too late for libraries that
-use the CUDA runtime directly: ``import jax`` already loads CUDA.
+use the CUDA runtime directly: `import jax` already loads CUDA.
 """
 import os
 import runpy
@@ -18,7 +18,7 @@ _LOCAL_RANK = ("OMPI_COMM_WORLD_LOCAL_RANK", "MPI_LOCALRANKID",
 
 
 def bind():
-    """Set ``CUDA_VISIBLE_DEVICES`` for this rank; True if it did."""
+    """Set `CUDA_VISIBLE_DEVICES` for this rank; True if it did."""
     if os.environ.get("CUDA_VISIBLE_DEVICES") is not None:
         return False
     local = next((int(os.environ[k]) for k in _LOCAL_RANK if k in os.environ), None)

@@ -1,18 +1,19 @@
-"""``MarchSolver`` — the v6 march assembled from :mod:`blocks`.
+"""`MarchSolver` — the v6 march assembled from `blocks`.
 
 This is the REFERENCE IMPLEMENTATION of the phase-1 solver design: the
 printed march that core will later emit must reproduce these semantics, so
 the block structure and the signatures are the deliverable, not cleverness.
 
 It is a **new shell over the existing kernels**.  Setup is inherited verbatim
-from :class:`zoomy_jax.fvm.solver_jax.HyperbolicSolver` (model coercion, NSM
-resolution, LSQ mesh, periodic-BC remap, ``JaxRuntime`` construction, the
+from `zoomy_jax.fvm.solver_jax.HyperbolicSolver` (model coercion, NSM
+resolution, LSQ mesh, periodic-BC remap, `JaxRuntime` construction, the
 reconstruction factory, the initial aux/BC sweep).  Nothing in
-``solver_jax.py`` is modified; the production solver stays the production
+`solver_jax.py` is modified; the production solver stays the production
 path (standing user ruling: side-by-side, no deletion).
 
-Shape of one step (design §3 with the v6 dt ruling)::
+Shape of one step (design §3 with the v6 dt ruling):
 
+```
     STEP HEAD   lam_lo, lam_hi = dt_pass(...)          # stored, 2 scalars/face
                 dt             = reduce_dt(...)        # FROZEN for the step
                 assert_dt_admissible(dt, ...)          # FATAL if dt <= 0
@@ -24,6 +25,7 @@ Shape of one step (design §3 with the v6 dt ruling)::
                     Q = alpha*Q0 + (1-alpha)*Q_cand    # Shu-Osher
     MOOD        mood_resolve(troubled, ...)            # whole-step O1 redo
     POST        update_variables -> update_aux
+```
 """
 
 from __future__ import annotations
@@ -42,18 +44,18 @@ from zoomy_jax.fvm.solver2.state import MarchState, proceed, should_write
 
 
 class MarchSolver(HyperbolicSolver):
-    """The solver2 march.  Inherits every ``param`` knob and the whole setup
-    path from :class:`HyperbolicSolver`; overrides only the march itself.
+    """The solver2 march.  Inherits every `param` knob and the whole setup
+    path from `HyperbolicSolver`; overrides only the march itself.
 
     Parameters that matter here:
 
-    * ``CFL`` — the user law (0.9 in 1-D, 0.45 in 2-D).  It is applied by
-      :func:`blocks.reduce_dt` and is NEVER reduced on instability: an
+    * `CFL` — the user law (0.9 in 1-D, 0.45 in 2-D).  It is applied by
+      `blocks.reduce_dt` and is NEVER reduced on instability: an
       instability at the law CFL is a reported finding.
-    * ``mood_redo`` — solver2's own flag for the sanctioned whole-step
-      order-1 MOOD redo.  It is deliberately NOT the inherited ``mood``
-      param: that one selects the production per-cell ``force_o1`` corrector
-      and its setup guard demands ``reconstruction_variables='eta'``.  The
+    * `mood_redo` — solver2's own flag for the sanctioned whole-step
+      order-1 MOOD redo.  It is deliberately NOT the inherited `mood`
+      param: that one selects the production per-cell `force_o1` corrector
+      and its setup guard demands `reconstruction_variables='eta'`.  The
       whole-step redo has no such requirement (amendment 5: the strategy is
       the backend's choice, only the OUTCOME is contracted), so it works with
       any reconstruction.
@@ -70,13 +72,13 @@ class MarchSolver(HyperbolicSolver):
     # ── setup ───────────────────────────────────────────────────────────
     def setup_march(self, mesh, model, *, CFL, dt_max=None,
                     dt_dimension=None):
-        """Run the inherited ``setup_simulation`` and translate its results
-        into ``(MeshRT, Ops)`` — the two design-§2 translation blocks.
+        """Run the inherited `setup_simulation` and translate its results
+        into `(MeshRT, Ops)` — the two design-§2 translation blocks.
 
-        ``dt_dimension`` is the ``d`` of the CFL denominator
-        ``CFL*2r/(d(2k+1)|lam|)``.  Default = the mesh's own spatial dimension
-        (the honest reading of ``timestepping.adaptive``'s docstring).  It is
-        exposed because the production call sites use ``adaptive(CFL=...)``
+        `dt_dimension` is the `d` of the CFL denominator
+        `CFL*2r/(d(2k+1)|lam|)`.  Default = the mesh's own spatial dimension
+        (the honest reading of `timestepping.adaptive`'s docstring).  It is
+        exposed because the production call sites use `adaptive(CFL=...)`
         with that argument left at its default of 2 even on 1-D meshes, so a
         parity comparison must be able to say so explicitly.  It is NOT a CFL
         knob: the safety factor stays the user law.
@@ -102,9 +104,9 @@ class MarchSolver(HyperbolicSolver):
         return MarchState(0.0, 0, 0, Q, Qaux)
 
     def _resolve_h_index(self):
-        """Row index of ``h`` for the PAD troubled predicate.  Explicit
-        ``free_surface_h_index`` wins; otherwise resolve BY NAME.  Never
-        positional — an unmapped row must stay ``None`` (non-finite detection
+        """Row index of `h` for the PAD troubled predicate.  Explicit
+        `free_surface_h_index` wins; otherwise resolve BY NAME.  Never
+        positional — an unmapped row must stay `None` (non-finite detection
         only), not silently resolve to something else."""
         if self.free_surface_h_index is not None:
             return int(self.free_surface_h_index)
@@ -124,8 +126,8 @@ class MarchSolver(HyperbolicSolver):
                                time=t, dt=dt, position=cell_centers)
 
         def stage_loop(Q0, Qaux, p, t, dt, o1):
-            """The explicit stage loop.  ``dt`` is FROZEN (v6): it was computed
-            at the step head and no stage recomputes it.  ``o1=True`` is the
+            """The explicit stage loop.  `dt` is FROZEN (v6): it was computed
+            at the step head and no stage recomputes it.  `o1=True` is the
             MOOD redo; identical code, piecewise-constant reconstruction."""
             Qk = Q0
             troubled = jnp.zeros((Q0.shape[1],), dtype=bool)
@@ -194,18 +196,18 @@ class MarchSolver(HyperbolicSolver):
     def march(self, S, *, time_end=None, n_steps=None, dt_window=None,
               write_interval=None, on_write=None, parameters=None,
               max_steps=1_000_000):
-        """Run the march.  ``proceed(S)`` drives the loop; the per-step
+        """Run the march.  `proceed(S)` drives the loop; the per-step
         sequence is exactly the one in the module docstring.
 
-        The loop is a plain python ``while`` so the FATAL dt guard
-        (:func:`blocks.assert_dt_admissible`) is a real abort with a real
+        The loop is a plain python `while` so the FATAL dt guard
+        (`blocks.assert_dt_admissible`) is a real abort with a real
         diagnostic.  Each block is compiled once; the host sees two dispatches
-        per step (head + step).  Returns ``(S, stats)``.
+        per step (head + step).  Returns `(S, stats)`.
 
-        ``max_steps`` is the SECOND honesty guard.  ``assert_dt_admissible``
-        catches ``dt <= 0``; it does NOT catch the other zero-progress mode —
+        `max_steps` is the SECOND honesty guard.  `assert_dt_admissible`
+        catches `dt <= 0`; it does NOT catch the other zero-progress mode —
         a dt that collapses towards zero while staying strictly positive (the
-        classic dry-front ``u = q/h`` blow-up at order >= 2 without a wet/dry
+        classic dry-front `u = q/h` blow-up at order >= 2 without a wet/dry
         reconstruction).  Both are "the march stopped making progress" and
         both must ABORT with a diagnostic rather than spin.
         """
@@ -259,9 +261,9 @@ class MarchSolver(HyperbolicSolver):
 def describe_nsm(nsm) -> str:
     """The mandatory pre-march NSM operator print (user law).
 
-    Same content as the thesis SWASHES case's ``describe_nsm`` — state, aux,
+    Same content as the thesis SWASHES case's `describe_nsm` — state, aux,
     parameters, flux, NCP matrix, source, eigenvalues, and the cap check
-    (``update_variables`` must be ``None`` for the capless derived SWE).
+    (`update_variables` must be `None` for the capless derived SWE).
     """
     return "\n".join([
         f"state: {list(nsm.state)}",

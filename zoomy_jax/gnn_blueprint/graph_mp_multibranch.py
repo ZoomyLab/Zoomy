@@ -7,7 +7,7 @@ import jax.numpy as jnp
 
 
 def _mp_layer(h: jnp.ndarray, edges: jnp.ndarray, ws: jnp.ndarray, wn: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
-    """One message-passing step; ``h`` (n, d), ``edges`` int32 (2, E)."""
+    """One message-passing step; `h` (n, d), `edges` int32 (2, E)."""
     send = edges[0].astype(jnp.int32)
     recv = edges[1].astype(jnp.int32)
     msg = h[send] @ wn
@@ -23,7 +23,7 @@ def _branch_forward(
     n_mp: int,
     hid: int,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Input ``f_node`` (n,) per sample; returns ``out`` (n, 1), last hidden (n, hid)."""
+    """Input `f_node` (n,) per sample; returns `out` (n, 1), last hidden (n, hid)."""
     n = f_node.shape[0]
     x = jnp.stack([jnp.zeros((n,), dtype=f_node.dtype), f_node], axis=-1)
     h = x @ p["emb_w"] + p["emb_b"]
@@ -40,7 +40,7 @@ def _fuse(
     f_node: jnp.ndarray,
     p: dict,
 ) -> jnp.ndarray:
-    """Per-node softmax gates from ``[o0,o1,o2,f]``."""
+    """Per-node softmax gates from `[o0,o1,o2,f]`."""
     z = jnp.concatenate([o0, o1, o2, f_node[:, None]], axis=-1)
     logits = z @ p["fuse_w"] + p["fuse_b"]
     g = jax.nn.softmax(logits, axis=-1)
@@ -57,7 +57,7 @@ def forward_multibranch(
     n_mp: int,
     hid: int,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """``f_b`` (B, n). Returns fused (B,n,1), o0,o1,o2 (B,n,1)."""
+    """`f_b` (B, n). Returns fused (B,n,1), o0,o1,o2 (B,n,1)."""
     def one(f):
         o0, _ = _branch_forward(f, edges, p0, n_mp, hid)
         o1, _ = _branch_forward(f, edges, p1, n_mp, hid)
@@ -75,7 +75,7 @@ def forward_z(
     n_mp: int,
     hid: int,
 ) -> jnp.ndarray:
-    """``r_b`` (B, n) → ``z`` (B, n, 1)."""
+    """`r_b` (B, n) → `z` (B, n, 1)."""
 
     def one(r):
         n = r.shape[0]

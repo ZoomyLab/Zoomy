@@ -1,7 +1,7 @@
 """Driver of the JAX backend: prints the solver template (hyperbolic, Chorin) of a
-NumericalSystemModel and runs it against :mod:`zoomy_jax.symsolver.runtime`.  ``ad_mode="reverse"``
-checkpoints the time loop for ``jax.grad``, ``couple=`` makes the march a preCICE participant,
-``comm=`` (mpi4py) runs it distributed, one rank per device.
+NumericalSystemModel and runs it against `zoomy_jax.symsolver.runtime`.  `ad_mode="reverse"`
+checkpoints the time loop for `jax.grad`, `couple=` makes the march a preCICE participant,
+`comm=` (mpi4py) runs it distributed, one rank per device.
 
 References:
     Bradbury et al. 2018, https://github.com/jax-ml/jax
@@ -42,8 +42,8 @@ class AdMode(Option):
 
 
 class SymbolicHyperbolicSolverJax(HyperbolicSettings):
-    """Finite-volume solver on JAX: prints ``HyperbolicTemplate`` for a NumericalSystemModel, builds
-    the runtime and marches the jitted program.  Use ``setup(mesh, model)``, then ``run(Q, Qaux)``.
+    """Finite-volume solver on JAX: prints `HyperbolicTemplate` for a NumericalSystemModel, builds
+    the runtime and marches the jitted program.  Use `setup(mesh, model)`, then `run(Q, Qaux)`.
     """
     fold_geometry = param.Boolean(
         default=False,
@@ -79,13 +79,13 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
             bind_device(self.comm)
 
     def setup(self, mesh, model):
-        """Lift ``model`` to an NSM if needed, then build the solver on ``mesh``.
+        """Lift `model` to an NSM if needed, then build the solver on `mesh`.
 
         Args:
             mesh: a mesh, or the path of a mesh file
             model: SystemModel or NumericalSystemModel
         Returns:
-            initial ``(Q, Qaux)`` (distributed: the local piece)
+            initial `(Q, Qaux)` (distributed: the local piece)
         """
         self._bind()
         nsm = (model if isinstance(model, NumericalSystemModel)
@@ -94,8 +94,8 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
 
     def _setup(self, mesh, nsm, systems=None, linsolve=None):
         """Distribute or read the mesh, build topology, runtime and the jitted program; returns the
-        initial ``(Q, Qaux)``.  Called by :meth:`setup` and by the Chorin subclass (which adds
-        ``systems`` and ``linsolve``).
+        initial `(Q, Qaux)`.  Called by `setup` and by the Chorin subclass (which adds
+        `systems` and `linsolve`).
         """
         from zoomy_core.mesh import distributed
         bcs = getattr(nsm.sm, "_bc_source", None)
@@ -184,7 +184,7 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
                     time_order=self.time_order, dt_checkpoint=self.dt_checkpoint)
 
     def _print(self):
-        """Print the template to Python source; returns ``(name, source)``."""
+        """Print the template to Python source; returns `(name, source)`."""
         Q, Qaux, p, time, time_end, mesh = sp.symbols(
             "Q Qaux p time time_end mesh")
         template = HyperbolicTemplate(self.nsm, **self._config())
@@ -197,7 +197,7 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
             "hyperbolic", (Q, Qaux, p, time, time_end, mesh), template.march)
 
     def _writer(self):
-        """``on_write``, plus the HDF5 snapshots when ``output`` is set (distributed: gathered and
+        """`on_write`, plus the HDF5 snapshots when `output` is set (distributed: gathered and
         written by rank 0 on the global mesh).
         """
         if not self.output:
@@ -221,7 +221,7 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         count, user = [0], self.on_write
 
         def write(time, Q, Qaux):
-            """Write snapshot number ``count`` and call the user's ``on_write``."""
+            """Write snapshot number `count` and call the user's `on_write`."""
             if blocks:
                 part.write_fields(path, count[0], time, Q, Qaux)
             else:
@@ -308,9 +308,9 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
 
 
 class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
-    """The Chorin projection solver on JAX (``ChorinTemplate``): ``setup(mesh, pred, press, corr)``
+    """The Chorin projection solver on JAX (`ChorinTemplate`): `setup(mesh, pred, press, corr)`
     takes the predictor NSM on the full state and the pressure and corrector systems.  The split
-    must use zoomy's time-step symbol ``dt`` (positive).
+    must use zoomy's time-step symbol `dt` (positive).
 
     References:
         Chorin 1968, https://doi.org/10.1090/S0025-5718-1968-0242392-2
@@ -346,7 +346,7 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
 
     def setup(self, mesh, pred, press, corr):
         """Check the split, build the pressure and corrector runtimes and the linear-solver
-        settings, then :meth:`_setup`; returns the initial ``(Q, Qaux)``.
+        settings, then `_setup`; returns the initial `(Q, Qaux)`.
         """
         self._bind()
         if self.couple:
@@ -405,14 +405,14 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
         return name
 
     def _newton(self):
-        """Newton ``(tol, maxit)`` for a nonlinear pressure constraint, ``None`` for the linear
+        """Newton `(tol, maxit)` for a nonlinear pressure constraint, `None` for the linear
         solve.
         """
         return (None if self.pressure_solve == "linear" else
                 (sp.Float(self.pressure_newton_tol), int(self.pressure_newton_maxit)))
 
     def _print(self):
-        """Print the Chorin template to Python source; returns ``(name, source)``."""
+        """Print the Chorin template to Python source; returns `(name, source)`."""
         Q, Qaux, p, time, time_end, mesh = sp.symbols(
             "Q Qaux p time time_end mesh")
         template = ChorinTemplate(

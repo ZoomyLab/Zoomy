@@ -49,15 +49,15 @@ def get_save_fields(_filepath, write_all=False, overwrite=True):
             def _save(i_snapshot, time, Q, Qaux):
                 """Internal helper `_save`.
 
-                Uses ``io_callback`` (an ORDERED side effect), NOT
-                ``pure_callback``: XLA treats ``pure_callback`` as
+                Uses `io_callback` (an ORDERED side effect), NOT
+                `pure_callback`: XLA treats `pure_callback` as
                 side-effect-free and ELIDES the HDF5 write inside the
-                solver's ``lax.while_loop``, so every in-loop snapshot was
-                dropped and only the eager pre-loop ``iteration_0`` survived
-                (REQ-92).  ``io_callback`` is not elided.  The
-                ``custom_jvp`` zero-tangent rule below intercepts
+                solver's `lax.while_loop`, so every in-loop snapshot was
+                dropped and only the eager pre-loop `iteration_0` survived
+                (REQ-92).  `io_callback` is not elided.  The
+                `custom_jvp` zero-tangent rule below intercepts
                 differentiation, so AD never reaches the (JVP-less)
-                ``io_callback`` — forward AD through the solver still works.
+                `io_callback` — forward AD through the solver still works.
                 """
                 return jax.experimental.io_callback(
                     _save_hdf5,

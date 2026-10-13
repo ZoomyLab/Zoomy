@@ -1,21 +1,21 @@
 """Differentiable implicit solves: Newton roots and the linear solves they use.
 
 Every implicit stage of the jax solvers (IMEX source, state-dependent implicit
-diffusion) finds a root of a residual ``R(x) = 0`` with a Newton loop.  The
-loop itself is not differentiated.  :func:`newton_root` wraps it in
-``jax.lax.custom_root``, so the derivative of the converged root follows from
+diffusion) finds a root of a residual `R(x) = 0` with a Newton loop.  The
+loop itself is not differentiated.  `newton_root` wraps it in
+`jax.lax.custom_root`, so the derivative of the converged root follows from
 the implicit function theorem,
 
     dx/dm = -(dR/dx)^{-1} dR/dm,
 
-for every quantity ``m`` the residual closes over (the explicit predictor,
-``dt``, the physical parameters, ...).  The tangent system takes the exact AD
-linearization of ``R`` and is solved with the same linear solver as the Newton
-updates, inside ``jax.lax.custom_linear_solve`` with a ``transpose_solve``, so
+for every quantity `m` the residual closes over (the explicit predictor,
+`dt`, the physical parameters, ...).  The tangent system takes the exact AD
+linearization of `R` and is solved with the same linear solver as the Newton
+updates, inside `jax.lax.custom_linear_solve` with a `transpose_solve`, so
 the root is differentiable in forward AND reverse mode.
 
-The linear solvers (:func:`gmres`, :func:`cellwise_solve`) carry no AD rule of
-their own and accept any ``matvec``, including a finite-difference Jacobian
+The linear solvers (`gmres`, `cellwise_solve`) carry no AD rule of
+their own and accept any `matvec`, including a finite-difference Jacobian
 action that jax cannot transpose.
 """
 
@@ -28,9 +28,9 @@ from zoomy_core.misc.logger_config import logger
 
 
 def gmres(matvec, b, *, tol, maxiter, restart=20):
-    """Restarted GMRES: ``x`` with ``||b - matvec(x)||_2 <= tol ||b||_2`` or
-    after ``maxiter`` restart cycles of ``restart`` Arnoldi steps each.
-    ``x0 = 0``.  ``matvec`` maps arrays of ``b``'s shape to arrays of ``b``'s
+    """Restarted GMRES: `x` with `||b - matvec(x)||_2 <= tol ||b||_2` or
+    after `maxiter` restart cycles of `restart` Arnoldi steps each.
+    `x0 = 0`.  `matvec` maps arrays of `b`'s shape to arrays of `b`'s
     shape."""
     shape, dtype = b.shape, b.dtype
     bf = b.reshape(-1)
@@ -80,11 +80,11 @@ def gmres(matvec, b, *, tol, maxiter, restart=20):
 
 
 def cellwise_solve(matvec, b):
-    """``x`` with ``matvec(x) = b`` for an operator that is BLOCK-DIAGONAL
-    over the trailing (cell) axis of ``b`` (shape ``(n_vars, n_cells)``).
+    """`x` with `matvec(x) = b` for an operator that is BLOCK-DIAGONAL
+    over the trailing (cell) axis of `b` (shape `(n_vars, n_cells)`).
 
-    The ``n_vars x n_vars`` block of every cell is read off ``n_vars``
-    applications of ``matvec`` to the unit vector of one variable placed in
+    The `n_vars x n_vars` block of every cell is read off `n_vars`
+    applications of `matvec` to the unit vector of one variable placed in
     every cell; each cell is then solved densely."""
     n = b.shape[0]
     units = jnp.eye(n, dtype=b.dtype)
@@ -104,28 +104,28 @@ def _warn_unconverged(rnorm, iterations, *, tol, maxiter):
 
 
 def newton_root(residual, x0, jvp, solve, *, tol, maxiter, norm=jnp.linalg.norm):
-    """Root of ``residual`` by Newton, differentiable by the implicit function
+    """Root of `residual` by Newton, differentiable by the implicit function
     theorem.
 
     Parameters
     ----------
-    residual : callable ``x -> R(x)``, same shape in and out.
+    residual : callable `x -> R(x)`, same shape in and out.
     x0 : initial iterate.
-    jvp : callable ``(x, v) -> J(x) v``, the Jacobian action of the NEWTON
+    jvp : callable `(x, v) -> J(x) v`, the Jacobian action of the NEWTON
         updates (exact AD, finite differences or an analytic form).  Not used
         for derivatives: the tangent system always takes the exact AD
-        linearization of ``residual``.
-    solve : callable ``(matvec, b) -> x`` (:func:`gmres` with its tolerances
-        bound, or :func:`cellwise_solve`), used for the Newton updates and
+        linearization of `residual`.
+    solve : callable `(matvec, b) -> x` (`gmres` with its tolerances
+        bound, or `cellwise_solve`), used for the Newton updates and
         for the tangent (and transposed tangent) systems.
-    tol, maxiter : the iteration stops when ``norm(R) <= tol`` or after
-        ``maxiter`` updates.  Stopping at ``maxiter`` with ``||R||_2 > tol``
-        logs a warning (a ``jax.debug.callback``, so also under ``jit``,
-        ``jvp`` and the checkpointed reverse loop, where the recomputation
+    tol, maxiter : the iteration stops when `norm(R) <= tol` or after
+        `maxiter` updates.  Stopping at `maxiter` with `||R||_2 > tol`
+        logs a warning (a `jax.debug.callback`, so also under `jit`,
+        `jvp` and the checkpointed reverse loop, where the recomputation
         may log it again).  The result is the last iterate either way, but
         its derivative is then the implicit-function derivative of the EXACT
         root, taken at a point that is not one.
-    norm : ``||.||_2`` of a residual; a distributed run passes the global
+    norm : `||.||_2` of a residual; a distributed run passes the global
         norm over the owned cells (every rank then takes the same number of
         updates).
     """

@@ -1,34 +1,34 @@
-"""``EmittedMarchSolver`` — the jax adapter for the march EMITTED by core.
+"""`EmittedMarchSolver` — the jax adapter for the march EMITTED by core.
 
 This file is the architecture test's jax half.  It contains **no scheme
-logic**: every :class:`~zoomy_core.solver.external.ExternalProcedure` body it
+logic**: every `ExternalProcedure` body it
 supplies is a thin positional shim onto the EXISTING
-:mod:`zoomy_jax.fvm.solver2.blocks` implementation.  The march STRUCTURE — the
+`zoomy_jax.fvm.solver2.blocks` implementation.  The march STRUCTURE — the
 loop, the step head, the frozen dt, the stage sequence, the build-time
 branches, the write cadence, the honesty guards and every constant — comes
-from :func:`zoomy_core.solver.march.emit_march` and is lowered by
-:class:`~zoomy_core.transformation.procedure_python.ProcedureBuilder`.
+from `zoomy_core.solver.march.emit_march` and is lowered by
+`ProcedureBuilder`.
 
-If this solver reproduces ``MarchSolver`` bitwise, the emitted march IS the
+If this solver reproduces `MarchSolver` bitwise, the emitted march IS the
 hand-written one and the other backends become ports.
 
-Nothing in ``solver2`` is modified; ``EmittedMarchSolver`` subclasses
-``MarchSolver`` purely to inherit the setup path (``setup_march`` builds
-``MeshRT`` / ``Ops``) and the reference blocks.
+Nothing in `solver2` is modified; `EmittedMarchSolver` subclasses
+`MarchSolver` purely to inherit the setup path (`setup_march` builds
+`MeshRT` / `Ops`) and the reference blocks.
 
 Two lowering choices, both forced and both worth stating
 -------------------------------------------------------
 1. **The step is built on the jax backend, the march on numpy.**  The
-   ``While`` lowers to ``lax.while_loop`` on the jax backend, and a traced
+   `While` lowers to `lax.while_loop` on the jax backend, and a traced
    loop CANNOT host the FATAL dt guard — the abort would be staged out.  The
-   reference march is a plain python ``while`` for exactly this reason, so the
-   emitted march is built with ``ProcedureBuilder("numpy")``: at march level
-   the only arithmetic is the scalar ``time < t_end`` predicate, all array
+   reference march is a plain python `while` for exactly this reason, so the
+   emitted march is built with `ProcedureBuilder("numpy")`: at march level
+   the only arithmetic is the scalar `time < t_end` predicate, all array
    work happens inside the jax-built step.  This mirrors the reference's two
    host dispatches per step (head + step).
-2. **The MOOD redo reuses ``MarchSolver.stage_loop``.**  The sanctioned redo
-   re-enters the SAME stage sequence at runtime with ``o1=1``.  The IR's only
-   branch is build-time and ``o1`` is not a declared argument slot, so the
+2. **The MOOD redo reuses `MarchSolver.stage_loop`.**  The sanctioned redo
+   re-enters the SAME stage sequence at runtime with `o1=1`.  The IR's only
+   branch is build-time and `o1` is not a declared argument slot, so the
    emitted step cannot re-enter itself; the redo body therefore calls the
    reference stage loop, which is the same code the emitted sequence shims
    onto block by block.
@@ -55,11 +55,11 @@ from zoomy_jax.fvm.solver2.state import MarchState
 @partial(jax.jit, static_argnums=(4, 5, 6))
 def _reduce_dt_jit(lam_lo, lam_hi, inradius_f, dt_max, cfl, dimension, degree,
                    clamp):
-    """``blocks.reduce_dt`` under ``jit`` — see the note at the call site.
+    """`blocks.reduce_dt` under `jit` — see the note at the call site.
 
-    ``cfl`` / ``dimension`` / ``degree`` are static because they are EMITTED
+    `cfl` / `dimension` / `degree` are static because they are EMITTED
     constants: they are baked into the compiled program exactly as the
-    reference bakes the closed-over ``self._cfl``.
+    reference bakes the closed-over `self._cfl`.
     """
     return B.reduce_dt(lam_lo, lam_hi, inradius_f, dt_max, CFL=cfl,
                        dimension=dimension, degree=degree,
@@ -69,10 +69,10 @@ def _reduce_dt_jit(lam_lo, lam_hi, inradius_f, dt_max, cfl, dimension, degree,
 class _NotCoupled:
     """Bodies for the coupling surfaces on an UNCOUPLED backend.
 
-    They exist so the ``REQUIRED_PROCEDURES`` contract is met without
+    They exist so the `REQUIRED_PROCEDURES` contract is met without
     pretending coupling works: the face fixup is the STRICT no-op the design
     demands, everything else RAISES if it is ever reached (it never is with
-    ``coupled=False``, which is a build-time flag).
+    `coupled=False`, which is a build-time flag).
     """
 
     @staticmethod
@@ -91,9 +91,9 @@ class _NotCoupled:
 
 
 class EmittedMarchSolver(MarchSolver):
-    """``MarchSolver`` whose march comes from core instead of ``march.py``.
+    """`MarchSolver` whose march comes from core instead of `march.py`.
 
-    Every ``param`` knob, the whole setup path and all block bodies are
+    Every `param` knob, the whole setup path and all block bodies are
     inherited / reused; only the assembly changes.
     """
 
@@ -105,7 +105,7 @@ class EmittedMarchSolver(MarchSolver):
 
     def _external_bodies(self, MeshRT, Ops_, *, on_write=None,
                          max_steps=1_000_000):
-        """Positional shims onto ``solver2.blocks`` — no scheme logic here."""
+        """Positional shims onto `solver2.blocks` — no scheme logic here."""
         nc = MeshRT.n_cells
         cell_centers = MeshRT.cell_centers[:, :nc]
         stage_loop = self.stage_loop        # the reference stage loop (MOOD)
@@ -119,9 +119,9 @@ class EmittedMarchSolver(MarchSolver):
         def cell_ncp(Q, Qaux, p, lim_grad):
             """Amendment 10, the cell-interior NCP integral.
 
-            The only body without a one-to-one counterpart in ``blocks.py``:
-            in the reference it is inline in ``MarchSolver._build_step``.  It
-            is reproduced verbatim (no ``|cell|`` division — the volume factor
+            The only body without a one-to-one counterpart in `blocks.py`:
+            in the reference it is inline in `MarchSolver._build_step`.  It
+            is reproduced verbatim (no `|cell|` division — the volume factor
             cancels against the per-unit-volume residual).
             """
             if lim_grad is None or Ops_.nonconservative_matrix is None:
@@ -290,11 +290,11 @@ class EmittedMarchSolver(MarchSolver):
               write_interval=None, on_write=None, parameters=None,
               max_steps=1_000_000):
         """Run the EMITTED march.  Same signature and same return shape as
-        :meth:`MarchSolver.march`, so the twin gate can call either.
+        `MarchSolver.march`, so the twin gate can call either.
 
-        ``n_steps`` is not part of the emitted loop predicate (the design's
-        ``proceed`` is ``time < t_end``); a step-count run is therefore driven
-        by the equivalent ``t_end`` and is REJECTED rather than silently
+        `n_steps` is not part of the emitted loop predicate (the design's
+        `proceed` is `time < t_end`); a step-count run is therefore driven
+        by the equivalent `t_end` and is REJECTED rather than silently
         approximated.
         """
         if n_steps is not None:

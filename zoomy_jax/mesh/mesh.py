@@ -19,27 +19,27 @@ from zoomy_core.mesh.lsq_reconstruction import find_derivative_indices
 def compute_derivatives(u, mesh, derivatives_multi_index=None, u_bf=None):
     """Compute cell-wise LSQ derivatives using JAX vmap.
 
-    ``lsq_gradQ`` is built over the stencil ``neighbours + boundary faces``, so
+    `lsq_gradQ` is built over the stencil `neighbours + boundary faces`, so
     the right-hand side MUST carry a boundary block too: on a 1-D 80-cell mesh
-    ``lsq_gradQ`` is ``(82, 5, 2)`` while ``lsq_neighbors`` is only ``(82, 4)``
-    and ``lsq_boundary_face_neighbors`` supplies the 5th (4 + 1 = 5).  Feeding
+    `lsq_gradQ` is `(82, 5, 2)` while `lsq_neighbors` is only `(82, 4)`
+    and `lsq_boundary_face_neighbors` supplies the 5th (4 + 1 = 5).  Feeding
     just the neighbours made the matmul contract 5 against 4 and raise
-    ``dot_general requires contracting dimensions to have the same shape``.
+    `dot_general requires contracting dimensions to have the same shape`.
 
-    ⚠ ``u_bf`` carries the value at the **GHOST-CELL** position (the symmetric
+    ⚠ `u_bf` carries the value at the **GHOST-CELL** position (the symmetric
     image of the inner cell through the boundary face), NOT at the face:
 
-    * ``u_bf=None`` ⇒ ghost = inner cell value = core's documented
-      ``'extrapolation'`` / Neumann-zero BC.  This is a **BC CHOICE**, not a
-      neutral default — core's ``_resolve_u_boundary_face`` RAISES on ``None``
+    * `u_bf=None` ⇒ ghost = inner cell value = core's documented
+      `'extrapolation'` / Neumann-zero BC.  This is a **BC CHOICE**, not a
+      neutral default — core's `_resolve_u_boundary_face` RAISES on `None`
       precisely to force callers to state it.
-    * a prescribed face value must be passed as ``2*u_face - u_cell``.  Handing
+    * a prescribed face value must be passed as `2*u_face - u_cell`.  Handing
       in the bare face value puts a face-valued sample at a ghost-positioned
       point and caps the boundary gradient at 1st order: measured 4.16 max err
-      vs 0.024 for the correct form on ``x**2+2x+1``.  (I made exactly this
+      vs 0.024 for the correct form on `x**2+2x+1`.  (I made exactly this
       mistake and briefly concluded the stencil was broken — it isn't.)
 
-    See ``zoomy_core.mesh.lsq_reconstruction._resolve_u_boundary_face`` for the
+    See `zoomy_core.mesh.lsq_reconstruction._resolve_u_boundary_face` for the
     authoritative statement.  Exactness follows that convention: a LINEAR field
     is exact everywhere including boundary cells; a quadratic is exact in the
     interior, with the boundary set by the linear ghost extrapolation.
@@ -73,14 +73,14 @@ def compute_derivatives(u, mesh, derivatives_multi_index=None, u_bf=None):
 
 def lsq_gradient_per_field(mesh, u_inner, u_bf=None, multi_index=(1,)):
     """JAX LSQ derivative for a single scalar field via the mesh's precomputed
-    stencil — the BC-aware kernel (boundary-face neighbours via ``u_bf``;
-    ``u_bf=None`` ⇒ extrapolation/Neumann-zero).  ``u_inner`` is the full state
-    row (inner + sentinel); returns ``(n_inner_cells,)``.
+    stencil — the BC-aware kernel (boundary-face neighbours via `u_bf`;
+    `u_bf=None` ⇒ extrapolation/Neumann-zero).  `u_inner` is the full state
+    row (inner + sentinel); returns `(n_inner_cells,)`.
 
     Shared canonical kernel for the unified derivative-aux applicator
-    (``solver_jax.update_qaux``) and the Chorin pressure split.  jit-traceable:
-    the stencil arrays are ``jnp.ndarray`` on a :class:`MeshJAX`; the
-    ``multi_index`` → monomial-column lookup is host-side/static."""
+    (`solver_jax.update_qaux`) and the Chorin pressure split.  jit-traceable:
+    the stencil arrays are `jnp.ndarray` on a `MeshJAX`; the
+    `multi_index` → monomial-column lookup is host-side/static."""
     nc = int(mesh.n_inner_cells)
     A_glob = mesh.lsq_gradQ[:nc]
     neighbors = mesh.lsq_neighbors[:nc]

@@ -1,10 +1,10 @@
-"""Train multilevel learned ``deltaQ`` with optional 1D FFT coupling + physics losses.
+"""Train multilevel learned `deltaQ` with optional 1D FFT coupling + physics losses.
 
-Loss = supervised MSE + ``beta_impl`` * implicit residual proxy + ``beta_pois`` *
-discrete Laplacian penalty on a pressure proxy (depth channel ``index 1``).
+Loss = supervised MSE + `beta_impl` * implicit residual proxy + `beta_pois` *
+discrete Laplacian penalty on a pressure proxy (depth channel `index 1`).
 
-Writes ``weights_deltaq.npz`` for the learned predictor
-when ``global_coupling_mode=FFT_1D`` (see :mod:`zoomy_jax.gnn_blueprint.global_coupling`).
+Writes `weights_deltaq.npz` for the learned predictor
+when `global_coupling_mode=FFT_1D` (see `zoomy_jax.gnn_blueprint.global_coupling`).
 """
 
 from __future__ import annotations

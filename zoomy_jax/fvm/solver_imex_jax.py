@@ -1,20 +1,20 @@
 """JAX IMEX solver: explicit flux + implicit diffusion + implicit source.
 
-``IMEXSourceSolverJax`` is the jax :class:`HyperbolicSolver` with two implicit
+`IMEXSourceSolverJax` is the jax `HyperbolicSolver` with two implicit
 stages appended to its explicit step.  Everything else -- the adaptive
-per-face CFL, ``dt_max``, the time loop, ``post_step``, output, ``ad_mode`` --
+per-face CFL, `dt_max`, the time loop, `post_step`, output, `ad_mode` --
 is the base solver's.  One step is
 
 1. the base explicit step WITHOUT the source (flux only, RK2 at order 2,
    MOOD-aware);
-2. implicit Crank-Nicolson diffusion of the runtime ``diffusion_matrix``
+2. implicit Crank-Nicolson diffusion of the runtime `diffusion_matrix`
    (when the model carries one; the base flux then leaves it out);
-3. implicit Euler on the source, ``Q - Q_e - dt S(Q, aux(Q), p, t + dt) = 0``,
-   solved cell-wise (``source_mode="local"``) or globally by Newton-GMRES
-   (``"global"``).
+3. implicit Euler on the source, `Q - Q_e - dt S(Q, aux(Q), p, t + dt) = 0`,
+   solved cell-wise (`source_mode="local"`) or globally by Newton-GMRES
+   (`"global"`).
 
-Both implicit stages are Newton roots wrapped in ``jax.lax.custom_root``
-(:mod:`zoomy_jax.fvm.implicit_ad`), so the solver is differentiable in
+Both implicit stages are Newton roots wrapped in `jax.lax.custom_root`
+(`zoomy_jax.fvm.implicit_ad`), so the solver is differentiable in
 forward and reverse mode through the converged roots.
 """
 
@@ -31,7 +31,7 @@ from zoomy_jax.fvm.solver_jax import HyperbolicSolver
 class IMEXSourceSolverJax(HyperbolicSolver):
     """Jax IMEX solver: the base explicit step plus implicit diffusion and an
     implicit source stage.  The knobs below are read in
-    ``setup_simulation``."""
+    `setup_simulation`."""
 
     source_mode = param.Selector(
         objects=["auto", "local", "global"], default="auto",
@@ -80,7 +80,7 @@ class IMEXSourceSolverJax(HyperbolicSolver):
 
     def step(self, dt, time, Q, Qaux, parameters=None, coupled=None):
         """Explicit flux step, then implicit diffusion, then implicit source.
-        Same signature and contract as the base ``step``."""
+        Same signature and contract as the base `step`."""
         parameters = self._rt_parameters if parameters is None else parameters
         Q = super().step(dt, time, Q, Qaux, parameters, coupled=coupled)
         if self._rt_implicit_diffusion is not None:
@@ -95,15 +95,15 @@ class IMEXSourceSolverJax(HyperbolicSolver):
         return "global" if self.nsm.source_derivative_specs else "local"
 
     def _build_implicit_source(self):
-        """``(dt, time, Q, Qaux, parameters) -> Q``: implicit Euler on the
-        source at ``time + dt``,
+        """`(dt, time, Q, Qaux, parameters) -> Q`: implicit Euler on the
+        source at `time + dt`,
 
             R(Q) = Q - Q_e - dt * S(Q, aux(Q), p, time + dt, dt, x) = 0,
 
-        ``Q_e`` the explicit predictor.  ``aux(Q)``: ``local`` mode recomputes
-        the cell-local ``update_aux_variables`` rows from the iterate on top
-        of the aux of ``Q_e`` (gradient rows frozen); ``global`` mode runs the
-        full ``update_qaux``."""
+        `Q_e` the explicit predictor.  `aux(Q)`: `local` mode recomputes
+        the cell-local `update_aux_variables` rows from the iterate on top
+        of the aux of `Q_e` (gradient rows frozen); `global` mode runs the
+        full `update_qaux`."""
         mode = self._resolve_source_mode()
         jv_backend = self.jv_backend
         tol, maxiter = float(self.implicit_tol), int(self.implicit_maxiter)
@@ -170,11 +170,11 @@ class IMEXSourceSolverJax(HyperbolicSolver):
         return implicit_source
 
     def _build_implicit_diffusion(self):
-        """``(dt, time, Q, Qaux, parameters) -> Q``: one Crank-Nicolson step
-        of the runtime ``diffusion_matrix`` with
-        :class:`DenseDiffusionOperatorJAX` (interior faces; a linear GMRES
+        """`(dt, time, Q, Qaux, parameters) -> Q`: one Crank-Nicolson step
+        of the runtime `diffusion_matrix` with
+        `DenseDiffusionOperatorJAX` (interior faces; a linear GMRES
         solve for a constant tensor, Newton-GMRES for a state-dependent one).
-        ``None`` when the model carries no implicit diffusion."""
+        `None` when the model carries no implicit diffusion."""
         rt = self._rt_model
         dmat = rt.diffusion_matrix
         if dmat is None:

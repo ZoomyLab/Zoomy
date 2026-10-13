@@ -1,5 +1,5 @@
-"""JAX backend of the symbolic solvers (``zoomy_core.symsolver``).  Importing it switches XLA's HLO
-constant folding off (unless ``XLA_FLAGS`` names it or ``ZOOMY_XLA_CONSTANT_FOLDING=1``), because
+"""JAX backend of the symbolic solvers (`zoomy_core.symsolver`).  Importing it switches XLA's HLO
+constant folding off (unless `XLA_FLAGS` names it or `ZOOMY_XLA_CONSTANT_FOLDING=1`), because
 the constant mesh topology otherwise makes GPU compiles grow with the mesh.
 """
 import os as _os

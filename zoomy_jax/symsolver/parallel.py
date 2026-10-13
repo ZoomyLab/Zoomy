@@ -1,6 +1,6 @@
-"""Distributed runs on JAX: the ``halo`` exchange and the global reductions of the runtime's name
-table, one MPI rank per device.  Used by :mod:`zoomy_jax.symsolver.runtime` when the solver gets
-``comm=``; the exchanges are mpi4jax collectives, differentiable in both directions.
+"""Distributed runs on JAX: the `halo` exchange and the global reductions of the runtime's name
+table, one MPI rank per device.  Used by `zoomy_jax.symsolver.runtime` when the solver gets
+`comm=`; the exchanges are mpi4jax collectives, differentiable in both directions.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from zoomy_core.mesh.distributed import HALO  # noqa: F401  (re-exported)
 
 
 def _mpi4jax():
-    """Import mpi4jax and register the AD rules of its ``alltoall``; a clear error when it is
+    """Import mpi4jax and register the AD rules of its `alltoall`; a clear error when it is
     missing.
     """
     try:
@@ -27,7 +27,7 @@ def _mpi4jax():
 
 def bind_device(comm):
     """Bind this rank to one GPU of its node (round robin), before JAX starts if possible.  No-op on
-    the CPU, with one GPU, or when ``CUDA_VISIBLE_DEVICES`` is set.
+    the CPU, with one GPU, or when `CUDA_VISIBLE_DEVICES` is set.
     """
     import os
     from mpi4py import MPI
@@ -68,8 +68,8 @@ _AD_DONE = []
 
 
 def _register_alltoall_ad():
-    """Register the JVP and transpose of mpi4jax's ``alltoall`` (linear; its transpose is
-    ``alltoall``), once.
+    """Register the JVP and transpose of mpi4jax's `alltoall` (linear; its transpose is
+    `alltoall`), once.
     """
     if _AD_DONE:
         return
@@ -77,12 +77,12 @@ def _register_alltoall_ad():
     from mpi4jax._src.collective_ops.alltoall import mpi_alltoall_p as p
 
     def jvp(primals, tangents, comm):
-        """JVP of ``alltoall``: ``alltoall`` of the tangent."""
+        """JVP of `alltoall`: `alltoall` of the tangent."""
         (x,), (t,) = primals, tangents
         return p.bind(x, comm=comm), p.bind(ad.instantiate_zeros(t), comm=comm)
 
     def transpose(ct, x, comm):
-        """Transpose of ``alltoall``: ``alltoall`` of the cotangent."""
+        """Transpose of `alltoall`: `alltoall` of the cotangent."""
         return [p.bind(ad.instantiate_zeros(ct), comm=comm)]
 
     ad.primitive_jvps[p] = jvp
@@ -95,7 +95,7 @@ _LOCAL = [False]
 
 
 class no_halo:
-    """Context manager inside which ``halo`` is the identity, giving the rank's own block of an
+    """Context manager inside which `halo` is the identity, giving the rank's own block of an
     operator (block-Jacobi preconditioner).
     """
 
@@ -109,11 +109,11 @@ class no_halo:
 
 
 def krylov(part, nc):
-    """The owned-cell mask ``(nc,)`` and the global sum (allreduce) a distributed Krylov solve
+    """The owned-cell mask `(nc,)` and the global sum (allreduce) a distributed Krylov solve
     needs.
 
     Returns:
-        ``(mask, gsum)``; inside ``custom_linear_solve`` nothing is differentiated through ``gsum``.
+        `(mask, gsum)`; inside `custom_linear_solve` nothing is differentiated through `gsum`.
     """
     mpi4jax = _mpi4jax()
     from mpi4py import MPI
@@ -123,14 +123,14 @@ def krylov(part, nc):
 
 
 def blocks(part, mesh_np):
-    """The ``halo`` exchange and the global reductions of the runtime's name table for this rank's
+    """The `halo` exchange and the global reductions of the runtime's name table for this rank's
     piece, each face and cell counted once.
 
     Args:
-        part: :class:`zoomy_core.mesh.distributed.Partition` of this rank
+        part: `zoomy_core.mesh.distributed.Partition` of this rank
         mesh_np: the rank's local mesh
     Returns:
-        dict with ``halo``, ``reduce_any``, ``reduce_min``, ``reduce_max``
+        dict with `halo`, `reduce_any`, `reduce_min`, `reduce_max`
     """
     mpi4jax = _mpi4jax()
     from mpi4py import MPI
@@ -150,7 +150,7 @@ def blocks(part, mesh_np):
     send, recv = jnp.asarray(send), jnp.asarray(recv.reshape(-1))
 
     def halo(X, mesh):
-        """Refresh the halo copies in ``X`` from their owners by ``alltoall``."""
+        """Refresh the halo copies in `X` from their owners by `alltoall`."""
         if size == 1 or jnp.ndim(X) == 0 or _LOCAL[0]:
             return X
         buf = jnp.moveaxis(X[:, send], 1, 0)            # (size, rows, m)
@@ -169,7 +169,7 @@ def blocks(part, mesh_np):
     own_cell = jnp.asarray(np.arange(nc) < part.n_own)
 
     def owned(x, empty):
-        """Entries of ``x`` this rank owns (faces or cells); the others are replaced by ``empty``."""
+        """Entries of `x` this rank owns (faces or cells); the others are replaced by `empty`."""
         x = jnp.asarray(x)
         if x.ndim == 0:
             return x
@@ -181,19 +181,19 @@ def blocks(part, mesh_np):
                          f"{nf} faces")
 
     def total(x):
-        """Sum over the ranks by ``alltoall``, whose transpose sums the cotangents of all ranks
+        """Sum over the ranks by `alltoall`, whose transpose sums the cotangents of all ranks
         (mpi4jax transposes allreduce as the identity).
         """
         every = jnp.broadcast_to(x, (size,) + jnp.shape(x))
         return jnp.sum(mpi4jax.alltoall(every, comm=comm), axis=0)
 
     def chooser(op, local, empty):
-        """A differentiable global min / max: ``local`` over the owned entries, then an allreduce
-        with ``op``.
+        """A differentiable global min / max: `local` over the owned entries, then an allreduce
+        with `op`.
         """
         @jax.custom_jvp
         def reduce(x):
-            """Global extremum of the owned entries of ``x``."""
+            """Global extremum of the owned entries of `x`."""
             return mpi4jax.allreduce(local(owned(x, empty)), op, comm=comm)
 
         @reduce.defjvp
