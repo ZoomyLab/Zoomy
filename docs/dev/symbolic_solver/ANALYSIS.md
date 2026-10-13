@@ -1179,3 +1179,20 @@ Remaining FAIL: C15 Chorin AD on gpu1 (NaN; CPU and mpi2 pass).
   the pressure-increment form: Brown, Cortez, Minion 2001, https://doi.org/10.1006/jcph.2001.6715;
   Guermond, Minev, Shen 2006, https://doi.org/10.1016/j.cma.2005.10.010 (Zotero J4IJXP8A, no PDF;
   the Almgren papers are not in the library).
+
+### 45b. In-plane viscosity: two derivation defects fixed; one physics choice open (2026-10-13)
+
+- `equations.py:package_viscous` emitted `-Derivative(C, x_d) * d_e Q` unevaluated; for a
+  state-dependent `C = nu q / h` `from_model` turned it into a compound aux (`nu*q_x_0/h_x`,
+  `target_kind='unknown'`) that every backend read as 0, silently dropping -d_d(nu q/h) d_e h
+  (also in m07 / m14).  Now `sp.diff(C, x_d)`.
+- `system_extract.py:_classification_remainder` added +d_d(A d_e Q) although A carries the RHS
+  sign: the "classified into NO slot" warning was a false positive.  Now `-=`.
+- After both: the SystemModel operator of SME(0) and SME(1) + NewtonianInPlane equals the model's
+  own depth integration symbolically (gate 45: 4e-16 vs h div(tau)); discrete -> SM order 2 on all
+  backends; C26 moved by 5e-5.
+- **Open (physics, the user's call):** (A) the model keeps the Leibniz in-plane boundary terms ->
+  h div(nu (grad u + grad u^T)), not momentum-conservative on periodic domains; (B) the literature
+  form div(nu h (grad u + grad u^T)) (Gerbeau-Perthame RR-4084 Lemma 2.1 eq. (9); Marche 2007
+  eq. (5.19)) needs the in-plane stress in the surface / bed traction (`apply_stress_closures`,
+  `_solve_traction` build sigma.n from tau_iz only) -- affects SME, VAM, ML-SME, ML-VAM.

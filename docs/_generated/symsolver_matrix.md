@@ -1,4 +1,4 @@
-**657 PASS, 0 FAIL** (37 information rows, 12 n/a, 1 unsupported).  Last run 2026-10-12; library commits: zoomy_amrex 0270878/ba55420/ce3f72a, zoomy_core 09d1584/44bc573/4c6ae22/6cbf885, zoomy_foam 250b152/8d4fb93/e17026f, zoomy_jax 4b2ce3f/5fd4252/9cb23c5/f39b67f; rendered from `matrix_latest.json` of 2026-10-12.
+**657 PASS, 0 FAIL** (37 information rows, 12 n/a, 1 unsupported).  Last run 2026-10-13; library commits: zoomy_amrex 0270878/ba55420/ce3f72a, zoomy_core 09d1584/3846d17/44bc573/4c6ae22/6cbf885, zoomy_foam 250b152/8d4fb93/e17026f, zoomy_jax 4b2ce3f/5fd4252/9cb23c5/f39b67f; rendered from `matrix_latest.json` of 2026-10-13.
 
 A cell counts the checks of a case on a backend over every config (serial, MPI, GPU).  Case setups and pass criteria: [matrix README](https://github.com/ZoomyLab/Zoomy/blob/main/docs/dev/symbolic_solver/matrix/README.md#cases-and-pass-criteria); every row: [table.md](https://github.com/ZoomyLab/Zoomy/blob/main/docs/dev/symbolic_solver/matrix/table.md).  `-`: no check of its own on that backend (JAX is the reference, or the runs are counted under C6 / C7 / C9).
 

@@ -121,7 +121,7 @@
 | C7 | C21 pulse_o1 parallel vs serial CPU (max rel) | foam | - | 3.18e-16 PASS | 3.18e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 pulse_o2 parallel vs serial CPU (max rel) | foam | - | 4.31e-16 PASS | 5.74e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 sod_y parallel vs serial CPU (max rel) | foam | - | 7.99e-16 PASS | 9.33e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C7 | C26 visc parallel vs serial CPU (max rel) | foam | - | 1.19e-14 PASS | 6.39e-14 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C7 | C26 visc parallel vs serial CPU (max rel) | foam | - | 4.12e-15 PASS | 5.19e-15 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C5 n48 parallel vs serial CPU (max rel) | foam | - | 2.09e-15 PASS | 2.27e-15 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C8 vam parallel vs serial CPU (max rel) | foam | - | 2.34e-14 PASS | 2.13e-14 PASS | n/a | n/a | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C7 | C1 o2_n40 parallel vs serial CPU (max rel) | jax | - | 1.22e-13 PASS | 1.22e-13 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
@@ -130,7 +130,7 @@
 | C7 | C21 pulse_o1 parallel vs serial CPU (max rel) | jax | - | 3.18e-16 PASS | 3.18e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 pulse_o2 parallel vs serial CPU (max rel) | jax | - | 5.84e-16 PASS | 5.84e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 sod_y parallel vs serial CPU (max rel) | jax | - | 1.78e-15 PASS | 1.15e-15 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
-| C7 | C26 visc parallel vs serial CPU (max rel) | jax | - | 1.02e-15 PASS | 9.68e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
+| C7 | C26 visc parallel vs serial CPU (max rel) | jax | - | 8.66e-16 PASS | 8.66e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C5 n48 parallel vs serial CPU (max rel) | jax | - | 3.62e-15 PASS | 3.39e-15 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C8 vam parallel vs serial CPU (max rel) | jax | - | 8.73e-10 PASS | 8.67e-10 PASS | - | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C8 | Newton vs linear pressure (max rel) | amrex | 8.35e-10 PASS | - | - | - | - | <= 1e-08 (tolerance (Newton 1e-10 vs GMRES 1e-10, over the steps)) |
@@ -150,7 +150,7 @@
 | C9 | C8 vam GPU vs serial CPU (max rel) | amrex | - | - | - | 1.91e-14 PASS | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C9 | C1 o2_n40 GPU vs serial CPU (max rel) | jax | - | - | - | 1.67e-13 PASS | - | <= 1e-12 (tolerance (round-off)) |
 | C9 | C14 o2_n40 GPU vs serial CPU (max rel) | jax | - | - | - | 5.84e-16 PASS | 5.32e-16 PASS | <= 1e-12 (tolerance (round-off)) |
-| C9 | C26 visc GPU vs serial CPU (max rel) | jax | - | - | - | 9.17e-16 PASS | 9.17e-16 PASS | <= 1e-12 (tolerance (round-off)) |
+| C9 | C26 visc GPU vs serial CPU (max rel) | jax | - | - | - | 1.26e-15 PASS | 9.17e-16 PASS | <= 1e-12 (tolerance (round-off)) |
 | C9 | C5 n48 GPU vs serial CPU (max rel) | jax | - | - | - | 3.14e-15 PASS | 3.10e-15 PASS | <= 1e-12 (tolerance (round-off)) |
 | C9 | C8 vam GPU vs serial CPU (max rel) | jax | - | - | - | 2.79e-10 PASS | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C10 | space O1 time O1 order (Richardson) | amrex | 1.91e+00 PASS | - | - | - | - | >= 0.8 (theory 1) |
@@ -380,7 +380,7 @@
 | C24 | wave o2minmod order 32->64 | jax | 1.82e+00 PASS | - | - | - | - | >= 1.7 (observed 1.83) |
 | C24 | wave o2none max|u - u0|, |p - 1| | jax | 1.33e-15 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C24 | wave o2none order 32->64 | jax | 2.32e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
-| C26 | max rel vs JAX | amrex | 1.10e-13 PASS | - | - | - | - | <= 1e-08 (tolerance (Newton 1e-12, GMRES 1e-13)) |
+| C26 | max rel vs JAX | amrex | 3.97e-14 PASS | - | - | - | - | <= 1e-08 (tolerance (Newton 1e-12, GMRES 1e-13)) |
 | C26 | L1 rel vs JAX | foam | 1.72e-03 | - | - | n/a | n/a | information |
 | C27 | ODE time_order 1 order 32->64 steps | amrex | 1.01e+00 PASS | - | - | - | - | >= 0.8 (theory 1, slack 0.2) |
 | C27 | ODE time_order 2 order 32->64 steps | amrex | 1.92e+00 PASS | - | - | - | - | >= 1.8 (theory 2, slack 0.2) |
@@ -587,12 +587,12 @@
 | C33 | rk2 q(T) vs expm, order dt/2 -> dt/4 | jax | 2.03e+00 PASS | - | - | - | - | >= 1.8 (theory 2, slack 0.2) |
 | C33 | rk2 q(T) vs its own scheme, SSP-RK2 (1 + dt J + (dt J)^2 / 2)^N (max rel) | jax | 2.79e-15 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C33 | rk2 uniform state: max|Q - Q[:, 0]|, |h - 1| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
-| C34 | nx 16 max rel |L - L_JAX| | amrex | 5.62e-10 PASS | - | - | - | - | <= 2e-07 (observed 7e-8 foam (its own O2 stencils in the explicit stage: O(dt) in L), 6e-10 AMReX (round-off / dt)) |
+| C34 | nx 16 max rel |L - L_JAX| | amrex | 5.43e-10 PASS | - | - | - | - | <= 2e-07 (observed 7e-8 foam (its own O2 stencils in the explicit stage: O(dt) in L), 6e-10 AMReX (round-off / dt)) |
 | C34 | nx 16 max rel |L - L_JAX| | foam | 6.94e-08 PASS | - | - | n/a | n/a | <= 2e-07 (observed 7e-8 foam (its own O2 stencils in the explicit stage: O(dt) in L), 6e-10 AMReX (round-off / dt)) |
-| C34 | q_x_0: vs the SystemModel operator (mixed derivatives), order 32->64 | jax | 1.98e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
-| C34 | q_x_0: vs the SystemModel operator at nx 64 (max rel) | jax | 1.94e-03 PASS | - | - | - | - | <= 0.006 (observed 3.1e-3 (q_y), 1.9e-3 (q_x) on JAX) |
+| C34 | q_x_0: vs the SystemModel operator (mixed derivatives), order 32->64 | jax | 1.99e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
+| C34 | q_x_0: vs the SystemModel operator at nx 64 (max rel) | jax | 1.77e-03 PASS | - | - | - | - | <= 0.006 (observed 3.1e-3 (q_y), 1.9e-3 (q_x) on JAX) |
 | C34 | q_y_0: vs the SystemModel operator (mixed derivatives), order 32->64 | jax | 1.98e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
-| C34 | q_y_0: vs the SystemModel operator at nx 64 (max rel) | jax | 3.07e-03 PASS | - | - | - | - | <= 0.006 (observed 3.1e-3 (q_y), 1.9e-3 (q_x) on JAX) |
+| C34 | q_y_0: vs the SystemModel operator at nx 64 (max rel) | jax | 3.08e-03 PASS | - | - | - | - | <= 0.006 (observed 3.1e-3 (q_y), 1.9e-3 (q_x) on JAX) |
 
 ## Large tier
 
@@ -773,8 +773,8 @@ Notes:
 - C29 p3 neu d1 interior order 24->48, jax serial: max err 2.12e-03 / 2.43e-04 / 2.43e-05; ghost as sample: 2.12e-03 / 2.43e-04 / 2.43e-05
 - C29 p3 neu d2 interior order 24->48, jax serial: max err 2.07e-02 / 5.39e-03 / 1.42e-03; ghost as sample: 2.07e-02 / 5.39e-03 / 1.42e-03
 - C29 p3 neu d3 interior order 24->48, jax serial: max err 1.91e-02 / 8.77e-03 / 3.47e-03; ghost as sample: 1.91e-02 / 8.77e-03 / 3.47e-03
-- C34 q_x_0: vs the SystemModel operator (mixed derivatives), order 32->64, jax serial: max rel 3.05e-02 / 7.69e-03 / 1.94e-03; vs its diagonal-index part only 1.54e-01 / 1.76e-01 / 1.82e-01
-- C34 q_y_0: vs the SystemModel operator (mixed derivatives), order 32->64, jax serial: max rel 4.62e-02 / 1.21e-02 / 3.07e-03; vs its diagonal-index part only 5.19e-01 / 5.79e-01 / 5.95e-01
+- C34 q_x_0: vs the SystemModel operator (mixed derivatives), order 32->64, jax serial: max rel 2.78e-02 / 7.05e-03 / 1.77e-03; vs its diagonal-index part only 1.55e-01 / 1.76e-01 / 1.82e-01
+- C34 q_y_0: vs the SystemModel operator (mixed derivatives), order 32->64, jax serial: max rel 4.64e-02 / 1.21e-02 / 3.08e-03; vs its diagonal-index part only 5.18e-01 / 5.79e-01 / 5.95e-01
 - C30 gate 39 checks failing, jax serial: PASS=72 FAIL=0 (tol 1e-09); the ghost as a plain sample is inexact in 15 cases (sensitivity)
 - C31 SWE lie1 order dt/4->dt/8, jax serial: L1(h) vs dt/32 3.77e-05 / 1.81e-05 / 8.43e-06 / 3.61e-06
 - C31 SWE lie2 order dt/4->dt/8, jax serial: L1(h) vs dt/32 5.61e-06 / 2.70e-06 / 1.26e-06 / 5.38e-07
@@ -931,7 +931,7 @@ Notes:
 - C28 tri impl per max rel vs JAX, foam serial: L_inf vs exact 5.20e-04
 - C28 tri impl steady max rel vs JAX, foam serial: L_inf vs exact 0.00e+00
 - C28 tri impl steady max|u - L|, foam serial: on the backend itself
-- C34 nx 16 max rel |L - L_JAX|, foam serial: vs the SystemModel operator 3.05e-02 / 4.62e-02
+- C34 nx 16 max rel |L - L_JAX|, foam serial: vs the SystemModel operator 2.78e-02 / 4.64e-02
 - C32 noslip n20 max|h - 1|, foam serial: theory: h stays 1
 - C32 noslip n20 max|q_y|, foam serial: theory: v stays 0
 - C32 noslip n20 x-variation of q_x (max rel), foam serial: theory: u = u(y)
@@ -1037,7 +1037,7 @@ Notes:
 - C28 quad impl per max rel vs JAX, amrex serial: L_inf vs exact 8.16e-04
 - C28 quad impl steady max rel vs JAX, amrex serial: L_inf vs exact 0.00e+00
 - C28 quad impl steady max|u - L|, amrex serial: on the backend itself
-- C34 nx 16 max rel |L - L_JAX|, amrex serial: vs the SystemModel operator 3.05e-02 / 4.62e-02
+- C34 nx 16 max rel |L - L_JAX|, amrex serial: vs the SystemModel operator 2.78e-02 / 4.64e-02
 - C32 noslip n20 max|h - 1|, amrex serial: theory: h stays 1
 - C32 noslip n20 max|q_y|, amrex serial: theory: v stays 0
 - C32 noslip n20 x-variation of q_x (max rel), amrex serial: theory: u = u(y)
@@ -1079,4 +1079,4 @@ Notes:
 - C6 C32 mass change (rel), amrex serial: max over 2 runs
 - C6 C33 mass change (rel), amrex serial: max over 6 runs
 
-Summed run wall time (s, without process start-up): amrex 4298, foam 4296, jax 7380
+Summed run wall time (s, without process start-up): amrex 4411, foam 4295, jax 7253
