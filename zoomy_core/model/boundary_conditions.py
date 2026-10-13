@@ -40,13 +40,16 @@ _BC_ON_METHODS = {
 }
 
 
-#: Producer -> the channel it serves; a `face=` / `ghost=` BC replaces it on the slots of its
-#: `on`.  A ghost is always derived from the BC's own face value, never from a `face=` BC.
+#: Producer -> the channel it serves; a `face=` / `ghost=` / `normal_gradient=` BC replaces it on
+#: the slots of its `on`.  A ghost is always derived from the BC's own face value, never from a
+#: `face=` BC.
 _BC_CHANNELS = {
     "compute_boundary_condition": "face",
     "face_value":                 "face",
     "face_state":                 "face",
     "compute_ghost_state":        "ghost",
+    "compute_boundary_gradient":  "normal_gradient",
+    "face_gradient":              "normal_gradient",
 }
 
 
@@ -137,9 +140,10 @@ class BoundaryCondition(param.Parameterized):
     state field(s) it owns. A flat list of BCs gives different fields different BCs at one tag;
     ``on`` is resolved against the model state by :func:`resolve_per_field`.
 
-    A BC feeds two channels: `face`, the state on the boundary face (the Riemann problem), and
+    A BC feeds three channels: `face`, the state on the boundary face (the Riemann problem);
     `ghost`, the value at the mirror image of the inner cell centre (gradients, limiters,
-    derivative aux, diffusion), by default derived from the face value.  `face=` / `ghost=` take
+    derivative aux, diffusion), by default derived from the face value; `normal_gradient`, a
+    prescribed dQ/dn on the face (Neumann data).  `face=` / `ghost=` / `normal_gradient=` take
     another BC that supplies that channel on the slots of its `on`, e.g.
     `Wall(tag="w", ghost=Dirichlet(on="momentum", value=0))`.
     """
@@ -150,6 +154,8 @@ class BoundaryCondition(param.Parameterized):
         "'all'); resolved against the model's declared state."))
     face = param.Parameter(default=None, doc="BC supplying the `face` channel (None: this BC).")
     ghost = param.Parameter(default=None, doc="BC supplying the `ghost` channel (None: this BC).")
+    normal_gradient = param.Parameter(
+        default=None, doc="BC supplying the `normal_gradient` channel (None: this BC).")
 
     # Resolved slot indices this BC owns (None ⇒ all ⇒ no masking).  Set by
     # ``bind_on`` once the model state is known (see SystemModel.attach_*).
@@ -180,8 +186,9 @@ class BoundaryCondition(param.Parameterized):
             setattr(self, channel, self._own_channel(channel, bc))
 
     def channels(self):
-        """The channel BCs given, `{"face": bc, "ghost": bc}`."""
-        return {c: getattr(self, c) for c in ("face", "ghost") if getattr(self, c) is not None}
+        """The channel BCs given, e.g. `{"face": bc, "ghost": bc}`."""
+        return {c: getattr(self, c) for c in ("face", "ghost", "normal_gradient")
+                if getattr(self, c) is not None}
 
     def _own_channel(self, channel, bc):
         """This BC's copy of the channel BC `bc`, at this BC's tag."""
