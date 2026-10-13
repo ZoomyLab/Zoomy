@@ -1,8 +1,13 @@
+# Everything `jupyter-book build docs/book` and docs/scripts/*.py need.  The CI
+# image (docs/Dockerfile.docs) installs exactly this; nothing is fetched at build time.
 jupyter-book<1
 sphinx
-myst-parser
+myst-parser              # Markdown (MyST): pages and docstrings
+sphinx-autodoc2          # API reference from docstrings, rendered as MyST (static analysis)
+sphinxcontrib-bibtex     # literature.md / acknowledgements.md
 sphinx-design
 sphinx-copybutton
 sphinx-togglebutton
+pyyaml                   # docs/scripts/generate_apidoc.py reads _config.yml
 breathe
 exhale
