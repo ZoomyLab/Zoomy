@@ -159,9 +159,13 @@ def step(backend, nx, nu, work=None):
     names = [str(s) for s in nsm.state]
     xc = np.asarray(mesh.cell_centers)[:2, :Q0.shape[1]]
     kw = dict(time_end=DT, dt=DT, cfl_check_every=0, imex="lie", mood=False, **TIGHT)
-    if backend == "jax":
+    if backend in ("jax", "numpy"):
         import jax.numpy as jnp
         from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+        if backend == "numpy":
+            from zoomy_core.symsolver.numpy_backend import (
+                SymbolicHyperbolicSolverNumpy as SymbolicHyperbolicSolverJax)
+            jnp = np
         s = SymbolicHyperbolicSolverJax(**kw)
         _, A = s.setup(mesh, nsm)
         Q = jnp.asarray(Q0)

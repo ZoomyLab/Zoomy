@@ -33,7 +33,10 @@ class Agree:
 RO_MAX = Agree("relmax", "RO")
 GPU = {"jax:gpu1": RO_MAX}
 
-DEFAULT_CONFIGS = {"jax": ("serial", "gpu1"), "foam": ("serial",), "amrex": ("serial", "gpu1")}
+DEFAULT_CONFIGS = {"jax": ("serial", "gpu1"), "foam": ("serial",), "amrex": ("serial", "gpu1"),
+                   "numpy": ("serial",)}
+#: numpy = JAX serial: round-off (explicit), the pressure / implicit tolerance otherwise
+NUMPY = {"numpy:serial": RO_MAX}
 
 
 @dataclass(frozen=True)
@@ -102,25 +105,26 @@ DT7, DT9, DT10 = 2.0 ** -7, 2.0 ** -9, 2.0 ** -10
 
 CASES = {c.key: c for c in (
     TimingCase("swe_o1", "SWE bump (C1), 200^2, O1", partial(_swe, 1, 200), 50, DT7,
-               agree={"foam:serial": RO_MAX, "amrex:serial": RO_MAX, "amrex:gpu1": RO_MAX, **GPU}),
+               agree={"foam:serial": RO_MAX, "amrex:serial": RO_MAX, "amrex:gpu1": RO_MAX, **GPU, **NUMPY}),
     TimingCase("swe_o2", "SWE bump (C1), 200^2, O2 minmod", partial(_swe, 2, 200), 50, DT7,
-               agree={"amrex:serial": RO_MAX, "amrex:gpu1": RO_MAX, **GPU}),
+               agree={"amrex:serial": RO_MAX, "amrex:gpu1": RO_MAX, **GPU, **NUMPY}),
     TimingCase("vam1_chorin", "VAM(1) Chorin channel (C8 / L2P), 200 x 20", partial(_vam, 200), 8, DT10,
                chorin=True, q0=_vam_q0,
                agree={"foam:serial": Agree("l1rel", "TH:C8 foam"), "amrex:serial": Agree("relmax", "PRESS"),
-                      "amrex:gpu1": Agree("relmax", "PRESS"), "jax:gpu1": Agree("relmax", "PRESS")}),
+                      "amrex:gpu1": Agree("relmax", "PRESS"), "jax:gpu1": Agree("relmax", "PRESS"),
+                      "numpy:serial": Agree("relmax", "PRESS")}),
     TimingCase("imex_swe", "IMEX SWE + Manning (C14), 100^2, O2", partial(_imex, 2, 100), 50, DT7, imex="lie",
                agree={"amrex:serial": Agree("relmax", IMPLICIT), "amrex:gpu1": Agree("relmax", IMPLICIT),
-                      **GPU}),
+                      **GPU, "numpy:serial": Agree("relmax", IMPLICIT)}),
     TimingCase("euler3d_o1", "Euler 3-D pulse box (C20), 40^3, O1", partial(_euler, 1, 40), 40, DT10,
-               agree={"foam:serial": RO_MAX, "amrex:serial": RO_MAX, "amrex:gpu1": RO_MAX, **GPU}),
+               agree={"foam:serial": RO_MAX, "amrex:serial": RO_MAX, "amrex:gpu1": RO_MAX, **GPU, **NUMPY}),
     TimingCase("euler3d_o2", "Euler 3-D pulse box (C20), 40^3, O2 + MOOD", partial(_euler, 2, 40), 40, DT10,
-               mood=True),
+               mood=True, agree=dict(NUMPY)),
     TimingCase("diffusion_impl", "implicit diffusion (C26), 48^2, IMEX", partial(_diffusion, 48), 10, DT9,
                imex="lie", solver=dict(implicit_tol=1e-12, gmres_tol=1e-13, implicit_maxiter=10,
                                       gmres_maxiter=60),
                agree={"amrex:serial": Agree("relmax", IMPLICIT), "amrex:gpu1": Agree("relmax", IMPLICIT),
-                      **GPU}),
+                      **GPU, "numpy:serial": Agree("relmax", IMPLICIT)}),
 )}
 
 

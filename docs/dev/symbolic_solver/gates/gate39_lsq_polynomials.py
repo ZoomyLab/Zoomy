@@ -62,6 +62,9 @@ from gate16_parallel import tri_bump
 
 TOL = 1e-9
 SEED = 20260712
+#: jax: the JAX kernel (mesh stencils, jit); numpy: core lsq_derivatives on the topology
+#: in plain numpy, as the NumPy runtime calls it
+BACKEND = os.environ.get("GATE39_BACKEND", "jax")
 DEGREES = (1, 2, 3)
 # BC -> smallest degree at which the ghost sample is no longer exact (None: never)
 INEXACT_FROM = {"dirichlet": 2, "neumann": 3, "zerograd": None}
@@ -149,6 +152,16 @@ def run_derivs(mj, mis, U, UB):
     return out
 
 
+def run_derivs_numpy(mesh, d, p, mis, U, UB):
+    """The fit with the ghost samples `UB` as the NumPy runtime takes it (no closure)."""
+    topo = build_topology(mesh, lsq_degree=p)
+    g = compute_geometry(topo, np.asarray(mesh.vertex_coordinates, float)[:d])
+    nc = int(mesh.n_inner_cells)
+    D = lsq_derivatives(topo, g, np.asarray(U)[:, :nc], np.asarray(UB))
+    cols = [tuple(int(k) for k in mi) for mi in topo.lsq_monomial_multi_index]
+    return {mi: D[:, :, cols.index(mi)] for mi in mis}
+
+
 def cell_err(out, row, exact, scale_all):
     """Per inner cell: max over multi-indices of |fit - exact| / max|exact_mi|."""
     worst = 0.0
@@ -173,13 +186,16 @@ def run_closure(mesh, d, p, kinds, U, UG, mis):
     # op by op compiles every primitive); the derivatives through ONE jit,
     # as the runtime calls them
     g = compute_geometry(topo, np.asarray(mesh.vertex_coordinates, float)[:d])
-    g = {k: jnp.asarray(v) for k, v in g.items()}
     nc = int(mesh.n_inner_cells)
     # degree 1 has no closure (the ghost sample is exact for linear data)
     classes = topo.lsq_closure_class.get(("gate39", "state"), (-1,) * len(kinds))
     assert (p >= 2) == any(c >= 0 for c in classes), (p, classes)
-    D = np.asarray(jax.jit(lambda gg, u, ug: lsq_derivatives(topo, gg, u, ug, classes))(
-        g, jnp.asarray(U)[:, :nc], jnp.asarray(UG)))
+    if BACKEND == "numpy":
+        D = lsq_derivatives(topo, g, np.asarray(U)[:, :nc], np.asarray(UG), classes)
+    else:
+        g = {k: jnp.asarray(v) for k, v in g.items()}
+        D = np.asarray(jax.jit(lambda gg, u, ug: lsq_derivatives(topo, gg, u, ug, classes))(
+            g, jnp.asarray(U)[:, :nc], jnp.asarray(UG)))
     cols = [tuple(int(k) for k in mi) for mi in topo.lsq_monomial_multi_index]
     return {mi: D[:, :, cols.index(mi)] for mi in mis}
 
@@ -221,7 +237,8 @@ def main():
                 scale0 = max(np.abs(e).max() for e in exact0.values())
                 U.append(P0(cc))
                 UB.append(zg)
-            out = run_derivs(mj, mis, np.array(U), np.array(UB))
+            out = (run_derivs(mj, mis, np.array(U), np.array(UB)) if BACKEND == "jax"
+                   else run_derivs_numpy(mesh, d, p, mis, np.array(U), np.array(UB)))
             nbf = len(bfc)
             kinds = [np.full(nbf, GHOST), np.full(nbf, DIRICHLET), np.full(nbf, NEUMANN)]
             if have_zg:

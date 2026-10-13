@@ -109,4 +109,32 @@ class Amrex:
         return float(t), np.asarray(Q)
 
 
-BACKENDS = {"jax": Jax, "foam": Foam, "amrex": Amrex}
+class Numpy:
+    """zoomy_core's NumPy backend (the default install): serial only."""
+    configs = ("serial",)
+
+    def launch(self, config):
+        return None
+
+    def run(self, r, mesh, systems, Q0, config, work):
+        from zoomy_core.symsolver.numpy_backend import (SymbolicChorinSolverNumpy,
+                                                        SymbolicHyperbolicSolverNumpy)
+        cls = SymbolicChorinSolverNumpy if r.chorin else SymbolicHyperbolicSolverNumpy
+        kw = _solver_kw(r, cls)
+        if r.chorin:
+            s = cls(pressure_linear_solver="gmres", **kw)
+            Q, A = s.setup(mesh, *systems)
+        else:
+            s = cls(**kw)
+            Q, A = s.setup(mesh, systems)
+        if r.q0 is not None:
+            names = [str(v) for v in s.nsm.state]
+            Q = r.q0(names, np.asarray(s.mesh_np.cell_centers)[:, :Q.shape[1]])
+            A = s.initial_aux(np.asarray(Q, dtype=float), A)
+        else:
+            Q = np.asarray(Q0)
+        t, Q, _ = s.run(Q, A)
+        return float(t), np.asarray(Q)
+
+
+BACKENDS = {"jax": Jax, "foam": Foam, "amrex": Amrex, "numpy": Numpy}

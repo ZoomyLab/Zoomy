@@ -574,7 +574,7 @@ DIFF_ALL = ("dir0", "neu", "dirL", "per", "steady")
 
 def _c28():
     from custom import diffusion_cxx, diffusion_orders
-    runs = [Run(f"orders_{k}_{p}", None, 0.0, custom=lambda b, c, w, k=k, p=p: diffusion_orders(k, p),
+    runs = [Run(f"orders_{k}_{p}", None, 0.0, custom=lambda b, c, w, k=k, p=p: diffusion_orders(k, p, b),
                 backends=("jax",)) for k in DIFF_KINDS for p in DIFF_PATHS]
     return runs + [Run(f"{k}_{p}_{case}", None, 0.0,
                        custom=lambda b, c, w, k=k, p=p, case=case: diffusion_cxx(b, k, p, case, w),
@@ -584,13 +584,13 @@ def _c28():
 
 def _c29():
     from custom import lsq_closure
-    return [Run(f"p{p}_{bc}", None, 0.0, custom=lambda b, c, w, p=p, bc=bc: lsq_closure(p, bc),
+    return [Run(f"p{p}_{bc}", None, 0.0, custom=lambda b, c, w, p=p, bc=bc: lsq_closure(p, bc, b),
                 backends=("jax",)) for p in (2, 3) for bc in ("dir", "neu")]
 
 
 def _c30():
     from custom import lsq_polynomials
-    return [Run("polynomials", None, 0.0, custom=lambda b, c, w: lsq_polynomials(),
+    return [Run("polynomials", None, 0.0, custom=lambda b, c, w: lsq_polynomials(b),
                 backends=("jax",))]
 
 
@@ -732,3 +732,16 @@ CASES = {
     "C34": ("in-plane viscous operator vs the exact div(h tau), mixed derivatives (gate 45)",
             _c34()),
 }
+
+
+# ── the NumPy backend (serial): every serial JAX run, but the fine JAX references
+#    the checks read, the round-off sensitivity runs (*_pert), the gate-40 control,
+#    AD (C15, C22), preCICE (C16) and AMR (C17); C28 also against JAX
+NUMPY_SKIP = ("C15", "C16", "C17", "C22")
+NUMPY_REFS = {("C11", "smooth_ref_n1280"), ("C14", "ref_n160"), ("C27", "ode_control")}
+for _case, (_, _runs) in CASES.items():
+    for _r in _runs if _case not in NUMPY_SKIP else ():
+        if (("jax" in _r.backends or (_case == "C28" and not _r.key.startswith("orders")))
+                and "serial" in _r.configs and (_case, _r.key) not in NUMPY_REFS
+                and not _r.key.endswith("_pert")):
+            _r.backends = _r.backends + ("numpy",)

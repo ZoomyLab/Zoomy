@@ -1,6 +1,7 @@
 """Runs that are not "march Q0 to t_end": AD (C15), preCICE coupling (C16),
 AMR (C17) and the wrapped gates 40 / 41 / 43 / 44 / 39 / 45 (C27-C30, C34).  Each
 returns {metric: value} (rank 0; None on the other ranks)."""
+import contextlib
 import os
 import re
 import subprocess
@@ -99,8 +100,9 @@ def ad3d(variant, part):
 
 
 # ── C16: preCICE (the gate scripts, as subprocesses) ────────────────────────
-def _gate(args, timeout=280):
-    env = dict(os.environ, PYTHONPATH=f"{GATES}{os.pathsep}{os.environ.get('PYTHONPATH', '')}")
+def _gate(args, timeout=280, **extra):
+    env = dict(os.environ, PYTHONPATH=f"{GATES}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
+               **extra)
     r = subprocess.run([sys.executable, *args], cwd=GATES, env=env, capture_output=True,
                        text=True, timeout=timeout)
     return r.returncode, r.stdout + r.stderr
@@ -177,6 +179,26 @@ def amr(case, config, work):
     return res
 
 
+@contextlib.contextmanager
+def on_backend(backend, G):
+    """Run gate module `G`'s JAX hyperbolic solver as `backend`: jax unchanged, numpy the
+    NumPy class (and numpy for its `jnp`)."""
+    if backend != "numpy":
+        yield
+        return
+    from zoomy_core.symsolver.numpy_backend import SymbolicHyperbolicSolverNumpy
+    old = G.SymbolicHyperbolicSolverJax, getattr(G, "jnp", None)
+    G.SymbolicHyperbolicSolverJax = SymbolicHyperbolicSolverNumpy
+    if old[1] is not None:
+        G.jnp = np
+    try:
+        yield
+    finally:
+        G.SymbolicHyperbolicSolverJax = old[0]
+        if old[1] is not None:
+            G.jnp = old[1]
+
+
 # ── C27: SSP-RK time order (gate 40) ────────────────────────────────────────
 ODE_STEPS = (16, 32, 64)            # gate 40 ``ode``: T = 1, dt = T / n
 WAVE_T, WAVE_DT0 = 0.04, 2e-3       # gate 40 ``wave``: dt0 / 2^k, k = 0, 1, 2 vs k = 4
@@ -208,7 +230,7 @@ def time_order(backend, part, to, work):
                                      lambda x: 1.0 + 0.1 * np.exp(-((x - 0.5) / 0.1) ** 2))
         T, ks = WAVE_T, (0, 1, 2, 4)
         dts = [WAVE_DT0 / 2 ** k for k in ks]
-    if backend != "jax":
+    if backend not in ("jax", "numpy"):
         nsm.spectral_radius_method, nsm._call = "eig", None     # as cases.prepare
         mesh = ensure_lsq_mesh(mesh, nsm)
         names = [str(s) for s in nsm.state]
@@ -217,16 +239,21 @@ def time_order(backend, part, to, work):
                         dtype=float)
 
     def solve(i, dt):
-        if backend == "jax":
-            return G.run(mesh, nsm, T, dt, to)
+        if backend in ("jax", "numpy"):
+            with on_backend(backend, G):
+                return G.run(mesh, nsm, T, dt, to)
         return np.asarray(_to_solver(backend, to, T, dt).run(mesh, nsm, Q0, Path(work) / f"s{i}")[1])
     Q = [solve(i, dt) for i, dt in enumerate(dts)]
+    extra = {}
+    if backend == "numpy":                     # numpy = JAX on every dt
+        Qj = [G.run(mesh, nsm, T, dt, to) for dt in dts]
+        extra["rel_vs_jax"] = max(float(np.abs(q - j).max() / np.abs(j).max()) for q, j in zip(Q, Qj))
     if part == "ode":
         exact = np.exp(G.A_F * (np.sin(G.W_F * T + G.PHASE) - np.sin(G.PHASE)) / G.W_F)
         errs = [float(abs(float(q[ih, 0]) - exact)) for q in Q]
     else:
         errs = [float(np.abs(q - Q[-1]).max()) for q in Q[:-1]]
-    return dict(err=errs, orders=G.orders(errs), order=G.orders(errs)[-1])
+    return dict(err=errs, orders=G.orders(errs), order=G.orders(errs)[-1], **extra)
 
 
 def time_order_control():
@@ -248,13 +275,14 @@ def time_order_control():
 DIFF_CASES = ("dir0", "neu", "dirL", "per")
 
 
-def diffusion_orders(kind, path):
-    """Gate 41 (JAX): the L_inf error of the heat equation at nx 16 / 32 / 64
+def diffusion_orders(kind, path, backend="jax"):
+    """Gate 41 (JAX, numpy): the L_inf error of the heat equation at nx 16 / 32 / 64
     for dir0, neu, dirL, per on ``kind`` (1d, quad, tri), ``path`` (expl,
     impl), and the steady linear Dirichlet field's residual."""
     import gate41_diffusion_bc as G
-    out = {c: [float(G.error(kind, c, path, nx)[0]) for nx in G.NXS] for c in DIFF_CASES}
-    out["steady"] = float(G.error(kind, "steady", path, 16)[0])
+    with on_backend(backend, G):
+        out = {c: [float(G.error(kind, c, path, nx)[0]) for nx in G.NXS] for c in DIFF_CASES}
+        out["steady"] = float(G.error(kind, "steady", path, 16)[0])
     return out
 
 
@@ -267,20 +295,25 @@ def diffusion_cxx(backend, kind, path, case, work):
     dim = 1 if kind == "1d" else 2
     nx = 16
     tj, uj = G.jax_run(kind, case, path, nx)
-    tc, uc = G.cxx_run(backend, kind, case, path, nx)
+    if backend == "numpy":
+        with on_backend(backend, G):
+            tc, uc = G.jax_run(kind, case, path, nx)
+    else:
+        tc, uc = G.cxx_run(backend, kind, case, path, nx)
     xc = np.asarray(G.setup(kind, case, path, nx)[0].cell_centers)[:, :len(uc)]
     return dict(rel_vs_jax=float(np.abs(uc - uj).max() / np.abs(uj).max()),
                 err=float(np.abs(uc - G.exact(case, dim, xc, tc)).max()), t=float(tc), t_jax=float(tj))
 
 
 # ── C29: LSQ boundary closure (gate 44) ─────────────────────────────────────
-def lsq_closure(p, bc):
+def lsq_closure(p, bc, backend="jax"):
     """Gate 44 on the quads: the max error of the derivatives of order
     k = 1..p over the boundary and the interior cells at nx 12 / 24 / 48, with
     the boundary closure ("closure") and the ghost as a fit sample ("ghost",
     for comparison); degree ``p``, BC kind ``bc`` (dir, neu)."""
     import gate44_lsq_closure as G
-    E = [G.errors("quad", bc, p, nx) for nx in G.NX]
+    with on_backend(backend, G):
+        E = [G.errors("quad", bc, p, nx) for nx in G.NX]
     return {f"{method}_{where}_d{k}": [float(e[(method, k, where)]) for e in E]
             for method in ("closure", "ghost") for where in ("boundary", "interior")
             for k in range(1, p + 1)}
@@ -304,11 +337,11 @@ def inplane_operator(backend, nx, work):
 
 
 # ── C30: polynomial reproduction of the LSQ fit (gate 39) ───────────────────
-def lsq_polynomials():
+def lsq_polynomials(backend="jax"):
     """Gate 39 as a subprocess: seeded random polynomials of degree p = 1..3
     reproduced to 1e-9 by the LSQ fit (and its boundary closure) on 1-D, quads,
     jittered quads, triangles, hexahedra.  Its SUMMARY line."""
-    rc, out = _gate(["gate39_lsq_polynomials.py"])
+    rc, out = _gate(["gate39_lsq_polynomials.py"], GATE39_BACKEND=backend)
     m = re.search(r"SUMMARY gate39: PASS=(\d+) FAIL=(\d+) \(tol ([\d.e+-]+)\).*inexact in (\d+) cases", out)
     if m is None:
         raise RuntimeError(f"gate 39 gave no summary (rc {rc}):\n{out[-2000:]}")
