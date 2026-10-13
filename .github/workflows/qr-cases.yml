@@ -2,10 +2,11 @@ name: QR cases
 
 # Every case the thesis links to by QR code runs on every push to main and every PR
 # (tests/qr_cases/README.md): the manifest is thesis/scripts/animations.yml, snapshot in
-# tests/qr_cases/animations.yml. Each GUI session runs in CPython (this checkout's
-# zoomy_core, no jax; then zoomy_jax for the one JAX session) and in headless Pyodide 0.29.3,
-# the GUI worker's, with a wheel of this checkout's zoomy_core. The deploy
-# (render-webpage.yml) does not wait for this workflow; it checks the live QR targets itself.
+# tests/qr_cases/animations.yml. Each GUI session runs in CPython (no jax; then zoomy_jax
+# from the checkout for the one JAX session) and in headless Pyodide 0.29.3, the GUI
+# worker's. Both install the zoomy_core / zoomy_plotting wheels the deploy serves, built by
+# the same script (docs/scripts/build_gui_wheels.py). The deploy (render-webpage.yml) does
+# not wait for this workflow; it checks the live QR targets itself.
 
 on:
   push:
@@ -54,9 +55,12 @@ jobs:
           path: ~/.cache/qr-pyodide
           key: qr-pyodide-${{ hashFiles('tests/qr_cases/pyodide/package-lock.json') }}
 
-      - name: Install
+      - name: Install (with the deploy's zoomy_core / zoomy_plotting wheels)
         run: |
           python -m pip install -r tests/qr_cases/requirements.txt
+          python docs/scripts/build_gui_wheels.py "$RUNNER_TEMP/wheels"
+          python -m pip install "$RUNNER_TEMP"/wheels/*.whl
+          echo "QR_WHEELS=$RUNNER_TEMP/wheels" >> "$GITHUB_ENV"
           npm ci --prefix tests/qr_cases/pyodide --no-audit --no-fund
 
       - name: Sessions in CPython (no jax) and Pyodide, C1 bump

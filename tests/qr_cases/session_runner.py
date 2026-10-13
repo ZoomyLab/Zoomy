@@ -62,6 +62,22 @@ def check_stores(root="."):
     return found
 
 
+def zoomy_packages():
+    """`{module: {version, file}}` of the zoomy_core / zoomy_plotting this run imported."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    out = {}
+    for mod, dist in (("zoomy_core", "zoomy_core"), ("zoomy_plotting", "zoomy-plotting")):
+        m = sys.modules.get(mod)
+        if m is not None:
+            try:
+                v = version(dist)
+            except PackageNotFoundError:
+                v = None
+            out[mod] = {"version": v, "file": getattr(m, "__file__", None)}
+    return out
+
+
 def run_case(case, process_code, workdir):
     """Run `case` (`{"cells": [[role, code], ...], "needs_store": bool}`) in `workdir`."""
     os.makedirs(workdir, exist_ok=True)
@@ -99,6 +115,7 @@ def main(case_json, engine_path, out_json, workdir=None):
     report["modules_loaded"] = sorted(m for m in ("jax", "jaxlib", "zoomy_jax", "pyamg", "mpi4py",
                                                   "h5py", "matplotlib", "zoomy_plotting")
                                       if m in sys.modules)
+    report["packages"] = zoomy_packages()
     with open(out_json, "w") as f:
         json.dump(report, f, indent=1)
     return report

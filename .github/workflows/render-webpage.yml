@@ -32,6 +32,8 @@ on:
       - "library/zoomy_jax"
       - "library/zoomy_foam"
       - "library/zoomy_amrex"
+      # Served as a wheel the GUI's workers install (gui/gui/wheels/).
+      - "library/zoomy_plotting/**"
       - "apps/swe-game/**"
       - "apps/baukasten-preview/**"
       - "tutorials/**/*.ipynb"
@@ -175,6 +177,18 @@ jobs:
           for a in assets cards demo previews projects snippets tutorials \
                    core.js engine.py param_extract.py pyodide-worker.js; do
             cp -r "library/zoomy_gui/$a" docs/book/_build/html/gui/gui/
+          done
+          # The zoomy_core / zoomy_plotting both Pyodide workers install: wheels built
+          # from this commit, named in gui/gui/wheels/index.json (PyPI only when that
+          # file is absent, i.e. local dev). The QR CI installs the same build.
+          /usr/bin/python3 -m venv .wheelvenv
+          .wheelvenv/bin/python docs/scripts/build_gui_wheels.py docs/book/_build/html/gui/gui/wheels
+          # Release assets a browser session fetches, served same-origin: GitHub sends no
+          # CORS headers for release downloads (tests/qr_cases/test_qr_live.py MIRRORED).
+          mkdir -p docs/book/_build/html/gui/gui/data
+          for f in sme_vof_snap_gui_l1.tar.gz; do
+            curl -fsSL --retry 3 -o "docs/book/_build/html/gui/gui/data/$f" \
+              "https://github.com/ZoomyLab/Zoomy/releases/download/case-data-v1/$f"
           done
           # #10 offline + cross-origin isolation service worker (COOP/COEP)
           cp library/zoomy_gui/sw.js docs/book/_build/html/gui/sw.js
@@ -335,8 +349,9 @@ jobs:
         uses: actions/deploy-pages@v5
 
   # The thesis's printed QR codes, against the site just deployed
-  # (tests/qr_cases/test_qr_live.py): every manifest URL answers 200 and every project zip
-  # is served with the repo's file list. A broken QR target fails this workflow.
+  # (tests/qr_cases/test_qr_live.py): every manifest URL answers 200, every project zip
+  # is served with the repo's file list (qr_live), and the GUI serves this commit's
+  # wheels and the mirrored session data (qr_deploy). A broken QR target fails this workflow.
   qr-live:
     name: QR targets live
     needs: deploy-docs
@@ -351,4 +366,4 @@ jobs:
       - name: QR targets on the live site
         run: |
           python -m pip install pytest pyyaml
-          python -m pytest tests/qr_cases -m qr_live -rA --tb=short -p no:cacheprovider
+          python -m pytest tests/qr_cases -m "qr_live or qr_deploy" -rA --tb=short -p no:cacheprovider

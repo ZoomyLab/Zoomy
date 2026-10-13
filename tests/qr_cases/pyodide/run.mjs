@@ -1,14 +1,18 @@
 // Headless Pyodide run of a QR case, booted like library/zoomy_gui/pyodide-worker.js.
 //
-//   node run.mjs --wheel zoomy_core-*.whl --case case.json --out report.json
-//   node run.mjs --wheel zoomy_core-*.whl --script ../c1_bump.py --out report.json
+//   node run.mjs --wheels WHEELS_DIR --case case.json --out report.json
+//   node run.mjs --wheels WHEELS_DIR --script c1_bump.py --out report.json
 //
-// Boot = the worker's: micropip, h5py, then micropip ["param", <zoomy-core>] with the
-// checkout's wheel in place of the PyPI pin, param_extract.py, the catalog param
-// pre-extract, engine.py, then its tier-2 installs (zoomy-plotting>=0.2.4, matplotlib;
-// jedi is autocomplete only and skipped). The lazy installs (plotly, meshio+rich) follow the
-// worker's regexes, applied to all cells up front. `QR_PYODIDE_DIR` points at an unpacked
-// npm `pyodide` package, `QR_PYODIDE_CACHE` at a package cache directory.
+// WHEELS_DIR is what docs/scripts/build_gui_wheels.py writes (index.json + the zoomy-core
+// and zoomy-plotting wheels), i.e. what the deployed worker installs from gui/wheels/.
+// Boot = the worker's: micropip, h5py, then micropip ["param", <zoomy-core wheel>],
+// param_extract.py, the catalog param pre-extract, engine.py, then its tier-2 installs
+// (<zoomy-plotting wheel>, matplotlib; jedi is autocomplete only and skipped). The lazy
+// installs (plotly, meshio+rich) follow the worker's regexes, applied to all cells up
+// front. Node has no XMLHttpRequest, which zoomy_core.misc.download uses in the browser's
+// workers: a synchronous one is shimmed below. `QR_PYODIDE_DIR` points at an unpacked npm
+// `pyodide` package, `QR_PYODIDE_CACHE` at a package cache directory.
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -25,6 +29,21 @@ const mod = process.env.QR_PYODIDE_DIR
     : await import("pyodide");
 const log = (s) => process.stderr.write(s + "\n");
 
+// Synchronous GET, as a browser Web Worker's XMLHttpRequest (no CORS in node).
+const FETCH_JS = "const r = await fetch(process.argv[1]); process.stderr.write(String(r.status));"
+    + " process.stdout.write(Buffer.from(await r.arrayBuffer()));";
+globalThis.XMLHttpRequest = class {
+    open(method, url) { this.url = url; }
+    send() {
+        const p = spawnSync(process.execPath, ["--input-type=module", "-e", FETCH_JS, this.url],
+                            { maxBuffer: 1 << 30 });
+        this.status = Number(String(p.stderr).trim().split(/\s+/).pop()) || 0;
+        const b = p.stdout;
+        this.response = this.responseType === "arraybuffer"
+            ? b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) : b.toString("utf8");
+    }
+};
+
 const t0 = Date.now();
 const stamp = (msg) => log(`[${((Date.now() - t0) / 1000).toFixed(1)}s] ${msg}`);
 const opts = { stdout: log, stderr: log };
@@ -35,11 +54,15 @@ stamp(`pyodide ${py.version}`);
 await py.loadPackage("micropip");
 try { await py.loadPackage(["h5py"]); } catch (e) { log("h5py failed: " + (e.message || e)); }
 const mp = py.pyimport("micropip");
-const whl = path.basename(args.wheel);
+const index = JSON.parse(fs.readFileSync(path.join(args.wheels, "index.json"), "utf8"));
 py.FS.mkdirTree("/tmp/wheels");
-py.FS.writeFile("/tmp/wheels/" + whl, fs.readFileSync(args.wheel));
-await mp.install(["param", "emfs:/tmp/wheels/" + whl]);
-stamp("zoomy-core " + whl);
+const wheel = (name) => {
+    const whl = index[name].wheel;
+    py.FS.writeFile("/tmp/wheels/" + whl, fs.readFileSync(path.join(args.wheels, whl)));
+    return "emfs:/tmp/wheels/" + whl;
+};
+await mp.install(["param", wheel("zoomy-core")]);
+stamp("zoomy-core " + index["zoomy-core"].wheel);
 await py.runPythonAsync(fs.readFileSync(path.join(GUI, "param_extract.py"), "utf8"));
 for (const tab of ["models", "solvers"]) {          // the worker's boot pre-extract
     for (const c of JSON.parse(fs.readFileSync(path.join(GUI, "cards", tab, "default.json"), "utf8"))) {
@@ -48,7 +71,7 @@ for (const tab of ["models", "solvers"]) {          // the worker's boot pre-ext
     }
 }
 await py.runPythonAsync(fs.readFileSync(path.join(GUI, "engine.py"), "utf8"));
-await mp.install(["zoomy-plotting>=0.2.4"]);
+await mp.install([wheel("zoomy-plotting")]);
 await py.loadPackage(["matplotlib"]);
 stamp("engine + tier 2 ready");
 
@@ -77,6 +100,7 @@ import session_runner as _R
 _rep = _R.run_case(json.loads(_qr_case_json), process_code, "/home/pyodide/qr_case")
 _rep["modules_loaded"] = sorted(m for m in ("pyamg", "mpi4py", "h5py", "matplotlib", "zoomy_plotting")
                                 if m in sys.modules)
+_rep["packages"] = _R.zoomy_packages()
 json.dumps(_rep)
 `);
 } else {

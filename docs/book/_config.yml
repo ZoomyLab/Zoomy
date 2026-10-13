@@ -63,7 +63,7 @@ sphinx:
       - path: ../../library/zoomy_core/zoomy_core
         module: zoomy_core
         exclude_dirs: [__pycache__, tests, analysis, decorators, fvm, kernel, misc,
-                       postprocessing, preprocessing, solver, symbolic, transformation]
+                       postprocessing, solver, symbolic, transformation]
       - path: ../../library/zoomy_jax/zoomy_jax
         module: zoomy_jax
         exclude_dirs: [__pycache__, tests, fvm, gnn_blueprint, mesh, misc, template,
