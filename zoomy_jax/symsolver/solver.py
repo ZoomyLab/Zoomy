@@ -324,6 +324,11 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
     pressure_newton_tol = param.Number(default=1e-10, bounds=(0, None),
                                        doc="Newton: stop at max|R| <= tol.")
     pressure_newton_maxit = param.Integer(default=10, bounds=(1, None))
+    projection = param.Selector(
+        default="increment", objects=["increment", "standard"],
+        doc="'increment': each projection stage corrects with the lagged pressure and "
+            "solves for its increment (time order kept on a fixed mesh); 'standard': "
+            "it solves for the full pressure (ChorinTemplate, Projection).")
     pressure_linear_solver = param.Selector(
         default="auto", objects=["auto", "gmres", "amgx", "pyamg"],
         doc="'amgx' (GPU, optional JAX-AMG), 'pyamg' (CPU, optional PyAMG) "
@@ -418,6 +423,7 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
             "Q Qaux p time time_end mesh")
         template = ChorinTemplate(
             self.nsm, self.press, self.corr, pressure_newton=self._newton(),
+            projection=self.projection,
             **self._config())
         return "chorin", PyPrinter().procedure(
             "chorin", (Q, Qaux, p, time, time_end, mesh), template.march)
