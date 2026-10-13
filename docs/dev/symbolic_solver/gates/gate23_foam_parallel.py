@@ -57,7 +57,7 @@ def chorin(case):
     def foam(n):
         sf = SymbolicChorinSolverFoam(time_end=g7.DT * g7.N_STEPS, dt=g7.DT, cfl=0.9,
                                       time_order=to, nprocs=n,
-                                      pressure_preconditioner=os.environ.get("PREC", "gamg"))
+                                      linear_solver=os.environ.get("LINSOLVE", "hypre"))
         t0 = wall.perf_counter()
         t, Qf = sf.run(s.mesh_np, (s.nsm, s.press, s.corr), np.asarray(Q),
                        f"{WORK}/{case}_np{n}")

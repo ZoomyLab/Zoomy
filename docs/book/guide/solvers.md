@@ -41,7 +41,7 @@ Which terms are implicit is the SystemModel's classification (the `source` and
 | `pressure_solve` | `"linear"` | `"newton"` for a constraint nonlinear in the pressure (`pressure_newton_tol` 1e-10, `pressure_newton_maxit` 10) |
 | `pressure_tol`, `pressure_maxit` | `ELLIPTIC_RTOL`, `100` | relative tolerance and GMRES restarts of the pressure solve |
 | `pressure_linear_solver` (JAX) | `"auto"` | `"pyamg"` on CPU, `"amgx"` on GPU when installed, else matrix-free `"gmres"` |
-| `pressure_preconditioner` (foam) | `"gamg"` | GMRES with OpenFOAM's GAMG per pressure row; `"none"` |
+| `linear_solver` (foam, AMReX) | `"hypre"` | hypre FlexGMRES + BoomerAMG on the operator assembled by colouring and scaled by its inverse cell blocks; foam `"schur-gamg"` (GMRES, OpenFOAM's GAMG on the Schur complement) or `"gmres"`; AMReX `"gmres"` |
 
 `docs/book/examples/chorin_vam.py` runs VAM(1) in a channel (matrix case C8):
 the model's `chorin_split`, the predictor's numerics, 8 steps of
