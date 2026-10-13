@@ -26,6 +26,9 @@ class Option(str, Enum):
     def __str__(self):
         return self.value
 
+    def __repr__(self):
+        return f"{type(self).__name__}.{self.name}"
+
     @classmethod
     def _missing_(cls, value):
         if isinstance(value, str):
