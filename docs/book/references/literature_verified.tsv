@@ -61,3 +61,4 @@ jax-amg	10.1016/j.softx.2026.102966	Liu, Fan, Wang 2026, JAX-AMG
 gerbeau-perthame	10.3934/dcdsb.2001.1.89	Gerbeau, Perthame 2001, viscous Saint-Venant for laminar shallow water
 hypre	10.1007/3-540-47789-6_66	Falgout, Yang 2002, hypre: a library of high performance preconditioners
 almgren-bell-crutchfield	10.1137/S1064827599357024	Almgren, Bell, Crutchfield 2000, approximate projection methods (pressure increment)
+marche-2007	10.1016/j.euromechflu.2006.04.007	Marche 2007, two-dimensional viscous shallow water model
