@@ -630,7 +630,7 @@ export class ZoomyCLI {
         const settingsOut = Object.assign({}, settings, solver.params || {});
         if (solver.tag && settingsOut.backend === undefined) settingsOut.backend = solver.tag;
         // Carry the solver card id too: several solvers can share one backend tag
-        // (e.g. the coupled zoomyFoam + incompressibleVOF both run on "OpenFOAM"), so
+        // (e.g. the NumPy hyperbolic, IMEX and split cards all run on "numpy"), so
         // the tag alone can't restore WHICH one a case selected.
         if (solver.id && settingsOut.solver_id === undefined) settingsOut.solver_id = solver.id;
         let head = "# " + (meta.title || "Zoomy case") + (meta.description ? "\n\n" + meta.description : "");
@@ -706,7 +706,7 @@ export class ZoomyCLI {
             "import zoomy_plotting as zp",
             "",
             "# The Run cell above already opened its own output: every solver card",
-            "# ends with open_hdf5('/tmp/zoomy_sim/sim.h5'), which publishes `store`.",
+            "# ends with open_hdf5(run_h5_path()), which publishes `store`.",
             "# Reuse it. Reading simulation.h5 unconditionally here overwrote that",
             "# store with a file no solver card writes -- the name comes from the",
             "# session-packing scripts -- so a run that had just finished with 16",
