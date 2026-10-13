@@ -14,4 +14,4 @@ Use the sections in this part for:
 - logging
 - CI reports
 
-Backend-split API references are available in the dedicated **API** section. The Zoomy Core and Zoomy JAX pages are produced with `sphinx-apidoc` via `python docs/scripts/generate_apidoc.py` (run automatically in the docs CI job before `jupyter-book build`).
+Backend-split API references are available in the dedicated **API** section. They are written from the Markdown docstrings by `sphinx-autodoc2` (`python docs/scripts/generate_apidoc.py`, run by CI before `jupyter-book build`); how the docs are written and built: {doc}`developer/index`.

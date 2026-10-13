@@ -3,7 +3,8 @@ FROM python:3.11-slim
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/workspace/library/zoomy_core:/workspace/library/zoomy_jax:/workspace/library/zoomy_foam:/workspace/library/zoomy_amrex
 
 # Docs-only toolchain: Sphinx/Jupyter Book + C++ API doc generators.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -19,14 +20,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /workspace
 
+# Every Python dependency of the docs build: Jupyter Book (Sphinx), myst-parser,
+# sphinx-autodoc2, sphinxcontrib-bibtex, sphinx-design, ...
 COPY docs/requirements-docs.txt /tmp/requirements-docs.txt
 RUN python -m pip install --upgrade pip && \
     python -m pip install -r /tmp/requirements-docs.txt
 
-# Match a dev conda env: both packages for Python API reference pages.
+# The libraries, importable.  The API reference is written from the sources by
+# sphinx-autodoc2 (nothing is imported, so the backends' heavy dependencies --
+# petsc4py, firedrake, gmsh, ... -- are never needed).  The checkout is mounted at
+# /workspace when the image runs and PYTHONPATH (set above) puts its four Python
+# trees first, so the docs describe the checked-out sources, never the copies
+# baked in here; the editable installs only bring the dependencies of zoomy_core
+# and zoomy_jax and keep `import zoomy_core` working without a mounted checkout.
 COPY library/zoomy_core /tmp/zoomy_core
 COPY library/zoomy_jax /tmp/zoomy_jax
 RUN python -m pip install --no-cache-dir -e /tmp/zoomy_core && \
     python -m pip install --no-cache-dir -e /tmp/zoomy_jax
+
+# The files this image was built from: the workflow compares them with the
+# checkout and rebuilds a stale prebuilt image.
+COPY docs/Dockerfile.docs docs/requirements-docs.txt /opt/docs-image/
 
 CMD ["bash"]

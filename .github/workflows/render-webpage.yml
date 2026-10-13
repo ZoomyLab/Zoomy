@@ -26,6 +26,12 @@ on:
       # until this was dispatched by hand.
       - "library/zoomy_cli/**"
       - "library/zoomy_js/**"
+      # The API reference is written from the docstrings of these libraries, so a
+      # submodule bump (a bare gitlink change, see zoomy_gui above) re-renders it.
+      - "library/zoomy_core"
+      - "library/zoomy_jax"
+      - "library/zoomy_foam"
+      - "library/zoomy_amrex"
       - "apps/swe-game/**"
       - "apps/baukasten-preview/**"
       - "tutorials/**/*.ipynb"
@@ -69,13 +75,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pull docs image
+      # The prebuilt image (docs-image.yml pushes it when docs/Dockerfile.docs or
+      # docs/requirements-docs.txt change on main) is used only if it was built from
+      # the very files of this checkout.  docs-image.yml and this workflow start on
+      # the same push, so `latest` can still be the previous image, without a new
+      # dependency of the build (sphinx-autodoc2, ...): then build it here.
+      - name: Pull docs image (or build it when stale)
         run: |
           IMAGE="ghcr.io/$OWNER_LC/zoomy_docs:latest"
+          fresh=no
           if docker pull "$IMAGE"; then
+            if docker run --rm "$IMAGE" cat /opt/docs-image/Dockerfile.docs | cmp -s - docs/Dockerfile.docs \
+               && docker run --rm "$IMAGE" cat /opt/docs-image/requirements-docs.txt | cmp -s - docs/requirements-docs.txt; then
+              fresh=yes
+            fi
+          fi
+          if [ "$fresh" = yes ]; then
             echo "DOCS_IMAGE=$IMAGE" >> "$GITHUB_ENV"
           else
-            echo "Prebuilt docs image not available. Building fallback image locally."
+            echo "Prebuilt docs image missing or stale. Building it from docs/Dockerfile.docs."
             docker build -f docs/Dockerfile.docs -t zoomy-docs:fallback .
             echo "DOCS_IMAGE=zoomy-docs:fallback" >> "$GITHUB_ENV"
           fi
@@ -105,14 +123,19 @@ jobs:
           if_no_artifact_found: ignore
           search_artifacts: true
 
+      # The site is built here, from the checkout, and nowhere else: no built or
+      # generated page (docs/_generated, docs/book/api/_autodoc2, docs/book/_build)
+      # is committed.  Every generator runs offline and without the solvers; the
+      # API pages are read from the library sources by sphinx-autodoc2, and the
+      # results pages from the committed tests/results/symsolver/*.json.
       - name: Build Jupyter Book in docs image
         run: |
           docker run --rm \
             -v "$PWD:/workspace" \
             -w /workspace \
-            -e PYTHONPATH=/workspace/library/zoomy_foam:/workspace/library/zoomy_amrex \
+            -e PYTHONPATH=/workspace/library/zoomy_core:/workspace/library/zoomy_jax:/workspace/library/zoomy_foam:/workspace/library/zoomy_amrex \
             "$DOCS_IMAGE" \
-            bash -lc "python docs/scripts/generate_ci_test_report.py && python docs/scripts/generate_symsolver_results.py && python docs/scripts/generate_tutorial_index.py && python docs/scripts/generate_apidoc.py && jupyter-book build docs/book"
+            bash -lc "python docs/scripts/generate_ci_test_report.py && python docs/scripts/generate_symsolver_results.py && python docs/scripts/generate_tutorial_index.py && python docs/scripts/collect_references.py --check && python docs/scripts/generate_apidoc.py && jupyter-book build docs/book"
 
       # NOTE: mesh cards are an AUTHORED registry now (cards/meshes/default.json,
       # hand-curated). CI no longer downloads release .msh files or regenerates

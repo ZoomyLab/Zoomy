@@ -53,4 +53,4 @@ eigenvalues                None
 ([NumericalSystemModel](numerical-system-model.md)).  `sm.describe()` renders
 the slots.
 
-API: {doc}`zoomy_core.systemmodel <../api/_apidoc_zoomy_core/zoomy_core.systemmodel>`.
+API: {doc}`zoomy_core.systemmodel <../api/_autodoc2/zoomy_core/zoomy_core.systemmodel>`.

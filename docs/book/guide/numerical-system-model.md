@@ -35,5 +35,5 @@ foam / AMReX).  The mesh is an `LSQMesh` (`zoomy_core.mesh`:
 `LSQMesh.create_1d/2d/3d`, or from a gmsh file); its least-squares stencils
 serve gradients and boundary closures.
 
-API: {doc}`zoomy_core.numerics <../api/_apidoc_zoomy_core/zoomy_core.numerics>`,
-{doc}`zoomy_core.mesh <../api/_apidoc_zoomy_core/zoomy_core.mesh>`.
+API: {doc}`zoomy_core.numerics <../api/_autodoc2/zoomy_core/zoomy_core.numerics>`,
+{doc}`zoomy_core.mesh <../api/_autodoc2/zoomy_core/zoomy_core.mesh>`.

@@ -7,7 +7,7 @@ The implementing code cites its references as ``Author Year, https://doi.org/<do
 (Python docstrings, C++ ``///`` comments, docs pages).  This script scans
 
 * ``library/zoomy_{core,jax,foam,amrex}/**/*.{py,H,C,cpp}`` and
-* ``docs/book/**/*.md`` (not ``_build``, not ``api/_apidoc*``)
+* ``docs/book/**/*.md`` (not ``_build``, not the generated ``api/_autodoc2``)
 
 for ``https://doi.org/<doi>`` and for the non-DOI URLs of the verified set
 ``docs/book/references/literature_verified.tsv`` (key, DOI or URL, short
@@ -135,8 +135,7 @@ def _walk_sources():
         dirs[:] = sorted(
             d for d in dirs
             if d != "_build" and not d.startswith(".")
-            and not (rel.parts[:1] == ("api",) and d.startswith("_apidoc"))
-            and not (not rel.parts and d.startswith("_apidoc"))
+            and not (rel.parts[:1] == ("api",) and d == "_autodoc2")
         )
         for f in sorted(files):
             if f.endswith(".md"):

@@ -211,4 +211,4 @@ richer unstructured 2-D / 3-D meshes come from `zoomy_mesh` (sibling subrepo at
   declare `h` and (when bathymetry is present) `b` in `variables` — these
   slots drive wet/dry detection and the positive Rusanov path.
 
-**API reference**: see [zoomy_core](../api/_apidoc_zoomy_core/zoomy_core.rst).
+**API reference**: see [zoomy_core](../api/_autodoc2/zoomy_core/zoomy_core.md).

@@ -64,5 +64,5 @@ t = 0.007812, cells = 360, h in [0.01500, 0.34274]
 Backend-specific settings (ranks, GPU, AMR, containers): [Backends](backends.md).
 What each option is tested by: the [test matrix](../testing/symsolver.md).
 
-API: {doc}`zoomy_core.symsolver <../api/_apidoc_zoomy_core/zoomy_core.symsolver>`,
-{doc}`zoomy_jax.symsolver <../api/_apidoc_zoomy_jax/zoomy_jax.symsolver>`.
+API: {doc}`zoomy_core.symsolver <../api/_autodoc2/zoomy_core/zoomy_core.symsolver>`,
+{doc}`zoomy_jax.symsolver <../api/_autodoc2/zoomy_jax/zoomy_jax.symsolver>`.
