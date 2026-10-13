@@ -1321,3 +1321,29 @@ the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Det
   (|mu| up to 1.45 on 368 modes); a run to t = 0.4 took > 590 s with `increment` vs 254 s with
   `standard`.  `increment` is therefore opt-in (C31 uses it: VAM ssp2 1.96); triangle meshes need
   a stabilized variant (e.g. Almgren et al.'s version (5)) before it can be the default.
+
+## 46. JAX distributed pressure solve (pyamg): the iteration count does not scale (2026-10-13)
+
+L2P's VAM Chorin at nx 256 (65k cells), `pressure_linear_solver="pyamg"`, 3 constant steps
+(`scratchpad/l2p_prof.py`: pyamg wrapped to count and time V-cycles; `ZOOMY_KRYLOV_LOG=1`).
+Matched: one core per rank, XLA single-threaded (`--xla_cpu_multi_thread_eigen=false
+intra_op_parallelism_threads=1`), `mpiexec -bind-to core` (the env's MPI is MPICH / Hydra).
+
+| ranks | ms / step | Krylov iterations / solve | V-cycle per rank |
+|---|---|---|---|
+| 1 (host GMRES + global SA-AMG) | 135 | 10 | 4.4 ms |
+| 2 (JAX FGMRES, rank-local V-cycle + Nicolaides coarse) | 164 | 28 | 2.3 ms |
+| 4 | 208 | 76 | 1.2 ms |
+
+- The V-cycle scales (cost per rank halves with the rank's size); the preconditioner does not:
+  the rank-local AMG drops the coupling between ranks, and one constant per rank and row is too
+  small a coarse space to restore it, so the iterations grow with the rank count.
+- Each distributed iteration also costs a JAX matvec with a halo exchange, two global
+  reductions and a host callback; at 76 iterations that dominates.
+- Unmatched runs mislead twice: with 8 XLA threads per process the serial run takes 266 ms /
+  step (XLA's intra-op threading costs 2x at this size), and two ranks sharing those 8 cores
+  oversubscribe (479 ms / step).
+- Fix (proposed): one global AMG across the ranks, i.e. hypre BoomerAMG + FlexGMRES on the
+  colour-assembled rows (as foam and AMReX), called once per solve on the host instead of once
+  per iteration.  Needs a hypre build against the env's MPICH (the existing CPU build links
+  OpenMPI 4.1.6, the OF13 / AMReX toolchain).
