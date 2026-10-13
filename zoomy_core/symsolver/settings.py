@@ -1,4 +1,4 @@
-"""The settings every symbolic solver shares (section `solver` of a settings file), declared once.
+"""The settings every symbolic solver shares, declared once.
 
 The backends (NumPy, JAX, foam, AMReX) inherit these classes and add their own settings; a
 backend that supports only some members of an option narrows it with `OptionParam(members=...)`.
@@ -7,16 +7,8 @@ import param
 
 from zoomy_core.misc.options import Configurable, Option, OptionParam
 from zoomy_core.solver.constants import ELLIPTIC_RTOL
-from zoomy_core.symsolver.discretization.time import Imex
+from zoomy_core.symsolver.discretization.time import CflWaveSpeed, Imex  # noqa: F401
 from zoomy_core.symsolver.strategies.chorin import Projection
-
-
-class CflWaveSpeed(Option):
-    """Where the CFL step takes its wave speeds."""
-    #: from the first RK stage's Riemann problem
-    faces = "faces"
-    #: from the cell states on each face
-    cells = "cells"
 
 
 class PressureSolve(Option):
@@ -45,7 +37,6 @@ class LinearSolver(Option):
 
 class HyperbolicSettings(Configurable):
     """Settings of every symbolic hyperbolic solver: time window, step control, MOOD, IMEX."""
-    section = "solver"
 
     time_end = param.Number(default=None, allow_None=True, doc="End time.")
     time_start = param.Number(default=0.0, doc="Start time when not restarting.")

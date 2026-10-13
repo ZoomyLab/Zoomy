@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sympy as sp
 
-from zoomy_core.misc.options import Option
+from zoomy_core.misc.options import Option, typed
 from zoomy_core.model.operations import Operation
 from zoomy_core.model.models.material import ClosureState   # the full-access state
 
@@ -592,7 +592,8 @@ class InterfaceFlux(Closure):
     def __init__(self, name=None, quantity=None):
         """Store the `quantity` this scheme supplies (default: the transfer velocity)."""
         super().__init__(name=name)
-        self.quantity = InterfaceQuantity(quantity or InterfaceQuantity.velocity)
+        self.quantity = typed(InterfaceQuantity, quantity or InterfaceQuantity.velocity,
+                              "quantity")
 
     def expression(self, below, above, G):    # noqa: D401 - distinct signature
         """Return the shared interface velocity `u*` (override)."""

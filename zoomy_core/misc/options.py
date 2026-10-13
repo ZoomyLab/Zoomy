@@ -1,12 +1,8 @@
-"""Typed options and the settings hierarchy: class defaults < settings-file section < arguments.
-
-Every choice-valued setting is an `Option` (a str-Enum: the IDE completes it, a typo is answered
-with "did you mean"); every configurable component is a `Configurable`, which reads its section of
-a settings file and rejects unknown keys with a suggestion.
+"""Typed options: every choice is an `Option` (a str-Enum), held on a `param.Parameterized` by an
+`OptionParam`.  A plain string where a member belongs raises `TypeError` naming the member, and
+`Configurable` answers a misspelt argument name with "did you mean".
 """
 import difflib
-import json
-import os
 from enum import Enum
 
 import param
@@ -19,8 +15,9 @@ def did_you_mean(word, candidates):
 
 
 class Option(str, Enum):
-    """A typed choice: `Imex("SSP2")` is `Imex.ssp2` (member value or name, any case); a typo
-    raises `ValueError` naming the closest member.  Members compare equal to their value.
+    """A typed choice; members compare equal to their value.  `Imex("SSP2")` converts a string
+    explicitly (member value or name, any case); a typo raises `ValueError` naming the closest
+    member.
     """
 
     def __str__(self):
@@ -41,9 +38,32 @@ class Option(str, Enum):
                          f"(one of: {', '.join(values)})")
 
 
+def typed(enum, value, name, allowed=None):
+    """`value`, unless it is a plain string where a member of `enum` belongs: then `TypeError`
+    naming the member (`projection='increment': use Projection.increment`), or for a typo the
+    closest of `allowed` (default: all members) and the list.
+    """
+    if not isinstance(value, str) or isinstance(value, enum):
+        return value
+    allowed = list(enum) if allowed is None else list(allowed)
+    listing = ", ".join(repr(a) for a in allowed)
+    key = value.lower()
+    hit = next((m for m in enum if key in (m.value.lower(), m.name.lower())), None)
+    if hit is not None and hit in allowed:
+        raise TypeError(f"{name}={value!r}: use {hit!r}")
+    if hit is not None:
+        raise TypeError(f"{name}={value!r}: {hit!r} is not supported here (one of: {listing})")
+    members = [a for a in allowed if isinstance(a, enum)]
+    words = {w: m for m in members for w in (m.value, m.name)}
+    close = difflib.get_close_matches(value, list(words), n=1, cutoff=0.5)
+    if close:
+        raise TypeError(f"{name}={value!r}: did you mean {words[close[0]]!r}? (one of: {listing})")
+    raise TypeError(f"{name}={value!r}: use one of {listing}")
+
+
 class OptionParam(param.Selector):
     """A `param.Selector` over the members of one `Option` enum (or the subset `members`), plus
-    `extra` plain values such as `False`; strings are coerced to members.
+    `extra` plain values such as `False`; a plain string raises `TypeError` (`typed`).
     """
 
     __slots__ = ["enum"]
@@ -53,56 +73,23 @@ class OptionParam(param.Selector):
         objects = [*extra, *(members if members is not None else (enum or ()))]
         super().__init__(default=default, objects=objects, **params)
 
-    def _coerce(self, val):
-        if self.enum is not None and isinstance(val, str) and not isinstance(val, self.enum):
-            return self.enum(val)
-        return val
-
-    def __set__(self, obj, val):
-        super().__set__(obj, self._coerce(val))
-
     def _validate_value(self, val, *args, **kwargs):
-        val = self._coerce(val)
-        if self.enum is not None and isinstance(val, self.enum) and val not in self.objects:
-            supported = [str(o) for o in self.objects]
-            raise ValueError(f"{self.owner.__name__ if self.owner else ''}.{self.name}: "
-                             f"{val.value!r} is not supported here (one of: {', '.join(supported)})")
+        if self.enum is not None:
+            typed(self.enum, val, self.name, self.objects)
+            if isinstance(val, self.enum) and val not in self.objects:
+                supported = ", ".join(repr(o) for o in self.objects)
+                raise ValueError(f"{self.name}={val!r} is not supported here "
+                                 f"(one of: {supported})")
         super()._validate_value(val, *args, **kwargs)
 
 
-def load_settings(path):
-    """Read a settings file (`.json`, `.yml` / `.yaml`) into a dict of sections."""
-    with open(path) as f:
-        if os.path.splitext(str(path))[1] in (".yml", ".yaml"):
-            import yaml
-            return yaml.safe_load(f) or {}
-        return json.load(f)
-
-
-def settings_section(settings, name):
-    """Section `name` of `settings` (a dict, a Zstruct / `Settings`, or a file path) as a dict."""
-    if settings is None or name is None:
-        return {}
-    if isinstance(settings, (str, os.PathLike)):
-        settings = load_settings(settings)
-    sec = settings.get(name) if isinstance(settings, dict) else getattr(settings, name, None)
-    if sec is None:
-        return {}
-    return dict(sec.as_dict() if hasattr(sec, "as_dict") else sec)
-
-
 class Configurable(param.Parameterized):
-    """A component configured by class defaults < `settings[section]` < keyword arguments;
-    an unknown key raises `TypeError` naming the closest setting.
-    """
+    """A `param.Parameterized` whose constructor answers an unknown argument with "did you mean"."""
 
-    section = None  # this component's section of a settings file, e.g. "solver"
-
-    def __init__(self, settings=None, **kwargs):
-        values = {**settings_section(settings, type(self).section), **kwargs}
+    def __init__(self, **kwargs):
         known = [n for n in type(self).param if n != "name"]
-        for key in values:
+        for key in kwargs:
             if key != "name" and key not in known:
                 raise TypeError(f"{type(self).__name__} has no setting {key!r}"
                                 f"{did_you_mean(key, known)}")
-        super().__init__(**values)
+        super().__init__(**kwargs)

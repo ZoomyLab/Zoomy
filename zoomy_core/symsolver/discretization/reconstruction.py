@@ -74,7 +74,7 @@ def maps(nsm):
 
 def bed_rows(nsm):
     """`(bed, depth)` rows when the reconstruction is the pair (h, eta = b + h) with
-    `bed="derived"`, else None.
+    `bed=BedReconstruction.derived`, else None.
 
     References:
         Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090

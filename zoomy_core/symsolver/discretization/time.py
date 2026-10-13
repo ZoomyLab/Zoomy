@@ -31,6 +31,14 @@ class Imex(Option):
     ssp2 = "ssp2"
 
 
+class CflWaveSpeed(Option):
+    """Where the CFL step takes its wave speeds."""
+    #: from the first RK stage's Riemann problem
+    faces = "faces"
+    #: from the cell states on each face
+    cells = "cells"
+
+
 class ImexTableau(NamedTuple):
     """Double Butcher tableau: explicit `(At, wt, ct)` and diagonally implicit
     `(A, w, c)`.

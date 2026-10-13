@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional, Type
 
-from zoomy_core.misc.options import Option
+from zoomy_core.misc.options import Option, typed
 from zoomy_core.systemmodel.system_model import SystemModel
 
 
@@ -464,7 +464,7 @@ class ReconstructionSpec:
     # model declares a map, e.g. SWE/SME: eta = b + h, u = hinv q);
     # "conservative": Q itself.
     # ``limiters``: per-row override of ``limiter`` by state name (the row of
-    # W in that state's slot), e.g. {"b": "none"}.
+    # W in that state's slot), e.g. {"b": Limiter.none}.
     # ``ties``: {row: lead} -- the row's limiter factor never exceeds the
     # lead row's, phi_row <- min(phi_row, phi_lead).  Default: none, every
     # row limited on its own.
@@ -478,10 +478,12 @@ class ReconstructionSpec:
     ties: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        self.limiter = Limiter(self.limiter)
-        self.variables = ReconstructedVariables(self.variables)
-        self.bed = BedReconstruction(self.bed)
-        self.limiters = {k: Limiter(v) for k, v in self.limiters.items()}
+        self.limiter = Limiter(typed(Limiter, self.limiter, "limiter"))
+        self.variables = ReconstructedVariables(typed(ReconstructedVariables, self.variables,
+                                                      "variables"))
+        self.bed = BedReconstruction(typed(BedReconstruction, self.bed, "bed"))
+        self.limiters = {k: Limiter(typed(Limiter, v, f"limiters[{k!r}]"))
+                         for k, v in self.limiters.items()}
 
 
 @dataclass

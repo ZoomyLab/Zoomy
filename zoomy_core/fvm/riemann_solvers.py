@@ -9,6 +9,7 @@ import param
 import sympy as sp
 
 from zoomy_core.misc.misc import ZArray, Zstruct
+from zoomy_core.misc.options import typed
 from zoomy_core.model.basefunction import SymbolicRegistrar
 from zoomy_core.model.kernel_functions import (
     conditional,
@@ -437,8 +438,10 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
             # (see SystemModel.use_spectral_radius_bound for the measured cost
             # on the Ritter dry dam break).  The cheap bound is opt-in.  The
             # symbolic solvers set "power" (zoomy_core.symsolver.WAVE_SPEED).
-            method = SpectralRadius(getattr(self.model, "spectral_radius_method",
-                                            SystemModel.spectral_radius_method))
+            method = SpectralRadius(typed(
+                SpectralRadius, getattr(self.model, "spectral_radius_method",
+                                        SystemModel.spectral_radius_method),
+                "spectral_radius_method"))
             if method == "bound" or getattr(self.model, "use_spectral_radius_bound",
                                              SystemModel.use_spectral_radius_bound):
                 return self._spectral_radius_bound(Q, Qaux, p, n)
