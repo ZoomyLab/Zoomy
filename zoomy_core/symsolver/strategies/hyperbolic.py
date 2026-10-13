@@ -4,11 +4,12 @@ configuration and its methods are the graphs a backend prints.
 """
 import sympy as sp
 
+from zoomy_core.misc.options import typed
 from zoomy_core.symsolver.core import Cond, While
 from zoomy_core.symsolver.discretization.residual import (
     explicit_step, full_aux, imex_step, implicit_step, mood_step, post_step)
 from zoomy_core.symsolver.discretization.time import (
-    IMEX_RK, SSP_RK, Imex, cfl_dt, checked, face_dt, face_rule, step_size)
+    IMEX_RK, SSP_RK, CflWaveSpeed, Imex, cfl_dt, checked, face_dt, face_rule, step_size)
 from zoomy_core.symsolver.vocabulary import (
     couple, coupled_faces, interface_flux, interface_states, io)
 
@@ -19,7 +20,7 @@ class HyperbolicTemplate:
     """
 
     def __init__(self, nsm, *, cfl, dimension, mood=False, dt_write=None,
-                 imex=False, cfl_check_every=10, wave_speed="faces",
+                 imex=False, cfl_check_every=10, wave_speed=CflWaveSpeed.faces,
                  dt_constant=None, time_order=None, dt_checkpoint=None):
         """Set the configuration; `nsm` is the NumericalSystemModel.
 
@@ -28,23 +29,21 @@ class HyperbolicTemplate:
             dimension: mesh dimension, enters the CFL step.
             mood: a-posteriori MOOD guard of the RK step.
             dt_write: output interval; `None`: no output.
-            imex: `False` (implicit slots inside the RK step), `"lie"` (implicit
-                step
-                after it) or `"ssp2"` (IMEX-SSP2(2,2,2) stages).
+            imex: `False` (implicit slots inside the RK step), `Imex.lie` (implicit step
+                after it) or `Imex.ssp2` (IMEX-SSP2(2,2,2) stages).
             cfl_check_every: constant `dt`: CFL test every N steps (1: each, 0:
                 never).
-            wave_speed: CFL speeds from the first stage's Riemann problem (`"faces"`)
-                or
-                from the cell states of each face (`"cells"`).
+            wave_speed: CFL speeds from the first stage's Riemann problem
+                (`CflWaveSpeed.faces`) or from the cell states of each face (`CflWaveSpeed.cells`).
             dt_constant: constant step, or `None` for the adaptive CFL step.
             time_order: SSP-RK order; `None`: the reconstruction order (2 for
-                `"ssp2"`).
+                `Imex.ssp2`).
             dt_checkpoint: interval of `io.save_state` (landed on); `None`: at the end only.
         """
         if time_order is not None and time_order not in SSP_RK:
             raise ValueError(f"time_order {time_order}: SSP-RK of order "
                              f"{sorted(SSP_RK)} only")
-        imex = Imex(imex) if imex else None
+        imex = typed(Imex, imex, "imex") or None
         if imex is Imex.ssp2 and time_order not in (None, 2):
             raise ValueError(f"imex 'ssp2' is of time order 2, not {time_order}")
         self.nsm = nsm
@@ -55,7 +54,7 @@ class HyperbolicTemplate:
         self.dt_checkpoint = dt_checkpoint
         self.imex = imex
         self.cfl_check_every = cfl_check_every
-        self.wave_speed = wave_speed
+        self.wave_speed = typed(CflWaveSpeed, wave_speed, "wave_speed")
         self.dt_constant = None if dt_constant is None else sp.Float(dt_constant)
         self.time_order = (time_order if time_order is not None else
                            2 if imex is Imex.ssp2 else self.order)

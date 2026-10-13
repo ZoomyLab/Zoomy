@@ -13,7 +13,7 @@ import param
 from typing import Callable, List
 
 from zoomy_core.misc.misc import Zstruct, ZArray
-from zoomy_core.misc.options import Option
+from zoomy_core.misc.options import Option, typed
 from zoomy_core.model.basefunction import Function
 
 
@@ -231,14 +231,15 @@ class BoundaryCondition(param.Parameterized):
     def compute_ghost_state(self, time, X, dX, Q, Qaux, parameters, normal,
                             bdata=None):
         """Symbolic ghost state at the mirror image of the inner cell centre; a
-        `boundary_value_kind == "face"` value `v` gives `2v - Q`.
+        `BoundaryValueKind.face` value `v` gives `2v - Q`.
 
         Args:
             bdata: per-face boundary data (coupling), read only by subclasses that need it.
         """
         v = ZArray(self.compute_boundary_condition(
             time, X, dX, Q, Qaux, parameters, normal))
-        if self.boundary_value_kind == "face":
+        kind = typed(BoundaryValueKind, self.boundary_value_kind, "boundary_value_kind")
+        if kind is BoundaryValueKind.face:
             q = ZArray(Q)
             return ZArray([2 * v[i] - q[i] for i in range(len(q))])
         return v

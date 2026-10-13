@@ -1,12 +1,12 @@
 """The Chorin projection solver, written once for every backend: a hyperbolic predictor,
 a pressure solve and a correction, from the three systems of the model's pressure
 split (`pred`, `press`, `corr`). `time_order` 2 / 3 wraps stages in SSP-RK2 /
-RK3 and `imex="ssp2"` uses IMEX-SSP2(2,2,2) with projected stages.
+RK3 and `imex=Imex.ssp2` uses IMEX-SSP2(2,2,2) with projected stages.
 """
 
 import sympy as sp
 
-from zoomy_core.misc.options import Option
+from zoomy_core.misc.options import Option, typed
 from zoomy_core.symsolver.core import LinSolve, While
 from zoomy_core.symsolver.discretization.residual import (
     explicit_step, full_aux, imex_step, implicit_step, mood_step)
@@ -47,17 +47,17 @@ class ChorinTemplate(HyperbolicTemplate):
         Args:
             pressure_newton: `(tol, maxit)` for a nonlinear pressure constraint solved
                 by Newton, else `None`.
-            projection: `Projection` (or its name).
+            projection: a `Projection`.
         """
         super().__init__(pred, cfl=cfl / (2 * pred.reconstruction.order - 1),
                          time_order=time_order, **config)
         self.press = press
         self.corr = corr
         self.pressure_newton = pressure_newton
-        self.projection = Projection(projection)
+        self.projection = typed(Projection, projection, "projection")
 
     def step(self, Q, Qaux, p, time, dt, mesh, *, dt_rule=None):
-        """One time step: the outer SSP-RK over projection stages; with `imex="ssp2"`
+        """One time step: the outer SSP-RK over projection stages; with `imex=Imex.ssp2`
         every stage solves the implicit source and is then projected.
 
         Args:
@@ -65,7 +65,7 @@ class ChorinTemplate(HyperbolicTemplate):
         Returns:
             `(Q, Qaux, dt)`.
         """
-        # imex="ssp2": the pressure joins the implicit source S in the tableau as the
+        # Imex.ssp2: the pressure joins the implicit source S in the tableau as the
         # stage correction B_i = A_ii dt G P_i (off the pressure rows); f, S act on
         # the projected stages Y_i = P(R_i):
         #   R_i = Q + sum_{j<i} (At_ij F_j + A_ij (S_j + B_j / A_jj)) + A_ii dt S(R_i)

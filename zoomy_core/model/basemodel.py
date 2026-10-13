@@ -248,19 +248,15 @@ class Model(Configurable, SymbolicRegistrar):
     # the result's ICs/BCs.  Default ``False`` leaves a model uncached.
     _cacheable_derivation = False
 
-    section = "model"
-
-    def __init__(self, init_functions=True, settings=None, **params):
+    def __init__(self, init_functions=True, **params):
         """Declare variables and parameters, run the derivation, and (unless `_finalize_lazy`)
         finalize for the SystemModel.
 
         Args:
             init_functions: register the operator methods as symbolic functions during
                 finalization.
-            settings: a settings file / dict whose `model` section sets parameters (arguments
-                win).
         """
-        super().__init__(settings=settings, **params)
+        super().__init__(**params)
         self.functions, self.call = Zstruct(), Zstruct()
         self._equations: dict = {}
         self.history: list = []
