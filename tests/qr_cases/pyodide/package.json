@@ -1,0 +1,8 @@
+{
+  "name": "zoomy-qr-cases-pyodide",
+  "private": true,
+  "description": "Headless Pyodide (the GUI worker's version) for tests/qr_cases.",
+  "dependencies": {
+    "pyodide": "0.29.3"
+  }
+}
