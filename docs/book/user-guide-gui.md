@@ -33,7 +33,9 @@ A card-based GUI for composing and running a free-surface-flow case:
   equations render inline (KaTeX), and the mesh previews live.
 - **Run in the browser** — the built-in **NumPy** solver runs on an in-browser
   **Pyodide kernel** (off the main thread, with jedi autocomplete). No install,
-  no server.
+  no server.  The NumPy and JAX solver cards run the symbolic solvers
+  (`SymbolicHyperbolicSolverNumpy` / `...Jax`, the Chorin ones for a VAM `split`);
+  the card-by-card table is in `library/zoomy_gui/README.md`.
 - **Run on a backend** — connect an external `zoomy-server` (numpy / jax / amrex
   / dmplex / foam) and the composed case is submitted and solved remotely; the
   result store comes back for visualization. NumPy-in-browser is always
