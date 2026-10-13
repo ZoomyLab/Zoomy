@@ -1,5 +1,5 @@
 """Composable stress closures: each `Closure` is one constitutive relation for a stress
-component (bulk, bed trace, surface trace, horizontal or in-plane) over a `ClosureState`.
+component (bulk, bed trace, surface trace, horizontal) over a `ClosureState`.
 Models list them in `closures=[...]` and perform the substitution when the Model is derived,
 before the lift to a SystemModel.
 """
@@ -44,26 +44,46 @@ def _solve_traction(P, s, nh, inplane=None):
     return out
 
 
-def inplane_stress(inplane, s, nh):
+def full_tensor_closures(closures, stress):
+    """The bulk closures that supply the full stress tensor when the model keeps it (`stress`
+    is `Stress.full`; a model's choice is `m.stress`, set by `moment_scaling`), else `[]`.
+
+    Raises:
+        ValueError: `Stress.full` with no bulk closure, or with one that closes only the
+            vertical shear (only `Newtonian` provides the tensor).
+    """
+    from zoomy_core.model.models.equations import Stress
+    if stress is None or Stress(stress) != Stress.full:
+        return []
+    bulk = [c for c in closures if c.closes == "bulk"]
+    partial = [type(c).__name__ for c in bulk if not hasattr(c, "tensor")]
+    if partial or not bulk:
+        why = (f"{', '.join(partial)} closes only the vertical shear rho nu d_z u"
+               if partial else "none is given")
+        raise ValueError("stress=Stress.full needs a bulk closure that supplies the full stress "
+                         f"tensor (Newtonian); {why}: use stress=Stress.shallow")
+    return bulk
+
+
+def inplane_stress(full, s, nh):
     """In-plane stress relative to the vertical normal stress, `tau_de - delta_de tau_zz`,
-    summed over the in-plane closures at the trace of `s` (`nh x nh` nested list).
+    summed over the full-tensor closures at the trace of `s` (`nh x nh` nested list).
     """
     T = [[sp.S.Zero] * nh for _ in range(nh)]
-    for c in inplane:
-        Tc = c.stress(s)
-        N = c.normal_stress(s) if hasattr(c, "normal_stress") else sp.S.Zero
+    for c in full:
+        Tc, N = c.stress(s), c.normal_stress(s)
         for d_ in range(nh):
             for e in range(nh):
                 T[d_][e] += Tc[d_][e] - (N if d_ == e else 0)
     return T
 
 
-def _inplane_traction(inplane, s, nh):
+def _inplane_traction(full, s, nh):
     """In-plane part of the boundary traction, `g_d = sum_e (tau_de - delta_de tau_zz) d_e I`
-    per axis, or `None` without an in-plane closure.
+    per axis, or `None` without the full tensor.
 
-    `tau_de` is the closures' in-plane stress at the trace of `s` and `d_e I` the PHYSICAL
-    interface slope, the slope the sigma map gives the Leibniz terms of the depth-integrated
+    `tau_de` is the in-plane stress at the trace of `s` and `d_e I` the PHYSICAL interface
+    slope, the slope the sigma map gives the Leibniz terms of the depth-integrated
     `d_e tau_de` and of the pressure; with `tau_dz = P_d + g_d` those cancel and the depth
     integral is `d_e(h <tau_de - delta_de tau_zz>)` (Gerbeau, Perthame 2001,
     https://doi.org/10.3934/dcdsb.2001.1.89).  The `tau_zz` part is the surface pressure
@@ -71,17 +91,18 @@ def _inplane_traction(inplane, s, nh):
     projection removes (Marche 2007, eq. (5.18),
     https://doi.org/10.1016/j.euromechflu.2006.04.007).
     """
-    if not inplane:
+    if not full:
         return None
     S = s.interface_slopes
-    T = inplane_stress(inplane, s, nh)
+    T = inplane_stress(full, s, nh)
     return [sum(T[d_][e] * S[e] for e in range(nh)) for d_ in range(nh)]
 
 
 def apply_stress_closures(closures, m, axes, state, horiz):
     """Inject the bulk, bed and surface stress closures into the projected momentum equations of
-    SME/VAM, frame-aware and dimension-agnostic.  With an in-plane closure the bed and surface
-    tractions carry the in-plane stress too (`_inplane_traction`).
+    SME/VAM, frame-aware and dimension-agnostic.  With the full tensor (`Stress.full`) the bed
+    and surface tractions carry the in-plane stress too (`_inplane_traction`) and the bulk
+    shear its `rho nu d_d w` part.
 
     Args:
         closures: list of `Closure` objects.
@@ -101,7 +122,7 @@ def apply_stress_closures(closures, m, axes, state, horiz):
     surface = [c for c in closures if c.closes == "surface"]
     bottom = [c for c in closures if c.closes == "bottom"]
     bulk = [c for c in closures if c.closes == "bulk"]
-    inplane = [c for c in closures if c.closes == "in_plane"]
+    full = full_tensor_closures(closures, getattr(m, "stress", None))
     for at, btag, pieces in ((1, "eta", surface), (0, "b", bottom)):
         if not pieces:
             continue
@@ -111,14 +132,69 @@ def apply_stress_closures(closures, m, axes, state, horiz):
             for i in range(min(nh, len(tang))):
                 P[i] += tang[i]
         traces = _solve_traction(P, state(at, btag=btag), nh,
-                                 inplane=_inplane_traction(inplane, state(at, btag=btag), nh))
+                                 inplane=_inplane_traction(full, state(at, btag=btag), nh))
         for i, ax in enumerate(axes):
             ax["mx"].apply({ax["tau"].at(at): traces[i]})
-    for c in bulk:                                # diagonal constitutive
-        for ax in axes:
-            ax["mx"].apply({ax["tau"].expr:
-                            c.expression(state(None, alias={"u": ax["velname"]}))})
+    _apply_bulk(bulk, full, axes, state, nh)
     return bool(bulk)
+
+
+def _full_shear(full, s, nh):
+    """The `rho nu d_d w` part of the shear `tau_dz` of the full-tensor closures at the trace of
+    `s`, per axis, or `None` without the full tensor.
+    """
+    if not full:
+        return None
+    parts = [c.shear(s) for c in full]
+    return [sum(p[i] for p in parts) for i in range(nh)]
+
+
+def _apply_bulk(bulk, full, axes, state, nh):
+    """Substitute the bulk shear `tau_dz`: each bulk closure's vertical shear (diagonal
+    constitutive) plus, with the full tensor, its `rho nu d_d w` part.
+    """
+    shear = _full_shear(full, state(None), nh)
+    for j, c in enumerate(bulk):
+        for i, ax in enumerate(axes):
+            e = c.expression(state(None, alias={"u": ax["velname"]}))
+            if shear is not None and j == 0:
+                e = e + shear[i]
+            ax["mx"].apply({ax["tau"].expr: e})
+
+
+def apply_full_tensor(closures, m, momentum):
+    """With `Stress.full`, substitute the full-tensor closure's stress (physical, fixed-z
+    coordinates, before the sigma map) into the blueprint `momentum`: `tau_de` and `tau_zz` in
+    the horizontal rows, `tau_ez` and `tau_zz` in the vertical row (its divergence evaluated).
+    The horizontal shear `tau_dz` stays a closure variable, closed after the projection
+    (`apply_stress_closures`: bed / surface traction, bulk).  In the vertical row the
+    `rho nu d_e d_e w` term is dropped (Marche 2007, (3.2) -> (3.5)).
+
+    Returns:
+        The tensor `{key: tau}`, or `None` with `Stress.shallow` (no-op).
+    """
+    full = full_tensor_closures(closures, getattr(m, "stress", None))
+    if not full:
+        return None
+    c = full[0]
+    c.register(m)
+    horiz = list(m.coords[1:-1])
+    T = c.tensor(m, momentum.uvel, momentum.w, horiz)
+    tau = momentum.tau
+    hsub = {tau[k]: T[k] for k in tau if k in T and ("z" not in k or k == "zz")}
+    vsub = {tau[k]: T[k] for k in tau if k in T and "z" in k}
+    for eq in momentum.rows:
+        eq.expr = eq.expr.xreplace(hsub)
+    # vertical row: its divergence evaluated, without the eps^2 term nu d_e d_e w of Marche
+    # (3.2), which (3.5) drops: it is eps^2 below every other term of the row (the
+    # non-hydrostatic inertia included) and would put d^3 b (bed-kinematic w) into the w rows
+    vt = momentum.vertical_term
+    w2 = {sp.Derivative(momentum.w, (xe, 2)): 0 for xe in horiz}
+    momentum.vertical.expr = (momentum.vertical.expr - vt
+                              + sp.expand(vt.xreplace(vsub).doit()).subs(w2))
+    m._history("apply_full_tensor", "momentum",
+               description=f"{type(c).__name__} full stress tensor (physical coordinates)")
+    return T
 
 
 class Closure(Operation):
@@ -185,7 +261,15 @@ class Closure(Operation):
 
 
 class Newtonian(Closure):
-    """Newtonian bulk stress `tau = rho nu d_z u`."""
+    """Incompressible Newtonian fluid, `tau = rho nu (grad u + grad u^T)`.  `expression` is
+    the vertical shear `rho nu d_z u` (all `Stress.shallow` keeps); with `Stress.full` the
+    model takes the whole tensor (`tensor` before the sigma map, `stress` / `normal_stress` /
+    `shear` at the traces), so the depth-averaged in-plane term is `div(h (tau - tau_zz I))`,
+    i.e. `div(nu h (grad u + grad u^T)) + 2 nu grad(h div u)` at level 0.
+
+    References:
+        Marche 2007, eqs. (3.2), (3.5), (5.19), https://doi.org/10.1016/j.euromechflu.2006.04.007
+    """
     closes = "bulk"; requires = ("u",)
 
     def register(self, m):
@@ -195,6 +279,48 @@ class Newtonian(Closure):
     def expression(self, s):
         """Return `rho nu d_z u`."""
         return s.par.rho * s.par.nu * s.dz(s.u)
+
+    def tensor(self, m, uvel, w, horiz):
+        """The tensor in physical (fixed-z) coordinates, before the sigma map, `{key: tau}` for
+        the blueprint keys (`"xx"`, `"xy"`, `"yy"`, `"xz"`, `"yz"`, `"zz"`):
+        `tau_de = rho nu (d_d u_e + d_e u_d)`, `tau_dz = rho nu (d_z u_d + d_d w)`,
+        `tau_zz = 2 rho nu d_z w = -2 rho nu div_h u` (incompressible).
+        """
+        from zoomy_core import coords as _C
+        import zoomy_core.derivatives as _d
+        rho, nu = m.parameters.rho, m.parameters.nu
+        D, N = {_C.x: _d.x, _C.y: _d.y}, {_C.x: "x", _C.y: "y"}
+        T = {}
+        for i, a in enumerate(horiz):
+            for j in range(i, len(horiz)):
+                T[N[a] + N[horiz[j]]] = rho * nu * (D[a](uvel[j]) + D[horiz[j]](uvel[i]))
+            T[N[a] + "z"] = rho * nu * (_d.z(uvel[i]) + D[a](w))
+        T["zz"] = -2 * rho * nu * sum(D[a](uvel[i]) for i, a in enumerate(horiz))
+        return T
+
+    def stress(self, s):
+        """In-plane tensor `tau_de = rho nu (d_d u_e + d_e u_d)` at the trace of `s`, with the
+        physical (fixed-z) derivatives of the sigma map; it enters the boundary traction
+        (`apply_stress_closures`).
+        """
+        u, X = s.horizontal_velocity, s.horizontal
+        return [[s.trace(s.par.rho * s.par.nu * (s.dx_phys(u[e], X[d]) + s.dx_phys(u[d], X[e])))
+                 for e in range(len(X))] for d in range(len(X))]
+
+    def normal_stress(self, s):
+        """Viscous normal stress `tau_zz = 2 rho nu d_z w = -2 rho nu div_h u` at the trace of
+        `s` (physical derivatives).
+        """
+        u, X = s.horizontal_velocity, s.horizontal
+        div = sum(s.dx_phys(u[e], X[e]) for e in range(len(X)))
+        return s.trace(-2 * s.par.rho * s.par.nu * div)
+
+    def shear(self, s):
+        """The `rho nu d_d w` part of the shear `tau_dz` at the trace of `s` (physical
+        derivative), per axis; `expression` is the other part.
+        """
+        w, X = s.vertical_velocity, s.horizontal
+        return [s.trace(s.par.rho * s.par.nu * s.dx_phys(w, X[d])) for d in range(len(X))]
 
 
 class KEpsilonViscosity(Closure):
@@ -491,62 +617,6 @@ class EddyViscosity(Closure):
         return s.par.nu
 
 
-class ShallowInPlane(Closure):
-    """Opt-in shallow form: drop the in-plane deviatoric stress
-    (`tau_xx, tau_xy, tau_yy -> 0`) of a full-stress model.
-    """
-    closes = "horizontal"; requires = ()
-
-    def expression(self, s):
-        """Return zero."""
-        return sp.S.Zero
-
-
-class NewtonianInPlane(Closure):
-    """Marker closure that keeps the in-plane deviatoric stress as incompressible Newtonian,
-    `tau_de = rho nu (d_d u_e + d_e u_d)`, the complement of `ShallowInPlane`, and with it
-    the normal stress `tau_zz = -2 rho nu div_h u` of the same order.
-    The model adds the divergence (`add_inplane_viscous`), takes `tau_zz` into the pressure
-    and routes both into `diffusion_matrix` (`package_viscous`); `stress` and
-    `normal_stress` put them into the bed and surface traction (`apply_stress_closures`),
-    so the depth-averaged term is `div(h (tau - tau_zz I))`, i.e.
-    `div(nu h (grad u + grad u^T)) + 2 nu grad(h div u)`.
-
-    References:
-        Marche 2007, eq. (5.19), https://doi.org/10.1016/j.euromechflu.2006.04.007
-    """
-    closes = "in_plane"; requires = ("u",)
-
-    def register(self, m):
-        """Register the kinematic viscosity `nu`."""
-        m.parameter("nu", 0.0)
-
-    def expression(self, s):
-        """Return `rho nu d_z u`; the in-plane tensor itself is built by the model, not by
-        this scalar.
-        """
-        # in-plane stress is tensor-valued and consumed by the model's
-        # add_inplane_viscous (not the scalar apply_stress_closures path)
-        return s.par.rho * s.par.nu * s.dz(s.u)
-
-    def stress(self, s):
-        """In-plane tensor `tau_de = rho nu (d_d u_e + d_e u_d)` at the trace of `s`, with the
-        physical (fixed-z) derivatives of the sigma map; it enters the boundary traction
-        (`apply_stress_closures`).
-        """
-        u, X = s.horizontal_velocity, s.horizontal
-        return [[s.trace(s.par.rho * s.par.nu * (s.dx_phys(u[e], X[d]) + s.dx_phys(u[d], X[e])))
-                 for e in range(len(X))] for d in range(len(X))]
-
-    def normal_stress(self, s):
-        """Viscous normal stress `tau_zz = 2 rho nu d_z w = -2 rho nu div_h u` at the trace of
-        `s` (physical derivatives), the partner of `inplane_normal_stress` in the bulk.
-        """
-        u, X = s.horizontal_velocity, s.horizontal
-        div = sum(s.dx_phys(u[e], X[e]) for e in range(len(X)))
-        return s.trace(-2 * s.par.rho * s.par.nu * div)
-
-
 # ── surface closures ───────────────────────────────────────────────────────
 
 
@@ -576,7 +646,7 @@ class InterfaceQuantity(Option):
     """The interface value an `InterfaceFlux` scheme supplies."""
     #: the transfer velocity u*
     velocity = "velocity"
-    #: the in-plane stress of the interface traction (interface_inplane_traction)
+    #: the stress of the interface traction (interface_traction)
     stress = "stress"
 
 
@@ -624,10 +694,11 @@ def apply_layer_stress_closures(closures, m, axes, state, *, is_top, is_bottom):
     """Per-layer variant of `apply_stress_closures` for the multilayer models: the surface
     closure acts only on the top layer and the bed closure only on the bottom layer.
 
-    With an in-plane closure every trace carries the layer's own in-plane traction
+    With the full tensor (`Stress.full`) every trace carries the layer's own in-plane traction
     (`_inplane_traction`), so the layer's in-plane term is ``d_e(h_l <tau_de - delta_de
-    tau_zz>)``; at an internal interface the model adds the shared part
-    (`interface_inplane_traction`).
+    tau_zz>)``, and the bulk shear its `rho nu d_d w` part; at an internal interface the trace
+    is that own part only, and the model adds the shared, single-valued rest of the traction
+    (`interface_traction`).
 
     Args:
         is_top: this layer carries the free surface.
@@ -639,18 +710,16 @@ def apply_layer_stress_closures(closures, m, axes, state, *, is_top, is_bottom):
     stress = [c for c in closures if c.closes in ("bulk", "bottom", "surface")]
     for c in stress:
         c.register(m)
-    inplane = [c for c in closures if c.closes == "in_plane"]
-    for c in inplane:
-        c.register(m)
+    full = full_tensor_closures(closures, getattr(m, "stress", None))
     surface = [c for c in stress if c.closes == "surface"] if is_top else []
     bottom = [c for c in stress if c.closes == "bottom"] if is_bottom else []
     bulk = [c for c in stress if c.closes == "bulk"]
     for at, btag, pieces, outer in ((1, "eta", surface, is_top), (0, "b", bottom, is_bottom)):
-        g = _inplane_traction(inplane, state(at, btag=btag), nh)
+        g = _inplane_traction(full, state(at, btag=btag), nh)
         if not pieces:
             if g is not None and not outer:          # internal interface: own in-plane part
                 for i, ax in enumerate(axes):
-                    ax["mx"].apply({ax["tau"].at(at): ax["tau"].at(at) + g[i]})
+                    ax["mx"].apply({ax["tau"].at(at): g[i]})
             continue
         P = [sp.S.Zero] * nh
         for c in pieces:
@@ -660,10 +729,7 @@ def apply_layer_stress_closures(closures, m, axes, state, *, is_top, is_bottom):
         traces = _solve_traction(P, state(at, btag=btag), nh, inplane=g)
         for i, ax in enumerate(axes):
             ax["mx"].apply({ax["tau"].at(at): traces[i]})
-    for c in bulk:
-        for ax in axes:
-            ax["mx"].apply({ax["tau"].expr:
-                            c.expression(state(None, alias={"u": ax["velname"]}))})
+    _apply_bulk(bulk, full, axes, state, nh)
     return bool(bulk)
 
 
@@ -673,27 +739,41 @@ def interface_closure(closures, quantity=InterfaceQuantity.velocity):
                  and getattr(c, "quantity", InterfaceQuantity.velocity) == quantity), None)
 
 
-def interface_inplane_traction(closures, below, above, G):
-    """Shared in-plane part of the traction at an internal layer interface `z_l`,
-    `sum_e sigma*_de d_e z_l` per axis, or `None` without an in-plane closure.
-
-    `sigma*` is the interface value of `tau_de - delta_de tau_zz` from the two one-sided
-    traces (`below`: top trace of the lower layer, `above`: bottom trace of the upper
-    layer, both `ClosureState`) by the `InterfaceFlux` closure with `quantity=InterfaceQuantity.stress`,
-    by default their mean.  Each layer's own in-plane part is in its traction
-    (`apply_layer_stress_closures`); with this shared part the interface traction is
-    single-valued and the layer terms telescope (momentum-conservative).
+def _shear_trace(full, s, nh):
+    """The shear `tau_dz` of the full-tensor closures at the trace of `s`, per axis: the vertical
+    shear (`expression` on the bulk, traced) plus the `rho nu d_d w` part.
     """
-    inplane = [c for c in (closures or []) if c.closes == "in_plane"]
-    if not inplane:
+    from zoomy_core import coords as _C
+    names = [{_C.x: "u", _C.y: "v"}[X] for X in s.horizontal]
+    sh = _full_shear(full, s, nh)
+    return [sum(s.trace(c.expression(s.bulk(alias={"u": names[i]}))) for c in full) + sh[i]
+            for i in range(nh)]
+
+
+def interface_traction(closures, stress, below, above, G):
+    """Shared, single-valued part of the traction at an internal layer interface `z_l`, per axis,
+    `sum_e sigma*_de d_e z_l - tau*_dz`, or `None` without the full tensor (`stress`).
+
+    `sigma*` (of `tau_de - delta_de tau_zz`) and `tau*` (of the shear `tau_dz`) are the
+    interface values of the two one-sided traces (`below`: top trace of the lower layer,
+    `above`: bottom trace of the upper layer, both `ClosureState`) by the `InterfaceFlux`
+    closure with `quantity=InterfaceQuantity.stress`, by default their mean.  Each layer's
+    trace carries only its own in-plane part (`apply_layer_stress_closures`); the model adds
+    this shared part like the transfer term (`+` at the top of the layer below, `-` at the
+    bottom of the layer above), so the interface traction `tau*_dz - sigma*_de d_e z_l` is
+    single-valued and the layer terms telescope.
+    """
+    full = full_tensor_closures(closures, stress)
+    if not full:
         return None
     scheme = (interface_closure(closures, quantity=InterfaceQuantity.stress)
               or MeanInterface(quantity=InterfaceQuantity.stress))
     nh = len(below.horizontal)
-    Sb, Sa = inplane_stress(inplane, below, nh), inplane_stress(inplane, above, nh)
+    Sb, Sa = inplane_stress(full, below, nh), inplane_stress(full, above, nh)
+    Tb, Ta = _shear_trace(full, below, nh), _shear_trace(full, above, nh)
     slope = below.interface_slopes
     return [sum(scheme.expression(Sb[d_][e], Sa[d_][e], G) * slope[e] for e in range(nh))
-            for d_ in range(nh)]
+            - scheme.expression(Tb[d_], Ta[d_], G) for d_ in range(nh)]
 
 
 # ── depth-averaged SWE closure consumption ──────────────────────────────────
@@ -735,9 +815,9 @@ def swe_closure_state(model):
 
 __all__ = ["Closure", "ClosureState", "apply_stress_closures",
            "apply_layer_stress_closures", "interface_closure",
-           "interface_inplane_traction", "inplane_stress",
+           "interface_traction", "inplane_stress",
            "Newtonian", "KEpsilonViscosity", "QRViscosity", "NavierSlip", "RoughWall",
            "WallFunctionBed",
            "StressFree", "InterfaceFlux", "MeanInterface", "UpwindInterface",
-           "ManningFriction", "EddyViscosity", "ShallowInPlane", "NewtonianInPlane",
+           "ManningFriction", "EddyViscosity", "full_tensor_closures", "apply_full_tensor",
            "swe_closure_state"]

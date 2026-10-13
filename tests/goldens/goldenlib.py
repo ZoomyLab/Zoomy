@@ -528,12 +528,11 @@ def build_m06_elder_sme():
 
 def build_m07_sme_inplane():
     from zoomy_core.model.models import SME
-    from zoomy_core.model.models.closures import NewtonianInPlane
+    from zoomy_core.model.models.equations import Stress
     return _simple_model_golden(
-        lambda: SME(level=1, dimension=2,
-                    closures=_std_closures() + [NewtonianInPlane()]),
-        "SME(level=1, dimension=2) + NewtonianInPlane (retained in-plane "
-        "stress on the untransformed 3-D PDE)")
+        lambda: SME(level=1, dimension=2, stress=Stress.full, closures=_std_closures()),
+        "SME(level=1, dimension=2, stress=Stress.full) (the full Newtonian stress "
+        "on the untransformed 3-D PDE)")
 
 
 def build_m08_sme_bingham():
@@ -592,11 +591,10 @@ def build_m13_vam_2d():
 
 def build_m14_vam_inplane():
     from zoomy_core.model.models import VAM
-    from zoomy_core.model.models.closures import NewtonianInPlane
+    from zoomy_core.model.models.equations import Stress
     return _simple_model_golden(
-        lambda: VAM(level=1, dimension=2,
-                    closures=_std_closures() + [NewtonianInPlane()]),
-        "VAM(level=1, dimension=2) + NewtonianInPlane (REQ-176(4): retain "
+        lambda: VAM(level=1, dimension=2, stress=Stress.full, closures=_std_closures()),
+        "VAM(level=1, dimension=2, stress=Stress.full) (REQ-176(4): retain "
         "form + live nu*q*db/dx topography couplings)")
 
 

@@ -64,6 +64,8 @@ from zoomy_core.model.derivation.projection import Integrate
 from zoomy_core.model.operations import Multiply, ProductRule, KinematicBC
 from zoomy_core.model.operations import Integrate as IntegrateZ
 from zoomy_core.systemmodel import SystemModel
+from zoomy_core.model.models.equations import Stress
+from zoomy_core.misc.options import OptionParam
 
 t, x, y, z = C.t, C.x, C.y, C.z
 zeta = sp.Symbol("zeta", real=True)
@@ -86,6 +88,10 @@ class Sigma3D(BaseModel):
         "Total spatial dimension INCLUDING the vertical: 2 → coords (t,x,z), one "
         "horizontal (U=U_x); 3 → coords (t,x,y,z), two horizontals.  Only dim=2 "
         "is wired today; dim=3 needs the SME HAXES-loop treatment."))
+    stress = OptionParam(Stress, default=None, extra=[None], doc=(
+        "In-plane stress: `None` keeps tau_xx as an open (unclosed) field, the full-stress "
+        "model; `Stress.shallow` drops it (`moment_scaling`).  The vertical balance is "
+        "hydrostatic either way."))
     closures = param.List(default=[], doc=(
         "Stress closures applied to the RESOLVED 3-D σ-momentum (closures.py): the "
         "bulk (Newtonian) closure becomes the vertical viscous diffusion "
@@ -102,7 +108,7 @@ class Sigma3D(BaseModel):
         user_vals = getattr(self, "parameter_values", None)
         if user_vals is not None and hasattr(user_vals, "items"):
             values.update({k: float(v) for k, v in user_vals.items()})
-        from zoomy_core.model.models.equations import (Mass, Momentum)
+        from zoomy_core.model.models.equations import (Mass, Momentum, moment_scaling)
 
         m = DModel(coords=(t, x, z), parameters=values)
         g, rho, e_x = m.parameters.g, m.parameters.rho, m.parameters.e_x
@@ -113,11 +119,9 @@ class Sigma3D(BaseModel):
 
         # 1 — general 3-D mass + momentum, FULL deviatoric stress tensor.
         # Unlike the shallow-moment models, Sigma3D does NOT drop the in-plane
-        # stress (no ``moment_scaling``): every deviatoric term survives in the
-        # derivation, and what to do with the in-plane component τ̃_xx is decided
-        # by a HORIZONTAL closure (step 3b').  An SME/hydrostatic-type 3-D run
-        # adds ``ShallowInPlane()`` to drop it (recovering the shallow form);
-        # leaving it out keeps the geometrically-exact full-stress model.
+        # stress by default: τ̃_xx survives as an open field (the geometrically-exact
+        # full-stress model); ``stress=Stress.shallow`` drops it (``moment_scaling``,
+        # recovering the shallow form).
         m.declare_state(h)
         m.add_equation("bottom", d.t(b))                 # ∂_t b = 0
         m.add_equation(Mass(m))                          # mints u, w
@@ -126,8 +130,17 @@ class Sigma3D(BaseModel):
         m.add_equation("kbc_top", KinematicBC(w=w, u=uvel[0], interface=b + h))
         m.add_equation("kbc_bot", KinematicBC(w=w, u=uvel[0], interface=b))
 
-        # 2 — hydrostatic elimination of p (physical z).
+        if self.stress is not None and Stress(self.stress) == Stress.full:
+            raise NotImplementedError("Sigma3D: stress=Stress.full is not wired (SME, VAM, "
+                                      "MLSME, MLVAM are); None keeps tau_xx open")
+        if self.stress is not None:
+            moment_scaling(m, mom, self.stress)
+
+        # 2 — hydrostatic elimination of p (physical z): no inertia, no stress in the
+        # vertical row
         mz = m.momentum.z
+        if self.stress is None:
+            mz.expr = mz.expr - mom.vertical_term
         mz.apply({d.t(w): 0, d.z(w * w): 0, d.x(uvel[0] * w): 0})
         mz.apply(IntegrateZ(z, z, b + h, method="analytical"))
         mz.apply({p.subs(z, b + h): 0})                  # p(surface) = 0
@@ -154,23 +167,6 @@ class Sigma3D(BaseModel):
         axes = [{"mx": m.momentum.x, "tau": m.functions.tau_xz, "velname": "u"}]
         apply_stress_closures(clos, m, axes, _cstate, [x])
         m.momentum.x.apply(Simplify())
-
-        # 3b' — HORIZONTAL (in-plane) stress closure.  The full-stress momentum
-        # still carries the deviatoric in-plane component τ̃_xx; a ``horizontal``
-        # closure supplies its constitutive value (``ShallowInPlane`` → 0 drops
-        # it back to the shallow-moment form; a Newtonian in-plane → 2ρν ∂_x ũ).
-        # With NO horizontal closure τ̃_xx stays free — the honest full-stress
-        # model.  We substitute the closure value into the in-plane stress head.
-        horiz_clos = [c for c in clos if getattr(c, "closes", None) == "horizontal"]
-        if horiz_clos:
-            for c in horiz_clos:
-                c.register(m); c.check(m)
-            inplane_val = sum((c.expression(_cstate(at=zeta)) for c in horiz_clos),
-                              sp.S.Zero)
-            for a in list(m.momentum.x.expr.atoms(sp.Function)):
-                if "tau_xx" in str(a.func):
-                    m.momentum.x.apply({a: inplane_val})
-            m.momentum.x.apply(Simplify())
 
         def _head(name):
             pool = m.momentum.x.expr.atoms(sp.Function)

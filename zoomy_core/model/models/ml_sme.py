@@ -23,7 +23,8 @@ from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
 from zoomy_core.model.derivation.system_extract import HydrostaticPressure
 from zoomy_core.model.operations import Multiply, ProductRule, KinematicBC
 from zoomy_core.model.models.walls import register_free_slip_wall
-from zoomy_core.model.models.equations import evaluate_time_derivatives
+from zoomy_core.model.models.equations import evaluate_time_derivatives, Stress
+from zoomy_core.misc.options import OptionParam
 from zoomy_core.systemmodel import SystemModel
 
 t, x, y, z = C.t, C.x, C.y, C.z
@@ -52,6 +53,9 @@ class MLSME(BaseModel):
         "(q_ℓ_i); 3 → (t,x,y,z), two horizontal (q_x_ℓ_i, q_y_ℓ_i).  Each layer "
         "is derived dimension-agnostically; the interface mass-flux closure and "
         "the transfer velocity u* generalise per horizontal direction."))
+    stress = OptionParam(Stress, default=Stress.shallow, doc=(
+        "How much of the bulk closure's stress the model keeps (`moment_scaling`): "
+        "`Stress.shallow` the vertical shear only, `Stress.full` the whole Newtonian tensor."))
     closures = param.List(default=[], doc=(
         "Composable Closure pieces (closures.py): stress (Newtonian/RoughWall/…) "
         "AND the interface transfer scheme (MeanInterface/UpwindInterface).  "
@@ -121,18 +125,19 @@ class MLSME(BaseModel):
         lam_s, nu_s = sp.symbols("lambda_s nu", positive=True)
         rho_s = sp.Symbol("rho", positive=True)
 
+        from types import SimpleNamespace
         from zoomy_core.model.models.equations import (
-            Mass, small_slope_scaling, add_inplane_viscous, package_viscous,
-            gravity_components)
+            Mass, small_slope_scaling, moment_scaling, package_viscous, gravity_components)
         from zoomy_core.model.models.material import ClosureState
-        from zoomy_core.model.models.closures import apply_layer_stress_closures
+        from zoomy_core.model.models.closures import (apply_layer_stress_closures,
+                                                      apply_full_tensor)
+        from zoomy_core.model.operations import Integrate as IntegrateZ
 
-        # KEEP-ALL: a NewtonianInPlane closure RETAINS the per-layer in-plane
-        # deviatoric stress τ_de = ρν(∂_d u_e + ∂_e u_d) (the streamwise normal
-        # stress ml_fullsme.py keeps); routed to conservative diffusion by
-        # package_viscous.  No-op by default → Gate-1 byte-identical.
-        retain_inplane = any(getattr(c, "closes", None) == "in_plane"
-                             for c in (self.closures or []))
+        # stress scaling (moment_scaling): Stress.shallow (default, byte-identical) keeps the
+        # vertical shear only; Stress.full keeps the whole tensor of the bulk closure
+        # (Newtonian), routed to conservative diffusion by package_viscous.
+        full_stress = Stress(self.stress) == Stress.full
+        Pi_top = {ell: sp.Function(f"Pitop_{ell}", real=True)(t, *horiz) for ell in range(1, N + 1)}
 
         def derive_layer(ell):
             """Return the continuity and the per-direction modal momentum rows of layer `ell`
@@ -157,17 +162,49 @@ class MLSME(BaseModel):
             # force g·e_x on the streamwise row (0 on cross/vertical), the SAME
             # single gravity path SME/VAM read (mints e_x on ml).
             g_h, _ = gravity_components(ml, coords)
+            # full stress tensor (MomentumNonHydrostatic's structure): the pressure g d(b + H)
+            # (+ the viscous Pi with the full tensor) is -sigma_zz = p - tau_zz, continuous
+            # across the interfaces, so tau_zz enters the horizontal rows
+            full = {CN[xd] + "z": tau[xd] for xd in horiz}
+            for i, xd in enumerate(horiz):
+                for xe in horiz[i:]:
+                    full[CN[xd] + CN[xe]] = sp.Function(f"tau_{CN[xd]}{CN[xe]}_{ell}",
+                                                        real=True)(*coords)
+            full["zz"] = sp.Function(f"tau_zz_{ell}", real=True)(*coords)
+            comp = lambda a, b_: full["".join(sorted(CN[a] + CN[b_]))]
+            Pi = sp.Function(f"Pi_{ell}", real=True)(*coords)
+            blue = SimpleNamespace(tau=full, uvel=uvel, w=w, rows=[], shallow_terms=[],
+                                   vertical=None, vertical_term=None)
             for i, xd in enumerate(horiz):
                 adv = sum(DERIV[xe](uvel[i] * uvel[j]) for j, xe in enumerate(horiz))
+                hterm = -(sum(DERIV[xe](comp(xd, xe)) for xe in horiz)
+                          - DERIV[xd](full["zz"])) / rl
                 ml.add_equation(
                     f"momentum_{CN[xd]}",
                     d.t(uvel[i]) + adv + d.z(uvel[i] * w)
-                    + gl * DERIV[xd](b + H) - d.z(tau[xd]) / rl - g_h[xd])
-            if retain_inplane:                       # add in-plane divergence pre-σ-map
-                # the hydrostatic g d(b + H) is then -sigma_zz = p - tau_zz (continuous
-                # across the interfaces)
-                add_inplane_viscous(ml, [getattr(ml, mn) for mn in MOM],
-                                    uvel, list(horiz), nu_s, normal_stress=True)
+                    + gl * DERIV[xd](b + H) - d.z(tau[xd]) / rl - g_h[xd] + hterm
+                    + (DERIV[xd](Pi) / rl if full_stress else 0))
+                blue.rows.append(getattr(ml, f"momentum_{CN[xd]}"))
+                blue.shallow_terms.append((blue.rows[-1], hterm))
+            if full_stress:
+                # vertical balance at the stress order (Marche 2007, (3.5)): d_z Pi = sum_e d_e
+                # tau_ez, integrated from z to the layer top, where Pi = Pi_top (the integral
+                # over the layers above, resolved at the assembly)
+                blue.vertical_term = -sum(DERIV[xe](tau[xe]) for xe in horiz) / rl
+                ml.add_equation("momentum_z", d.z(Pi) / rl + blue.vertical_term)
+                blue.vertical = ml.momentum_z
+                for c in (self.closures or []):
+                    c.register(ml)
+            moment_scaling(ml, blue, self.stress)
+            apply_full_tensor(self.closures or [], ml, blue)
+            if full_stress:
+                mz = ml.momentum_z
+                mz.apply(IntegrateZ(z, z, z_top, method="analytical"))
+                mz.apply({Pi.subs(z, z_top): Pi_top[ell]})
+                psol = mz.solve_for(Pi)
+                for mn in MOM:
+                    getattr(ml, mn).apply(psol)
+                mz.remove()
 
             def _kbc(iface, G):
                 """Kinematic boundary condition of layer `ell` at `iface` with interface
@@ -289,7 +326,12 @@ class MLSME(BaseModel):
             hyd = ml.parameters.g * h_l ** 2 / 2
             mom = {xd: [row.subs({hyd: HydrostaticPressure(hyd)}) for row in rows]
                    for xd, rows in mom.items()}
-            return cont, mom
+            # the layer's vertical velocity profile (kinematic, in q), for the interface traction
+            cov = {coeff_heads[i](j, t, *horiz): sp.Function(qname(xd, ell), real=True)(
+                j, t, *horiz) / h_l for i, xd in enumerate(horiz) for j in range(Nu + 1)}
+            w_prof = (sum(sp.expand(w_closure[j].rhs.subs(cov)) * legendre.eval(j, zeta)
+                          for j in range(Nu + 2)) if full_stress else None)
+            return cont, mom, w_prof
 
         layer_eqs = {ell: derive_layer(ell) for ell in range(1, N + 1)}
 
@@ -352,11 +394,17 @@ class MLSME(BaseModel):
         par = {lam_s: m.parameters.lambda_s, nu_s: m.parameters.nu}
         par.update({l_par[j - 1]: getattr(m.parameters, f"l_{j}")
                     for j in range(1, N)})
-        # shared in-plane interface traction sum_e sigma*_de d_e z_a (None without an in-plane
-        # closure): sigma* from the two layers' modal traces by the stress InterfaceFlux
-        # closure (default: mean); each layer's own part is already in its traction
-        from zoomy_core.model.models.closures import interface_inplane_traction
+        # with the full tensor: the shared, single-valued interface traction (stress
+        # InterfaceFlux closure, default mean; each layer's own in-plane part is in its trace)
+        # and the viscous pressure Pi at each layer top, the vertical integral over the layers
+        # above (Pi = 0 at the surface)
+        from zoomy_core.model.models.closures import interface_traction, full_tensor_closures
         from zoomy_core.model.models.material import ClosureState, ProfileField
+
+        def _assembled(e):
+            """A layer expression in the assembled state (fractions, global mass, G, parameters)."""
+            e = sp.expand(sp.sympify(e).subs(frac).doit())
+            return e.subs(sp.Derivative(ht, t), dth_glob).subs(G_sol).subs(par)
 
         def _layer_state(ell, side):
             """Closure state of layer `ell` over its modal profile, at local height `side`."""
@@ -364,14 +412,25 @@ class MLSME(BaseModel):
             prof = {HNAME[xd]: ProfileField(
                 sum(q_mod[ell][xd][k] / h_ell * inner_basis.eval(k, zeta)
                     for k in range(levels[ell - 1] + 1)), zeta) for xd in horiz}
+            prof["w"] = ProfileField(_assembled(layer_eqs[ell][2]), zeta)
             return ClosureState(prof, params=m.parameters, h=h_ell, x=x, zeta=zeta, at=side,
                                 horiz=list(horiz), base=b + sum(l_all[:ell - 1]) * ht)
-        iface_tr = {}
-        for a in range(1, N):
-            tr = interface_inplane_traction(self.closures, _layer_state(a, 1),
-                                            _layer_state(a + 1, 0), G_sol[Gf[a]])
-            if tr is not None:
+        iface_tr, Pi_sub, dt_grad = {}, {}, {}
+        if full_stress:
+            dt_grad = {sp.Derivative(ht, t, xe): sp.diff(dth_glob, xe).subs(par) for xe in horiz}
+            for a in range(1, N):
+                tr = interface_traction(self.closures, self.stress, _layer_state(a, 1),
+                                        _layer_state(a + 1, 0), G_sol[Gf[a]])
                 iface_tr[a] = [sp.expand(e.doit()) for e in tr]
+            full = full_tensor_closures(self.closures, self.stress)
+            Pi_sub[Pi_top[N]] = sp.S.Zero
+            for ell in range(N - 1, 0, -1):                 # Pi_top_l = Pi_bottom_(l+1)
+                s_ = _layer_state(ell + 1, None)
+                tez = [sum(c.expression(s_.bulk(alias={"u": HNAME[xe]})) for c in full)
+                       for xe in horiz]
+                vint = sp.integrate(sp.expand((s_.depth * sum(
+                    s_.dx_phys(tez[e], xe) for e, xe in enumerate(horiz))).doit()), (zeta, 0, 1))
+                Pi_sub[Pi_top[ell]] = sp.expand(Pi_sub[Pi_top[ell + 1]] - vint)
         m.add_equation("bottom", d.t(b))
         m.add_equation("continuity", sp.expand(glob_c.subs(par)))
         for ell in range(1, N + 1):
@@ -398,19 +457,26 @@ class MLSME(BaseModel):
                             mom = mom + (sgn * phik
                                          * (_ustar(a, xd) - _trace(ell, side, xd))
                                          * Gf[a] / rho_s / inner_basis.gram(k, k))
-                            if a in iface_tr:          # shared in-plane traction
+                            if a in iface_tr:          # shared interface traction
                                 mom = mom + (sgn * phik * iface_tr[a][horiz.index(xd)]
                                              / rho_s / inner_basis.gram(k, k))
                     mom = sp.expand(mom).subs(G_sol)
+                    if Pi_sub:                         # Pi at the layer top, derivatives evaluated
+                        mom = mom.xreplace({D: sp.Derivative(Pi_sub[D.expr], *D.args[1:]).doit()
+                                            for D in mom.atoms(sp.Derivative)
+                                            if D.expr in Pi_sub}).xreplace(Pi_sub)
                     enm = (f"momentum_{ell}_{k}" if dim == 2
                            else f"momentum_{CN[xd]}_{ell}_{k}")
-                    m.add_equation(enm, sp.expand(
-                        evaluate_time_derivatives(mom.subs(par), t)))
+                    row = sp.expand(evaluate_time_derivatives(mom.subs(par), t))
+                    if full_stress:
+                        # d_e of an interface's d_t (the w part of the shear): global mass
+                        row = sp.expand(row.xreplace(dt_grad))
+                    m.add_equation(enm, row)
 
         # KEEP-ALL: route the retained per-layer in-plane deviatoric-stress
         # divergence into conservative diffusion (mirrors ml_fullsme.py); b is a
         # STATE in `states` so topography couplings evaluate from the same stage.
-        if retain_inplane:
+        if full_stress:
             states = {ht, b}
             for ell in range(1, N + 1):
                 for xd in horiz:

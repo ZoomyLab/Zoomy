@@ -182,17 +182,6 @@ class MLVAMWD(BaseModel):
         lam_s, nu_s = sp.symbols("lambda_s nu", positive=True)
         rho_s = sp.Symbol("rho", positive=True)
 
-        # KEEP-ALL: a NewtonianInPlane closure RETAINS the per-layer in-plane
-        # deviatoric stress τ_de = ρν(∂_d u_e + ∂_e u_d) (the streamwise normal
-        # stress ml_fullvam.py keeps).  The retained bare ∂² is regrouped into
-        # conservative diffusion by the SAME generalized second-derivative
-        # absorption the §6c curvature step already runs (no separate
-        # package_viscous needed); b is a state so topography couplings stay
-        # live.  No-op by default → Gate-1 byte-identical.
-        from zoomy_core.model.models.equations import add_inplane_viscous
-        retain_inplane = any(getattr(c, "closes", None) == "in_plane"
-                             for c in (self.closures or []))
-
         # inner (per-layer) basis object: the per-layer modal reconstruction,
         # top-mode closures and interface traces all go through it, so the
         # bed/surface values φ_k(0)=(−1)^k / φ_k(1)=1 and the running integral
@@ -219,15 +208,17 @@ class MLVAMWD(BaseModel):
             gl, rl = ml.parameters.g, ml.parameters.rho
             p = sp.Function(f"p_{ell}", real=True)(*coords)
             from zoomy_core.model.models.equations import (
-                Mass, MomentumNonHydrostatic, small_slope_scaling)
+                Mass, MomentumNonHydrostatic, small_slope_scaling, moment_scaling)
             from zoomy_core.model.models.material import ClosureState
             from zoomy_core.model.models.closures import apply_layer_stress_closures
             ml.add_equation(Mass(ml, suffix=f"_{ell}"))
             # tau_name → tau_<ell> in 1-D (1 horizontal uses tau_name, ignores
             # suffix); ignored in 2-D where the blueprint mints per-direction
             # tau_xz_<ell>/tau_yz_<ell> (matches sname()).
-            ml.add_equation(MomentumNonHydrostatic(
-                ml, suffix=f"_{ell}", tau_name=f"tau_{ell}", free_surface=b + H))
+            blue = MomentumNonHydrostatic(
+                ml, suffix=f"_{ell}", tau_name=f"tau_{ell}", free_surface=b + H)
+            ml.add_equation(blue)
+            moment_scaling(ml, blue)            # shallow stress (the vertical shear only)
             uvel = [sp.Function(HNAME[xd] + f"_{ell}", real=True)(*coords)
                     for xd in horiz]
             w = sp.Function(f"w_{ell}", real=True)(*coords)
@@ -240,9 +231,6 @@ class MLVAMWD(BaseModel):
                 return KinematicBC(**kw)
             ml.add_equation("kbc_bot", _kbc(z_bot, G_bot))
             ml.add_equation("kbc_top", _kbc(z_top, G_top))
-            if retain_inplane:                       # in-plane divergence pre-σ-map
-                add_inplane_viscous(ml, [getattr(ml, mn) for mn in MOM],
-                                    uvel, list(horiz), nu_s)
             ml.apply(PDETransformation({z: (zeta, sp.Eq(z, z_bot + h_l * zeta))}))
 
             basis = Basis(symbol="phi", weight="c"); c = basis.weight

@@ -110,9 +110,11 @@ class InvertMassMatrix(Operation):
         # normalize the form: pull field-free factors out of Derivatives
         # (linearity) so ``∂_t(q/(2k+1))/(1/(2k+1))`` reads ``∂_t q``.
         def _pull(a):
-            """Pull field-free factors out of one Derivative (linearity)."""
+            """Pull field-free factors out of one Derivative (linearity); a factor in one of
+            its variables (`zeta` in `d_x d_zeta (zeta^2 q)`) stays inside.
+            """
             co, rest = a.expr.as_independent(
-                *a.expr.atoms(sp.Function), as_Mul=True)
+                *a.expr.atoms(sp.Function), *a.variables, as_Mul=True)
             return (co * sp.Derivative(rest, *a.args[1:])
                     if co != 1 and rest != 1 else a)
 

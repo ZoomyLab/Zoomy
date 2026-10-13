@@ -5780,6 +5780,12 @@ def _resolve_subs_safe(expr):
             deriv_vars.update(d.variables)
         if any(v in deriv_vars for v in vars_tup):
             continue
+        # a partial derivative at a point that depends on its variable: ``Subs(d_x u(x, z), z,
+        # b(x))`` is not ``d_x u(x, b(x))`` (which sympy reads as the total derivative)
+        if any(set(d.variables) & sp.sympify(val).free_symbols
+               for d in inner.atoms(sp.Derivative) if d.expr.has(*vars_tup)
+               for val in vals_tup):
+            continue
         bound_vars = set()
         for I in inner.atoms(sp.Integral):
             for lim in I.args[1:]:

@@ -277,6 +277,13 @@ class PDETransformation(Operation):
             if any(n is not o for n, o in zip(new_args, e.args)):
                 return e.func(*new_args)
             return e
+        if isinstance(e, sp.Subs) and self._is_vertical_subs(e):
+            # a vertical expression at an interface height, ``Subs(f(z), z, Z)`` (e.g. the
+            # physical ``d_x u`` at the surface from a vertical integral): map ``f`` at the free
+            # height, then evaluate it at the sigma height of ``Z``
+            (v,), (Z,) = e.variables, e.point
+            inner = self._rewrite(e.expr.xreplace({v: self._z}))
+            return inner.subs(self._zeta, sp.simplify((Z - self._b) / self._h))
         if e.args:
             new_args = tuple(self._rewrite(a) for a in e.args)
             if any(n is not o for n, o in zip(new_args, e.args)):
@@ -286,6 +293,17 @@ class PDETransformation(Operation):
         if e == self._z:
             return self._zeta * self._h + self._b
         return e
+
+    def _is_vertical_subs(self, e):
+        """`e` substitutes one variable at a z-free height, and that variable sits in the
+        vertical slot of a field of the model.
+        """
+        if len(e.variables) != 1 or self._z in e.point[0].free_symbols:
+            return False
+        v = e.variables[0]
+        return any(f.func in self._vertical_heads and len(f.args) > self._vertical_heads[f.func]
+                   and f.args[self._vertical_heads[f.func]] == v
+                   for f in e.expr.atoms(sp.core.function.AppliedUndef))
 
     def _apply_one_derivative(self, inner_expr, var):
         """Chain rule for one derivative: `d_z -> (1/h) d_zeta` and ``d_s -> d_s - (d_s(zeta h +

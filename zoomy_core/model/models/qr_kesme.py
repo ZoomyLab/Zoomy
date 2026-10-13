@@ -109,7 +109,7 @@ class QRKESME(SME):
         m.add_equation("bottom", d.t(b))
         m.add_equation(Mass(m))
         mom = Momentum(m); m.add_equation(mom)
-        moment_scaling(m, mom)
+        moment_scaling(m, mom, self.stress)
         uvel, w, p = mom.uvel, mom.w, mom.p
 
         # 1b — ADD the q-r transport equations (the only structural addition).

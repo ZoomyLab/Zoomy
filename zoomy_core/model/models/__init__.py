@@ -16,7 +16,7 @@ import SME``) without the cycle.
 """
 
 __all__ = ["SWE", "MalpassetSWE", "SME", "ElderSME", "KESME", "QRKESME",
-           "VAM", "MLSWE", "MLSME", "MLVAM", "ClosureState",
+           "VAM", "MLSWE", "MLSME", "MLVAM", "ClosureState", "Stress",
            # composable stress / interface closures (closures.py) — the ONLY
            # stress-closure path (the legacy MaterialModel was removed)
            "Closure", "Newtonian", "NavierSlip", "StressFree", "RoughWall",
@@ -25,6 +25,9 @@ __all__ = ["SWE", "MalpassetSWE", "SME", "ElderSME", "KESME", "QRKESME",
 
 
 def __getattr__(name):
+    if name == "Stress":
+        from zoomy_core.model.models.equations import Stress
+        return Stress
     if name == "SWE":
         from zoomy_core.model.models.swe import SWE
         return SWE

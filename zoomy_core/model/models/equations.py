@@ -9,6 +9,7 @@ import sympy as sp
 
 from zoomy_core import coords as C
 import zoomy_core.derivatives as d
+from zoomy_core.misc.options import Option
 
 # horizontal coord symbol → its directional derivative operator, velocity-field
 # name, and coordinate name string
@@ -93,7 +94,7 @@ def gravity_components(model, coords):
 
 class Momentum(Equation):
     """General 3-D momentum balance with the full symmetric stress tensor `tau_ij` declared as
-    closure variables and the pressure `p` as state.
+    closure variables (in every row, the vertical one included) and the pressure `p` as state.
     The shallow simplification is not built in; it is applied explicitly by `moment_scaling`.
     """
 
@@ -129,69 +130,55 @@ class Momentum(Equation):
                     + d.z(stress(xi, zc)))
             comps.append(d.t(uvel[i]) + adv + dop(xi)(p) / rho - sdiv / rho
                          - g_h[xi])
-        # vertical momentum (eliminated hydrostatically); − g_z = +g (flat)
+        # vertical momentum (eliminated hydrostatically); − g_z = +g (flat); its stress
+        # Σ_e ∂_e τ_ez + ∂_z τ_zz is one separate term (dropped by the shallow scaling)
+        vterm = -(sum(dop(xj)(stress(xj, zc)) for xj in horiz) + d.z(stress(zc, zc))) / rho
         comps.append(d.t(w) + sum(dop(xj)(uvel[j] * w) for j, xj in enumerate(horiz))
-                     + d.z(w * w) + d.z(p) / rho - g_z)
+                     + d.z(w * w) + d.z(p) / rho - g_z + vterm)
         model.declare_state(p)
         model.declare_closure(*tau.values())
         model.add_equation("momentum", (len(comps),), comps)
         self.uvel, self.w, self.p, self.tau = uvel, w, p, tau
+        self.rows = list(model.momentum)[:-1]
+        self.vertical, self.vertical_term = model.momentum.z, vterm
+        self.shallow_terms = [(self.vertical, vterm)]
         return model.momentum
 
 
-def moment_scaling(model, momentum):
-    """Shallow thin-layer scaling step: drop the in-plane stress components (both indices
-    horizontal) from the full-tensor `Momentum` and record it in the model history.
-
-    The vertical row of `Momentum` carries no stress, so the viscous normal stress
-    `tau_zz` of the same order never enters; with an in-plane closure the SME adds it to the
-    vertical row (`inplane_normal_stress`).
+class Stress(Option):
+    """How much of the bulk closure's deviatoric stress a moment model keeps; the rule is
+    applied by `moment_scaling`, per component, in physical coordinates before the sigma map.
     """
+    #: horizontal momentum: only the vertical shear `rho nu d_z u_e` of `tau_ez` (its `d_e w`
+    #: part, `tau_de` and `tau_zz` dropped); vertical balance hydrostatic (no stress)
+    shallow = "shallow"
+    #: the whole tensor `rho nu (grad u + grad u^T)`; in the vertical row without its eps^2
+    #: term `rho nu d_e d_e w` (Marche 2007 eqs. (3.2) -> (3.5),
+    #: https://doi.org/10.1016/j.euromechflu.2006.04.007)
+    full = "full"
+
+
+def moment_scaling(model, momentum, stress=Stress.shallow):
+    """Stress scaling step of the moment models: `Stress.shallow` drops, from the full-tensor
+    blueprint `momentum`, the in-plane stresses `tau_de`, `tau_zz` and the stress of the
+    vertical row; `Stress.full` keeps everything.  The choice is recorded as `model.stress`,
+    which the bulk closure reads for the `d_e w` part of `tau_ez` (`apply_stress_closures`).
+    """
+    stress = Stress(stress)
+    model.stress = stress
+    if stress == Stress.full:
+        model._history("moment_scaling", "momentum", description="full stress: nothing dropped")
+        return model
+    for eq, term in getattr(momentum, "shallow_terms", ()):
+        eq.expr = eq.expr - term
     drop = {s: sp.S.Zero for k, s in momentum.tau.items() if "z" not in k}
-    if drop:
+    if drop and any(sp.sympify(eq.expr).has(*drop) for eq in model._equations.values()
+                    if hasattr(eq, "expr")):
         model.apply(drop)
-        model._history("moment_scaling", "momentum",
-                       description=f"shallow scaling: drop in-plane stresses "
-                                   f"{sorted(k for k in momentum.tau if 'z' not in k)}")
-    return model
-
-
-def inplane_normal_stress(model, uvel, horiz, nu):
-    """Viscous normal stress `tau_zz = 2 rho nu d_z w = -2 rho nu div_h u` of the
-    incompressible Newtonian fluid (bulk, before the sigma-map).
-
-    Same order as the in-plane stress `add_inplane_viscous` keeps; the hydrostatic SME takes
-    it through the vertical momentum into the pressure, `p = rho g (eta - z) + tau_zz`.
-    """
-    rho = model.parameters.rho
-    return -2 * rho * nu * sum(_DERIV[xd](uvel[i]) for i, xd in enumerate(horiz))
-
-
-def add_inplane_viscous(model, momentum_eqs, uvel, horiz, nu, normal_stress=False):
-    """Keep-all complement of `moment_scaling`: add the incompressible Newtonian in-plane
-    deviatoric stress divergence `-(1/rho) sum_e d_e[rho nu (d_d u_e + d_e u_d)]` to each
-    horizontal momentum residual, before the sigma-map.
-
-    Args:
-        normal_stress: also add `(1/rho) d_d tau_zz` (`inplane_normal_stress`): the model's
-            pressure unknown is then `p - tau_zz = -sigma_zz`, zero at the free surface (VAM,
-            ML-SME, ML-VAM), and the in-plane stress `tau_de - delta_de tau_zz`.
-    """
-    rho = model.parameters.rho
-    dop = {C.x: d.x, C.y: d.y}
-    tzz = inplane_normal_stress(model, uvel, horiz, nu) if normal_stress else None
-    for i, xd in enumerate(horiz):
-        # τ_de = ρ ν (∂_d u_e + ∂_e u_d);  sdiv_d = Σ_e ∂_e τ_de
-        sdiv = sum(dop[xe](rho * nu * (dop[xd](uvel[horiz.index(xe)]) + dop[xe](uvel[i])))
-                   for xe in horiz)
-        if tzz is not None:
-            sdiv = sdiv - dop[xd](tzz)
-        eq = momentum_eqs[i]
-        eq.expr = eq.expr - sdiv / rho
-    model._history("add_inplane_viscous", "momentum",
-                   description="keep in-plane deviatoric stress (incompressible "
-                               "Newtonian τ_de = ρν(∂_d u_e + ∂_e u_d))"
-                               + (" minus δ_de τ_zz" if normal_stress else ""))
+    model._history("moment_scaling", "momentum",
+                   description=f"shallow scaling: drop in-plane stresses "
+                               f"{sorted(k for k in momentum.tau if 'z' not in k)}, tau_zz "
+                               f"and the stress of the vertical row")
     return model
 
 
@@ -296,8 +283,9 @@ def slope_aware_scaling(model, interfaces):
 
 class MomentumNonHydrostatic(Equation):
     """Non-hydrostatic momentum with the hydrostatic pressure pre-absorbed: horizontal rows
-    `momentum_<d>` carry `g d_d(eta)` and `p` is only the non-hydrostatic part, and the
-    vertical row `momentum_z` keeps `d_z p`.
+    `momentum_<d>` carry `g d_d(eta)` and `p` is only the non-hydrostatic part of `-sigma_zz`,
+    and the vertical row `momentum_z` keeps `d_z p`; the full stress tensor is declared, the
+    shallow form is applied by `moment_scaling`.
 
     Args:
         suffix: scopes the field names (multilayer column).
@@ -317,8 +305,9 @@ class MomentumNonHydrostatic(Equation):
         self.free_surface = free_surface
 
     def add_to(self, model):
-        """Declare `p` and one shear stress per horizontal direction and add the
-        `momentum_x` (`momentum_y`) and `momentum_z` equations.
+        """Declare `p` and the stress tensor (one shear stress per horizontal direction, the
+        in-plane `tau_de` and `tau_zz`) and add the `momentum_x` (`momentum_y`) and
+        `momentum_z` equations.
         """
         coords = model.coords
         t = coords[0]
@@ -343,10 +332,24 @@ class MomentumNonHydrostatic(Equation):
             h = sp.Function("h", positive=True)(t, *horiz)
             b = sp.Function("b", real=True)(t, *horiz)
             eta = b + h
+        # the rest of the tensor: in-plane tau_de and tau_zz (+ suffix); p is the
+        # non-hydrostatic part of -sigma_zz = p_total - tau_zz (zero at the surface), so tau_zz
+        # enters the horizontal rows and not the vertical one
+        full = dict(zip((_CNAME[xd] + "z" for xd in horiz), tau.values()))
+        for i, xd in enumerate(horiz):
+            for xe in horiz[i:]:
+                key = _CNAME[xd] + _CNAME[xe]
+                full[key] = sp.Function(f"tau_{key}" + s, real=True)(*coords)
+        full["zz"] = sp.Function("tau_zz" + s, real=True)(*coords)
+        comp = lambda a, b: full["".join(sorted(_CNAME[a] + _CNAME[b]))]
         model.declare_state(p)
         model.declare_closure(*tau.values())
+        model.declare_closure(*[f for k, f in full.items() if "z" not in k or k == "zz"])
+        self.rows, self.shallow_terms = [], []
         for i, xd in enumerate(horiz):
             adv = sum(_DERIV[xe](uvel[i] * uvel[j]) for j, xe in enumerate(horiz))
+            # in-plane stress relative to tau_zz, one separate term (dropped by the shallow scaling)
+            hterm = -(sum(_DERIV[xe](comp(xd, xe)) for xe in horiz) - _DERIV[xd](full["zz"])) / rho
             # −g_z·∂_d η is the pre-absorbed hydrostatic gradient (flat: +g·∂_d η);
             # −g_h[xd] is the in-plane (downslope) body force — the SAME vector
             # component Momentum carries, so an inclined-plane VAM falls out with
@@ -354,12 +357,17 @@ class MomentumNonHydrostatic(Equation):
             model.add_equation(
                 f"momentum_{_CNAME[xd]}",
                 d.t(uvel[i]) + adv + d.z(uvel[i] * w) - g_z * _DERIV[xd](eta)
-                + _DERIV[xd](p) / rho - d.z(tau[xd]) / rho - g_h[xd])
+                + _DERIV[xd](p) / rho - d.z(tau[xd]) / rho - g_h[xd] + hterm)
+            self.rows.append(getattr(model, f"momentum_{_CNAME[xd]}"))
+            self.shallow_terms.append((self.rows[-1], hterm))
+        vterm = -sum(_DERIV[xd](tau[xd]) for xd in horiz) / rho
         model.add_equation(
             "momentum_z",
             d.t(w) + sum(_DERIV[xd](uvel[i] * w) for i, xd in enumerate(horiz))
-            + d.z(w * w) + d.z(p) / rho)
-        self.uvel, self.w, self.p, self.tau = uvel, w, p, tau
+            + d.z(w * w) + d.z(p) / rho + vterm)
+        self.vertical, self.vertical_term = model.momentum_z, vterm
+        self.shallow_terms.append((self.vertical, vterm))
+        self.uvel, self.w, self.p, self.tau = uvel, w, p, full
         self.txz = tau[horiz[0]]
         return model
 
@@ -398,5 +406,5 @@ class Transport(Equation):
 
 __all__ = ["Equation", "Mass", "Momentum", "MomentumNonHydrostatic", "Transport",
            "moment_scaling", "small_slope_scaling", "frame_slope",
-           "add_inplane_viscous", "inplane_normal_stress", "package_viscous",
+           "Stress", "package_viscous",
            "gravity_components"]

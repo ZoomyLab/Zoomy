@@ -23,7 +23,8 @@ from zoomy_core.model.derivation.closure import GaussQuadrature
 from zoomy_core.model.derivation.system_extract import HydrostaticPressure
 from zoomy_core.model.operations import Multiply, ProductRule, KinematicBC
 from zoomy_core.model.models.walls import register_free_slip_wall
-from zoomy_core.model.models.equations import evaluate_time_derivatives
+from zoomy_core.model.models.equations import evaluate_time_derivatives, Stress
+from zoomy_core.misc.options import OptionParam
 from zoomy_core.systemmodel import SystemModel
 
 t, x, y, z = C.t, C.x, C.y, C.z
@@ -49,6 +50,9 @@ class MLVAM(BaseModel):
         "Total spatial dimension incl. vertical: 2 → (t,x,z), one horizontal "
         "(q_ℓ_i, r_ℓ_i, P_ℓ_i); 3 → (t,x,y,z), two horizontal (q_x_ℓ_i, "
         "q_y_ℓ_i; r/P stay scalar per layer)."))
+    stress = OptionParam(Stress, default=Stress.shallow, doc=(
+        "How much of the bulk closure's stress the model keeps (`moment_scaling`): "
+        "`Stress.shallow` the vertical shear only, `Stress.full` the whole Newtonian tensor."))
     closures = param.List(default=[], doc=(
         "Composable Closure pieces (closures.py): stress AND the interface "
         "transfer scheme (MeanInterface/UpwindInterface). Default interface "
@@ -102,16 +106,13 @@ class MLVAM(BaseModel):
         lam_s, nu_s = sp.symbols("lambda_s nu", positive=True)
         rho_s = sp.Symbol("rho", positive=True)
 
-        # KEEP-ALL: a NewtonianInPlane closure RETAINS the per-layer in-plane
-        # deviatoric stress τ_de = ρν(∂_d u_e + ∂_e u_d) (the streamwise normal
-        # stress ml_fullvam.py keeps).  The retained bare ∂² is regrouped into
-        # conservative diffusion by the SAME generalized second-derivative
-        # absorption the §6c curvature step already runs (modes k ≥ 1) and by
-        # package_viscous (mode 0); b is a state so topography couplings stay
-        # live.  No-op by default → Gate-1 byte-identical.
-        from zoomy_core.model.models.equations import add_inplane_viscous
-        retain_inplane = any(getattr(c, "closes", None) == "in_plane"
-                             for c in (self.closures or []))
+        # stress scaling (moment_scaling): Stress.shallow (default, Gate-1 byte-identical)
+        # keeps the vertical shear only; Stress.full keeps the whole tensor of the bulk
+        # closure (Newtonian), its retained bare ∂² regrouped into conservative diffusion by
+        # the SAME generalized second-derivative absorption the §6c curvature step already
+        # runs (modes k ≥ 1) and by package_viscous (mode 0); b is a state so topography
+        # couplings stay live.
+        full_stress = Stress(self.stress) == Stress.full
 
         # inner (per-layer) basis object: the per-layer modal reconstruction,
         # top-mode closures and interface traces all go through it, so the
@@ -140,15 +141,17 @@ class MLVAM(BaseModel):
             gl, rl = ml.parameters.g, ml.parameters.rho
             p = sp.Function(f"p_{ell}", real=True)(*coords)
             from zoomy_core.model.models.equations import (
-                Mass, MomentumNonHydrostatic, small_slope_scaling)
+                Mass, MomentumNonHydrostatic, small_slope_scaling, moment_scaling)
             from zoomy_core.model.models.material import ClosureState
-            from zoomy_core.model.models.closures import apply_layer_stress_closures
+            from zoomy_core.model.models.closures import (apply_layer_stress_closures,
+                                                          apply_full_tensor)
             ml.add_equation(Mass(ml, suffix=f"_{ell}"))
             # tau_name → tau_<ell> in 1-D (1 horizontal uses tau_name, ignores
             # suffix); ignored in 2-D where the blueprint mints per-direction
             # tau_xz_<ell>/tau_yz_<ell> (matches sname()).
-            ml.add_equation(MomentumNonHydrostatic(
-                ml, suffix=f"_{ell}", tau_name=f"tau_{ell}", free_surface=b + H))
+            blue = MomentumNonHydrostatic(
+                ml, suffix=f"_{ell}", tau_name=f"tau_{ell}", free_surface=b + H)
+            ml.add_equation(blue)
             uvel = [sp.Function(HNAME[xd] + f"_{ell}", real=True)(*coords)
                     for xd in horiz]
             w = sp.Function(f"w_{ell}", real=True)(*coords)
@@ -164,11 +167,13 @@ class MLVAM(BaseModel):
                 return KinematicBC(**kw)
             ml.add_equation("kbc_bot", _kbc(z_bot, G_bot))
             ml.add_equation("kbc_top", _kbc(z_top, G_top))
-            if retain_inplane:                       # in-plane divergence pre-σ-map
-                # the pressure unknown is p - tau_zz = -sigma_zz (continuous across the
-                # interfaces, zero at the surface)
-                add_inplane_viscous(ml, [getattr(ml, mn) for mn in MOM],
-                                    uvel, list(horiz), nu_s, normal_stress=True)
+            # the pressure unknown is the non-hydrostatic part of -sigma_zz (continuous across the
+            # interfaces, zero at the surface); the full tensor is filled before the σ-map
+            if full_stress:
+                for c in (self.closures or []):
+                    c.register(ml)
+            moment_scaling(ml, blue, self.stress)
+            apply_full_tensor(self.closures or [], ml, blue)
             ml.apply(PDETransformation({z: (zeta, sp.Eq(z, z_bot + h_l * zeta))}))
 
             basis = Basis(symbol="phi", weight="c"); c = basis.weight
@@ -458,10 +463,15 @@ class MLVAM(BaseModel):
         par.update({l_par[j - 1]: getattr(m.parameters, f"l_{j}")
                     for j in range(1, N)})
 
-        # shared in-plane interface traction (see MLSME): sigma* from the two layers' modal
-        # traces by the stress InterfaceFlux closure (default: mean)
-        from zoomy_core.model.models.closures import interface_inplane_traction
+        # with the full tensor: the shared, single-valued interface traction (see MLSME; stress
+        # InterfaceFlux closure, default mean)
+        from zoomy_core.model.models.closures import interface_traction
         from zoomy_core.model.models.material import ClosureState, ProfileField
+
+        def _assembled(e):
+            """A layer expression in the assembled state (fractions, global mass, G, parameters)."""
+            e = sp.expand(sp.sympify(e).subs(frac).doit())
+            return e.subs(sp.Derivative(ht, t), dth_glob).subs(G_sol).subs(par)
 
         def _layer_state(ell, side):
             """Closure state of layer `ell` over its modal profile, at local height `side`."""
@@ -469,13 +479,14 @@ class MLVAM(BaseModel):
             prof = {HNAME[xd]: ProfileField(
                 sum(q_mod[ell][xd][k] / h_ell * inner_basis.eval(k, zeta)
                     for k in range(Nu + 1)), zeta) for xd in horiz}
+            prof["w"] = ProfileField(_assembled(layer_eqs[ell][6]), zeta)
             return ClosureState(prof, params=m.parameters, h=h_ell, x=x, zeta=zeta, at=side,
                                 horiz=list(horiz), base=b + sum(l_all[:ell - 1]) * ht)
         iface_tr = {}
-        for a in range(1, N):
-            tr = interface_inplane_traction(self.closures, _layer_state(a, 1),
-                                            _layer_state(a + 1, 0), G_sol[Gf[a]])
-            if tr is not None:
+        if full_stress:
+            for a in range(1, N):
+                tr = interface_traction(self.closures, self.stress, _layer_state(a, 1),
+                                        _layer_state(a + 1, 0), G_sol[Gf[a]])
                 iface_tr[a] = [sp.expand(e.doit()) for e in tr]
         m.add_equation("bottom", d.t(b))
         m.add_equation("continuity", sp.expand(glob_c.subs(par)))
@@ -503,7 +514,7 @@ class MLVAM(BaseModel):
                             row = row + (sgn * phik
                                          * (_ustar(a, xd) - _trace(ell, side, xd))
                                          * Gf[a] / rho_s / mus[k])
-                            if a in iface_tr:          # shared in-plane traction
+                            if a in iface_tr:          # shared interface traction
                                 row = row + (sgn * phik * iface_tr[a][horiz.index(xd)]
                                              / rho_s / mus[k])
                     row = sp.expand(row).subs(G_sol)
@@ -588,13 +599,15 @@ class MLVAM(BaseModel):
                 eq.expr = e
         # mode 0 is skipped above: route its retained in-plane second derivatives into
         # conservative diffusion (as SME / VAM / ML-SME do)
-        if retain_inplane:
+        if full_stress:
             from zoomy_core.model.models.equations import package_viscous
-            states = {ht, b} | {q_mod[ell][xd][k] for ell in range(1, N + 1)
-                                for xd in horiz for k in range(Nu + 1)}
+            # and the w rows' d_e tau_ez (package_viscous evaluates their mode-0 brackets)
+            states = ({ht, b} | {q_mod[ell][xd][k] for ell in range(1, N + 1)
+                                 for xd in horiz for k in range(Nu + 1)}
+                      | {r for layer in r_mod for r in layer})
             for ell in range(1, N + 1):
-                for xd in horiz:
-                    eq = getattr(m, f"momentum_{CN[xd]}_{ell}_0")
+                for rn in [f"momentum_{CN[xd]}_{ell}_0" for xd in horiz] + [f"momentum_z_{ell}_0"]:
+                    eq = getattr(m, rn)
                     eq.expr = package_viscous(eq.expr, m.parameters.nu, states, space)
 
         # ── interpolate_to_3d + project_from_3d, PIECEWISE over the moving

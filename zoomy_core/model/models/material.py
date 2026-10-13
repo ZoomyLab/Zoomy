@@ -87,6 +87,12 @@ class ClosureState:
         """The bulk expression `e` at this state's trace `zeta = at` (`e` in the bulk)."""
         return e if self._at is None else e.subs(self._zeta, self._at)
 
+    def bulk(self, alias=None):
+        """This state in the bulk (`at=None`), optionally with a field-name `alias`."""
+        return ClosureState(self._fields, params=self._params, h=self._h, x=self._x,
+                            zeta=self._zeta, at=None, alias=alias, boundary_tag=self._btag,
+                            horiz=self._horiz, base=self._base)
+
     @property
     def horizontal(self):
         """Horizontal coordinates of the model."""
@@ -99,6 +105,12 @@ class ClosureState:
         f = self._fields
         names = [{_C.x: "u", _C.y: "v"}[c] for c in self._horiz]
         return [(f[n] if isinstance(f, dict) else getattr(f, n)).expr for n in names]
+
+    @property
+    def vertical_velocity(self):
+        """Bulk vertical velocity `w` (no alias), whatever the trace of this state."""
+        f = self._fields
+        return (f["w"] if isinstance(f, dict) else getattr(f, "w")).expr
 
     @property
     def interface_slopes(self):

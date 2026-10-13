@@ -21,6 +21,8 @@ from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
 from zoomy_core.model.operations import Multiply, ProductRule, KinematicBC
 from zoomy_core.model.operations import Integrate as IntegrateZ       # vertical (pressure) integral
 from zoomy_core.model.models.walls import register_free_slip_wall
+from zoomy_core.model.models.equations import Stress
+from zoomy_core.misc.options import OptionParam
 from zoomy_core.systemmodel import SystemModel
 
 t, x, y, z = C.t, C.x, C.y, C.z
@@ -55,6 +57,10 @@ class SME(BaseModel):
         "(non-polynomial material closures, e.g. bingham_navier_slip). "
         "0 (default) = off: an unresolvable integral then raises at "
         "extraction."))
+    stress = OptionParam(Stress, default=Stress.shallow, doc=(
+        "How much of the bulk closure's stress the model keeps (`moment_scaling`): "
+        "`Stress.shallow` the vertical shear only, `Stress.full` the whole Newtonian tensor "
+        "(Marche 2007 eq. (3.5))."))
     closures = param.List(default=[], doc=(
         "List of composable stress Closure pieces (closures.py), e.g. "
         "[Newtonian(), NavierSlip(), StressFree()]. An empty list leaves "
@@ -89,9 +95,9 @@ class SME(BaseModel):
             values.update({k: float(v) for k, v in user_vals.items()})
         from zoomy_core.model.models.equations import (
             Mass, Momentum, moment_scaling, small_slope_scaling,
-            slope_aware_scaling, add_inplane_viscous, package_viscous)
+            slope_aware_scaling, package_viscous)
         from zoomy_core.model.models.material import ClosureState
-        from zoomy_core.model.models.closures import apply_stress_closures
+        from zoomy_core.model.models.closures import apply_stress_closures, apply_full_tensor
 
         # dimension setup: dim=2 → (t,x,z), ONE horizontal direction (the
         # canonical K&T SME, q_0,q_1,…); dim=3 → (t,x,y,z), TWO horizontals
@@ -117,24 +123,19 @@ class SME(BaseModel):
 
         # 1 — full system, assembled from balance blueprints (equations.py).
         # Mass registers the horizontal velocity(ies) + w; Momentum (full stress
-        # tensor) registers p (state) + the shear stresses (closure) with the
-        # incline body force −g·e_x; moment_scaling drops the in-plane stresses.
+        # tensor) registers p (state) + the stresses (closure) with the
+        # incline body force −g·e_x; moment_scaling applies the stress setting:
+        # Stress.shallow (default, byte-identical to K&T) drops the in-plane stresses and the
+        # vertical-row stress; Stress.full keeps the whole tensor, which the bulk closure
+        # (Newtonian) fills in physical coordinates (apply_full_tensor) and the projection
+        # routes into conservative diffusion (package_viscous, §9b).
         m.declare_state(h)
         m.add_equation("bottom", d.t(b))
         m.add_equation(Mass(m))
         mom = Momentum(m); m.add_equation(mom)
-        # DEFAULT: drop the in-plane deviatoric stress (shallow scaling).  Always
-        # applied → the ν=0 / no-in_plane-closure path stays byte-identical to
-        # K&T.  A retain-viscous closure list (NewtonianInPlane) then ADDS the
-        # incompressible-Newtonian in-plane divergence back (τ_xx etc.); it σ-maps
-        # and projects with the shear, and is routed to conservative diffusion by
-        # package_viscous after the CoV (§9b).
-        moment_scaling(m, mom)
-        retain_inplane = any(getattr(c, "closes", None) == "in_plane"
-                             for c in (self.closures or []))
-        if retain_inplane:
-            add_inplane_viscous(m, [getattr(m.momentum, ax) for ax in HAXES],
-                                mom.uvel, list(horiz), m.parameters.nu)
+        moment_scaling(m, mom, self.stress)
+        full_stress = m.stress == Stress.full
+        tensor = apply_full_tensor(self.closures or [], m, mom)
         uvel, w, p = mom.uvel, mom.w, mom.p
         # hook: a turbulence subclass (KESME) declares its extra depth-averaged
         # state (k, ε) HERE so the bulk stress closure can read them in §5.
@@ -156,16 +157,13 @@ class SME(BaseModel):
         zdrop = {d.t(w): 0, d.z(w * w): 0}
         for i, xd in enumerate(horiz):
             zdrop[DERIV[xd](uvel[i] * w)] = 0
-        mz.apply(zdrop)
-        # with an in-plane closure the viscous normal stress tau_zz (same order) enters the
-        # vertical balance, d_z p = -rho g + d_z tau_zz, and the free surface carries the normal
-        # stress-free condition p(eta) = tau_zz(eta): p = rho g (eta - z) + tau_zz(z)
-        # (Marche 2007, eqs. (3.5), (3.10), without the shear term d_e tau_ez; ANALYSIS 45f).
+        # with the full stress the vertical balance keeps d_e tau_ez + d_z tau_zz (Marche 2007,
+        # (3.5)); the free surface carries the normal stress-free condition
+        # p(eta) = tau_zz(eta), so p = rho g (eta - z) - rho nu (div u(z) + div u(eta)), (3.11)
         tzz = None
-        if retain_inplane:
-            from zoomy_core.model.models.equations import inplane_normal_stress
-            tzz = inplane_normal_stress(m, uvel, list(horiz), m.parameters.nu)
-            mz.expr = mz.expr - d.z(tzz) / rho
+        if full_stress:
+            tzz = tensor["zz"]
+        mz.apply(zdrop)
         mz.apply(IntegrateZ(z, z, b + h, method="analytical"))
         # Free-surface pressure BC.  Default p(η)=0 (atmospheric).  A SURFACE
         # closure may instead prescribe a NORMAL traction ``{"normal": n·σn}``
@@ -326,8 +324,8 @@ class SME(BaseModel):
         # package_viscous regroups each into ∂(D·∂Q) − ∂(D)·∂Q (diffusive flux A
         # + NCP), which the extractor routes into diffusion_matrix.  b is a STATE
         # in `states`, so the topography couplings evaluate from the same stage
-        # (no flat-bed / frozen-b assumption).  No-op unless retain_inplane.
-        if retain_inplane:
+        # (no flat-bed / frozen-b assumption).  No-op unless full_stress.
+        if full_stress:
             q_heads = [getattr(m.functions, qn).head for qn in QNAME]
             states = {h, b}
             for qh in q_heads:
@@ -434,7 +432,7 @@ class SME(BaseModel):
             for i in range(n_eq):
                 for j in range(n_eq):
                     A[i, j] += normal[k] * sm.quasilinear_matrix[i, j, k]
-        # Retained-viscous (NewtonianInPlane) models: package_viscous leaves a
+        # Full-stress (Stress.full) models: package_viscous leaves a
         # first-derivative NCP remainder (∝ ν) in the quasilinear matrix, which
         # would pollute the HYPERBOLIC wave speed with the parabolic (diffusion)
         # terms — the CFL bound must be the INVISCID characteristic speed (the

@@ -7,7 +7,7 @@ regenerate with ``python scripts/regen_goldens.py`` and review the git diff
 (re-bless protocol: rederive tier green first when >1 family changes).
 
 T1 gate members (v3 delta): m01/m02 (SWE 1D/2D), m03 (SME l1), m07
-(SME+NewtonianInPlane), m09 (ML-SWE 2-layer), m12 (VAM Escalante-bump).
+(SME, stress=Stress.full), m09 (ML-SWE 2-layer), m12 (VAM Escalante-bump).
 Everything else is T2; m05/m13 (true 2-D derivations) are ``large``.
 """
 import pytest

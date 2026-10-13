@@ -22,6 +22,8 @@ from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
 from zoomy_core.model.derivation.closure import GaussQuadrature
 from zoomy_core.model.operations import Multiply, ProductRule, KinematicBC
 from zoomy_core.model.models.walls import register_free_slip_wall
+from zoomy_core.model.models.equations import Stress
+from zoomy_core.misc.options import OptionParam
 from zoomy_core.systemmodel import SystemModel
 
 t, x, y, z = C.t, C.x, C.y, C.z
@@ -46,6 +48,9 @@ class VAM(BaseModel):
         "Total spatial dimension incl. vertical: 2 → (t,x,z), one horizontal "
         "(q_i, r_i, P_i); 3 → (t,x,y,z), two horizontal (q_x_i, q_y_i, r_i, "
         "P_i).  Every projection/closure loops over the horizontal directions."))
+    stress = OptionParam(Stress, default=Stress.shallow, doc=(
+        "How much of the bulk closure's stress the model keeps (`moment_scaling`): "
+        "`Stress.shallow` the vertical shear only, `Stress.full` the whole Newtonian tensor."))
     closures = param.List(default=[], doc=(
         "Composable stress Closure pieces (closures.py).  Empty leaves tau_xz "
         "UNCLOSED (modal moments stay free)."))
@@ -64,10 +69,10 @@ class VAM(BaseModel):
         if user_vals is not None and hasattr(user_vals, "items"):
             values.update({k: float(v) for k, v in user_vals.items()})
         from zoomy_core.model.models.equations import (
-            Mass, MomentumNonHydrostatic, small_slope_scaling,
-            slope_aware_scaling, add_inplane_viscous, package_viscous)
+            Mass, MomentumNonHydrostatic, moment_scaling, small_slope_scaling,
+            slope_aware_scaling, package_viscous)
         from zoomy_core.model.models.material import ClosureState
-        from zoomy_core.model.models.closures import apply_stress_closures
+        from zoomy_core.model.models.closures import apply_stress_closures, apply_full_tensor
 
         # dimension setup (see SME): dim=2 → 1 horizontal (q_i,r_i,P_i,
         # byte-identical Escalante); dim=3 → 2 horizontal (q_x_i,q_y_i).  The
@@ -106,20 +111,15 @@ class VAM(BaseModel):
         m.add_equation("kbc_top", _kbc(b + h))
         m.add_equation("kbc_bot", _kbc(b))
 
-        # 1b — KEEP-ALL: with a NewtonianInPlane closure, RETAIN the in-plane
-        # deviatoric stress τ_de = ρν(∂_d u_e + ∂_e u_d) on each horizontal
-        # momentum (the streamwise normal stress the shallow VAM drops).  Added
-        # on the 3-D velocity BEFORE the σ-map, exactly like fullvam.py's
-        # tau_inplane; routed to conservative diffusion by package_viscous after
-        # the ω̃/regroup/curvature machinery (§6e).  No-op by default → Gate-1
-        # byte-identical.
-        retain_inplane = any(getattr(c, "closes", None) == "in_plane"
-                             for c in (self.closures or []))
-        if retain_inplane:
-            # normal_stress: the modal pressure is p - tau_zz = -sigma_zz, so the surface BC
-            # p(1) = 0 is the normal stress-free condition and the vertical row is unchanged
-            add_inplane_viscous(m, [getattr(m, mn) for mn in MOM],
-                                momblue.uvel, list(horiz), m.parameters.nu, normal_stress=True)
+        # 1b — stress scaling: Stress.shallow (default, byte-identical Escalante) keeps the
+        # vertical shear only; Stress.full keeps the whole tensor (the w rows get d_e tau_ez),
+        # filled by the bulk closure (Newtonian) on the 3-D velocity BEFORE the σ-map and routed
+        # to conservative diffusion by package_viscous after the ω̃/regroup/curvature machinery
+        # (§6e).  The pressure unknown is -sigma_zz minus the hydrostatic part, zero at the
+        # surface (MomentumNonHydrostatic).
+        moment_scaling(m, momblue, self.stress)
+        full_stress = m.stress == Stress.full
+        apply_full_tensor(self.closures or [], m, momblue)
 
         # 2 — σ-map:  z = b + h ζ
         m.apply(PDETransformation({z: (zeta, sp.Eq(z, b + h * zeta))}))
@@ -348,13 +348,16 @@ class VAM(BaseModel):
         # the ω̃/regroup/curvature machinery so it repackages the residual bare
         # second-derivatives C·∂²(q_i/h) (+ topography-coupled ν·q·∂b) into
         # ∂(D·∂Q) − ∂(D)·∂Q; b is a STATE in `states` so those evaluate from the
-        # same stage (no frozen-b).  No-op unless retain_inplane.
-        if retain_inplane:
+        # same stage (no frozen-b).  No-op unless full_stress.
+        if full_stress:
             states = {h, b}
             for qn in QNAME:
                 qh = getattr(m.functions, qn).head
                 states |= {qh(i, t, *horiz) for i in range(Nu + 1)}
-            for mn in MOM:
+            # the w rows too: their d_e tau_ez (first derivatives; package_viscous evaluates the
+            # mode-0 brackets of d_x d_zeta the projection leaves as integrals)
+            states |= {m.functions.r.head(i, t, *horiz) for i in range(Nu + 1)}
+            for mn in MOM + ["momentum_z"]:
                 for kk in range(Nu + 1):
                     getattr(m, mn)[kk].expr = package_viscous(
                         getattr(m, mn)[kk].expr, m.parameters.nu, states, list(horiz))

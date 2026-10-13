@@ -312,47 +312,50 @@ def test_vam1_advective_divergences_routed_as_flux(vam1):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# In-plane viscous h-column — first-principles G-matrix cross-check (REQ-176c)
+# Viscous h-column of the full stress — first-principles projection (REQ-176c)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def test_inplane_h_column_matches_G_matrix_first_principles():
-    """Build G_kj = int_0^1 zeta phi_j' phi_k dzeta from the shifted-Legendre
-    basis, form V[q_k<-h] = -4 nu (abar_k + (2k+1)(G abar)_k), and assert the
-    extracted diffusion column satisfies A[q_k<-h] = V[q_k<-h] — tying the
-    ViscousDiffusion extraction back to the first-principles derivation
-    (the closed forms themselves are pinned by the m07/m14 goldens).  In 1-D the
-    in-plane stress relative to the normal stress is tau_xx - tau_zz = 4 nu u_x
-    (Gerbeau-Perthame's 4 mu), and h d_x u = d_x q - (q/h) d_x h gives the minus sign."""
-    from zoomy_core.model.models.closures import NewtonianInPlane
+def test_inplane_h_column_matches_first_principles_projection():
+    """SME(2) with the full Newtonian stress (`Stress.full`): the extracted diffusion column
+    A[q_k<-h] equals the coefficient of d_xx h in an independent Galerkin projection of the
+    full 3-D stress, built here from the modal profile (flat bed, one horizontal):
+    (2k+1)[<phi_k, h d_x(tau_xx - tau_zz - Pi)> + traction - <phi_k', tau_xz>], tau_xx - tau_zz
+    = 4 nu u_x (Gerbeau-Perthame's 4 mu), tau_xz = nu (d_z u + d_x w) with the kinematic w,
+    Pi = -nu (u_x(eta) - u_x(z)) (Marche 2007 eq. (3.11)); physical derivatives
+    d_x f = f_x - zeta h_x / h f_zeta.  Only d_xx h is read: its coefficient is the h column
+    of A whatever the routing of the first-derivative parts."""
     from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
-    sm = SystemModel.from_model(SME(
-        level=2, dimension=2,
-        closures=[NewtonianInPlane(), Newtonian(), NavierSlip(), StressFree()]))
+    from zoomy_core.model.models.equations import Stress
+    N = 2
+    sm = SystemModel.from_model(SME(level=N, dimension=2, stress=Stress.full,
+                                    closures=[Newtonian(), NavierSlip(), StressFree()]))
     st = [str(s) for s in sm.state]
-    sym = {str(s): s for s in sm.state}
     A = sm.diffusion_matrix
     assert A is not None
-    hi = st.index("h")
-    hcol = {}
-    for i, name in enumerate(st):
-        if name.startswith("q"):
-            hcol[name] = sp.simplify(sp.sympify(A[i, hi, 0, 0]))
-    nu = sm.parameters.nu
-    h = sym["h"]
-    a = [sym[f"q_{k}"] / h for k in range(3)]
-    zeta = sp.Symbol("zeta", real=True)
-    N = 2
+    nu, h_s = sm.parameters.nu, {str(s): s for s in sm.state}["h"]
+    x, zeta = sp.Symbol("x", real=True), sp.Symbol("zeta", real=True)
+    H = sp.Function("H")(x)
+    Q = [sp.Function(f"Q{k}")(x) for k in range(N + 1)]
     leg = Legendre_shifted(level=N + 2)
     phi = [sp.expand(leg.eval(i, zeta)) for i in range(N + 1)]
-    # concrete zeta-polys with NO Derivative coefficients -> direct integration
-    G = sp.Matrix(N + 1, N + 1, lambda k, j: sp.integrate(
-        zeta * sp.diff(phi[j], zeta) * phi[k], (zeta, 0, 1)))
+    U = sum(Q[j] / H * phi[j] for j in range(N + 1))
+    Dx = lambda f: sp.diff(f, x) - zeta * sp.diff(H, x) / H * sp.diff(f, zeta)
+    s_ = sp.Dummy("s")
+    W = -sp.integrate((H * Dx(U)).subs(zeta, s_), (s_, 0, zeta))
+    sxx = 4 * nu * Dx(U)
+    Pi = -nu * (Dx(U).subs(zeta, 1) - Dx(U))
+    txz = nu * (sp.diff(U, zeta) / H + Dx(W))
+    hxx = sp.Derivative(H, (x, 2))
     for k in range(N + 1):
-        Ga_k = sum(G[k, j] * a[j] for j in range(N + 1))
-        V = -4 * nu * (a[k] + (2 * k + 1) * Ga_k)
-        assert hcol[f"q_{k}"] != 0, f"k={k}: h-column identically zero (the bug)"
-        assert sp.simplify(hcol[f"q_{k}"] - V) == 0, (
-            f"k={k}: A[q_{k}<-h]={hcol[f'q_{k}']} != V={sp.simplify(V)}")
+        op = (2 * k + 1) * (sp.integrate(sp.expand(phi[k] * H * (Dx(sxx) - Dx(Pi))), (zeta, 0, 1))
+                            + sxx.subs(zeta, 1) * sp.diff(H, x)
+                            - sp.integrate(sp.expand(sp.diff(phi[k], zeta) * txz), (zeta, 0, 1)))
+        sym = {str(s): s for s in sm.state}
+        V = sp.expand(op.doit()).coeff(hxx).subs({Q[j]: sym[f"q_{j}"] for j in range(N + 1)})
+        V = V.subs(H, h_s)
+        hc = sp.simplify(sp.sympify(A[st.index(f"q_{k}"), st.index("h"), 0, 0]))
+        assert hc != 0, f"k={k}: h-column identically zero"
+        assert sp.simplify(hc - V) == 0, f"k={k}: A[q_{k}<-h]={hc} != {sp.simplify(V)}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -429,10 +432,10 @@ def test_sigma3d_conservative_sigma_identity():
 
 def test_sigma3d_shallow_recovery():
     """Sigma3D keeps the FULL deviatoric stress by default (tau~_xx survives
-    as an honest aux); adding ShallowInPlane drops it and recovers the shallow
+    as an honest aux); stress=Stress.shallow drops it and recovers the shallow
     momentum EXACTLY (full momentum with tau~_xx -> 0)."""
     from zoomy_core.model.models.sigma3d import Sigma3D
-    from zoomy_core.model.models.closures import ShallowInPlane
+    from zoomy_core.model.models.equations import Stress
     from zoomy_core.model.basemodel import clear_derivation_model_cache
 
     clear_derivation_model_cache()
@@ -452,10 +455,10 @@ def test_sigma3d_shallow_recovery():
     assert sm_full._unclosed_closures == ["\\tilde{tau_xx}"]
 
     clear_derivation_model_cache()
-    shallow = Sigma3D(closures=[Newtonian(), NavierSlip(), StressFree(),
-                                ShallowInPlane()])
+    shallow = Sigma3D(stress=Stress.shallow,
+                      closures=[Newtonian(), NavierSlip(), StressFree()])
     mom_shallow = sp.sympify(shallow.derivation.momentum.expr)
     assert not [a for a in mom_shallow.atoms(sp.Function)
-                if "tau_xx" in str(a.func)], "ShallowInPlane must drop tau~_xx"
+                if "tau_xx" in str(a.func)], "Stress.shallow must drop tau~_xx"
     drop = {a: 0 for a in mom_full.atoms(sp.Function) if "tau_xx" in str(a.func)}
     assert sp.simplify(sp.expand((mom_shallow - mom_full.subs(drop)).doit())) == 0
