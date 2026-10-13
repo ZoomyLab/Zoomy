@@ -30,8 +30,9 @@ import zoomy_core.model.boundary_conditions as BC
 from zoomy_core.mesh import LSQMesh, ensure_lsq_mesh
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree, NewtonianInPlane
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel import SystemModel
+from zoomy_core.symsolver.settings import Imex
 
 WORK = os.environ.get("ZOOMY_GATE_WORK", "/tmp/zoomy_gates")
 NXS = (16, 32, 64)
@@ -147,7 +148,7 @@ def setup(nx, nu):
     for k in ("n", "n_m"):
         if hasattr(sm.parameter_values, k):
             setattr(sm.parameter_values, k, 0.0)
-    nsm = NumericalSystemModel.from_system_model(sm, reconstruction=ReconstructionSpec(order=2, limiter="none"))
+    nsm = NumericalSystemModel.from_system_model(sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.none))
     mesh = ensure_lsq_mesh(LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=nx, ny=nx), nsm)
     names = [str(s) for s in nsm.state]
     xc = np.asarray(mesh.cell_centers)[:2, :int(mesh.n_inner_cells)]
@@ -163,7 +164,7 @@ def step(backend, nx, nu, work=None):
     mesh, nsm, Q0 = setup(nx, nu)
     names = [str(s) for s in nsm.state]
     xc = np.asarray(mesh.cell_centers)[:2, :Q0.shape[1]]
-    kw = dict(time_end=DT, dt=DT, cfl_check_every=0, imex="lie", mood=False, **TIGHT)
+    kw = dict(time_end=DT, dt=DT, cfl_check_every=0, imex=Imex.lie, mood=False, **TIGHT)
     if backend in ("jax", "numpy"):
         import jax.numpy as jnp
         from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax

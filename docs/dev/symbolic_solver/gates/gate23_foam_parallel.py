@@ -17,6 +17,7 @@ import numpy as np
 from gate9_foam import FAILED, WORK, check
 from zoomy_foam.symsolver import SymbolicChorinSolverFoam, SymbolicHyperbolicSolverFoam
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_core.symsolver.settings import LinearSolver
 
 # serial foam vs JAX (L1 rel; bump1: max rel), N ranks vs serial (max rel)
 BOUND = dict(bump1=(1e-15, 1e-15), bump2=(4e-3, 2e-15), tri2=(6e-3, 4e-15),
@@ -57,7 +58,8 @@ def chorin(case):
     def foam(n):
         sf = SymbolicChorinSolverFoam(time_end=g7.DT * g7.N_STEPS, dt=g7.DT, cfl=0.9,
                                       time_order=to, nprocs=n,
-                                      linear_solver=os.environ.get("LINSOLVE", "hypre"))
+                                      linear_solver=LinearSolver(
+                                          os.environ.get("LINSOLVE", "hypre")))
         t0 = wall.perf_counter()
         t, Qf = sf.run(s.mesh_np, (s.nsm, s.press, s.corr), np.asarray(Q),
                        f"{WORK}/{case}_np{n}")

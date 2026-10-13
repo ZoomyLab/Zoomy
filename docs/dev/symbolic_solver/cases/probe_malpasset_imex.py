@@ -4,10 +4,11 @@ import malpasset as MP
 import zoomy_core.fvm.timestepping as ts
 from zoomy_jax.fvm.solver_imex_jax import IMEXSourceSolverJax
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_core.symsolver.settings import Imex
 DT = 0.01
 for n in (5, 20, 50):
     mesh, b = MP.build()
-    s = SymbolicHyperbolicSolverJax(time_end=n * DT, dt=DT, cfl=0.4, imex="lie")
+    s = SymbolicHyperbolicSolverJax(time_end=n * DT, dt=DT, cfl=0.4, imex=Imex.lie)
     Q, A = s.setup(mesh, b["nsm"]); _, Qn, _ = s.run(Q, A); Qn = np.asarray(Qn)
     mesh2, b2 = MP.build()
     o = IMEXSourceSolverJax(time_end=n * DT, compute_dt=ts.constant(DT), march_log_interval=0, **b2["fs_kwargs"])

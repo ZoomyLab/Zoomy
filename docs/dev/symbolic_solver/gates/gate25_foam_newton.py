@@ -6,10 +6,11 @@ import numpy as np
 import gate7_chorin as g7
 from gate9_foam import FAILED, WORK, check
 from zoomy_foam.symsolver import SymbolicChorinSolverFoam
+from zoomy_core.symsolver.settings import PressureSolve
 
-s, Q, _ = g7.new_solver(1, pressure_solve="newton")
+s, Q, _ = g7.new_solver(1, pressure_solve=PressureSolve.newton)
 out = {}
-for solve in ("linear", "newton"):
+for solve in PressureSolve:
     for n in [1] + [int(a) for a in sys.argv[1:]]:
         sf = SymbolicChorinSolverFoam(time_end=g7.DT * g7.N_STEPS, dt=g7.DT, cfl=0.9,
                                       pressure_solve=solve, nprocs=n)

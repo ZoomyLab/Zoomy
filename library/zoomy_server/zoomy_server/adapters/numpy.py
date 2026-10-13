@@ -28,7 +28,7 @@ class NumpyAdapter(SolverAdapter):
         from zoomy_core.mesh.fvm_mesh import FVMMesh
         from zoomy_core.fvm.solver_numpy import HyperbolicSolver, FreeSurfaceFlowSolver
         from zoomy_core.fvm.solver_imex_numpy import IMEXSolver, FSFIMEXSolver
-        from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+        from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
         from zoomy_core.misc.misc import Settings
         import zoomy_core.fvm.timestepping as timestepping
 
@@ -74,7 +74,7 @@ class NumpyAdapter(SolverAdapter):
             model,
             reconstruction=ReconstructionSpec(
                 order=settings.get("reconstruction_order", 1),
-                limiter=settings.get("limiter", "venkatakrishnan"),
+                limiter=Limiter(settings.get("limiter", "venkatakrishnan")),
             ),
         )
 

@@ -16,12 +16,13 @@ import jax.numpy as jnp
 import numpy as np
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
+from zoomy_core.symsolver.settings import LinearSolver
 from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
 
 T = float(os.environ.get("T_END", 0.5))
 for n in [int(a) for a in sys.argv[1:]] or [60, 2000]:
     out = {}
-    for ls in ("gmres", "amgx"):
+    for ls in (LinearSolver.gmres, LinearSolver.amgx):
         pred, press, corr = EB.split(_DT_SYMBOL)
         kw = {}
         if ls == "amgx" and os.environ.get("AMGX_CFG"):

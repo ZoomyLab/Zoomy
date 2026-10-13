@@ -47,7 +47,7 @@ default:
 Two spec objects:
 
 ```python
-ReconstructionSpec(order=1, limiter="venkatakrishnan",
+ReconstructionSpec(order=1, limiter=Limiter.venkatakrishnan,
                    free_surface_aware=False, positivity="")
 DiffusionSpec(enabled=True, scheme="crank_nicolson", nu=None)
 ```

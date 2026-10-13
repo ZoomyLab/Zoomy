@@ -21,6 +21,7 @@ from zoomy_core.model.models.closures import Newtonian, StressFree
 from zoomy_core.model.models.vam import VAM
 from zoomy_core.systemmodel.system_model import SystemModel, _DT_SYMBOL
 from gate7_chorin import pred_nsm
+from zoomy_core.symsolver.settings import LinearSolver
 
 
 class B:
@@ -69,7 +70,7 @@ def run(comm, solver):
 
 
 if __name__ == "__main__":
-    mode, solver, out = sys.argv[1], sys.argv[2], sys.argv[3]
+    mode, solver, out = sys.argv[1], LinearSolver(sys.argv[2]), sys.argv[3]
     ref = f"{out}/ref_{solver}.npy"
     if mode == "ref":
         Qs, names, wall_s, t = run(None, solver)

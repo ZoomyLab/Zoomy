@@ -17,13 +17,14 @@ import jax.numpy as jnp
 import numpy as np
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
+from zoomy_core.symsolver.settings import CflWaveSpeed
 from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
 
 T_END = float(sys.argv[1]) if len(sys.argv) > 1 else 5.0
 REPS = int(os.environ.get("REPS", 3))
 n = int(round(T_END / EB.DT))
 runs = {}
-for ws in ("cells", "faces"):
+for ws in (CflWaveSpeed.cells, CflWaveSpeed.faces):
     for every in (0, 1, 10):
         pred, press, corr = EB.split(_DT_SYMBOL)
         s = SymbolicChorinSolverJax(time_end=T_END, dt=EB.DT, cfl=0.9, pressure_tol=1e-9,

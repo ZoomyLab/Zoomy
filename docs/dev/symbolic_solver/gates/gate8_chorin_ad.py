@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 
 import gate7_chorin as g7
+from zoomy_jax.symsolver.solver import AdMode
 
 N = 16
 
@@ -24,8 +25,8 @@ def J(s, Q, Qaux, p, X):
 
 
 if __name__ == "__main__":
-    sf, Q, Qaux = solver("forward")
-    sr, _, _ = solver("reverse")
+    sf, Q, Qaux = solver(AdMode.forward)
+    sr, _, _ = solver(AdMode.reverse)
     p0, X0 = jnp.asarray(sf.parameters), sf.X
     names = list(sf.rt.parameter_names)
     ig = names.index("g")

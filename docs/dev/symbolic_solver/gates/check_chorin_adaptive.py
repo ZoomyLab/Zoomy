@@ -14,11 +14,13 @@ import numpy as np
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
 from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
+from zoomy_core.symsolver.settings import CflWaveSpeed
 
 T_END = float(sys.argv[1]) if len(sys.argv) > 1 else EB.T_END
 out = {}
-for label, kw in (("const dt", dict(dt=EB.DT)), ("adaptive cells", dict(cfl_wave_speed="cells")),
-                  ("adaptive faces", dict(cfl_wave_speed="faces"))):
+for label, kw in (("const dt", dict(dt=EB.DT)),
+                  ("adaptive cells", dict(cfl_wave_speed=CflWaveSpeed.cells)),
+                  ("adaptive faces", dict(cfl_wave_speed=CflWaveSpeed.faces))):
     pred, press, corr = EB.split(_DT_SYMBOL)
     s = SymbolicChorinSolverJax(time_end=T_END, cfl=0.9, pressure_tol=1e-9,
                                 pressure_maxit=200, **kw)

@@ -11,7 +11,7 @@ import jax.numpy as jnp
 from mpi4py import MPI
 import common as C
 from zoomy_jax.symsolver.runtime import geometry_of
-from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_jax.symsolver.solver import AdMode, SymbolicHyperbolicSolverJax
 
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
@@ -44,8 +44,8 @@ def bump_direction(X):
 def derivatives(make, t_end, dt, comm, mesh_ad):
     """(J, dJ/dg forward, reverse[, dJ/dX.v forward, reverse]); distributed:
     summed over ranks, on every rank."""
-    sf, Jpf, JXf = objective(make, "forward", t_end, dt, comm)
-    sr, Jpr, JXr = objective(make, "reverse", t_end, dt, comm)
+    sf, Jpf, JXf = objective(make, AdMode.forward, t_end, dt, comm)
+    sr, Jpr, JXr = objective(make, AdMode.reverse, t_end, dt, comm)
     part = sf.partition
     total = (lambda x: x) if part is None else (lambda x: comm.allreduce(x))
     p0 = sf.parameters.at[sf.rt.parameter_names.index("n")].set(0.03)

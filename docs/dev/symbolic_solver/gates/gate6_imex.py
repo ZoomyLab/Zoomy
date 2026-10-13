@@ -7,7 +7,8 @@ import jax.numpy as jnp
 import common as C
 from gate1_vs_solver_jax import old_march
 from zoomy_jax.fvm.solver_imex_jax import IMEXSourceSolverJax
-from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_jax.symsolver.solver import AdMode, SymbolicHyperbolicSolverJax
+from zoomy_core.symsolver.settings import CflWaveSpeed, Imex
 
 STIFF = dict(n=0.05, nu=0.01)
 
@@ -40,8 +41,8 @@ if __name__ == "__main__":
             t, n = t + dt, n + 1
         Qo = np.asarray(Q)
         mesh, nsm = make()
-        sn = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex="lie",
-                                         cfl_wave_speed="cells")   # as the old
+        sn = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex=Imex.lie,
+                                         cfl_wave_speed=CflWaveSpeed.cells)   # as the old
         Q0, A0 = sn.setup(mesh, nsm)
         _, Qn_, _ = sn.run(Q0, A0)
         Qn_ = np.asarray(Qn_)
@@ -53,9 +54,9 @@ if __name__ == "__main__":
     mesh, nsm = stiff(lambda: C.dambreak_1d(1, 2, nx=60))()
     names = list(SymbolicHyperbolicSolverJax().param.values())  # noqa (param check)
     res = {}
-    for mode in ("forward", "reverse"):
+    for mode in (AdMode.forward, AdMode.reverse):
         mesh, nsm = stiff(lambda: C.dambreak_1d(1, 2, nx=60))()
-        s = SymbolicHyperbolicSolverJax(time_end=0.05, dt=1e-3, imex="lie", ad_mode=mode,
+        s = SymbolicHyperbolicSolverJax(time_end=0.05, dt=1e-3, imex=Imex.lie, ad_mode=mode,
                                         ad_checkpoints=16)
         Q0, A0 = s.setup(mesh, nsm)
 

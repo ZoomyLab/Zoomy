@@ -21,9 +21,10 @@ from zoomy_core.mesh import LSQMesh
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import (ManningFriction, Newtonian,
                                               NewtonianInPlane, StressFree)
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
-from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_jax.symsolver.solver import AdMode, SymbolicHyperbolicSolverJax
+from zoomy_core.symsolver.settings import Imex
 
 NU = 1e-3
 TIGHT = dict(implicit_tol=1e-12, gmres_tol=1e-13, implicit_maxiter=10,
@@ -52,7 +53,7 @@ def viscous(dimension, order=2, nx=100):
         return q
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     mesh = (LSQMesh.create_1d(domain=(0.0, 1.0), n_inner_cells=nx) if dimension == 2
             else LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=nx, ny=nx))
     return mesh, nsm
@@ -69,7 +70,7 @@ def block_vs_legacy():
     from zoomy_jax.fvm.reconstruction_jax import DenseDiffusionOperatorJAX
     for label, make, _ in CASES:
         mesh, nsm = make()
-        s = SymbolicHyperbolicSolverJax(time_end=0.1, imex="lie", **TIGHT)
+        s = SymbolicHyperbolicSolverJax(time_end=0.1, imex=Imex.lie, **TIGHT)
         Q, A = s.setup(mesh, nsm)
         k, p, dt = s.rt.diffusion_matrix, s.parameters, 0.01
         new = np.asarray(jax.jit(lambda Q, A: s.module["implicit_diffusion"](
@@ -88,7 +89,7 @@ def block_vs_legacy():
 
 def march(make, t_end, comm, **kw):
     mesh, nsm = make()
-    s = SymbolicHyperbolicSolverJax(time_end=t_end, imex="lie", comm=comm, **kw)
+    s = SymbolicHyperbolicSolverJax(time_end=t_end, imex=Imex.lie, comm=comm, **kw)
     Q, A = s.setup(mesh, nsm)
     t0 = clock.perf_counter()
     t, Q, A = s.run(Q, A)
@@ -101,9 +102,9 @@ def ad(make, comm):
     """dJ/dnu, dJ/dg (J = sum h^2 + q^2 over the owned cells, ranks summed):
     forward vs central FD, reverse vs forward; fixed dt."""
     res = {}
-    for mode in ("forward", "reverse"):
+    for mode in (AdMode.forward, AdMode.reverse):
         mesh, nsm = make()
-        s = SymbolicHyperbolicSolverJax(time_end=0.01, dt=2e-3, imex="lie",
+        s = SymbolicHyperbolicSolverJax(time_end=0.01, dt=2e-3, imex=Imex.lie,
                                         ad_mode=mode, ad_checkpoints=8,
                                         comm=comm, **TIGHT)
         Q0, A0 = s.setup(mesh, nsm)

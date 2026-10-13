@@ -32,6 +32,7 @@ from zoomy_core.mesh import ensure_lsq_mesh
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 
 from gate41_diffusion_bc import NU, T_END, TIGHT, exact, heat, mesh_of  # noqa: F401
+from zoomy_core.symsolver.settings import Imex
 
 WORK = os.environ.get("ZOOMY_GATE_WORK", "/tmp/zoomy_gates")
 BOUND = {"expl": 1e-12, "impl": 1e-9}
@@ -56,7 +57,7 @@ def setup(kind, case, path, nx):
 def jax_run(kind, case, path, nx):
     mesh, nsm, Q0, dt = setup(kind, case, path, nx)
     s = SymbolicHyperbolicSolverJax(time_end=T_END, dt=dt, cfl_check_every=0,
-                                    imex="lie" if path == "impl" else False, **TIGHT)
+                                    imex=Imex.lie if path == "impl" else False, **TIGHT)
     _, A = s.setup(mesh, nsm)
     import jax.numpy as jnp
     t, Q, _ = s.run(jnp.asarray(Q0), A)
@@ -65,7 +66,7 @@ def jax_run(kind, case, path, nx):
 
 def cxx_run(backend, kind, case, path, nx, ranks=1):
     mesh, nsm, Q0, dt = setup(kind, case, path, nx)
-    kw = dict(time_end=T_END, dt=dt, cfl_check_every=0, imex="lie" if path == "impl" else False, **TIGHT)
+    kw = dict(time_end=T_END, dt=dt, cfl_check_every=0, imex=Imex.lie if path == "impl" else False, **TIGHT)
     if backend == "foam":
         from zoomy_foam.symsolver import SymbolicHyperbolicSolverFoam
         s = SymbolicHyperbolicSolverFoam(nprocs=ranks, **kw)

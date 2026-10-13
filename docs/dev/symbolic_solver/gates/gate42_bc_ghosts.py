@@ -58,7 +58,7 @@ import zoomy_core.model.boundary_conditions as BC
 from zoomy_core.mesh import LSQMesh, ensure_lsq_mesh
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import Newtonian, StressFree
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 from gate41_diffusion_bc import triangles
@@ -135,7 +135,7 @@ def build(kind, name):
                                     boundary_conditions=BC.BoundaryConditions(bcs)))
     assert [str(v) for v in sm.state] == names, sm.state
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=2, limiter="none"))
+        sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.none))
     if kind == "1d":
         mesh = LSQMesh.create_1d(domain=(0.0, 1.0), n_inner_cells=NX[kind])
     elif kind == "quad":

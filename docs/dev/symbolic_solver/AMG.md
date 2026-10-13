@@ -1,11 +1,11 @@
 # Optional: AmgX pressure solves (JAX-AMG)
 
-CPU: `pressure_linear_solver="pyamg"` -- PyAMG (Bell, Olson, Schroder 2022,
+CPU: `pressure_linear_solver=LinearSolver.pyamg` -- PyAMG (Bell, Olson, Schroder 2022,
 doi:10.21105/joss.04142; `pip install pyamg`) smoothed aggregation as the
 preconditioner of GMRES, on the host; default on the CPU when installed
 (`"auto"`).
 
-GPU: `SymbolicChorinSolverJax(pressure_linear_solver="amgx")` solves the Chorin
+GPU: `SymbolicChorinSolverJax(pressure_linear_solver=LinearSolver.amgx)` solves the Chorin
 pressure system with NVIDIA AmgX through JAX-AMG (Liu, Fan, Wang 2026,
 doi:10.1016/j.softx.2026.102966; AmgX: Naumov et al. 2015,
 doi:10.1137/140980260).  CUDA GPU only; optional (imported only when

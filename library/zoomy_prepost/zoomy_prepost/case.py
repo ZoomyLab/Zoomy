@@ -270,7 +270,7 @@ if "mesh" not in globals():
 if "settings" not in globals():
     settings = json.load(open("settings.json"))
 
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.fvm.solver_numpy import FreeSurfaceFlowSolver
 import zoomy_core.fvm.timestepping as ts
 from zoomy_core.misc.misc import Zstruct
@@ -283,7 +283,7 @@ nsm = NumericalSystemModel.from_system_model(
     model,
     reconstruction=ReconstructionSpec(
         order=_eff.get("reconstruction_order", 1),
-        limiter=_eff.get("limiter", "venkatakrishnan")))
+        limiter=Limiter(_eff.get("limiter", "venkatakrishnan"))))
 solver = FreeSurfaceFlowSolver(
     time_end=_eff.get("time_end", 0.1),
     compute_dt=ts.adaptive(CFL=_eff.get("cfl", 0.45)),

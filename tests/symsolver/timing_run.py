@@ -21,6 +21,7 @@ import numpy as np
 import timing_cases
 import timing_paths
 import timing_records
+from zoomy_core.symsolver.settings import LinearSolver
 
 
 @dataclass
@@ -57,7 +58,7 @@ def _jax(run, reps):
     cls = SymbolicChorinSolverJax if run.chorin else SymbolicHyperbolicSolverJax
     kw = dict(_solver_kw(run, cls), cfl_check_every=0)
     if run.chorin:
-        s = cls(pressure_linear_solver="auto", **kw)         # pyamg on a CPU, AmgX on a GPU
+        s = cls(pressure_linear_solver=LinearSolver.auto, **kw)         # pyamg on a CPU, AmgX on a GPU
         Q, A = s.setup(mesh, *systems)
     else:
         s = cls(**kw)
@@ -98,7 +99,7 @@ def _numpy(run, reps):
     cls = SymbolicChorinSolverNumpy if run.chorin else SymbolicHyperbolicSolverNumpy
     kw = dict(_solver_kw(run, cls), cfl_check_every=0)
     if run.chorin:
-        s = cls(pressure_linear_solver="auto", **kw)         # pyamg when installed
+        s = cls(pressure_linear_solver=LinearSolver.auto, **kw)         # pyamg when installed
         Q, A = s.setup(mesh, *systems)
     else:
         s = cls(**kw)

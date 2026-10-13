@@ -116,13 +116,13 @@ the same specs; you swap the solver import and pass a pre-built
 ```python
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.numerics.numerical_system_model import (
-    NumericalSystemModel, ReconstructionSpec)
+    Limiter, NumericalSystemModel, ReconstructionSpec)
 from zoomy_core.fvm import timestepping
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver   # JAX entry point
 
 mesh = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=N)
 nsm  = NumericalSystemModel.from_system_model(
-    sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod"))
+    sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod))
 
 solver  = HyperbolicSolver(time_end=t_end, compute_dt=timestepping.adaptive(CFL=0.9))
 Q, Qaux = solver.solve(mesh, nsm, write_output=False)

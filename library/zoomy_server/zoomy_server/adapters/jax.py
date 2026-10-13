@@ -30,7 +30,7 @@ class JaxAdapter(SolverAdapter):
         from zoomy_core.mesh.lsq_mesh import LSQMesh
         from zoomy_jax.fvm.solver_jax import HyperbolicSolver
         from zoomy_jax.fvm.solver_imex_jax import IMEXSourceSolverJax
-        from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+        from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
         from zoomy_core.misc.misc import Settings
         import zoomy_core.fvm.timestepping as timestepping
 
@@ -63,7 +63,7 @@ class JaxAdapter(SolverAdapter):
             model,
             reconstruction=ReconstructionSpec(
                 order=settings.get("reconstruction_order", 1),
-                limiter=settings.get("limiter", "venkatakrishnan"),
+                limiter=Limiter(settings.get("limiter", "venkatakrishnan")),
             ),
         )
 

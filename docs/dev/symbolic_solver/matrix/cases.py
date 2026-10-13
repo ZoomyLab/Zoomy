@@ -12,7 +12,9 @@ from zoomy_core.mesh import LSQMesh, ensure_lsq_mesh
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import (ManningFriction, NavierSlip, Newtonian,
                                               NewtonianInPlane, StressFree)
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import (Limiter, NumericalSystemModel, ReconstructedVariables,
+                                 ReconstructionSpec)
+from zoomy_core.symsolver.settings import Imex, PressureSolve, Projection
 from zoomy_core.systemmodel.system_model import SystemModel
 
 ALL = ("serial", "mpi2", "mpi4", "gpu1")
@@ -32,8 +34,8 @@ class Run:
     dt: float = None
     chorin: bool = False
     time_order: int = 1
-    pressure_solve: str = "linear"      # Chorin: "linear" | "newton"
-    imex: object = False                # False | "lie" | "ssp2" (zoomy_core Imex)
+    pressure_solve: PressureSolve = PressureSolve.linear   # Chorin: linear | newton
+    imex: object = False                # False | Imex.lie | Imex.ssp2
     solver: dict = None                 # further solver settings (tolerances)
     q0: object = None
     configs: tuple = ("serial",)
@@ -110,7 +112,7 @@ def lake(order, nx=40):
         return q
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     return LSQMesh.create_2d(domain=(0, 10, 0, 10), nx=nx, ny=nx), nsm
 
 
@@ -147,7 +149,7 @@ def channel(variant, order, nx, dim=2):
         return np.array([bed(x[0]), bernoulli(variant, np.array([x[0]]))[0], c["q"], 0.0][:len(names)])
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     if dim == 1:
         return LSQMesh.create_1d(domain=(0, LENGTH), n_inner_cells=nx), nsm
     return LSQMesh.create_2d(domain=(0, LENGTH, 0, WIDTH), nx=nx, ny=NY), nsm
@@ -164,8 +166,8 @@ def smooth_1d(order, nx):
         return q
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod",
-                                              variables="conservative"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod,
+                                              variables=ReconstructedVariables.conservative))
     return LSQMesh.create_1d(domain=(0, 10), n_inner_cells=nx), nsm
 
 
@@ -189,7 +191,7 @@ def periodic(order, x0):
         return np.array([0.0, h, h * P["u"], 0.0])
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     return LSQMesh.create_2d(domain=(0, P["L"], 0, 1.0), nx=P["nx"], ny=P["ny"]), nsm
 
 
@@ -292,7 +294,7 @@ def vam_wave(order, nx, friction=False):
         skip = {names.index("h"), names.index("b"), *map(int, press.equation_to_state_index)}
         nsm = NumericalSystemModel.from_system_model(
             sq, riemann=PositiveNonconservativeRusanov,
-            reconstruction=ReconstructionSpec(order=order, limiter="minmod"),
+            reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod),
             additional_systems=[press, corr],
             scaled_q_indices=[i for i in range(sq.n_variables) if i not in skip])
     mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.1), nx=nx, ny=2)   # quasi-1-D
@@ -310,8 +312,8 @@ def wave_q0(names, xc):
 
 # ── C31: IMEX time order, constant dt on a fixed mesh ──────────────────────
 #: scheme -> (imex, time_order); Lie with SSP-RK1 / RK2, IMEX-SSP2(2,2,2)
-C31_SWE = {"lie1": ("lie", 1), "lie2": ("lie", 2), "ssp2": ("ssp2", None)}
-C31_VAM = {"t1": ("lie", 1), "t2": ("lie", 2), "ssp2": ("ssp2", 2)}
+C31_SWE = {"lie1": (Imex.lie, 1), "lie2": (Imex.lie, 2), "ssp2": (Imex.ssp2, None)}
+C31_VAM = {"t1": (Imex.lie, 1), "t2": (Imex.lie, 2), "ssp2": (Imex.ssp2, 2)}
 C31_K = (0, 1, 2, 3)        # dt / 2^k
 C31_DT = dict(swe=4e-3, vam=8e-3)
 
@@ -337,7 +339,8 @@ def wave(dim, variant, n):
     """Periodic smooth density wave; variant o1, o2none, o2minmod."""
     import euler_common as E
     from zoomy_core.mesh import LSQMesh
-    order, lim = {"o1": (1, "minmod"), "o2none": (2, "none"), "o2minmod": (2, "minmod")}[variant]
+    order, lim = {"o1": (1, Limiter.minmod), "o2none": (2, Limiter.none),
+                  "o2minmod": (2, Limiter.minmod)}[variant]
     mesh = (LSQMesh.create_3d(domain=(0, 1, 0, 1, 0, 1), nx=n, ny=n, nz=n) if dim == 3
             else LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=n, ny=n))
     return mesh, E.nsm_of(E.wave_system(dim, VEL[dim]), order, limiter=lim)
@@ -386,7 +389,7 @@ def shear_exact(variant, y, t):
     return f(np.pi * y) * np.exp(-nu * np.pi ** 2 * t)
 
 
-def shear_decay(variant, ny, order=2, limiter="none"):
+def shear_decay(variant, ny, order=2, limiter=Limiter.none):
     """SWE (SME(0)) + NewtonianInPlane: h = 1, v = 0, u = u(y), periodic in x,
     walls at y = 0, 1.  Every x-derivative vanishes, so h stays 1, v stays 0 and
     the x-momentum equation is exactly u_t = nu u_yy (diffusion_matrix
@@ -462,7 +465,7 @@ def moment_decay(order=2):
         return q
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     return LSQMesh.create_1d(domain=(0, M["nx"]), n_inner_cells=M["nx"]), nsm   # dx 1: CFL-safe dt
 
 
@@ -519,7 +522,8 @@ PERTURB = 1e-14
 def _c8():
     tri = on_triangles(vam, 60, 6, (-1.5, 1.5, 0.0, 0.3))
     return [Run("vam", vam, 0.05, chorin=True, q0=vam_q0, configs=ALL),
-            Run("vam_newton", vam, 0.05, chorin=True, q0=vam_q0, pressure_solve="newton"),
+            Run("vam_newton", vam, 0.05, chorin=True, q0=vam_q0,
+                pressure_solve=PressureSolve.newton),
             Run("vam_t2", vam, 0.05, chorin=True, q0=vam_q0, time_order=2),
             Run("vam_tri", tri, 0.05, chorin=True, q0=vam_q0, backends=JF)]
 
@@ -572,11 +576,11 @@ def _c31():
            for s, (imex, to) in C31_SWE.items() for k in (*C31_K, "ref")]
     vam = [Run(f"vam_{s}_k{k}", partial(vam_friction, 60), WAVE["t_end"],
                dt=C31_DT["vam"] / 2 ** k, chorin=True, time_order=to, imex=imex, q0=wave_q0,
-               solver=dict(cfl_check_every=0, projection="increment"),
+               solver=dict(cfl_check_every=0, projection=Projection.increment),
                backends=JFA if (s, k) == ("ssp2", 0) else ("jax",))
            for s, (imex, to) in C31_VAM.items() for k in C31_K]
     pred = [Run(f"pred_ssp2_k{k}", partial(vam_friction, 60, True), WAVE["t_end"],
-                dt=C31_DT["vam"] / 2 ** k, imex="ssp2", q0=wave_q0,
+                dt=C31_DT["vam"] / 2 ** k, imex=Imex.ssp2, q0=wave_q0,
                 solver=dict(cfl_check_every=0), backends=("jax",)) for k in C31_K]
     return swe + vam + pred
 
@@ -622,11 +626,11 @@ def _c32():
     AMReX on ny 20; the controls ``ctrl`` (walls act), ``inviscid`` and ``inviscid_split``
     (JAX)."""
     return [Run(f"{v}_n{ny}", partial(shear_decay, v, ny), SHEAR["t_end"],
-                dt=1.0 / (ny * SHEAR["steps"]), imex="lie", solver=IMPLICIT,
+                dt=1.0 / (ny * SHEAR["steps"]), imex=Imex.lie, solver=IMPLICIT,
                 backends=JFA if ny == SHEAR["ny"][0] else ("jax",))
             for v in ("noslip", "free", "noslip_split") for ny in SHEAR["ny"]] + [
         Run(f"{v}_n20", partial(shear_decay, v, SHEAR["ny"][0]), SHEAR["t_end"],
-            dt=1.0 / (SHEAR["ny"][0] * SHEAR["steps"]), imex="lie", solver=IMPLICIT,
+            dt=1.0 / (SHEAR["ny"][0] * SHEAR["steps"]), imex=Imex.lie, solver=IMPLICIT,
             backends=("jax",)) for v in ("ctrl", "inviscid", "inviscid_split")]
 
 
@@ -635,7 +639,7 @@ def _c33():
     explicit step) at constant dt = dt0 / 2^k."""
     M = MOMENT
     return [Run(f"{integ}_k{k}", partial(moment_decay, 2), M["t_end"], dt=M["dt0"] / 2 ** k,
-                imex="lie" if integ == "imex" else False, solver=IMPLICIT)
+                imex=Imex.lie if integ == "imex" else False, solver=IMPLICIT)
             for integ in ("imex", "rk2") for k in M["ks"]]
 
 
@@ -698,10 +702,10 @@ CASES = {
             [Run(f"o{o}_x{x0}", partial(periodic, o, x0), PERIODIC["t_end"],
                  configs=("serial", "mpi2", "mpi4")) for o in (1, 2) for x0 in (2.5, 7.5)]),
     "C14": ("IMEX: SWE + Manning friction (implicit source), bump in flow, t = 0.3",
-            [Run(f"o{o}_n{n}", partial(imex_bump, o, n), 0.3, imex="lie",
+            [Run(f"o{o}_n{n}", partial(imex_bump, o, n), 0.3, imex=Imex.lie,
                  configs=ALL5 if (o, n) == (2, 40) else ("serial",))
              for o in (1, 2) for n in (20, 40, 80)]
-            + [Run("ref_n160", partial(imex_bump, 2, 160), 0.3, imex="lie", backends=("jax",))]),
+            + [Run("ref_n160", partial(imex_bump, 2, 160), 0.3, imex=Imex.lie, backends=("jax",))]),
     "C15": ("AD (JAX): jvp vs central FD, reverse vs forward, dJ/dg", _c15()),
     "C16": ("preCICE: coupled (2 x 100 cells, window 1e-3, O1) vs single domain", _c16()),
     "C17": ("AMR (AMReX, gate 37): covering, static patch, reflux, lake, regrid", _c17()),
@@ -729,7 +733,7 @@ CASES = {
             + [Run(f"{v}_n{n}", partial(wave, 2, v, n), 0.1, cfl=0.45, backends=EU)
                for v in ("o1", "o2none", "o2minmod") for n in (16, 32, 64)]),
     "C26": ("implicit diffusion (IMEX, NewtonianInPlane, nu 1e-3; gate 31), 20^2, t 0.05",
-            [Run("visc", _viscous, 0.05, imex="lie", solver=dict(
+            [Run("visc", _viscous, 0.05, imex=Imex.lie, solver=dict(
                 implicit_tol=1e-12, gmres_tol=1e-13, implicit_maxiter=10, gmres_maxiter=60),
                 configs=ALL5)]),
     "C27": ("SSP-RK time order 1 / 2 / 3 (gate 40): forced SWE, exact ODE and a smooth wave", _c27()),

@@ -35,7 +35,7 @@ import sympy as sp
 
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.symsolver.discretization import time as rk_time
 from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
@@ -87,7 +87,7 @@ def run(mesh, nsm, time_end, dt, time_order, **kw):
 def ode():
     """Exact solution; the stage times of SSP_RK are checked by a control."""
     T = 1.0
-    mesh, nsm, ih = forced_swe(1, "minmod", 8, (0.0, 1.0), lambda x: 1.0)
+    mesh, nsm, ih = forced_swe(1, Limiter.minmod, 8, (0.0, 1.0), lambda x: 1.0)
     exact = np.exp(A_F * (np.sin(W_F * T + PHASE) - np.sin(PHASE)) / W_F)
     steps = (16, 32, 64)
 
@@ -221,8 +221,8 @@ def par():
 if __name__ == "__main__":
     parts = sys.argv[1:] or ["ode", "wave"]
     for part in parts:
-        {"ode": ode, "wave": lambda: wave(1, "minmod"),
-         "o2": lambda: wave(2, "venkatakrishnan"), "chorin": chorin,
+        {"ode": ode, "wave": lambda: wave(1, Limiter.minmod),
+         "o2": lambda: wave(2, Limiter.venkatakrishnan), "chorin": chorin,
          "chorin_orders": chorin_orders, "par": par}[part]()
     print("G40_FAIL " + "; ".join(failed) if failed else "G40_DONE", flush=True)
     sys.exit(1 if failed else 0)

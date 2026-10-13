@@ -9,7 +9,8 @@ from zoomy_core.mesh import LSQMesh
 from zoomy_core.model.boundary_conditions import BoundaryConditions, FromModel
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import (
+    Limiter, NumericalSystemModel, ReconstructedVariables, ReconstructionSpec)
 from zoomy_core.systemmodel.system_model import SystemModel
 
 
@@ -31,7 +32,7 @@ def bump(order=2, nx=40):
 
     # 3. NumericalSystemModel: reconstruction, Riemann solver (default: Rusanov).
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter="minmod",
-                                              variables="conservative"))
+        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod,
+                                              variables=ReconstructedVariables.conservative))
     mesh = LSQMesh.create_2d(domain=(0, 10, 0, 10), nx=nx, ny=nx)
     return mesh, nsm

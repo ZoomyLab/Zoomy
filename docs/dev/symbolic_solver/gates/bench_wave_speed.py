@@ -17,6 +17,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "cases"))
 import zoomy_jax.symsolver.runtime as RT  # noqa: E402
+from zoomy_core.symsolver.settings import CflWaveSpeed, Imex
 
 REPS = int(os.environ.get("REPS", 3))
 _orig = RT.runtime
@@ -88,7 +89,7 @@ CASES = {
             hyperbolic(C.dry_dambreak_2d, 0.02, 0.45,
                        mood=True)),
     "imex": ("IMEX SME(1) 1-D dam break O2, 100 cells",
-             hyperbolic(__import__("gate6_imex").CASES[0][1], 0.1, 0.9, imex="lie",
+             hyperbolic(__import__("gate6_imex").CASES[0][1], 0.1, 0.9, imex=Imex.lie,
                         mood=False)),
     "chorin_check1": ("Chorin VAM(1) bump, const dt, check every step", chorin(True, 1)),
     "chorin_check10": ("Chorin VAM(1) bump, const dt, check every 10th", chorin(True, 10)),
@@ -96,7 +97,7 @@ CASES = {
     "chorin_adaptive_rk2": ("Chorin VAM(1) bump, adaptive dt, time_order 2",
                             chorin(False, time_order=2)),
     "malpasset": ("Malpasset SME(1) O1, 26k cells, t=0.5", malpasset(False)),
-    "malpasset_imex": ("Malpasset SME(1) O1, IMEX, t=0.5", malpasset("lie")),
+    "malpasset_imex": ("Malpasset SME(1) O1, IMEX, t=0.5", malpasset(Imex.lie)),
 }
 
 
@@ -118,7 +119,7 @@ if __name__ == "__main__":
     for key in sys.argv[1:] or list(CASES):
         name, build = CASES[key]
         runs = {}
-        for ws in ("cells", "faces"):
+        for ws in (CflWaveSpeed.cells, CflWaveSpeed.faces):
             f = build(ws)
             t0 = wall.perf_counter()
             out = f()
@@ -131,8 +132,8 @@ if __name__ == "__main__":
                 jax.block_until_ready(f())
                 best[ws] = min(best[ws], wall.perf_counter() - t0)
         n = {ws: steps(build, ws)[0] for ws in runs}
-        Qc, Qf = (np.asarray(runs[ws][1][1]) for ws in ("cells", "faces"))
-        tc, tf = (float(runs[ws][1][0]) for ws in ("cells", "faces"))
+        Qc, Qf = (np.asarray(runs[ws][1][1]) for ws in CflWaveSpeed)
+        tc, tf = (float(runs[ws][1][0]) for ws in CflWaveSpeed)
         d = np.abs(Qc - Qf).max()
         print(f"{name:48s} cells {best['cells']:7.3f}s {n['cells']:5d} st "
               f"{1e3 * best['cells'] / n['cells']:7.3f} ms/st | faces {best['faces']:7.3f}s "

@@ -22,6 +22,7 @@ from gate9_foam import FAILED, WORK, check
 from gate21_parallel_chorin import B, NX, T
 from zoomy_foam.symsolver import SymbolicChorinSolverFoam
 from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
+from zoomy_core.symsolver.settings import LinearSolver
 
 # serial vs JAX (L1 rel): same derivative fit (vertex ring + ghosts, REQ-174b
 # boundary rows), O1 predictor -> the pressure tolerance (NX 60: 2.8e-6);
@@ -55,7 +56,7 @@ def channel_triangles(nsm, nx=NX, ny=NX // 10, domain=(-1.5, 1.5, 0.0, 0.3)):
 
 def setup():
     pred, press, corr = B.split()
-    s = SymbolicChorinSolverJax(time_end=T, cfl=0.9, pressure_linear_solver="gmres")
+    s = SymbolicChorinSolverJax(time_end=T, cfl=0.9, pressure_linear_solver=LinearSolver.gmres)
     nsm = pred_nsm(pred, press, corr)
     Q, A = s.setup(channel_triangles(nsm, NXT, NXT // 10), nsm, press, corr)
     names = [str(v) for v in s.nsm.state]
@@ -83,7 +84,8 @@ if __name__ == "__main__":
     ref = np.load(f"{WORK}/c2dtri{NXT}_ref.npy")
     for n in map(int, sys.argv[2:]):
         sf = SymbolicChorinSolverFoam(time_end=T, cfl=0.9, nprocs=n,
-                                      linear_solver=os.environ.get("LINSOLVE", "hypre"))
+                                      linear_solver=LinearSolver(
+                                          os.environ.get("LINSOLVE", "hypre")))
         t1 = wall.perf_counter()
         t, Qf = sf.run(s.mesh_np, (s.nsm, s.press, s.corr), np.asarray(Q), f"{WORK}/c2dtri{NXT}_np{n}")
         w = wall.perf_counter() - t1

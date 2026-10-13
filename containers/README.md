@@ -76,7 +76,7 @@ AmgX, PyAMG in `docs/book/references/third_party.bib`).
 
 ## hypre for the AMReX pressure solve
 
-The AMReX symbolic solvers (`zoomy_amrex.symsolver`, `linear_solver="hypre"`, the default of
+The AMReX symbolic solvers (`zoomy_amrex.symsolver`, `linear_solver=LinearSolver.hypre`, the default of
 the Chorin template) link a static hypre: BoomerAMG-preconditioned FlexGMRES on the assembled,
 cell-block-scaled pressure operator (`Source/symsolver/rt_amrex.H`, `hypre_solve`).  The
 images do not ship hypre yet; `zoomy_amrex/build_hypre_cuda.sh` builds hypre 3.2.0 inside them:

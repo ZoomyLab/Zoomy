@@ -12,6 +12,7 @@ import common as C
 import jax
 import jax.numpy as jnp
 import numpy as np
+from zoomy_core.symsolver.settings import CflWaveSpeed, Imex
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 N_CHORIN, T_MALP = 1280, 0.5          # every case < 5 min (compile + 2 x 4 runs)
@@ -54,7 +55,7 @@ def hyperbolic(make, t_end, cfl, old_kw=None, new_kw=None, imex=False):
     old, oc, ot = timed(lambda: o.run_simulation(Qo, Ao, write_output=False))
     mesh, nsm = make()
     s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, imex=imex,
-                                    **{"mood": False, "cfl_wave_speed": "cells",
+                                    **{"mood": False, "cfl_wave_speed": CflWaveSpeed.cells,
                                        **(new_kw or {})})   # matched with the old
     Q, A = s.setup(mesh, nsm)
     new, nc, nt = timed(lambda: s.run(Q, A))
@@ -106,7 +107,7 @@ def malpasset(imex):
     Qo, Ao = o.setup_simulation(mesh, b["nsm"])
     old, oc, ot = timed(lambda: o.run_simulation(Qo, Ao, write_output=False))
     mesh, b = MP.build()
-    s = SymbolicHyperbolicSolverJax(time_end=T_MALP, cfl=0.4, cfl_wave_speed="cells", 
+    s = SymbolicHyperbolicSolverJax(time_end=T_MALP, cfl=0.4, cfl_wave_speed=CflWaveSpeed.cells, 
                                     imex=imex)
     Q, A = s.setup(mesh, b["nsm"])
     new, nc, nt = timed(lambda: s.run(Q, A))
@@ -131,10 +132,10 @@ CASES = {
                                __import__("gate1_vs_solver_jax").eta_kw(C.dry_dambreak_2d),
                                dict(mood=True))),
     "imex": ("IMEX SME(1) 1-D dam break O2, 100 cells, t=0.1",
-             lambda: hyperbolic(__import__("gate6_imex").CASES[0][1], 0.1, 0.9, imex="lie")),
+             lambda: hyperbolic(__import__("gate6_imex").CASES[0][1], 0.1, 0.9, imex=Imex.lie)),
     "chorin": ("Chorin VAM(1) bump, 60 cells, 1280 steps", chorin),
     "malpasset": ("Malpasset SME(1) O1, 26k cells, t=0.5, explicit", lambda: malpasset(False)),
-    "malpasset_imex": ("Malpasset SME(1) O1, 26k cells, t=0.5, IMEX", lambda: malpasset("lie")),
+    "malpasset_imex": ("Malpasset SME(1) O1, 26k cells, t=0.5, IMEX", lambda: malpasset(Imex.lie)),
 }
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ import zoomy_core.model.initial_conditions as IC
 from euler_common import TAGS, conserved, nsm_of
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.systemmodel.euler import compressible_euler
-from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+from zoomy_jax.symsolver.solver import AdMode, SymbolicHyperbolicSolverJax
 
 
 def make(order, n=10):
@@ -41,8 +41,8 @@ def objective(order, ad_mode, t_end, dt):
 
 for label, order, dt in (("O1, constant dt", 1, 5e-3), ("O1, adaptive dt", 1, None),
                          ("O2 + MOOD, constant dt", 2, 5e-3)):
-    Jf, p0, names = objective(order, "forward", 0.1, dt)
-    Jr, _, _ = objective(order, "reverse", 0.1, dt)
+    Jf, p0, names = objective(order, AdMode.forward, 0.1, dt)
+    Jr, _, _ = objective(order, AdMode.reverse, 0.1, dt)
     i = names.index("gamma")
     e = jnp.zeros_like(p0).at[i].set(1.0)
     d = float(jax.jvp(Jf, (p0,), (e,))[1])

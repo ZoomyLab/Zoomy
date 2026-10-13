@@ -9,17 +9,17 @@ from the same expressions.
 **What you write:**
 
 ```python
-from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 nsm = NumericalSystemModel.from_system_model(
-    sm, reconstruction=ReconstructionSpec(order=2, limiter="minmod"))
+    sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod))
 ```
 
 | option | default | meaning |
 |---|---|---|
 | `reconstruction.order` | `1` | 1: piecewise constant; 2: LSQ gradients, limited |
-| `reconstruction.limiter` | `"venkatakrishnan"` | also `"minmod"`, `"barth_jespersen"`, `"none"`; per row: `limiters={"b": "none"}` |
-| `reconstruction.variables` | `"model"` | `"model"`: the model's reconstruction variables (SWE/SME: $\eta = b + h$, $u = q/h$); `"conservative"`: $Q$ |
-| `reconstruction.bed` | `"derived"` | bed at the faces from $\eta - h$ (lake at rest, $h_f \ge 0$); `"reconstructed"` |
+| `reconstruction.limiter` | `Limiter.venkatakrishnan` | also `minmod`, `barth_jespersen`, `none`; per row: `limiters={"b": Limiter.none}` |
+| `reconstruction.variables` | `ReconstructedVariables.model` | `model`: the model's reconstruction variables (SWE/SME: $\eta = b + h$, $u = q/h$); `conservative`: $Q$ |
+| `reconstruction.bed` | `BedReconstruction.derived` | bed at the faces from $\eta - h$ (lake at rest, $h_f \ge 0$); `reconstructed` |
 | `reconstruction.ties` | `{}` | `{row: lead}`: a row is limited at least as much as its lead |
 | `riemann` | from the model's tags, else `NonconservativeRusanov` (C1 bump: `PositiveNonconservativeRusanov`) | `zoomy_core.fvm.riemann_solvers`: `Rusanov`, `NonconservativeRusanov`, `HLL`, `HLLC`, ... |
 | `diffusion` | on if `diffusion_matrix` is nonzero | `DiffusionSpec` |
