@@ -43,25 +43,37 @@ def _solve_traction(P, s, nh, inplane=None):
     return out
 
 
+def inplane_stress(inplane, s, nh):
+    """In-plane stress relative to the vertical normal stress, ``tau_de - delta_de tau_zz``,
+    summed over the in-plane closures at the trace of ``s`` (``nh x nh`` nested list).
+    """
+    T = [[sp.S.Zero] * nh for _ in range(nh)]
+    for c in inplane:
+        Tc = c.stress(s)
+        N = c.normal_stress(s) if hasattr(c, "normal_stress") else sp.S.Zero
+        for d_ in range(nh):
+            for e in range(nh):
+                T[d_][e] += Tc[d_][e] - (N if d_ == e else 0)
+    return T
+
+
 def _inplane_traction(inplane, s, nh):
-    """In-plane part of the boundary traction, ``g_d = sum_e tau_de(I) d_e I`` per axis, or
-    ``None`` without an in-plane closure.
+    """In-plane part of the boundary traction, ``g_d = sum_e (tau_de - delta_de tau_zz) d_e I``
+    per axis, or ``None`` without an in-plane closure.
 
     ``tau_de`` is the closures' in-plane stress at the trace of ``s`` and ``d_e I`` the PHYSICAL
-    interface slope, the slope the sigma map gives the Leibniz terms ``-tau_de(eta) d_e eta +
-    tau_de(b) d_e b`` of the depth-integrated ``d_e tau_de``; with ``tau_dz = P_d + g_d`` those
-    cancel and the depth integral is ``d_e(h <tau_de>)`` (Gerbeau, Perthame 2001,
-    https://doi.org/10.3934/dcdsb.2001.1.89).
+    interface slope, the slope the sigma map gives the Leibniz terms of the depth-integrated
+    ``d_e tau_de`` and of the pressure; with ``tau_dz = P_d + g_d`` those cancel and the depth
+    integral is ``d_e(h <tau_de - delta_de tau_zz>)`` (Gerbeau, Perthame 2001,
+    https://doi.org/10.3934/dcdsb.2001.1.89).  The ``tau_zz`` part is the surface pressure
+    ``p(eta) = tau_zz(eta)`` on the slope, and at the bed the normal stress the tangential
+    projection removes (Marche 2007, eq. (5.18),
+    https://doi.org/10.1016/j.euromechflu.2006.04.007).
     """
     if not inplane:
         return None
     S = s.interface_slopes
-    T = [[sp.S.Zero] * nh for _ in range(nh)]
-    for c in inplane:
-        Tc = c.stress(s)
-        for d_ in range(nh):
-            for e in range(nh):
-                T[d_][e] += Tc[d_][e]
+    T = inplane_stress(inplane, s, nh)
     return [sum(T[d_][e] * S[e] for e in range(nh)) for d_ in range(nh)]
 
 
@@ -491,10 +503,16 @@ class ShallowInPlane(Closure):
 
 class NewtonianInPlane(Closure):
     """Marker closure that keeps the in-plane deviatoric stress as incompressible Newtonian,
-    ``tau_de = rho nu (d_d u_e + d_e u_d)``, the complement of ``ShallowInPlane``.
-    The model adds the divergence (``add_inplane_viscous``) and routes it into
-    ``diffusion_matrix`` (``package_viscous``); ``stress`` puts it into the bed and surface
-    traction (``apply_stress_closures``), so the depth-averaged term is ``div(h tau)``.
+    ``tau_de = rho nu (d_d u_e + d_e u_d)``, the complement of ``ShallowInPlane``, and with it
+    the normal stress ``tau_zz = -2 rho nu div_h u`` of the same order.
+    The model adds the divergence (``add_inplane_viscous``), takes ``tau_zz`` into the pressure
+    and routes both into ``diffusion_matrix`` (``package_viscous``); ``stress`` and
+    ``normal_stress`` put them into the bed and surface traction (``apply_stress_closures``),
+    so the depth-averaged term is ``div(h (tau - tau_zz I))``, i.e.
+    ``div(nu h (grad u + grad u^T)) + 2 nu grad(h div u)``.
+
+    References:
+        Marche 2007, eq. (5.19), https://doi.org/10.1016/j.euromechflu.2006.04.007
     """
     closes = "in_plane"; requires = ("u",)
 
@@ -518,6 +536,14 @@ class NewtonianInPlane(Closure):
         u, X = s.horizontal_velocity, s.horizontal
         return [[s.trace(s.par.rho * s.par.nu * (s.dx_phys(u[e], X[d]) + s.dx_phys(u[d], X[e])))
                  for e in range(len(X))] for d in range(len(X))]
+
+    def normal_stress(self, s):
+        """Viscous normal stress ``tau_zz = 2 rho nu d_z w = -2 rho nu div_h u`` at the trace of
+        ``s`` (physical derivatives), the partner of ``inplane_normal_stress`` in the bulk.
+        """
+        u, X = s.horizontal_velocity, s.horizontal
+        div = sum(s.dx_phys(u[e], X[e]) for e in range(len(X)))
+        return s.trace(-2 * s.par.rho * s.par.nu * div)
 
 
 # ── surface closures ───────────────────────────────────────────────────────
@@ -546,11 +572,22 @@ class StressFree(Closure):
 
 
 class InterfaceFlux(Closure):
-    """Base of the multilayer interface transfer-velocity schemes;
-    ``expression(below, above, G)`` takes the two one-sided interface traces and the interface
-    mass flux ``G``.
+    """Base of the multilayer interface schemes; ``expression(below, above, G)`` takes the two
+    one-sided interface traces and the interface mass flux ``G``.
+
+    Args:
+        quantity: the interface value it supplies, ``"velocity"`` (the transfer velocity
+            ``u*``) or ``"stress"`` (the in-plane stress of the interface traction,
+            ``interface_inplane_traction``).
     """
     closes = "interface"; requires = ()
+
+    def __init__(self, name=None, quantity="velocity"):
+        """Store the ``quantity`` this scheme supplies."""
+        super().__init__(name=name)
+        if quantity not in ("velocity", "stress"):
+            raise ValueError(f"InterfaceFlux quantity: 'velocity' or 'stress', not {quantity!r}")
+        self.quantity = quantity
 
     def expression(self, below, above, G):    # noqa: D401 - distinct signature
         """Return the shared interface velocity ``u*`` (override)."""
@@ -582,6 +619,11 @@ def apply_layer_stress_closures(closures, m, axes, state, *, is_top, is_bottom):
     """Per-layer variant of ``apply_stress_closures`` for the multilayer models: the surface
     closure acts only on the top layer and the bed closure only on the bottom layer.
 
+    With an in-plane closure every trace carries the layer's own in-plane traction
+    (``_inplane_traction``), so the layer's in-plane term is ``d_e(h_l <tau_de - delta_de
+    tau_zz>)``; at an internal interface the model adds the shared part
+    (``interface_inplane_traction``).
+
     Args:
         is_top: this layer carries the free surface.
         is_bottom: this layer sits on the bed.
@@ -592,18 +634,25 @@ def apply_layer_stress_closures(closures, m, axes, state, *, is_top, is_bottom):
     stress = [c for c in closures if c.closes in ("bulk", "bottom", "surface")]
     for c in stress:
         c.register(m)
+    inplane = [c for c in closures if c.closes == "in_plane"]
+    for c in inplane:
+        c.register(m)
     surface = [c for c in stress if c.closes == "surface"] if is_top else []
     bottom = [c for c in stress if c.closes == "bottom"] if is_bottom else []
     bulk = [c for c in stress if c.closes == "bulk"]
-    for at, btag, pieces in ((1, "eta", surface), (0, "b", bottom)):
+    for at, btag, pieces, outer in ((1, "eta", surface, is_top), (0, "b", bottom, is_bottom)):
+        g = _inplane_traction(inplane, state(at, btag=btag), nh)
         if not pieces:
+            if g is not None and not outer:          # internal interface: own in-plane part
+                for i, ax in enumerate(axes):
+                    ax["mx"].apply({ax["tau"].at(at): ax["tau"].at(at) + g[i]})
             continue
         P = [sp.S.Zero] * nh
         for c in pieces:
             tang = c.traction(state(at, btag=btag)).get("tangent") or []
             for i in range(min(nh, len(tang))):
                 P[i] += tang[i]
-        traces = _solve_traction(P, state(at, btag=btag), nh)
+        traces = _solve_traction(P, state(at, btag=btag), nh, inplane=g)
         for i, ax in enumerate(axes):
             ax["mx"].apply({ax["tau"].at(at): traces[i]})
     for c in bulk:
@@ -613,9 +662,32 @@ def apply_layer_stress_closures(closures, m, axes, state, *, is_top, is_bottom):
     return bool(bulk)
 
 
-def interface_closure(closures):
-    """Return the ``InterfaceFlux`` closure in ``closures``, or ``None``."""
-    return next((c for c in (closures or []) if c.closes == "interface"), None)
+def interface_closure(closures, quantity="velocity"):
+    """Return the ``InterfaceFlux`` closure for ``quantity`` in ``closures``, or ``None``."""
+    return next((c for c in (closures or []) if c.closes == "interface"
+                 and getattr(c, "quantity", "velocity") == quantity), None)
+
+
+def interface_inplane_traction(closures, below, above, G):
+    """Shared in-plane part of the traction at an internal layer interface ``z_l``,
+    ``sum_e sigma*_de d_e z_l`` per axis, or ``None`` without an in-plane closure.
+
+    ``sigma*`` is the interface value of ``tau_de - delta_de tau_zz`` from the two one-sided
+    traces (``below``: top trace of the lower layer, ``above``: bottom trace of the upper
+    layer, both ``ClosureState``) by the ``InterfaceFlux`` closure with ``quantity="stress"``,
+    by default their mean.  Each layer's own in-plane part is in its traction
+    (``apply_layer_stress_closures``); with this shared part the interface traction is
+    single-valued and the layer terms telescope (momentum-conservative).
+    """
+    inplane = [c for c in (closures or []) if c.closes == "in_plane"]
+    if not inplane:
+        return None
+    scheme = interface_closure(closures, quantity="stress") or MeanInterface(quantity="stress")
+    nh = len(below.horizontal)
+    Sb, Sa = inplane_stress(inplane, below, nh), inplane_stress(inplane, above, nh)
+    slope = below.interface_slopes
+    return [sum(scheme.expression(Sb[d_][e], Sa[d_][e], G) * slope[e] for e in range(nh))
+            for d_ in range(nh)]
 
 
 # ── depth-averaged SWE closure consumption ──────────────────────────────────
@@ -657,6 +729,7 @@ def swe_closure_state(model):
 
 __all__ = ["Closure", "ClosureState", "apply_stress_closures",
            "apply_layer_stress_closures", "interface_closure",
+           "interface_inplane_traction", "inplane_stress",
            "Newtonian", "KEpsilonViscosity", "QRViscosity", "NavierSlip", "RoughWall",
            "WallFunctionBed",
            "StressFree", "InterfaceFlux", "MeanInterface", "UpwindInterface",
