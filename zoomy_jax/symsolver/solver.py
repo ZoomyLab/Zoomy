@@ -330,19 +330,21 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
             "corrects with the lagged pressure and solves for its increment (time order 2 on a "
             "fixed mesh; opt-in: growing lagged modes on triangles, ANALYSIS 45e).")
     pressure_linear_solver = param.Selector(
-        default="auto", objects=["auto", "gmres", "amgx", "pyamg"],
-        doc="'amgx' (GPU, optional JAX-AMG), 'pyamg' (CPU, optional PyAMG) "
-            "or 'gmres' (matrix-free, always available); 'auto': amgx on a "
-            "GPU, pyamg on the CPU, when installed, else gmres.")
+        default="auto", objects=["auto", "gmres", "amgx", "pyamg", "hypre"],
+        doc="'amgx' (GPU, optional JAX-AMG), 'pyamg' (CPU, optional PyAMG), "
+            "'hypre' (CPU, serial or MPI: BoomerAMG + FlexGMRES, the shared "
+            "library of build_hypre_cuda.sh cpu-env) or 'gmres' (matrix-free, "
+            "always available); 'auto': amgx on a GPU, hypre on CPU MPI ranks, "
+            "else pyamg, when installed, else gmres.")
     pressure_amg_rebuild = param.Integer(
         default=10, bounds=(1, None),
-        doc="'pyamg': rebuild the AMG hierarchy at least every this many "
-            "pressure solves; in between it preconditions the current matrix "
-            "(a lagged preconditioner).")
+        doc="'pyamg' / 'hypre': rebuild the AMG hierarchy at least every this "
+            "many pressure solves; in between it preconditions the current "
+            "matrix (a lagged preconditioner).")
     pressure_amg_growth = param.Number(
         default=2.0, bounds=(1, None),
-        doc="'pyamg': rebuild early once the GMRES iterations exceed this "
-            "factor times those right after the last rebuild.")
+        doc="'pyamg' / 'hypre': rebuild early once the GMRES iterations exceed "
+            "this factor times those right after the last rebuild.")
     pressure_amgx = param.Dict(
         default=dict(solver="FGMRES", gmres_n_restart=30, max_iters=500,
                      preconditioner={"solver": "AMG"}),
@@ -398,12 +400,17 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax):
             amg_rebuild=self.pressure_amg_rebuild, amg_growth=self.pressure_amg_growth))
 
     def _pressure_backend(self):
-        """The pressure linear solver: the configured one; for 'auto' amgx on a GPU, else pyamg,
-        when installed, else gmres.
+        """The pressure linear solver: the configured one; for 'auto' amgx on a GPU, hypre on CPU
+        MPI ranks (its library built), else pyamg, when installed, else gmres.
         """
         if self.pressure_linear_solver != "auto":
             return self.pressure_linear_solver
-        name = "amgx" if jax.default_backend() == "gpu" else "pyamg"
+        gpu = jax.default_backend() == "gpu"
+        if not gpu and self.comm is not None and self.comm.Get_size() > 1:
+            from zoomy_jax.symsolver import hypre
+            if hypre.available():
+                return "hypre"
+        name = "amgx" if gpu else "pyamg"
         try:
             __import__({"amgx": "jaxamg", "pyamg": "pyamg"}[name])
         except ImportError:
