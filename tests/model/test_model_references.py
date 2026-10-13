@@ -317,10 +317,12 @@ def test_vam1_advective_divergences_routed_as_flux(vam1):
 
 def test_inplane_h_column_matches_G_matrix_first_principles():
     """Build G_kj = int_0^1 zeta phi_j' phi_k dzeta from the shifted-Legendre
-    basis, form V[q_k<-h] = -2 nu (abar_k + (2k+1)(G abar)_k), and assert the
-    extracted diffusion column satisfies A[q_k<-h] + V[q_k<-h] = 0 — tying the
+    basis, form V[q_k<-h] = -4 nu (abar_k + (2k+1)(G abar)_k), and assert the
+    extracted diffusion column satisfies A[q_k<-h] = V[q_k<-h] — tying the
     ViscousDiffusion extraction back to the first-principles derivation
-    (the closed forms themselves are pinned by the m07/m14 goldens)."""
+    (the closed forms themselves are pinned by the m07/m14 goldens).  In 1-D the
+    in-plane stress relative to the normal stress is tau_xx - tau_zz = 4 nu u_x
+    (Gerbeau-Perthame's 4 mu), and h d_x u = d_x q - (q/h) d_x h gives the minus sign."""
     from zoomy_core.model.models.closures import NewtonianInPlane
     from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
     sm = SystemModel.from_model(SME(
@@ -347,10 +349,10 @@ def test_inplane_h_column_matches_G_matrix_first_principles():
         zeta * sp.diff(phi[j], zeta) * phi[k], (zeta, 0, 1)))
     for k in range(N + 1):
         Ga_k = sum(G[k, j] * a[j] for j in range(N + 1))
-        V = -2 * nu * (a[k] + (2 * k + 1) * Ga_k)
+        V = -4 * nu * (a[k] + (2 * k + 1) * Ga_k)
         assert hcol[f"q_{k}"] != 0, f"k={k}: h-column identically zero (the bug)"
-        assert sp.simplify(hcol[f"q_{k}"] + V) == 0, (
-            f"k={k}: A[q_{k}<-h]={hcol[f'q_{k}']} != -V={sp.simplify(-V)}")
+        assert sp.simplify(hcol[f"q_{k}"] - V) == 0, (
+            f"k={k}: A[q_{k}<-h]={hcol[f'q_{k}']} != V={sp.simplify(V)}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════

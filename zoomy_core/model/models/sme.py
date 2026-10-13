@@ -157,6 +157,15 @@ class SME(BaseModel):
         for i, xd in enumerate(horiz):
             zdrop[DERIV[xd](uvel[i] * w)] = 0
         mz.apply(zdrop)
+        # with an in-plane closure the viscous normal stress tau_zz (same order) enters the
+        # vertical balance, d_z p = -rho g + d_z tau_zz, and the free surface carries the normal
+        # stress-free condition p(eta) = tau_zz(eta): p = rho g (eta - z) + tau_zz(z)
+        # (Marche 2007, eqs. (3.5), (3.10), without the shear term d_e tau_ez; ANALYSIS 45f).
+        tzz = None
+        if retain_inplane:
+            from zoomy_core.model.models.equations import inplane_normal_stress
+            tzz = inplane_normal_stress(m, uvel, list(horiz), m.parameters.nu)
+            mz.expr = mz.expr - d.z(tzz) / rho
         mz.apply(IntegrateZ(z, z, b + h, method="analytical"))
         # Free-surface pressure BC.  Default p(η)=0 (atmospheric).  A SURFACE
         # closure may instead prescribe a NORMAL traction ``{"normal": n·σn}``
@@ -190,6 +199,8 @@ class SME(BaseModel):
                     acc += nrm
             if acc != 0:
                 p_surf = acc
+        if tzz is not None:
+            p_surf = (p_surf if p_surf is not None else 0) + tzz.subs(z, b + h)
         mz.apply({p.subs(z, b + h): (p_surf if p_surf is not None else 0)})
         psol = mz.solve_for(p)
         for ax in HAXES:
