@@ -27,12 +27,24 @@ RUN /opt/conda/envs/zoomy/bin/python -m pip install --no-cache-dir \
       ipykernel \
     && rm -rf /tmp/zoomy_src
 
+# MPI on the CPU for distributed runs (`comm=`; the matrix's mpiN configs): OpenMPI 5,
+# mpi4py and mpi4jax from conda-forge. python / numpy / scipy / jax / jaxlib pinned to the
+# installed builds (--freeze-installed cannot solve: OpenMPI needs another libhwloc).
+# GPU-aware MPI and AmgX: containers/zoomy_jax_mpi.
+RUN pins=$(/opt/conda/bin/conda list -n zoomy --export '^(python|numpy|scipy|jax|jaxlib)$' \
+           | grep -v '^#') \
+    && /opt/conda/bin/mamba install -n zoomy -y -c conda-forge $pins \
+      "openmpi>=5,<6" mpi4py "mpi4jax=0.9.1.post2" \
+    && /opt/conda/bin/conda clean -afy
+
 # Server env + triple-purpose dispatch (parity with zoomy_jax.def): the GUI's
 # jax backend runs `apptainer run img [port]` on this image too.
 ENV ZOOMY_ADAPTER=jax \
     ZOOMY_PORT=8080 \
     ZOOMY_ROOT=/workspace \
-    MPLBACKEND=Agg
+    MPLBACKEND=Agg \
+    OMPI_ALLOW_RUN_AS_ROOT=1 \
+    OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
 COPY containers/common/zoomy-entry /usr/local/bin/zoomy-entry
 RUN chmod +x /usr/local/bin/zoomy-entry && mkdir -p /workspace
 

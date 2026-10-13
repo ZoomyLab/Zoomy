@@ -105,6 +105,22 @@ CUDA flags) and rebuild the image; then run with `ZOOMY_HYPRE_DIR=/opt/hypre`:
 
 Credits: hypre and BoomerAMG in `docs/book/references/third_party.bib`.
 
+## Publishing (CI)
+
+`.github/workflows/build-containers.yml` runs on every push to `main` that touches
+`containers/`, `install/` or `library/` (in-tree sources and submodule pointers alike), and
+rebuilds and pushes (`ghcr.io/zoomylab/<c>:latest`, `oras://ghcr.io/zoomylab/<c>_sif:latest`)
+each image whose
+
+- folder `containers/<c>/` changed (recipes, `zoomy-entry`, `BACKEND`, `VERSION`; not `*.md`),
+- recipe bakes a changed shared file (`containers/common/zoomy-entry`),
+- recipe `COPY`s / `%files` a changed `library/<pkg>` (its `*.def` or `Dockerfile` names it),
+- stack comes from a changed `install/*.yml` (zoomy_jax_dev, zoomy_jax).
+
+A dev branch publishes nothing: the images follow `main`. Rebuild by hand:
+`gh workflow run build-containers.yml -f container=<c>` (no `-f`: every image). The JAX image
+also ships OpenMPI 5 + mpi4py + mpi4jax (CPU), so it runs distributed (`comm=`, `mpiexec -n N`).
+
 ## Pulling prebuilt images (no local build)
 
 The Containers pipeline publishes every backend to ghcr (public, anonymous

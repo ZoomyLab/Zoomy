@@ -10,32 +10,13 @@ on:
     paths:
       - "containers/**"
       - "install/**"
-      - "library/zoomy_core/pyproject.toml"
-      - "library/zoomy_jax/pyproject.toml"
-      - "library/zoomy_firedrake/pyproject.toml"
-      # The containers COPY these packages in and pip-install them EDITABLE, so
-      # their SOURCE is part of the image, not just their pyproject. Watching
-      # only the pyproject meant a source fix could land on main while the
-      # published image kept the old code -- which is exactly what happened: a
-      # one-line CORS fix in zoomy_server (allowing Chrome's Private Network
-      # Access preflight, without which NO browser-served GUI can reach a local
-      # backend) matched nothing here and had to be dispatched by hand.
-      - "library/zoomy_server/**"
-      - "library/zoomy_prepost/**"
-      - "library/zoomy_foam/**"
-      # SUBMODULES: a pointer bump changes the GITLINK -- the bare path
-      # `library/zoomy_foam`, with no trailing slash -- so `library/<sub>/**`
-      # (which requires the `library/<sub>/` prefix) never matches it. The
-      # patterns above only work for the IN-TREE packages (zoomy_server,
-      # zoomy_prepost). zoomy_core/foam/jax/firedrake are submodules, so
-      # every pointer bump silently skipped the rebuild and the published
-      # image kept older code than main claimed: `bump zoomy_foam: --closure
-      # roughwall` built nothing, and a zoomy_core bump never matched its
-      # pyproject path either. Watch the gitlinks themselves.
-      - "library/zoomy_core"
-      - "library/zoomy_foam"
-      - "library/zoomy_jax"
-      - "library/zoomy_firedrake"
+      # Every library change, in-tree package or submodule pointer: `library/**` also matches
+      # a GITLINK (the bare path `library/zoomy_amrex`, no trailing slash), which
+      # `library/<sub>/**` never does. The hand-kept list went stale: a zoomy_server fix,
+      # and zoomy_amrex / zoomy_plotting were never in it (the zoomy_amrex bumps 793f2432,
+      # 9863124e, 9dd4420f, 4c3fcd27 started no build). The detect step below selects the
+      # images whose recipe bakes the changed package (none: a no-op run).
+      - "library/**"
       - ".github/workflows/build-containers.yml"
       - ".github/workflows/dockers.txt"
   workflow_dispatch:
@@ -104,15 +85,25 @@ jobs:
             fi
             echo "Diff range: $base -> $head"
 
+            # the image's folder: recipes, but also what they bake (zoomy-entry, BACKEND,
+            # VERSION, scripts); docs do not rebuild
             for c in $ALL; do
-              if ! git diff --quiet "$base" "$head" -- "containers/$c/Dockerfile" 2>/dev/null; then
-                echo "Dockerfile changed: containers/$c"
+              if git diff --name-only "$base" "$head" -- "containers/$c/" 2>/dev/null \
+                  | grep -qv '\.md$'; then
+                echo "Container folder changed: containers/$c"
                 add_raw "$c"
               fi
-              if ! git diff --quiet "$base" "$head" -- "containers/$c/*.def" 2>/dev/null; then
-                echo "Apptainer def changed: containers/$c"
-                add_raw "$c"
-              fi
+            done
+            # shared files a recipe bakes (containers/common/zoomy-entry): the recipes naming them
+            for f in $(git diff --name-only "$base" "$head" -- containers/common/ 2>/dev/null); do
+              for c in $ALL; do
+                for recipe in "containers/$c/$c.def" "containers/$c/Dockerfile"; do
+                  if [ -f "$recipe" ] && grep -qF "$f" "$recipe"; then
+                    echo "Baked-in file changed: $f -> containers/$c"
+                    add_raw "$c"
+                  fi
+                done
+              done
             done
 
             shopt -s nullglob

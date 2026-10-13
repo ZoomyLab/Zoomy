@@ -42,7 +42,10 @@ def load(backend, config, case, key):
 
 
 def provenance():
-    """The library commits a run used (PYTHONPATH entries)."""
+    """The library commits a run used (PYTHONPATH entries; `MATRIX_PROVENANCE`: a JSON file
+    with them, for a library copy without git, e.g. mounted into a container)."""
+    if os.environ.get("MATRIX_PROVENANCE"):
+        return Path(os.environ["MATRIX_PROVENANCE"]).read_text()
     out = {}
     for d in os.environ.get("PYTHONPATH", "").split(os.pathsep):
         if d:
@@ -349,7 +352,7 @@ def euler_checks(add, b, g, J):
                 add("C22", f"{k} |rev - jvp| (rel)", b, c, abs(metrics(r)["rev"] - fw) / abs(fw), RO, "")
 
 
-def gate_checks(add, b, g):
+def gate_checks(add, b, g, J):
     """C27-C30, C34: the wrapped gates 40 (SSP-RK order), 41 / 43 (diffusion blocks
     at the boundaries), 44 (LSQ boundary closure), 39 (LSQ polynomials), 45
     (in-plane viscous operator)."""
@@ -379,20 +382,26 @@ def gate_checks(add, b, g):
                         "L_inf " + " / ".join(f"{x:.2e}" for x in m[case]))
                 add("C28", f"{kind} {path} steady max|u - L|", b, "serial", m["steady"], RO,
                     "linear Dirichlet field kept to round-off")
-            for case in DIFF_ALL:                   # gate 43: foam / AMReX vs JAX
+            for case in DIFF_ALL:                   # gate 43: foam / AMReX / numpy vs JAX
                 if b == "amrex" and kind == "tri":
                     if (path, case) == (DIFF_PATHS[0], DIFF_ALL[0]):
                         add("C28", "tri max rel vs JAX (n/a: AMReX takes Cartesian grids only)", b,
                             "serial", "n/a", None, "")
                     continue
-                d = g("C28", f"{kind}_{path}_{case}")
-                if d is None:
+                d, j = g("C28", f"{kind}_{path}_{case}"), J("C28", f"{kind}_{path}_{case}")
+                if d is None or b == "jax":
                     continue
                 m = metrics(d)
                 bound = ("<=", 1e-12, "tolerance, gate 43: the same two-point fluxes and ghosts") \
                     if path == "expl" else ("<=", 1e-9, "tolerance, gate 43: Newton 1e-10, GMRES 1e-13")
-                add("C28", f"{kind} {path} {case} max rel vs JAX", b, "serial", m["rel_vs_jax"], bound,
-                    f"L_inf vs exact {m['err']:.2e}")
+                if "u" not in m or (j is not None and "u" not in metrics(j)):
+                    add("C28", f"{kind} {path} {case} max rel vs JAX", b, "serial", float("nan"), bound,
+                        f"stored before each backend ran alone: matrix.py run {b} C28 --force (and jax)")
+                elif j is not None:
+                    u, uj = np.asarray(m["u"]), np.asarray(metrics(j)["u"])
+                    add("C28", f"{kind} {path} {case} max rel vs JAX", b, "serial",
+                        float(np.abs(u - uj).max() / np.abs(uj).max()), bound,
+                        f"L_inf vs exact {m['err']:.2e}")
                 if case == "steady":
                     add("C28", f"{kind} {path} steady max|u - L|", b, "serial", m["err"], RO,
                         "on the backend itself")
@@ -789,7 +798,7 @@ def measure():
         if b == "numpy":
             numpy_checks(add, g, J)
         euler_checks(add, b, g, J)
-        gate_checks(add, b, g)
+        gate_checks(add, b, g, J)
         imex_checks(add, b, g, J)
         restart_checks(add, b, g)
         visc_checks(add, b, g, J)

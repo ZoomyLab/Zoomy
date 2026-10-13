@@ -73,7 +73,8 @@ A run that raises `NotImplementedError` is stored as **unsupported**, any
 other exception as a **FAIL**; a backend without the config or the case is
 **n/a**.  Stored per run: `t, Q, Q0, xc, vol, names, wall, lib` (the library
 commits it ran on); custom runs (C15-C17, C22, C27-C30, C34, C35): their metrics.  Files:
-`cases.py` (every case, defined once), `backends.py` (adapters),
+`cases.py` (every case, defined once; jax-free, like the gate setups it uses, so a case
+is built in the NumPy / foam / AMReX images too), `backends.py` (adapters),
 `custom.py` (AD, preCICE, AMR, restart, the wrapped gates 39-45), `matrix.py` (runner, checks, table), `large.py`
 (large tier), `deliverable.py` (figure), `table.md` (the last table).
 
@@ -115,7 +116,7 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C24 Euler 2-D | Sod along x, y (n x 2); periodic wave [0,1]^2, u (1, .5), n 16/32/64 | as C18 / C19; wave O2 none >= 1.8, minmod >= 1.7 (observed), O1 >= 0.85 |
 | C26 implicit diffusion | gate 31: SME(0) + Newtonian, `stress=Stress.full` (dense, state-dependent diffusion_matrix), nu 1e-3, 20^2, IMEX (Crank-Nicolson Newton), t 0.05 | ranks / GPU vs serial <= 1e-12; AMReX vs JAX <= 1e-8 (Newton / GMRES tolerances) |
 | C27 time order | gate 40 `forced_swe` (SME(0), 1-D walls, first-order space, dh/dt = a cos(w t + 0.3) h), constant dt, time_order 1 / 2 / 3. `ode_t*`: 8 cells at rest, T 1, dt T/16, T/32, T/64, error vs the exact h(T); `wave_t*`: 100 cells, T 0.04, dt 2e-3 / 2^k, k = 0, 1, 2, error vs k = 4. JAX runs the gate's own `run`; foam / AMReX the same NSM and mesh through their drivers (`time_order` of `backend_cxx`). `ode_control` (JAX): RK3 with the last stage at the wrong time | order of the last pair >= k - 0.2 (theory k; observed 1.01 / 1.92 / 3.00 ODE); control order <= 2.5 (gate 40; observed 0.99) |
-| C28 diffusion BCs | heat equation u_t = div(nu grad u) on [0,1]^d (gate 41's SystemModel), cases dir0 / neu / dirL / per / steady, explicit and implicit (IMEX), on 1-D, quads, triangles. `orders_*` (JAX): L_inf at nx 16 / 32 / 64 (gate 41); `{kind}_{path}_{case}` (foam, AMReX): nx 16 against JAX, the same Q0 (gate 43; AMReX has no triangles) | L_inf order 32->64 >= 1.8 (theory 2); steady max abs(u - L) <= 1e-12; foam / AMReX vs JAX: explicit <= 1e-12, implicit <= 1e-9 (gate 43's tolerances: round-off; Newton 1e-10, GMRES 1e-13) |
+| C28 diffusion BCs | heat equation u_t = div(nu grad u) on [0,1]^d (gate 41's SystemModel), cases dir0 / neu / dirL / per / steady, explicit and implicit (IMEX), on 1-D, quads, triangles. `orders_*` (JAX): L_inf at nx 16 / 32 / 64 (gate 41); `{kind}_{path}_{case}` (JAX, foam, AMReX, numpy): nx 16, the same Q0, each backend's run stores its final field and the table compares it with JAX's (gate 43; AMReX has no triangles) | L_inf order 32->64 >= 1.8 (theory 2); steady max abs(u - L) <= 1e-12; foam / AMReX vs JAX: explicit <= 1e-12, implicit <= 1e-9 (gate 43's tolerances: round-off; Newton 1e-10, GMRES 1e-13) |
 | C29 LSQ boundary closure | gate 44 (JAX, quads, default set): `Lambda` (Dirichlet) and `Flux` (Neumann) BCs on SME(0), h = f(x, y), nx 12 / 24 / 48, fit degree p = 2, 3; max error of the derivatives of order k = 1..p over the boundary and interior cells, with the closure | order 24->48 >= p + 1 - k - 0.2 for every k, boundary and interior (the gate's criterion); the ghost-as-sample errors are in the notes |
 | C30 LSQ polynomials | gate 39 (subprocess): seeded random polynomials of degree p = 1..3 on 1-D, quads, jittered quads, triangles, hexahedra; interior, boundary with exact mirror ghost, Dirichlet / Neumann / zero-gradient ghosts through the closure | number of failing checks (PASS + FAIL = 72) = 0, each exact to 1e-9 |
 | C31 IMEX time order | constant dt (`cfl_check_every=0`), fixed mesh; schemes `lie1` / `lie2` (Lie: SSP-RK1 / RK2, then the implicit source), `ssp2` (IMEX-SSP2(2,2,2), Pareschi & Russo 2005: the implicit source in every stage). `swe_*`: C14 (bump in flow, Manning n 0.5) at space O1, nx 40, t 0.3, dt 4e-3 / 2^k, k = 0..3, L1(h) vs dt / 32 of the same scheme. `vam_*`: C10's wave + Manning n 0.5 (VAM(1) Chorin, space O1, nx 60, t 0.2), dt 8e-3 / 2^k, Richardson; `t1` / `t2` = time_order 1 / 2 with the Lie source per projection stage, `ssp2` = projected IMEX stages (ChorinTemplate.step); `pred_ssp2_*`: the VAM predictor alone (no projection). foam / AMReX: `swe_ssp2_k0`, `vam_ssp2_k0` | SWE order dt/4->dt/8: lie1 >= 0.8, ssp2 >= 1.8 (theory), lie2 <= 1.4 (theory 1: the Lie splitting caps SSP-RK2); VAM: t1 >= 0.8, t2 >= 0.8 (theory 1: the Lie source per stage), predictor ssp2 >= 1.8, ssp2 >= 1.8 (theory 2, with the increment projection); vs JAX: SWE round-off, VAM 1e-9 (pressure). The VAM projection is approximate by construction (ANALYSIS 45: the pressure rows are the constraint with the corrector substituted before the discretization, a compact operator L_a, not the composition constraint∘correction), which left an O(dt) error on a fixed mesh (ssp2 0.91, t2 0.67); the pressure-increment projection (`projection=Projection.increment`, opt-in, used here; the default is `standard`, ANALYSIS 45e / 45g) lets the defect act on the increment only |
@@ -402,3 +403,13 @@ mpi2/4/8, gpu1, gpu2).  **459 PASS, 0 FAIL** (ANALYSIS 42-44).
   `imex` is Lie splitting with an implicit-Euler source (order 1) and `rk2` takes the same
   source in the explicit SSP-RK2 step (the reconstruction order is the default time order).
   The NSM source uses the aux `hinv` = 1/h; `cases.moment_jacobian` substitutes it.
+- Jax-free case builders (2026-10-13).  The builders of C8, C10, C26, C28, C31 (gates 7, 21,
+  31, 41, 43) imported JAX, so the NumPy / foam / AMReX images could not set them up.  The
+  predictor numerics are core's `predictor_nsm` (= gate 7's `pred_nsm`), the gates import JAX
+  inside their JAX runs only, `gates/common.py` enables x64 when JAX is present.  C28's
+  per-case runs (`{kind}_{path}_{case}`) now run on every backend alone, JAX included, and
+  store the final field `u`; the table compares it with JAX's (was: each foam / AMReX / numpy
+  run also ran JAX).  A store from before needs `matrix.py run B C28 --force` on jax, numpy,
+  foam, amrex.  Rerun into a scratch store (C8, C10, C26, C28, C31, C35 jax + numpy, C15 jax,
+  C28 foam + AMReX; serial): every run bit-identical to the previous store (C35's misspelt
+  path note aside: its timing and work path), the table identical, 0 FAIL.

@@ -10,17 +10,14 @@ is its own run:
 import sys
 import time as wall
 import numpy as np
-import jax.numpy as jnp
-from mpi4py import MPI
 import common  # noqa: F401  (x64)
 from zoomy_core.mesh import LSQMesh
-from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
 from zoomy_core.model.boundary_conditions import Dirichlet, Extrapolation
 from zoomy_core.model.initial_conditions import Constant
 from zoomy_core.model.models.closures import Newtonian, StressFree
 from zoomy_core.model.models.vam import VAM
 from zoomy_core.systemmodel.system_model import SystemModel, _DT_SYMBOL
-from gate7_chorin import pred_nsm
+from zoomy_core.symsolver.strategies.chorin import predictor_nsm as pred_nsm
 from zoomy_core.symsolver.settings import LinearSolver
 
 
@@ -43,13 +40,14 @@ class B:
         r = model.chorin_split(_DT_SYMBOL, system_model=sm)
         return r.SM_pred, r.SM_press, r.SM_corr
 
-comm = MPI.COMM_WORLD
 NX, T = 60, 0.05
 
 
 def run(comm, solver):
-    pred, press, corr = B.split()
     import os
+    import jax.numpy as jnp
+    from zoomy_jax.symsolver.solver import SymbolicChorinSolverJax
+    pred, press, corr = B.split()
     s = SymbolicChorinSolverJax(time_end=T, cfl=0.9, pressure_linear_solver=solver,
                                 comm=comm, pressure_coarse=os.environ.get("COARSE", "1") == "1")
     mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.3), nx=NX, ny=NX // 10)
@@ -70,6 +68,8 @@ def run(comm, solver):
 
 
 if __name__ == "__main__":
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
     mode, solver, out = sys.argv[1], LinearSolver(sys.argv[2]), sys.argv[3]
     ref = f"{out}/ref_{solver}.npy"
     if mode == "ref":

@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""`apptainer exec [options] IMAGE CMD ...` INSIDE a backend container: run CMD right here.
+
+The foam / AMReX symbolic drivers build and run their C++ through `apptainer exec <image>`
+from the host; inside the image that toolchain is already present, so the matrix-in-container
+mode (tests/backend_e2e/matrix_driver.py) puts this shim first on PATH. `--env K=V` and
+`--pwd` are honoured, every other option (binds, --cleanenv, --nv) is dropped.
+"""
+import os
+import sys
+
+VALUED = {"--bind", "-B", "--env", "--pwd", "--home", "-H", "--env-file", "--overlay", "-o",
+          "--workdir", "-W", "--mount", "--security", "--network", "--hostname"}
+args = sys.argv[1:]
+if not args or args[0] != "exec":
+    sys.exit(f"apptainer shim: only `exec` is supported, got {args[:1]}")
+i, env, pwd = 1, {}, None
+while i < len(args) and args[i].startswith("-"):
+    key, val = args[i], None
+    if "=" in key and key.split("=", 1)[0] in VALUED:
+        key, val = key.split("=", 1)
+        i += 1
+    elif key in VALUED:
+        val = args[i + 1]
+        i += 2
+    else:
+        i += 1
+    if key == "--env":
+        k, v = val.split("=", 1)
+        env[k] = v
+    elif key == "--pwd":
+        pwd = val
+cmd = args[i + 1:]                       # args[i] is the image
+os.environ.update(env)
+if pwd:
+    os.chdir(pwd)
+os.execvp(cmd[0], cmd)

@@ -1,7 +1,10 @@
 """Shared setups for the symbolic-solver gates (scratch, not repo tests)."""
 import numpy as np
-import jax
-jax.config.update("jax_enable_x64", True)
+try:                    # the NumPy / foam / AMReX images ship no JAX
+    import jax
+    jax.config.update("jax_enable_x64", True)
+except ImportError:
+    pass
 
 import zoomy_core.fvm.timestepping as timestepping
 import zoomy_core.model.initial_conditions as IC

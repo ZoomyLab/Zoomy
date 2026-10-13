@@ -1,0 +1,101 @@
+name: Backend e2e
+
+# tests/backend_e2e/README.md: the GUI sessions / solver cards through the backend containers'
+# zoomy-server over the GUI's HTTP protocol, and a matrix subset inside the containers. The
+# CPU images come from GHCR (docker, no apptainer); dev mode mounts this commit's library/
+# into them. Push to main: the thesis-QR sessions (numpy, jax, amrex). Manual: any selection.
+# The foam / AMReX matrix reference runs on the host through apptainer: not here (skipped).
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "library/**"
+      - "containers/**"
+      - "tests/backend_e2e/**"
+      - "tests/qr_cases/**"
+      - ".github/workflows/backend-e2e.yml"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dev (this commit's library mounted) | published (the images as they are)"
+        default: "dev"
+      backends:
+        description: "comma list of numpy, jax, amrex, openfoam"
+        default: "numpy,jax,amrex,openfoam"
+      qr_only:
+        description: "only the sessions a thesis QR code opens (1) or everything (0)"
+        default: "0"
+      select:
+        description: "pytest -k expression (empty: all)"
+        default: ""
+
+concurrency:
+  group: backend-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  e2e:
+    name: ${{ matrix.backend }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [ numpy, jax, amrex, openfoam ]
+    env:
+      E2E_RUNTIME: docker
+      E2E_BACKENDS: ${{ matrix.backend }}
+      E2E_MODE: ${{ inputs.mode || 'dev' }}
+      E2E_QR_ONLY: ${{ github.event_name == 'push' && '1' || inputs.qr_only }}
+      OMP_NUM_THREADS: "1"
+    steps:
+      - name: Selected?
+        id: on
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then sel="numpy,jax,amrex"; else sel="${{ inputs.backends }}"; fi
+          case ",$sel," in *",${{ matrix.backend }},"*) echo "run=1" >> "$GITHUB_OUTPUT" ;; *) echo "run=0" >> "$GITHUB_OUTPUT" ;; esac
+
+      - uses: actions/checkout@v5
+        if: steps.on.outputs.run == '1'
+
+      - name: Submodules the tests use
+        if: steps.on.outputs.run == '1'
+        run: git submodule update --init library/zoomy_core library/zoomy_jax library/zoomy_foam library/zoomy_amrex library/zoomy_gui
+
+      - uses: actions/setup-python@v6
+        if: steps.on.outputs.run == '1'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tests/qr_cases/requirements.txt
+
+      - name: Host env (GUI-side checks, in-process and host matrix runs)
+        if: steps.on.outputs.run == '1'
+        run: python -m pip install -r tests/qr_cases/requirements.txt "jax[cpu]" attrs
+
+      - name: Pull the image
+        if: steps.on.outputs.run == '1'
+        run: |
+          c=$(case "${{ matrix.backend }}" in numpy) echo zoomy_numpy;; jax) echo zoomy_jax;; amrex) echo zoomy_amrex;; openfoam) echo zoomy_openfoam;; esac)
+          docker pull "ghcr.io/zoomylab/$c:latest"
+
+      - name: Backend e2e
+        if: steps.on.outputs.run == '1'
+        run: |
+          E2E_WORK="$RUNNER_TEMP/e2e" python -m pytest tests/backend_e2e -m backend_e2e \
+            -k "${{ inputs.select }}" -rA --tb=short -p no:cacheprovider
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && steps.on.outputs.run == '1' }}
+        with:
+          name: backend-e2e-${{ matrix.backend }}
+          path: |
+            ${{ runner.temp }}/e2e/report-*.json
+            ${{ runner.temp }}/e2e/*/*/server-*.log
+            ${{ runner.temp }}/e2e/*/*/matrix/*.log
+          if-no-files-found: ignore

@@ -284,29 +284,22 @@ def diffusion_orders(kind, path, backend="jax"):
     for dir0, neu, dirL, per on ``kind`` (1d, quad, tri), ``path`` (expl,
     impl), and the steady linear Dirichlet field's residual."""
     import gate41_diffusion_bc as G
-    with on_backend(backend, G):
-        out = {c: [float(G.error(kind, c, path, nx)[0]) for nx in G.NXS] for c in DIFF_CASES}
-        out["steady"] = float(G.error(kind, "steady", path, 16)[0])
+    out = {c: [float(G.error(kind, c, path, nx, backend)[0]) for nx in G.NXS] for c in DIFF_CASES}
+    out["steady"] = float(G.error(kind, "steady", path, 16, backend)[0])
     return out
 
 
-def diffusion_cxx(backend, kind, path, case, work):
-    """Gate 43: ``backend`` (foam | amrex) against JAX on gate 41's heat
-    equation, nx 16, the same Q0: max rel |backend - JAX| and the L_inf error
-    against the exact solution (for ``steady``: the residual max|u - L|)."""
+def diffusion_run(backend, kind, path, case, work):
+    """Gate 43 on ``backend`` alone: gate 41's heat equation, nx 16, the same Q0 on every
+    backend; the final field ``u`` (the table compares it with JAX's run) and the L_inf
+    error against the exact solution (for ``steady``: the residual max|u - L|)."""
     import gate43_cxx_diffusion as G
     G.WORK = str(work)
-    dim = 1 if kind == "1d" else 2
     nx = 16
-    tj, uj = G.jax_run(kind, case, path, nx)
-    if backend == "numpy":
-        with on_backend(backend, G):
-            tc, uc = G.jax_run(kind, case, path, nx)
-    else:
-        tc, uc = G.cxx_run(backend, kind, case, path, nx)
-    xc = np.asarray(G.setup(kind, case, path, nx)[0].cell_centers)[:, :len(uc)]
-    return dict(rel_vs_jax=float(np.abs(uc - uj).max() / np.abs(uj).max()),
-                err=float(np.abs(uc - G.exact(case, dim, xc, tc)).max()), t=float(tc), t_jax=float(tj))
+    t, u = G.solve(backend, kind, case, path, nx)
+    xc = np.asarray(G.setup(kind, case, path, nx)[0].cell_centers)[:, :len(u)]
+    dim = 1 if kind == "1d" else 2
+    return dict(err=float(np.abs(u - G.exact(case, dim, xc, t)).max()), t=t, u=u.tolist())
 
 
 # ── C29: LSQ boundary closure (gate 44) ─────────────────────────────────────

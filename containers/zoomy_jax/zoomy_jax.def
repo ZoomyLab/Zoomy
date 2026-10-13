@@ -19,6 +19,7 @@ From: ghcr.io/zoomylab/zoomy_jax_dev:latest
     library/zoomy_jax     /opt/src/zoomy_jax
     library/zoomy_server  /opt/src/zoomy_server
     library/zoomy_prepost /opt/src/zoomy_prepost
+    library/zoomy_plotting /opt/src/zoomy_plotting
 
 %environment
     export PATH=/opt/conda/envs/zoomy/bin:$PATH
@@ -26,6 +27,7 @@ From: ghcr.io/zoomylab/zoomy_jax_dev:latest
     export ZOOMY_ADAPTER=jax
     export ZOOMY_PORT=8080
     export ZOOMY_ROOT=/workspace
+    export OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
 
 %post
     set -e
@@ -37,9 +39,17 @@ From: ghcr.io/zoomylab/zoomy_jax_dev:latest
     ( /opt/conda/bin/mamba install -n zoomy -y -c conda-forge "pyprecice=3.4.0" \
       || /opt/conda/bin/conda install -n zoomy -y -c conda-forge "pyprecice=3.4.0" )
     /opt/conda/envs/zoomy/bin/python -c "import precice; print('pyprecice', precice.get_version_information())"
+    # MPI on the CPU for distributed runs (`comm=`; the matrix's mpiN configs), as in the
+    # Dockerfile (the stack pinned to the installed builds); GPU-aware MPI, AmgX: zoomy_jax_mpi
+    pins=$(/opt/conda/bin/conda list -n zoomy --export '^(python|numpy|scipy|jax|jaxlib)$' \
+           | grep -v '^#')
+    /opt/conda/bin/mamba install -n zoomy -y -c conda-forge $pins \
+        "openmpi>=5,<6" mpi4py "mpi4jax=0.9.1.post2"
+    /opt/conda/bin/conda clean -afy
     /opt/conda/envs/zoomy/bin/python -m pip install --no-cache-dir \
         h5py meshio jupyterlab jupyter-server ipykernel \
-        /opt/src/zoomy_core /opt/src/zoomy_jax /opt/src/zoomy_server /opt/src/zoomy_prepost
+        /opt/src/zoomy_core /opt/src/zoomy_jax /opt/src/zoomy_server /opt/src/zoomy_prepost \
+        /opt/src/zoomy_plotting
     rm -rf /opt/src
     mkdir -p /workspace
 
@@ -63,3 +73,4 @@ From: ghcr.io/zoomylab/zoomy_jax_dev:latest
     zoomy-server  --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
     zoomy-jupyter --help >/dev/null 2>&1 && echo "zoomy-jupyter CLI OK"
     /opt/conda/envs/zoomy/bin/python -c "import jupyterlab" && echo "jupyterlab OK"
+    mpiexec -n 2 /opt/conda/envs/zoomy/bin/python -c "from mpi4py import MPI; import mpi4jax, jax.numpy as jnp; c = MPI.COMM_WORLD; s = mpi4jax.allreduce(jnp.ones(1), op=MPI.SUM, comm=c); assert float(s[0]) == c.Get_size() == 2; print('mpi4jax allreduce OK, rank', c.Get_rank())"
