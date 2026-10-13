@@ -1,4 +1,4 @@
-"""Gate 45: the in-plane viscous operator of SME(0) + NewtonianInPlane, measured on the symbolic
+"""Gate 45: the in-plane viscous operator of SME(0) + Newtonian (stress=Stress.full), measured on the symbolic
 solvers, against (a) the SystemModel's own operator (diffusion_matrix A[i, j, a, b] with its
 mixed-index entries a != b, plus the nu-part of the source) and (b) the exact div(h tau'),
 tau' = nu (grad u + grad u^T) + 2 nu (div u) I (the in-plane stress minus the viscous normal
@@ -29,7 +29,8 @@ import common  # noqa: F401  (x64)
 import zoomy_core.model.boundary_conditions as BC
 from zoomy_core.mesh import LSQMesh, ensure_lsq_mesh
 from zoomy_core.model.models import SME
-from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree, NewtonianInPlane
+from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree
+from zoomy_core.model.models.equations import Stress
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel import SystemModel
 
@@ -56,9 +57,10 @@ PHYS = {"div(h tau')": {"q_x_0": sp.diff(H * (txx + 2 * dv), x) + sp.diff(H * tx
 
 
 def model(bcs):
-    """SME(0) + NewtonianInPlane with the boundary conditions ``bcs``."""
+    """SME(0) + Newtonian with the full stress and the boundary conditions ``bcs``."""
     return SystemModel.from_model(SME(level=0, dimension=3, boundary_conditions=BC.BoundaryConditions(bcs),
-                                      closures=[Newtonian(), ManningFriction(), StressFree(), NewtonianInPlane()]))
+                                      stress=Stress.full,
+                                      closures=[Newtonian(), ManningFriction(), StressFree()]))
 
 
 def sm_operator():

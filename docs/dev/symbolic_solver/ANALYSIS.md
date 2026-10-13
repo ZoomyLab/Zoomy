@@ -1395,6 +1395,84 @@ the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Det
   `standard`.  `increment` is therefore opt-in (C31 uses it: VAM ssp2 1.96); triangle meshes need
   a stabilized variant (e.g. Almgren et al.'s version (5)) before it can be the default.
 
+### 45h. The full Newtonian stress: `stress = Stress.shallow | Stress.full` (2026-10-13, dev/inplane-tauez)
+
+- **Design (the user's).**  `Newtonian` is the incompressible Newtonian fluid,
+  tau = rho nu (grad u + grad u^T), every component: `tensor` in physical (fixed-z) coordinates
+  before the sigma map, `stress` / `normal_stress` / `shear` at the traces (`expression` stays the
+  vertical shear rho nu d_z u).  The truncation is the shallow operator `moment_scaling`, set by the
+  typed model setting `stress` (`equations.Stress`, an `Option`; on SME, VAM, MLSME, MLVAM, default
+  `Stress.shallow`), one rule per component: `shallow` drops tau_de, tau_zz and the stress of the
+  vertical row (the blueprints carry each as its own additive term) and, read off `m.stress` by
+  the closure step, the rho nu d_d w part of the bulk tau_dz; `full` keeps the tensor.
+  `NewtonianInPlane`, `ShallowInPlane` and the `in_plane` slot are gone (users: gates 31, 45,
+  matrix C26 / C32 / C34, the reference tests, m07 / m14, the book; Sigma3D: `stress=None` keeps
+  tau_xx open, `Stress.shallow` drops it).  The other bulk closures close only the vertical shear:
+  `Stress.full` raises (`full_tensor_closures`).  ML-VAM-WD (experimental) is shallow only.
+- **Blueprints.**  `Momentum` and `MomentumNonHydrostatic` declare the full tensor in every row,
+  the vertical one included (d_e tau_ez + d_z tau_zz; the non-hydrostatic pressure unknown is
+  -sigma_zz minus the hydrostatic part, so tau_zz sits in its horizontal rows, 45f); ML-SME's
+  hand-written layer rows take the same terms through a stand-in blueprint.  `Stress.full`:
+  `apply_full_tensor` fills tau_de, tau_zz and the vertical row's tau_ez before the sigma map; the
+  horizontal shear tau_dz stays a closure variable for the traction (45e), its bulk
+  rho nu (d_z u_d + d_d w) (w: the kinematic reconstruction in SME / ML-SME, the state in VAM /
+  ML-VAM).
+- **One term not kept.**  The vertical row drops rho nu d_e d_e w, the eps^2 term of Marche 2007
+  eq. (3.2) that (3.5) drops (https://doi.org/10.1016/j.euromechflu.2006.04.007, Zotero CV8TMDFI):
+  it is eps^2 below every other term of that row (VAM's vertical inertia included), and in VAM the
+  bed-kinematic top w mode puts d^3 b into the w rows, which the extractor refuses (VAM(1) with it:
+  "diffusion-compound piece -12 nu q_1 b_x^2 / h ... has no D d_x Q reading", row 5).  So the
+  vertical row is (3.5)'s d_z p = -rho g + d_e(rho nu d_z u_e) + d_z tau_zz in every model.
+- **Where the order-nu terms land.**  SME: the vertical row integrated from z to eta with
+  p(eta) = tau_zz(eta) gives p = rho g (eta - z) - rho nu (div u(z) + div u(eta)), Marche (3.11).
+  VAM: d_e tau_ez in the w rows (prognostic, package_viscous now also on them).  ML-SME: a per-layer
+  vertical row for the viscous pressure Pi, integrated to the layer top Pi_top, which the assembly
+  sets to the integral over the layers above (Pi = 0 at the surface, continuous at the interfaces).
+  ML internal interfaces: each layer's trace is its own in-plane part; the assembly adds the shared
+  T* = tau*_dz - s*_de d_e z_a (`interface_traction`, `InterfaceFlux(quantity=
+  InterfaceQuantity.stress)`, mean by default, upwind): the whole interface traction is
+  single-valued with `Stress.full` (closes 45f open item (4) there).
+- **Defects found and fixed on the way** (each diagnosed with pdb on the derivation).
+  (1) `operations._resolve_subs_safe` unwrapped `Subs(d_x u(x, z), z, b + h)` into
+  `d_x u(x, b + h)`, which sympy reads as the TOTAL x-derivative: div u(eta) of (3.11) became
+  d_x[u(eta)] (SME(1) q_0 row: h^2 q_0'' coefficient 3 nu instead of 4 nu).  45f's surface terms
+  cancelled, so it was invisible.  Guard: no unwrap when the point depends on a differentiation
+  variable.  (2) `PDETransformation` had no rule for `Subs(f(z), z, Z)` (a vertical field at an
+  interface height): it now maps f and evaluates at zeta = (Z - b)/h.  (3)
+  `InvertMassMatrix._pull` pulled a zeta-factor out of d_x d_zeta(zeta^2 q) (bracket integrals the
+  w-row projection leaves): VAM(2) lost -6 nu d_x(q_2 / h) in the r_1 row.  Factors in a
+  derivative's variables now stay inside.  (4) ML-SME: d_x d_t h of the interface kinematics in the
+  w part, now from the global mass.
+- **Checks.**  (1) `Stress.shallow` = main, byte for byte: golden-style renders of 23 models
+  (SME 0-3, SME(1) 2-D, Manning, SWE 1-D / 2-D, VAM 0-2, VAM(1) 2-D, ML-SME 0 / 1 / mean / 2-D,
+  ML-VAM 0 / 1 / upwind) derived cold, and all 26 goldens rendered cold equal main's renders
+  except m07 / m14 (the `Stress.full` goldens, re-blessed: their nu = 0 operators equal main's,
+  the nu terms are the new ones).  (2) `Stress.full` at level 0: SME(0) 1-D / 2-D (gate 45 / 46 /
+  C26 / C32 / C34's model) and VAM(0) 1-D / 2-D render byte-identical to main's
+  `NewtonianInPlane`: gate 45 symbolic SM - div(h tau') = SM - gate 46 = 0 (flat and varying bed);
+  gate 46 q_x 3.55e-2 / 8.99e-3 / 2.26e-3, q_y 5.83e-2 / 1.52e-2 / 3.85e-3 (orders 1.99 / 1.98);
+  C34 JAX and NumPy the same (NumPy = JAX 1.12e-11), as in 45f.  (3) Gate 47 (new; generic smooth
+  h, q, r, b; aux = exact derivatives): SME(1), SME(2), SME(1) 2-D, VAM(1), VAM(2), VAM(1) 2-D,
+  every momentum and w row minus the independent projection = 0, 0 unclassified terms.  Gate 48
+  (new): ML-SME and ML-VAM, 2 layers, level 0 and 1 (1-D; level 0 also 2-D, ML-SME level 1 2-D):
+  every row = the per-layer projection with the mean interface traction and Pi; with identical
+  layer states (the single-layer profile restricted) the layer sum of the mode-0 rows = the
+  single-layer SME / VAM row, also with `UpwindInterface(quantity=stress)`; 0 unclassified.  The
+  rederive test of A[q_k <- h] now reads the d_xx h coefficient of an independent projection
+  (SME(2), passes; reference tier 13 / 13).  (4) Core suite: 350 passed, the 3 failures of main
+  (n02_vam_nsm, n03_sme_gate_guard, n02_time_canary), per directory the same counts as main.
+  (5) Matrix (serial, JAX and NumPy, scratch store): C26, C32, C33, C34 all PASS with values
+  equal to the committed table (73 rows identical); C36 (new: SME(1) `Stress.full`, periodic
+  16^2, IMEX) runs on both, mass change 0, NumPy = JAX 1.4e-13.
+- **Found, not fixed (pre-existing, shallow too).**  ML-VAM's w rows register the aux d_x(l_1 h)
+  with target 'h*l_1' and `target_kind='unknown'` (main's m15-type models, non-viscous terms),
+  the compound-aux pattern 45b found; backends likely read it as 0.
+- **Open.**  ML-VAM w rows: the vertical balance is pointwise per layer, so its interface traces
+  of tau_ez are one-sided (single-valued for continuous profiles only); a single-valued vertical
+  traction there is a model choice.  ML with `Stress.shallow` keeps the one-sided interface shear
+  (45f item (4)), unchanged by spec.  `interpolate_rows` slot 5 is still the hydrostatic part
+  (45f item (2)).  small_slope=False with the full stress is not run.
+
 ## 46. JAX distributed pressure solve (pyamg): the iteration count does not scale (2026-10-13)
 
 L2P's VAM Chorin at nx 256 (65k cells), `pressure_linear_solver="pyamg"`, 3 constant steps

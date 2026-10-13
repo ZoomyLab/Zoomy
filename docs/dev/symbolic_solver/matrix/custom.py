@@ -322,7 +322,7 @@ def lsq_closure(p, bc, backend="jax"):
 # ── C34: in-plane viscous operator vs the exact div(h tau') (gate 45) ────────
 def inplane_operator(backend, nx, work):
     """Gate 45 at ``nx``: the discrete in-plane viscous operator of SME(0) +
-    NewtonianInPlane (one step nu = 1 minus nu = 0, over dt) against the exact
+    Newtonian with stress=Stress.full (one step nu = 1 minus nu = 0, over dt) against the exact
     div(h tau'), tau' = tau - tau_zz I, the full SystemModel operator
     (mixed-index entries; = div(h tau') symbolically) and its diagonal-index
     part, max rel per momentum row; foam / AMReX also max rel |L - L_JAX|."""

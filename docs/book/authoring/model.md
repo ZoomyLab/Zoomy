@@ -129,7 +129,7 @@ editing the parent or adding a flag.
 
 | Closure | Acts on | Physics |
 | --- | --- | --- |
-| `Newtonian` | bulk | `τ = ρν ∂_z u` |
+| `Newtonian` | bulk | `τ = ρν(∇u + ∇uᵀ)`: the vertical shear `ρν ∂_z u` with `stress=Stress.shallow` (default), the whole tensor with `stress=Stress.full` |
 | `KEpsilonViscosity` | bulk | k–ε eddy viscosity `ν_t = C_μ k²/ε` |
 | `QRViscosity` | bulk | the same in `q`–`r` variables |
 | `Bingham` | bulk | regularised viscoplastic |
@@ -139,16 +139,21 @@ editing the parent or adding a flag.
 | `WallFunctionBed` | bottom | k–ε rough-wall function |
 | `ManningFriction` | bottom | `−g n²\|u\| / h^{1/3}` |
 | `EddyViscosity` | horizontal | horizontal mixing `∇·(ν h ∇u)` |
-| `ShallowInPlane` | horizontal | *drop* in-plane deviatoric stress |
-| `NewtonianInPlane` | in-plane | *keep* in-plane `τ_de` |
 | `StressFree` | surface | `τ(1) = 0` |
 | `MeanInterface`, `UpwindInterface` | interface | multilayer transfer velocity |
 
 `Bingham` and `KEpsilonViscosity` produce non-polynomial integrands — build the
 host model with `quadrature_order > 0`.
 
+How much of the bulk stress a moment model (`SME`, `VAM`, `MLSME`, `MLVAM`) keeps is
+the model setting `stress` (`zoomy_core.model.models.equations.Stress`), applied by
+`moment_scaling`: `Stress.shallow` (default) keeps the vertical shear `ρν ∂_z u` only;
+`Stress.full` keeps the whole Newtonian tensor (in-plane `τ_de`, `τ_zz`, the `ρν ∂_e w`
+part of `τ_ez` and the stress of the vertical balance; Marche 2007 eq. (3.5)).  Only
+`Newtonian` supplies the full tensor; the other bulk closures raise with `Stress.full`.
+
 ```{note}
-`ManningFriction`, `EddyViscosity`, `ShallowInPlane` and `NewtonianInPlane` are
+`ManningFriction` and `EddyViscosity` are
 **not** re-exported from `zoomy_core.model.models`; import them from
 `zoomy_core.model.models.closures`. There is no `Chezy` class — that is
 `RoughWall`.
