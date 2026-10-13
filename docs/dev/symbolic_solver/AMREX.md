@@ -16,8 +16,14 @@ Block -> what implements it
   divergence/edge_source                     per cell over its 4 faces (owner/other as JAX)
   halo                                       MultiFab::FillBoundary; ghost validity tracked (ngv)
   reduce_min/max/any                         ParReduce + ParallelDescriptor (NaN propagates)
-  linsolve                                   amrex::GMRES, right precond = exact cell blocks probed by
-                                             colouring ((R+1)^2 colours), inverted per cell
+  linsolve                                   linear_solver="hypre" (Chorin default): the operator's matrix
+                                             on the (2R+1)^D cell stencil by colouring (one op application
+                                             per colour and row), left-scaled by the inverse cell blocks,
+                                             hypre FlexGMRES + one BoomerAMG V-cycle (CPU HMIS / hybrid
+                                             sym. GS, GPU PMIS / l1-Jacobi; ext+i), rows owned per rank
+                                             (rank-major box numbering), true residual <= ls_tol;
+                                             "gmres": amrex::GMRES, right precond = exact cell blocks probed
+                                             by colouring ((R+1)^2 colours), inverted per cell
                                              (chorin_common.H ptype 3 idea; MLPoisson not used: Dirichlet-
                                              only, heuristic scale, indefinite 2x2 VAM block)
   root                                       per-cell FD Newton (foam rt.H scheme), device solve

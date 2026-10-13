@@ -120,7 +120,7 @@ Never in the default run; each command <= 5 min.  L1 weak scaling (C1 bump
 O2, 200^2 cells per rank, 1/2/4 ranks, 20 constant steps: ms/step); L2
 strong scaling (1600^2 = 2.56M cells, 5 steps); L2P pressure strong scaling
 (VAM(1) channel 3200 x 320 = 1M cells; JAX pyamg on CPU ranks, AmgX on GPUs;
-foam Schur-GAMG; AMReX GMRES + cell-block Jacobi); L3 catchment (JAX: the
+foam Schur-GAMG; AMReX hypre BoomerAMG + FlexGMRES); L3 catchment (JAX: the
 14.8M-cell 1 m mesh on 4 GPUs, a 5 s window, reads the mesh L5 writes: run
 L5 first; AMReX: `gates/catchment_amrex.py`, the 10 m raster with nodata
 cells as a bed-1e4 wall, against JAX on the same mesh); L4 setup / compile /
@@ -171,6 +171,24 @@ Not part of the matrix: 8 model goldens in zoomy_core (m01-m04, m06-m08,
 s01) fail on the base checkout too (pre-existing).  The diffusion_matrix
 sign fix (cfc19a85) changes no matrix case except C26: every other model
 here has nu = 0.
+
+## Results (2026-10-13, dev/hypre: AMG pressure solve on AMReX)
+
+AMReX `linsolve` with `linear_solver="hypre"` (the Chorin default; `"gmres"` keeps the old
+amrex::GMRES + cell-block Jacobi): the printed operator's matrix on the (2R+1)^D cell stencil by
+colouring (18 op applications in 2-D), left-scaled by the inverse 2x2 cell blocks, hypre
+FlexGMRES + one BoomerAMG V-cycle (CPU HMIS / hybrid symmetric GS, GPU PMIS / l1-Jacobi, ext+i)
+to the true residual 1e-10 (`amg_comparison.md`).  Scratch store, against the JAX store:
+- C8 `vam` / `vam_newton` / `vam_t2`: max rel vs JAX 2.8e-10 / 1.0e-10 / 8.8e-11 (<= 1e-9);
+  mpi2 (all three) and gpu1 (`vam`) vs serial <= 1.3e-11.  C10 (9 runs) vs JAX <= 1.6e-12,
+  mpi2 vs serial <= 8.2e-13; C31 `vam_ssp2_k0` 7.5e-12, mpi2 2.1e-13.
+- L2P (1M cells, 5 steps; ms/step, iterations per solve, ms per solve assembly / AMG setup /
+  Krylov): serial 24396, 19, 7400 / 3111 / 8361; mpi4 8180, 20, 2581 / 1055 / 2644 (6 boxes on
+  4 ranks); gpu1 512, 38, 72 / 148 / 251; gpu4 570, 38 (2 boxes: 2 GPUs busy; MPI not
+  CUDA-aware).  Before: > 10 min on every config.
+- 64k cells (`vam_large(800)`), old path vs hypre: CPU serial 892 iterations, 174 s per solve
+  (cores shared with other runs) vs 19, 1.04 s (assembly 0.51, setup 0.17, solve 0.36); gpu1 893,
+  13.9 s vs 36, 0.165 s (0.003 / 0.048 / 0.114).
 
 ## Results (2026-10-13, dev/tpfa: the diffusion face gradient)
 

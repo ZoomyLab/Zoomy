@@ -15,6 +15,14 @@ AMReX integration (`Src/Extern/HYPRE`: `HypreSolver<MSS>`, `HypreIJIface`), acti
 The 2x2 per-cell scaling is mandatory: scalar AMG stalls on the raw `A` (hypre 0.62, AmgX
 classical 0.61); after the scaling both libraries converge in 18-30 iterations.
 
+Implemented on AMReX (2026-10-13, `rt_amrex.H` `hypre_solve`, `linear_solver="hypre"`, the
+Chorin default): the matrix of the printed operator by colouring on the AMReX grid, the 2x2
+scaling, FlexGMRES + BoomerAMG (CPU HMIS + hybrid symmetric GS: 19 iterations at 1M cells; GPU
+PMIS + l1-Jacobi: 38), to the template's tolerance 1e-10 on the true residual.  hypre 3.2.0 is
+built into `~/.cache/zoomy` by `containers/zoomy_amrex/build_hypre_cuda.sh` (CPU and CUDA; the
+images have no hypre, and AMReX 25.02's `USE_HYPRE` does not compile against hypre 3.x CUDA).
+Results: `matrix/README.md`.
+
 ## Measured (setup s / solve s / iterations)
 
 | cells | AmgX, JAX's config (raw A) | AmgX classical PMIS (S) | hypre-CUDA PMIS + l1-Jacobi (S) | hypre 2.28 CPU, 8 ranks (S) | pyamg, 1 core (S) |
