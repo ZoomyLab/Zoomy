@@ -205,8 +205,9 @@ def imex_step(nsm, Q, Qaux, p, time, dt, mesh, order, tableau, mood=False,
     Newton solve of the implicit source.
 
     Args:
-        project: Chorin: ``project(Y, time, dt) -> (Y', B)`` maps a stage onto the
-            constraint, ``B = Y' - Y`` on the corrected rows.
+        project: Chorin: ``project(Y, time, dt, i) -> (Y', B)`` maps stage ``i`` (the
+            final combination: ``i`` omitted) onto the constraint, ``B = Y' - Y`` on the
+            corrected rows.
         dt_rule: ``dt`` from the cell states' wave speeds; returns ``(Q, dt)``.
     References:
         Pareschi, Russo 2005, https://doi.org/10.1007/s10915-004-4636-4
@@ -227,7 +228,7 @@ def imex_step(nsm, Q, Qaux, p, time, dt, mesh, order, tableau, mood=False,
                                 tableau.A[i][i] * dt, mesh)
         B = sp.S.Zero
         if project is not None:
-            Y, B = project(Y, time + c * dt, dt)
+            Y, B = project(Y, time + c * dt, dt, i)
         Y_aux = full_aux(nsm, Y, Qaux, p, time + c * dt, dt, mesh)
         F.append(euler(nsm, Y, Y_aux, p, time + tableau.ct[i] * dt, dt, mesh,
                        order, coupled=coupled, implicit_terms=False, rk=1) - Y)

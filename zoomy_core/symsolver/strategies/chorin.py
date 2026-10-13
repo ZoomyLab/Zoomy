@@ -3,6 +3,8 @@ a pressure solve and a correction, from the three systems of the model's pressur
 split (``pred``, ``press``, ``corr``). ``time_order`` 2 / 3 wraps stages in SSP-RK2 /
 RK3 and ``imex="ssp2"`` uses IMEX-SSP2(2,2,2) with projected stages.
 """
+from enum import Enum
+
 import sympy as sp
 
 from zoomy_core.symsolver.core import LinSolve, While
@@ -15,6 +17,18 @@ from zoomy_core.symsolver.vocabulary import (
     take, zeros)
 
 
+class Projection(str, Enum):
+    """What a projection stage solves for: the pressure, or its increment over a lagged one.
+    """
+    #: the full pressure each stage (Almgren, Bell, Crutchfield 2000, version (2))
+    standard = "standard"
+    #: correct with the lagged pressure ``P^n``, solve the same ``press`` system for
+    #: ``dP``, store ``P^n + dP`` (their version (1)): the approximate projection's defect
+    #: then acts on ``dP = O(dt)`` only, so the scheme keeps its time order on a fixed mesh.
+    #: The first step lags the initial state's pressure rows (zero: a standard projection)
+    increment = "increment"
+
+
 class ChorinTemplate(HyperbolicTemplate):
     """The projection solver of a pressure split ``pred`` / ``press`` / ``corr``, with
     ``nsm`` the predictor ``pred``; ``step`` is the projection step and ``march``,
@@ -22,22 +36,25 @@ class ChorinTemplate(HyperbolicTemplate):
 
     References:
         Chorin 1968, https://doi.org/10.1090/S0025-5718-1968-0242392-2
+        Almgren, Bell, Crutchfield 2000, https://doi.org/10.1137/S1064827599357024
     """
 
     def __init__(self, pred, press, corr, *, cfl, time_order=1,
-                 pressure_newton=None, **config):
+                 pressure_newton=None, projection=Projection.increment, **config):
         """Set the split and the configuration of :class:`HyperbolicTemplate`; ``cfl``
         is divided by ``2 order - 1``.
 
         Args:
             pressure_newton: ``(tol, maxit)`` for a nonlinear pressure constraint solved
                 by Newton, else ``None``.
+            projection: :class:`Projection` (or its name).
         """
         super().__init__(pred, cfl=cfl / (2 * pred.reconstruction.order - 1),
                          time_order=time_order, **config)
         self.press = press
         self.corr = corr
         self.pressure_newton = pressure_newton
+        self.projection = Projection(projection)
 
     def step(self, Q, Qaux, p, time, dt, mesh, *, dt_rule=None):
         """One time step: the outer SSP-RK over projection stages; with ``imex="ssp2"``
@@ -54,17 +71,37 @@ class ChorinTemplate(HyperbolicTemplate):
         #   R_i = Q + sum_{j<i} (At_ij F_j + A_ij (S_j + B_j / A_jj)) + A_ii dt S(R_i)
         #   B_i = Y_i - R_i,  F_i = dt f(Y_i),  S_i = dt S(Y_i)
         #   Q'  = P(Q + sum_i (wt_i F_i + w_i (S_i + B_i / A_ii)))
+        # increment: the lag of stage i (and of the final P) is cl_i P^n, cl_i the projection
+        # pressure the stage takes from a flux-driven pressure P^n (DG P^n = D f): stage i
+        # removes D R_i / dt = sum_{j<i} (At_ij - A_ij cl_j / A_jj) D f, so cl_i is that sum
+        # (SSP2: cl = (0, 1), final 1 - 1/(2 g)); the stored pressure is the step's total
+        # P^{n+1} = sum_i w_i P_i / A_ii + P_final.  A source-driven part of the pressure is
+        # not lagged (first order in that part only).
         if self.imex is Imex.ssp2:
             rows = tuple(self.press.equation_to_state_index)
+            tab, incr = IMEX_RK[self.imex], self.projection is Projection.increment
+            cl = []
+            for i in range(len(tab.c)):
+                cl.append(sum(tab.At[i][j] - tab.A[i][j] * cl[j] / tab.A[j][j]
+                              for j in range(i)))
+            cl.append(sum(tab.wt) - sum(w * cj / tab.A[j][j]
+                                        for j, (w, cj) in enumerate(zip(tab.w, cl))))
+            Pn, P_tab = take(Q, rows), []
 
-            def project(Y, t, dt):          # and its update off the pressure rows
-                """Project a stage; returns it with its update off the pressure rows.
+            def project(Y, t, dt, i=None):  # and its update off the pressure rows
+                """Project stage ``i`` (``None``: the final combination); returns it with
+                its update off the pressure rows.
                 """
-                Yp = self.project(Y, p, t, dt, mesh)
+                k = len(tab.c) if i is None else i
+                lag = cl[k] * Pn if incr and cl[k] != 0 else None
+                Yp = self.project(Y, p, t, dt, mesh, lag)
+                if incr and i is not None:
+                    P_tab.append(tab.w[i] * take(Yp, rows) / tab.A[i][i])
+                elif incr:
+                    Yp = put(Yp, rows, halo(take(Yp, rows) + sum(P_tab), mesh))
                 return Yp, put(Yp, rows, take(Y, rows)) - Y
             Q = imex_step(self.nsm, Q, Qaux, p, time, dt, mesh, self.order,
-                          IMEX_RK[self.imex], self.mood, dt_rule=dt_rule,
-                          project=project)
+                          tab, self.mood, dt_rule=dt_rule, project=project)
             if dt_rule is not None:
                 Q, dt = Q
             return Q, full_aux(self.nsm, Q, Qaux, p, time + dt, dt, mesh), dt
@@ -90,13 +127,31 @@ class ChorinTemplate(HyperbolicTemplate):
         """
         if dt_rule is None:
             Qaux = full_aux(self.nsm, Q, Qaux, p, time, dt, mesh)
+        # increment: the lag is the stage input's pressure (the predictor's flux would
+        # diffuse the pressure rows, a wrong lag at the boundaries)
+        lag = (take(Q, tuple(self.press.equation_to_state_index))
+               if self.projection is Projection.increment else None)
         Q, dt = self.predictor(Q, Qaux, p, time, dt, mesh, dt_rule)
-        return self.project(Q, p, time, dt, mesh), dt
+        return self.project(Q, p, time, dt, mesh, lag), dt
 
-    def project(self, Q, p, time, dt, mesh):
-        """The pressure solve and the correction of ``Q``."""
-        Q = pressure(self.press, Q, p, time, dt, mesh, self.pressure_newton)
-        return correct(self.corr, Q, p, time, dt, mesh)
+    def project(self, Q, p, time, dt, mesh, lag=None):
+        """The pressure solve and the correction of ``Q``.
+
+        Args:
+            lag: ``None``: solve for the pressure.  Else the lagged pressure ``P^n``:
+                correct with it, solve ``press`` on that state for ``dP`` (the corrector
+                is linear in the pressure) and correct ``Q`` with ``P^n + dP``.
+        """
+        if lag is None:
+            Q = pressure(self.press, Q, p, time, dt, mesh, self.pressure_newton)
+            return correct(self.corr, Q, p, time, dt, mesh)
+        rows = tuple(self.press.equation_to_state_index)
+        Q1 = put(correct(self.corr, put(Q, rows, lag), p, time, dt, mesh), rows,
+                 zeros(len(rows), mesh))
+        dP = take(pressure(self.press, Q1, p, time, dt, mesh, self.pressure_newton),
+                  rows)
+        return correct(self.corr, put(Q, rows, halo(lag + dP, mesh)), p, time, dt,
+                       mesh)
 
     def predictor(self, Q, Qaux, p, time, dt, mesh, dt_rule=None):
         """Euler flux step, then the implicit slots as Lie sub-steps (implicit with
