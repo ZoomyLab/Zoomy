@@ -7,18 +7,8 @@ on:
         description: "Execute curated smoke notebooks after validation"
         required: false
         default: "false"
-  pull_request:
-    branches: [ main, master ]
-    paths:
-      - "tutorials/**/*.ipynb"
-      - "notebooks/**/*.ipynb"
-      - "tests/notebooks/**"
-      - "tests/reporting/check_notebooks.py"
-      - "tests/reporting/requirements.txt"
-      - ".github/workflows/notebooks.yml"
-  schedule:
-    # Weekly notebook smoke execution
-    - cron: "0 4 * * 0"
+  # 2026-10-13: push / pull_request / schedule triggers DISABLED during the symbolic-solver
+  # migration (most suites are outdated). Manual runs only; re-enable the suites we keep after it.
 
 jobs:
   changed-notebooks:

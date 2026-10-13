@@ -38,10 +38,7 @@ on:
       - "tests/reporting/**"
       - "tests/results/symsolver/**"
       - ".github/workflows/render-webpage.yml"
-  workflow_run:
-    workflows: [ "Smart Tests" ]
-    types: [ completed ]
-    branches: [ main, master ]
+  # 2026-10-13: no longer chained to Smart Tests (disabled); push + manual only.
   workflow_dispatch:
     inputs:
       note:

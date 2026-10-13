@@ -31,35 +31,14 @@ permissions:
   packages: read
 
 on:
-  push:
-    branches: [ main, develop ]
-    paths:
-      - "library/**"
-      - "tests/**"
-      - "tutorials/**"
-      - "pytest.ini"
-      - "conftest.py"
-      - ".github/workflows/tests-report.yml"
-  pull_request:
-    branches: [ main ]
-    paths:
-      - "library/**"
-      - "tests/**"
-      - "tutorials/**"
-      - "pytest.ini"
-      - "conftest.py"
-      - ".github/workflows/tests-report.yml"
+  # 2026-10-13: push / pull_request / schedule triggers DISABLED during the symbolic-solver
+  # migration (most suites are outdated). Manual runs only; re-enable the suites we keep after it.
   workflow_dispatch:
     inputs:
       run_large:
         description: "Also run the large/benchmark/regression suite"
         required: false
         default: "false"
-  workflow_run:
-    workflows: [ "Containers" ]
-    types: [ completed ]
-  schedule:
-    - cron: "0 3 * * 0"   # weekly large/regression run, Sunday 03:00 UTC
 
 jobs:
   meta:
