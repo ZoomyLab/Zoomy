@@ -224,7 +224,7 @@ class SME(BaseModel):
             """
             return ClosureState(m.functions, params=m.parameters, h=h, x=x,
                                 zeta=zeta, at=at, alias=alias,
-                                boundary_tag=btag, horiz=list(horiz))
+                                boundary_tag=btag, horiz=list(horiz), base=b)
         for ax in HAXES:
             mxi = getattr(m.momentum, ax)
             mxi.apply(Multiply(h)); mxi.apply(Multiply(c(zeta) * phi_k))

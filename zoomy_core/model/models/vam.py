@@ -145,7 +145,7 @@ class VAM(BaseModel):
             """
             return ClosureState(m.functions, params=m.parameters, h=h, x=x,
                                 zeta=zeta, at=at, alias=alias,
-                                boundary_tag=btag, horiz=list(horiz))
+                                boundary_tag=btag, horiz=list(horiz), base=b)
         for mn in MOM:
             mxi = getattr(m, mn)
             _project(mxi)

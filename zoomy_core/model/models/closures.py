@@ -11,27 +11,64 @@ from zoomy_core.model.operations import Operation
 from zoomy_core.model.models.material import ClosureState   # the full-access state
 
 
-def _solve_traction(P, s, nh):
+def _solve_traction(P, s, nh, inplane=None):
     """Solve the boundary frame system ``t_a . (tau n) = P_a`` for the shear-stress traces
     ``tau_iz`` given the prescribed tangential tractions ``P``; they reduce to ``tau_iz = P_i``
     under small-slope scaling.
+
+    Args:
+        inplane: optional in-plane part ``g_d = sum_e tau_de d_e I`` per axis (``_inplane_traction``);
+            then ``(tau n)_d = (tau_dz - g_d) n_z`` and ``tau_iz -> P_i + g_i`` under small-slope
+            scaling.
     """
     nvec, tans = s.normal, s.tangents
     tau = [sp.Symbol(f"__tauz{i}") for i in range(nh)]
     nz = nvec[nh]
-    taudotn = sp.Matrix([tau[i] * nz for i in range(nh)]
-                        + [sum(tau[i] * nvec[i] for i in range(nh))])
+    if inplane is None:
+        taudotn = sp.Matrix([tau[i] * nz for i in range(nh)]
+                            + [sum(tau[i] * nvec[i] for i in range(nh))])
+    else:
+        # opaque g_d through the solve; the physical slope keeps it alive under small_slope
+        g = [sp.Symbol(f"__tauin{i}") for i in range(nh)]
+        taudotn = sp.Matrix([(tau[i] - g[i]) * nz for i in range(nh)]
+                            + [sum(tau[i] * nvec[i] for i in range(nh))])
     eqs = [sp.Eq((tans[a].T * taudotn)[0], P[a]) for a in range(nh)]
     sol = sp.solve(eqs, tau, dict=True)
     if not sol:
         raise ValueError("boundary traction frame solve failed for "
                          f"P={P} (nh={nh})")
-    return [sp.simplify(sol[0][tau[i]]) for i in range(nh)]
+    out = [sp.simplify(sol[0][tau[i]]) for i in range(nh)]
+    if inplane is not None:
+        out = [o.xreplace(dict(zip(g, inplane))) for o in out]
+    return out
+
+
+def _inplane_traction(inplane, s, nh):
+    """In-plane part of the boundary traction, ``g_d = sum_e tau_de(I) d_e I`` per axis, or
+    ``None`` without an in-plane closure.
+
+    ``tau_de`` is the closures' in-plane stress at the trace of ``s`` and ``d_e I`` the PHYSICAL
+    interface slope, the slope the sigma map gives the Leibniz terms ``-tau_de(eta) d_e eta +
+    tau_de(b) d_e b`` of the depth-integrated ``d_e tau_de``; with ``tau_dz = P_d + g_d`` those
+    cancel and the depth integral is ``d_e(h <tau_de>)`` (Gerbeau, Perthame 2001,
+    https://doi.org/10.3934/dcdsb.2001.1.89).
+    """
+    if not inplane:
+        return None
+    S = s.interface_slopes
+    T = [[sp.S.Zero] * nh for _ in range(nh)]
+    for c in inplane:
+        Tc = c.stress(s)
+        for d_ in range(nh):
+            for e in range(nh):
+                T[d_][e] += Tc[d_][e]
+    return [sum(T[d_][e] * S[e] for e in range(nh)) for d_ in range(nh)]
 
 
 def apply_stress_closures(closures, m, axes, state, horiz):
     """Inject the bulk, bed and surface stress closures into the projected momentum equations of
-    SME/VAM, frame-aware and dimension-agnostic.
+    SME/VAM, frame-aware and dimension-agnostic.  With an in-plane closure the bed and surface
+    tractions carry the in-plane stress too (``_inplane_traction``).
 
     Args:
         closures: list of ``Closure`` objects.
@@ -51,6 +88,7 @@ def apply_stress_closures(closures, m, axes, state, horiz):
     surface = [c for c in closures if c.closes == "surface"]
     bottom = [c for c in closures if c.closes == "bottom"]
     bulk = [c for c in closures if c.closes == "bulk"]
+    inplane = [c for c in closures if c.closes == "in_plane"]
     for at, btag, pieces in ((1, "eta", surface), (0, "b", bottom)):
         if not pieces:
             continue
@@ -59,7 +97,8 @@ def apply_stress_closures(closures, m, axes, state, horiz):
             tang = c.traction(state(at, btag=btag)).get("tangent") or []
             for i in range(min(nh, len(tang))):
                 P[i] += tang[i]
-        traces = _solve_traction(P, state(at, btag=btag), nh)
+        traces = _solve_traction(P, state(at, btag=btag), nh,
+                                 inplane=_inplane_traction(inplane, state(at, btag=btag), nh))
         for i, ax in enumerate(axes):
             ax["mx"].apply({ax["tau"].at(at): traces[i]})
     for c in bulk:                                # diagonal constitutive
@@ -454,7 +493,8 @@ class NewtonianInPlane(Closure):
     """Marker closure that keeps the in-plane deviatoric stress as incompressible Newtonian,
     ``tau_de = rho nu (d_d u_e + d_e u_d)``, the complement of ``ShallowInPlane``.
     The model adds the divergence (``add_inplane_viscous``) and routes it into
-    ``diffusion_matrix`` (``package_viscous``).
+    ``diffusion_matrix`` (``package_viscous``); ``stress`` puts it into the bed and surface
+    traction (``apply_stress_closures``), so the depth-averaged term is ``div(h tau)``.
     """
     closes = "in_plane"; requires = ("u",)
 
@@ -469,6 +509,15 @@ class NewtonianInPlane(Closure):
         # in-plane stress is tensor-valued and consumed by the model's
         # add_inplane_viscous (not the scalar apply_stress_closures path)
         return s.par.rho * s.par.nu * s.dz(s.u)
+
+    def stress(self, s):
+        """In-plane tensor ``tau_de = rho nu (d_d u_e + d_e u_d)`` at the trace of ``s``, with the
+        physical (fixed-z) derivatives of the sigma map; it enters the boundary traction
+        (``apply_stress_closures``).
+        """
+        u, X = s.horizontal_velocity, s.horizontal
+        return [[s.trace(s.par.rho * s.par.nu * (s.dx_phys(u[e], X[d]) + s.dx_phys(u[d], X[e])))
+                 for e in range(len(X))] for d in range(len(X))]
 
 
 # ── surface closures ───────────────────────────────────────────────────────

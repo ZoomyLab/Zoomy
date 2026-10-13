@@ -17,7 +17,7 @@ class ClosureState:
     """
 
     def __init__(self, fields, *, params=None, h=None, x=None, zeta=None,
-                 at=None, alias=None, boundary_tag=None, horiz=None):
+                 at=None, alias=None, boundary_tag=None, horiz=None, base=None):
         """Store the field map, parameters, sigma frame and (optionally) the boundary frame.
 
         Args:
@@ -28,10 +28,13 @@ class ClosureState:
             boundary_tag: ``"b"`` or ``"eta"``, selects the opaque slope symbols of the boundary
                 frame.
             horiz: horizontal coordinates of the model.
+            base: bottom ``z_0`` of the sigma map ``z = z_0 + h zeta``; needed only by
+                ``dx_phys`` and ``interface_slopes``.
         """
         # ``object.__setattr__`` so __getattr__ does not recurse on these.
         object.__setattr__(self, "_fields", fields)
         object.__setattr__(self, "_params", params)
+        object.__setattr__(self, "_base", base)
         object.__setattr__(self, "_h", h)
         object.__setattr__(self, "_x", x)
         object.__setattr__(self, "_zeta", zeta)
@@ -71,6 +74,46 @@ class ClosureState:
     def dx(self, e):
         """Horizontal derivative ``d_x e`` of ``e`` at fixed zeta."""
         return sp.Derivative(e, self._x)
+
+    def dx_phys(self, e, xd):
+        """Physical horizontal derivative of the bulk expression ``e`` at fixed z under the
+        sigma map ``z = z_0 + h zeta``: ``d_xd e - (d_xd z_0 + zeta d_xd h)/h d_zeta e``.
+        """
+        z0, zc = self._sigma_base(), self._zeta
+        return (sp.Derivative(e, xd)
+                - (sp.diff(z0, xd) + zc * sp.diff(self._h, xd)) / self._h * sp.Derivative(e, zc))
+
+    def trace(self, e):
+        """The bulk expression ``e`` at this state's trace ``zeta = at`` (``e`` in the bulk)."""
+        return e if self._at is None else e.subs(self._zeta, self._at)
+
+    @property
+    def horizontal(self):
+        """Horizontal coordinates of the model."""
+        return list(self._horiz)
+
+    @property
+    def horizontal_velocity(self):
+        """Bulk horizontal velocity ``[u, (v,)]`` (no alias), whatever the trace of this state."""
+        from zoomy_core import coords as _C
+        f = self._fields
+        names = [{_C.x: "u", _C.y: "v"}[c] for c in self._horiz]
+        return [(f[n] if isinstance(f, dict) else getattr(f, n)).expr for n in names]
+
+    @property
+    def interface_slopes(self):
+        """Physical slopes ``d_e(z_0 + at h)`` of this trace's interface (``d_e b`` at the bed,
+        ``d_e eta`` at the surface), one per horizontal direction.
+        """
+        iface = self._sigma_base() + self._at * self._h
+        return [sp.diff(iface, xe) for xe in self._horiz]
+
+    def _sigma_base(self):
+        """Bottom ``z_0`` of the sigma map; raises if the model did not supply it."""
+        if self._base is None:
+            raise ValueError("this ClosureState has no sigma-map base z_0 (pass base=...): "
+                             "physical horizontal derivatives and interface slopes need it")
+        return self._base
 
     # ── opaque boundary frame {n, t_α} (projected-traction closures) ──────────
     @property
