@@ -177,6 +177,11 @@ class CxxChorinBackend(CxxBackend):
     pressure_newton_tol = param.Number(default=1e-10, bounds=(0, None),
                                        doc="Newton: stop at max|R| <= tol.")
     pressure_newton_maxit = param.Integer(default=10, bounds=(1, None))
+    projection = param.Selector(
+        default="standard", objects=["standard", "increment"],
+        doc="'standard': each projection stage solves for the full pressure; 'increment': it "
+            "corrects with the lagged pressure and solves for its increment (time order 2 on a "
+            "fixed mesh; opt-in: growing lagged modes on triangles, ANALYSIS 45e).")
 
     def _prepare(self, mesh, model):
         """Name the split's systems as the template prints them (``pred.``, ``press.``,
@@ -216,6 +221,7 @@ class CxxChorinBackend(CxxBackend):
         newton = (None if self.pressure_solve == "linear" else
                   (sp.Float(self.pressure_newton_tol), int(self.pressure_newton_maxit)))
         return ChorinTemplate(nsm, self.press, self.corr, pressure_newton=newton,
+                              projection=self.projection,
                               **self._config(nsm, dimension))
 
     def _print(self, nsm, dimension):

@@ -993,16 +993,18 @@ class SystemModel:
         bcs = BoundaryConditions(merged)
         # Bind each BC's ``on=`` to slot indices against this state (so the root
         # mask fires), and run the SystemModel-needing hooks (FromModel,
-        # Characteristic).  Recurse into any PerFieldBoundary slot BCs.
+        # Characteristic).  Recurse into any PerFieldBoundary slot BCs and
+        # face= / ghost= channel BCs.
         def _prepare(bc):
             """Resolve ``bc`` against this system and bind it to the state names, recursing into
-            slot BCs.
+            slot and channel BCs.
             """
             if hasattr(bc, "resolve"):
                 bc.resolve(self)
             bc.bind_on(state_names)
-            for inner in {id(v): v for v in
-                          getattr(bc, "_slot_bc", {}).values()}.values():
+            nested = [*getattr(bc, "_slot_bc", {}).values(),
+                      *getattr(bc, "channels", dict)().values()]
+            for inner in {id(v): v for v in nested}.values():
                 _prepare(inner)
         for bc in bcs.boundary_conditions_list:
             _prepare(bc)

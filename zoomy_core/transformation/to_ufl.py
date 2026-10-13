@@ -1,7 +1,6 @@
 """Module `zoomy_core.transformation.to_ufl`."""
 
 import sympy as sp
-import ufl
 from zoomy_core.misc.misc import Zstruct
 from zoomy_core.systemmodel.system_model import OPERATOR_ARG_SLOTS
 from zoomy_core.transformation.to_numpy import (
@@ -54,6 +53,8 @@ def _zd_grad_resolver(field, *axis_indices):
     """Runtime resolver: ``ufl.grad(field)[axis_indices...]`` with one
     ``ufl.grad`` per axis index.  Single-index = first-order
     derivative; repeated = higher orders / mixed partials."""
+    import ufl
+
     val = field
     for idx in axis_indices:
         val = ufl.grad(val)[int(idx)]
@@ -62,6 +63,8 @@ def _zd_grad_resolver(field, *axis_indices):
 
 def _ufl_conditional(condition, true_val, false_val):
     """Internal helper `_ufl_conditional`."""
+    import ufl
+
     if condition is True:
         return true_val
     elif condition is False:
@@ -81,6 +84,100 @@ class _ZoomyVector(sp.Function):
     ``ImmutableDenseMatrix(...)`` and be indistinguishable.
     """
     pass
+
+
+def _ufl_module():
+    """The lambdify module dict mapping SymPy names to UFL; imports ufl."""
+    import ufl
+
+    return {
+        'ones_like': lambda x: 0*x + 1,
+        'zeros_like': lambda x:  0*x,
+        'array': ufl.as_vector,
+        'squeeze': lambda x: x,
+        'conditional': _ufl_conditional,
+
+        # --- Elementary arithmetic ---
+        "Abs": abs,
+        "sign": ufl.sign,
+        # SymPy's ``Min`` / ``Max`` accept N arguments; ``ufl.min_value`` /
+        # ``ufl.max_value`` are strictly binary.  Reduce N-ary calls to a
+        # pairwise chain so any arity lambdifies cleanly.
+        "Min": lambda *a: (a[0] if len(a) == 1
+                           else __import__("functools").reduce(ufl.min_value, a)),
+        "Max": lambda *a: (a[0] if len(a) == 1
+                           else __import__("functools").reduce(ufl.max_value, a)),
+        # --- Powers and roots ---
+        "sqrt": ufl.sqrt,
+        "exp": ufl.exp,
+        "ln": ufl.ln,
+        "pow": lambda x, y: x**y,
+        # --- Trigonometric functions ---
+        "sin": ufl.sin,
+        "cos": ufl.cos,
+        "tan": ufl.tan,
+        "asin": ufl.asin,
+        "acos": ufl.acos,
+        "atan": ufl.atan,
+        "atan2": ufl.atan2,
+        # --- Hyperbolic functions ---
+        "sinh": ufl.sinh,
+        "cosh": ufl.cosh,
+        "tanh": ufl.tanh,
+        # --- Piecewise / conditional logic ---
+        # SymPy emits ``Heaviside(x, h0)`` (2-arg) when it arises from a
+        # subgradient, e.g. d/dx Max(x, c) = Heaviside(x - c, 1/2): the 2nd
+        # arg is the value AT x == 0.  That set is measure-zero under FEM
+        # quadrature, but the lambda must still accept it (else lowering the
+        # symbolic source Jacobian of a floored Manning friction fails).
+        "Heaviside": lambda x, *h0: ufl.conditional(
+            x > 0, 1.0, ufl.conditional(x < 0, 0.0, h0[0] if h0 else 0.5)),
+        "Piecewise": ufl.conditional,
+        "signum": ufl.sign,
+        # --- Vector & tensor ops ---
+        "dot": ufl.dot,
+        "inner": ufl.inner,
+        "outer": ufl.outer,
+        "cross": ufl.cross,
+        # --- Differential operators (used in forms) ---
+        "grad": ufl.grad,
+        "div": ufl.div,
+        "curl": ufl.curl,
+        # --- Common constants ---
+        "pi": ufl.pi,
+        "E": ufl.e,
+        # --- Matrix and linear algebra ---
+        "transpose": ufl.transpose,
+        "det": ufl.det,
+        "inv": ufl.inv,
+        "tr": ufl.tr,
+        # --- Python builtins (SymPy may emit these) ---
+        "abs": abs,
+        "min": lambda *a: (a[0] if len(a) == 1
+                           else __import__("functools").reduce(ufl.min_value, a)),
+        "max": lambda *a: (a[0] if len(a) == 1
+                           else __import__("functools").reduce(ufl.max_value, a)),
+        "sqrt": ufl.sqrt,
+        "sum": lambda x: ufl.Constant(sum(x)) if isinstance(x, (list, tuple)) else x,
+        # --- Array / matrix serialisation ---
+        "_ZoomyVector": lambda *args: ufl.as_vector(list(args)),
+        "ImmutableDenseMatrix": lambda data: ufl.as_tensor(data),
+        # --- Derivative atom resolver
+        # Replaces ``sp.Derivative(field, x, ...)`` substituted in by
+        # ``_substitute_derivative_atoms`` with ``ufl.grad`` chains.
+        "_ZdGrad": _zd_grad_resolver,
+    }
+
+
+class _UFLModule:
+    """`UFLRuntimeModel.module`: built on first access, so importing this module needs no ufl."""
+
+    _dict = None
+
+    def __get__(self, obj, owner):
+        if _UFLModule._dict is None:
+            _UFLModule._dict = _ufl_module()
+        return _UFLModule._dict
 
 
 class UFLRuntimeModel(NumpyRuntimeModel):
@@ -354,83 +451,7 @@ class UFLRuntimeModel(NumpyRuntimeModel):
         SystemModel / NSM through ``to_numerical_system_model``."""
         return cls.from_system_model(nsm, module=module, printer=printer)
 
-    module = {
-        'ones_like': lambda x: 0*x + 1,
-        'zeros_like': lambda x:  0*x,
-        'array': ufl.as_vector,
-        'squeeze': lambda x: x,
-        'conditional': _ufl_conditional,
-
-        # --- Elementary arithmetic ---
-        "Abs": abs,
-        "sign": ufl.sign,
-        # SymPy's ``Min`` / ``Max`` accept N arguments; ``ufl.min_value`` /
-        # ``ufl.max_value`` are strictly binary.  Reduce N-ary calls to a
-        # pairwise chain so any arity lambdifies cleanly.
-        "Min": lambda *a: (a[0] if len(a) == 1
-                           else __import__("functools").reduce(ufl.min_value, a)),
-        "Max": lambda *a: (a[0] if len(a) == 1
-                           else __import__("functools").reduce(ufl.max_value, a)),
-        # --- Powers and roots ---
-        "sqrt": ufl.sqrt,
-        "exp": ufl.exp,
-        "ln": ufl.ln,
-        "pow": lambda x, y: x**y,
-        # --- Trigonometric functions ---
-        "sin": ufl.sin,
-        "cos": ufl.cos,
-        "tan": ufl.tan,
-        "asin": ufl.asin,
-        "acos": ufl.acos,
-        "atan": ufl.atan,
-        "atan2": ufl.atan2,
-        # --- Hyperbolic functions ---
-        "sinh": ufl.sinh,
-        "cosh": ufl.cosh,
-        "tanh": ufl.tanh,
-        # --- Piecewise / conditional logic ---
-        # SymPy emits ``Heaviside(x, h0)`` (2-arg) when it arises from a
-        # subgradient, e.g. d/dx Max(x, c) = Heaviside(x - c, 1/2): the 2nd
-        # arg is the value AT x == 0.  That set is measure-zero under FEM
-        # quadrature, but the lambda must still accept it (else lowering the
-        # symbolic source Jacobian of a floored Manning friction fails).
-        "Heaviside": lambda x, *h0: ufl.conditional(
-            x > 0, 1.0, ufl.conditional(x < 0, 0.0, h0[0] if h0 else 0.5)),
-        "Piecewise": ufl.conditional,
-        "signum": ufl.sign,
-        # --- Vector & tensor ops ---
-        "dot": ufl.dot,
-        "inner": ufl.inner,
-        "outer": ufl.outer,
-        "cross": ufl.cross,
-        # --- Differential operators (used in forms) ---
-        "grad": ufl.grad,
-        "div": ufl.div,
-        "curl": ufl.curl,
-        # --- Common constants ---
-        "pi": ufl.pi,
-        "E": ufl.e,
-        # --- Matrix and linear algebra ---
-        "transpose": ufl.transpose,
-        "det": ufl.det,
-        "inv": ufl.inv,
-        "tr": ufl.tr,
-        # --- Python builtins (SymPy may emit these) ---
-        "abs": abs,
-        "min": lambda *a: (a[0] if len(a) == 1
-                           else __import__("functools").reduce(ufl.min_value, a)),
-        "max": lambda *a: (a[0] if len(a) == 1
-                           else __import__("functools").reduce(ufl.max_value, a)),
-        "sqrt": ufl.sqrt,
-        "sum": lambda x: ufl.Constant(sum(x)) if isinstance(x, (list, tuple)) else x,
-        # --- Array / matrix serialisation ---
-        "_ZoomyVector": lambda *args: ufl.as_vector(list(args)),
-        "ImmutableDenseMatrix": lambda data: ufl.as_tensor(data),
-        # --- Derivative atom resolver
-        # Replaces ``sp.Derivative(field, x, ...)`` substituted in by
-        # ``_substitute_derivative_atoms`` with ``ufl.grad`` chains.
-        "_ZdGrad": _zd_grad_resolver,
-    }
+    module = _UFLModule()
 
 
 class UFLRuntimeSymbolic(UFLRuntimeModel, NumpyRuntimeSymbolic):

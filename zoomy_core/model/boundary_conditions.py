@@ -3,6 +3,7 @@ and the kernels it lowers to. They are attached to a SystemModel, which turns th
 boundary / ghost-state kernels the solver templates call.
 """
 
+import copy
 import functools
 import numpy as np
 from time import time as get_time
@@ -38,6 +39,45 @@ _BC_ON_METHODS = {
 }
 
 
+#: Producer -> the channel it serves; a `face=` / `ghost=` BC replaces it on the slots of its
+#: `on`.  A ghost is always derived from the BC's own face value, never from a `face=` BC.
+_BC_CHANNELS = {
+    "compute_boundary_condition": "face",
+    "face_value":                 "face",
+    "face_state":                 "face",
+    "compute_ghost_state":        "ghost",
+}
+
+
+def _own_value(self, fn, args, kw):
+    """`fn` evaluated with this BC's own face value (its `face=` BC switched off)."""
+    if self.face is None:
+        return fn(self, *args, **kw)
+    prev, self._own_face = self._own_face, True
+    try:
+        return fn(self, *args, **kw)
+    finally:
+        self._own_face = prev
+
+
+def _channel_value(self, name, fn, symbolic, args, kw):
+    """Producer `name` of `self` with the `face=` / `ghost=` channel BCs applied."""
+    channel = _BC_CHANNELS.get(name)
+    if channel is None:
+        return fn(self, *args, **kw)
+    other = None if (channel == "face" and self._own_face) else getattr(self, channel)
+    own = _own_value(self, fn, args, kw)
+    if other is None:
+        return own
+    value = getattr(other, name)(*args, **kw)
+    if other._on_slots is None:
+        return value
+    out = ZArray(own) if symbolic else np.asarray(own, dtype=float).copy()
+    for s in other._on_slots:
+        out[s] = value[s]
+    return out
+
+
 def _wrap_on_method(fn, interior_idx, is_grad, symbolic):
     """Wrap a BC producer so its result is written only to the slots in ``self._on_slots``
     (None: owns all, pass through).
@@ -45,7 +85,7 @@ def _wrap_on_method(fn, interior_idx, is_grad, symbolic):
     @functools.wraps(fn)
     def wrapped(self, *args, **kw):
         """Call the producer and mask its result to the owned slots."""
-        full = fn(self, *args, **kw)
+        full = _channel_value(self, fn.__name__, fn, symbolic, args, kw)
         slots = getattr(self, "_on_slots", None)
         if slots is None:                       # owns everything → no masking
             return full
@@ -87,16 +127,26 @@ class BoundaryCondition(param.Parameterized):
     """Base class of a boundary condition: a ``tag`` (patch) and an ``on`` selector naming the
     state field(s) it owns. A flat list of BCs gives different fields different BCs at one tag;
     ``on`` is resolved against the model state by :func:`resolve_per_field`.
+
+    A BC feeds two channels: `face`, the state on the boundary face (the Riemann problem), and
+    `ghost`, the value at the mirror image of the inner cell centre (gradients, limiters,
+    derivative aux, diffusion), by default derived from the face value.  `face=` / `ghost=` take
+    another BC that supplies that channel on the slots of its `on`, e.g.
+    `Wall(tag="w", ghost=Dirichlet(on="momentum", value=0))`.
     """
 
     tag = param.String(default="bc")
     on = param.String(default="all", doc=(
         "Field/family/group this BC applies to ('h', 'q', 'q_0', 'momentum', "
         "'all'); resolved against the model's declared state."))
+    face = param.Parameter(default=None, doc="BC supplying the `face` channel (None: this BC).")
+    ghost = param.Parameter(default=None, doc="BC supplying the `ghost` channel (None: this BC).")
 
     # Resolved slot indices this BC owns (None ⇒ all ⇒ no masking).  Set by
     # ``bind_on`` once the model state is known (see SystemModel.attach_*).
     _on_slots = None
+    # True while this BC derives a value from its own face value (`_own_value`).
+    _own_face = False
 
     #: How :meth:`compute_boundary_condition`'s value is to be read by the
     #: GHOST convention (decision D5, :meth:`compute_ghost_state`):
@@ -122,6 +172,24 @@ class BoundaryCondition(param.Parameterized):
         if on is not None:
             params["on"] = on
         super().__init__(**params)
+        for channel, bc in self.channels().items():
+            setattr(self, channel, self._own_channel(channel, bc))
+
+    def channels(self):
+        """The channel BCs given, `{"face": bc, "ghost": bc}`."""
+        return {c: getattr(self, c) for c in ("face", "ghost") if getattr(self, c) is not None}
+
+    def _own_channel(self, channel, bc):
+        """This BC's copy of the channel BC `bc`, at this BC's tag."""
+        if not isinstance(bc, BoundaryCondition) or isinstance(bc, (Periodic, Coupled)):
+            raise TypeError(f"{type(self).__name__}(tag={self.tag!r}): {channel}= takes a "
+                            f"per-field BoundaryCondition, got {type(bc).__name__}")
+        if isinstance(self, (Periodic, Coupled)):
+            raise TypeError(f"{type(self).__name__}(tag={self.tag!r}) is a whole-patch BC: "
+                            f"no {channel}= channel")
+        bc = copy.deepcopy(bc)
+        bc.tag = self.tag
+        return bc
 
     def bind_on(self, state_names, aliases=None):
         """Resolve ``on`` to the owned state-slot indices (None: all, no masking); called by
