@@ -20,3 +20,8 @@ Design notes (not part of the book; they record decisions and measurements):
 
 The scripts under `docs/dev/symbolic_solver/gates/` are the acceptance gates
 the matrix wraps; they are scratch, not library tests.
+
+## Writing and building the docs
+
+- **Markdown (MyST), never reStructuredText**: pages are `.md`, and so are the docstrings. The API reference ([sphinx-autodoc2](https://sphinx-autodoc2.readthedocs.io)) reads them as MyST: backticks for code, `[text](url)` for links, `` ```{note} `` for admonitions; `Args:` / `Returns:` / `References:` sections stay readable (`docs/book/_ext/zoomy_docstrings.py`). Old rST markup in docstrings is rewritten by `python docs/scripts/docstrings_rst_to_md.py PATH` (a dry run unless `--write`).
+- **The site is built by CI from `main`** (`.github/workflows/render-webpage.yml`, in the image of `docs/Dockerfile.docs`): the scripts of `docs/scripts/` write the report and API pages, then `jupyter-book build docs/book`. **Never commit built or generated output** (`_build`, `api/_autodoc2`, `docs/_generated`); preview in that image, do not push a local build.
