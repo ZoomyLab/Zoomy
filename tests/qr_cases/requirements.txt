@@ -1,0 +1,16 @@
+# CPython side of tests/qr_cases: what the GUI's Pyodide worker installs, minus jax (the
+# browser has none; CI installs it afterwards for the JAX session only). zoomy_core and
+# zoomy_plotting are the wheels docs/scripts/build_gui_wheels.py builds (CI installs them;
+# locally the checkout), zoomy_jax comes from the checkout.
+numpy
+scipy
+sympy>=1.14
+param
+loguru
+h5py
+matplotlib
+meshio
+imageio
+pyyaml
+pytest
+pytest-xdist

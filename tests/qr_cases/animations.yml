@@ -1,0 +1,68 @@
+# SNAPSHOT of thesis/scripts/animations.yml (the thesis repo is private, CI cannot
+# read it). test_manifest_snapshot_is_current fails when the two disagree; refresh
+# with: cp thesis/scripts/animations.yml tests/qr_cases/animations.yml and re-add
+# these four lines.
+# Online animation pages for {animated} figures.
+#
+# Key = file stem of the {animated} directive's argument
+# (./figures/animations/swe_dam_break.gif -> swe_dam_break).
+# scripts/gen_qrcodes.py regenerates chapters/figures/qrcodes/auto/<stem>.svg
+# from this file; the PDF QR codes and their \href targets both use it.
+#
+# `default` is what a stem with no entry below encodes. It is the GUI, not a
+# placeholder: an unfinished QR should land the reader in Zoomy rather than on
+# www.google.com, which is what shipped in the printed PDF for every stem that
+# was never wired (swe_dam_break and the four unreferenced OpenFOAM slices).
+# Give a stem its own line here, rerun gen_qrcodes.py, rebuild the PDF; no
+# chapter source needs touching.
+default: https://zoomylab.github.io/Zoomy/gui/
+# The GUI landing page, for the "Reproduce in GUI" codes that point at
+# no particular case. A stem here so the chapters keep resolving their QR
+# through this manifest instead of hardcoding an image.
+gui_home: https://zoomylab.github.io/Zoomy/
+# Per-case GUI sessions. `#/open?...` opens ONE file and needs a `path=`; a
+# whole case session is loaded with the plain query form below. The zips live
+# in library/zoomy_gui/projects/ and render-webpage.yml deploys them under
+# /Zoomy/gui/gui/projects/, so the page-relative `gui/projects/...` resolves.
+# Only wire a stem where the session really is the section's case: a landing
+# page beats a confidently wrong destination.
+malpasset_gui: https://zoomylab.github.io/Zoomy/gui/?project=gui/projects/malpasset-session.zip
+coupling_gui: https://zoomylab.github.io/Zoomy/gui/?project=gui/projects/coupling-session.zip
+bingham_gui: https://zoomylab.github.io/Zoomy/gui/?project=gui/projects/bingham-session.zip&view=notebook
+# swe_dam_break:https://ingo.steldermann.pages.rwth-aachen.de/thesis/anim/swe_dam_break.html
+dambreak_walls: https://zoomylab.github.io/Zoomy/gui/#/open?project=gui/projects/thesis-gifs.zip&path=convergence_3d_sigma.gif
+sme1_vof: https://zoomylab.github.io/Zoomy/gui/#/open?project=gui/projects/thesis-gifs.zip&path=coupling_sme_vof.gif
+hydro_spinup: https://zoomylab.github.io/Zoomy/gui/#/open?project=gui/projects/thesis-gifs.zip&path=hydro_spinup.gif
+malpasset_flood_wave: https://zoomylab.github.io/Zoomy/gui/#/open?project=gui/projects/thesis-gifs.zip&path=malpasset_flood_wave.gif
+# The two verification animations of ch. 5.1. Both are margin QRs rather than
+# {animated} wrappers, so they exist ONLY as entries here -- see the
+# manifest-is-also-a-source branch of gen_qrcodes.py. The gif names must match
+# the keys of GIFS in scripts/collect_gifs.py, which is what puts them in
+# thesis-gifs.zip.
+macdonald_relax: https://zoomylab.github.io/Zoomy/gui/#/open?project=gui/projects/thesis-gifs.zip&path=macdonald_relax.gif
+ritter_front: https://zoomylab.github.io/Zoomy/gui/#/open?project=gui/projects/thesis-gifs.zip&path=ritter_front.gif
+# The two coupling verification animations of ch. 5.4, same pattern: margin QR
+# beside the static figure, gif of the same name from the approved case.
+sme_self: https://zoomylab.github.io/Zoomy/gui/#/open?project=gui/projects/thesis-gifs.zip&path=sme_self.gif
+sme1_sme2: https://zoomylab.github.io/Zoomy/gui/#/open?project=gui/projects/thesis-gifs.zip&path=sme1_sme2.gif
+# The non-hydrostatic bump of ch. 5 and the curved channel of the applications
+# chapter. Both animations already existed; neither had a QR beside its figure.
+vam_bump: https://zoomylab.github.io/Zoomy/gui/#/open?project=gui/projects/thesis-gifs.zip&path=vam_bump.gif
+curvedchannel: https://zoomylab.github.io/Zoomy/gui/#/open?project=gui/projects/thesis-gifs.zip&path=curvedchannel.gif
+# The runnable GUI case of the Zoomy chapter: the Ghamry and Steffler bend,
+# SME level 1 on the 500-cell mesh, numpy. Opens pre-selected, ready to Run.
+steffler_gui: https://zoomylab.github.io/Zoomy/gui/?project=gui/projects/steffler-session.zip
+# The container installation guide, for the intro's pointer to the backends.
+zoomy_install: https://zoomylab.github.io/Zoomy/installation.html
+# The three runnable GUI examples of the Zoomy section at the end of the
+# numerics chapter, one per stage of the pipeline. Sources live in
+# thesis/cases/zoomy_example/gui/ and are packed by
+# library/zoomy_gui/projects/tools/pack_zoomy_pipeline_sessions.py.
+# The three Zoomy-pipeline sessions carry &view=notebook: the QR should land
+# the reader in the notebook, not on the card surface. Keep this in step with
+# the linkedmargin URLs in 30_numerics.md -- gen_qrcodes reads the URL from
+# HERE, so a change on only one side prints a code that disagrees with the
+# link beside it.
+zoomy_derivation_gui: https://zoomylab.github.io/Zoomy/gui/?project=gui/projects/zoomy-derivation-session.zip&view=notebook
+zoomy_systemmodel_gui: https://zoomylab.github.io/Zoomy/gui/?project=gui/projects/zoomy-systemmodel-session.zip&view=notebook
+zoomy_codeprinter_gui: https://zoomylab.github.io/Zoomy/gui/?project=gui/projects/zoomy-codeprinter-session.zip&view=notebook

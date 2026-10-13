@@ -1,0 +1,75 @@
+name: QR cases
+
+# Every case the thesis links to by QR code runs on every push to main and every PR
+# (tests/qr_cases/README.md): the manifest is thesis/scripts/animations.yml, snapshot in
+# tests/qr_cases/animations.yml. Each GUI session runs in CPython (no jax; then zoomy_jax
+# from the checkout for the one JAX session) and in headless Pyodide 0.29.3, the GUI
+# worker's. Both install the zoomy_core / zoomy_plotting wheels the deploy serves, built by
+# the same script (docs/scripts/build_gui_wheels.py). The deploy (render-webpage.yml) does
+# not wait for this workflow; it checks the live QR targets itself.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: qr-cases-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  qr-cases:
+    name: QR cases
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      QR_STRICT: "1"            # missing node / pyodide / jax fails instead of skipping
+      OMP_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Submodules the cases use
+        run: git submodule update --init library/zoomy_core library/zoomy_jax library/zoomy_gui
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"     # Pyodide 0.29.3 is CPython 3.13
+          cache: pip
+          cache-dependency-path: tests/qr_cases/requirements.txt
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/qr_cases/pyodide/package-lock.json
+
+      # Pyodide's own packages (numpy, scipy, h5py, matplotlib, ...) come from its CDN and
+      # land here; micropip's PyPI downloads are not cached.
+      - name: Pyodide package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/qr-pyodide
+          key: qr-pyodide-${{ hashFiles('tests/qr_cases/pyodide/package-lock.json') }}
+
+      - name: Install (with the deploy's zoomy_core / zoomy_plotting wheels)
+        run: |
+          python -m pip install -r tests/qr_cases/requirements.txt
+          python docs/scripts/build_gui_wheels.py "$RUNNER_TEMP/wheels"
+          python -m pip install "$RUNNER_TEMP"/wheels/*.whl
+          echo "QR_WHEELS=$RUNNER_TEMP/wheels" >> "$GITHUB_ENV"
+          npm ci --prefix tests/qr_cases/pyodide --no-audit --no-fund
+
+      - name: Sessions in CPython (no jax) and Pyodide, C1 bump
+        run: |
+          QR_PYODIDE_CACHE=$HOME/.cache/qr-pyodide python -m pytest tests/qr_cases \
+            -m "qr and not qr_jax" -n 4 -rA --tb=short -p no:cacheprovider
+
+      - name: JAX session in CPython
+        if: ${{ !cancelled() }}
+        run: |
+          python -m pip install "jax[cpu]"
+          python -m pytest tests/qr_cases -m qr_jax -rA --tb=short -p no:cacheprovider
