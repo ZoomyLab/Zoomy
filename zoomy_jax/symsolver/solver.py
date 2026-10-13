@@ -289,8 +289,8 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
                  LinearSolver.hypre],
         doc="amgx (GPU, optional JAX-AMG), pyamg (CPU, optional PyAMG), hypre (CPU, serial or "
             "MPI: BoomerAMG + FlexGMRES, the shared library of build_hypre_cuda.sh cpu-env) or "
-            "gmres (matrix-free, always available); auto: amgx on a GPU, hypre on CPU MPI ranks, "
-            "else pyamg, when installed, else gmres.")
+            "gmres (matrix-free, always available); auto: amgx on a GPU, hypre on the CPU, else "
+            "pyamg, when installed, else gmres.")
     pressure_amg_rebuild = param.Integer(
         default=10, bounds=(1, None),
         doc="'pyamg' / 'hypre': rebuild the AMG hierarchy at least every this "
@@ -355,13 +355,13 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
             amg_rebuild=self.pressure_amg_rebuild, amg_growth=self.pressure_amg_growth))
 
     def _pressure_backend(self):
-        """The pressure linear solver: the configured one; for 'auto' amgx on a GPU, hypre on CPU
-        MPI ranks (its library built), else pyamg, when installed, else gmres.
+        """The pressure linear solver: the configured one; for 'auto' amgx on a GPU, hypre on the
+        CPU (its library built), else pyamg, when installed, else gmres.
         """
         if self.pressure_linear_solver != "auto":
             return self.pressure_linear_solver
         gpu = jax.default_backend() == "gpu"
-        if not gpu and self.comm is not None and self.comm.Get_size() > 1:
+        if not gpu:
             from zoomy_jax.symsolver import hypre
             if hypre.available():
                 return "hypre"
