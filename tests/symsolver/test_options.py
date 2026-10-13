@@ -55,3 +55,11 @@ def test_reconstruction_spec_is_typed():
     assert r.limiter is Limiter.minmod and r.limiters["b"] is Limiter.none
     with pytest.raises(ValueError, match="did you mean 'venkatakrishnan'"):
         ReconstructionSpec(limiter="venkat")
+
+
+def test_model_reads_its_section():
+    from zoomy_core.model.models import SME
+    assert SME(dimension=2, settings={"model": {"level": 1}}).level == 1
+    assert SME(level=0, dimension=2, settings={"model": {"level": 1}}).level == 0
+    with pytest.raises(TypeError, match="did you mean 'level'"):
+        SME(levl=1)

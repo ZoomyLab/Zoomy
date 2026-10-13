@@ -6,6 +6,7 @@ import sympy as sp
 import numpy as np
 import param
 
+from zoomy_core.misc.options import Configurable
 from zoomy_core.model.boundary_conditions import BoundaryConditions
 
 # Import the new Aux specific classes
@@ -160,7 +161,7 @@ def extract_parameter_defaults(definition):
     return defaults
 
 
-class Model(param.Parameterized, SymbolicRegistrar):
+class Model(Configurable, SymbolicRegistrar):
     """Base class of the Model layer: named equations plus variables, parameters, boundary and
     initial conditions, lifted to a SystemModel by ``SystemModel.from_model``. Subclasses
     populate equations in ``derive_model`` or override the operator methods (``flux``,
@@ -247,15 +248,19 @@ class Model(param.Parameterized, SymbolicRegistrar):
     # the result's ICs/BCs.  Default ``False`` leaves a model uncached.
     _cacheable_derivation = False
 
-    def __init__(self, init_functions=True, **params):
+    section = "model"
+
+    def __init__(self, init_functions=True, settings=None, **params):
         """Declare variables and parameters, run the derivation, and (unless ``_finalize_lazy``)
         finalize for the SystemModel.
 
         Args:
             init_functions: register the operator methods as symbolic functions during
                 finalization.
+            settings: a settings file / dict whose `model` section sets parameters (arguments
+                win).
         """
-        super().__init__(**params)
+        super().__init__(settings=settings, **params)
         self.functions, self.call = Zstruct(), Zstruct()
         self._equations: dict = {}
         self.history: list = []
