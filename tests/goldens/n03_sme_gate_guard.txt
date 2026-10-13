@@ -105,6 +105,6 @@ regularization_eps: 0.01
 eigenvalue_treatment: 'regularize'
 eigenvalue_guard: 'gate'
 normalize_normal: True
-source_treatment: 'explicit'
+source_treatment: SourceTreatment.explicit
 default_operations: ['_op', '_op', '_op']
 extra_operations: ['_op', '_op']

@@ -10,6 +10,7 @@ from zoomy_core.numerics.numerical_system_model import (
     NumericalSystemModel,
     ReconstructedVariables,
     ReconstructionSpec,
+    SourceTreatment,
     to_numerical_system_model,
 )
 
@@ -20,6 +21,7 @@ __all__ = [
     "NumericalSystemModel",
     "ReconstructedVariables",
     "ReconstructionSpec",
+    "SourceTreatment",
     "to_numerical_system_model",
 ]
 
