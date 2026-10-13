@@ -41,6 +41,7 @@ parts:
               - glob: api/_apidoc_zoomy_amrex/zoomy_amrex.*
       - file: logging
       - file: literature
+      - file: acknowledgements
   - caption: Legacy / work in progress
     chapters:
       - file: legacy
@@ -83,4 +84,3 @@ parts:
       - file: documentation
       - file: research
       - file: publications
-      - file: acknowledgements
