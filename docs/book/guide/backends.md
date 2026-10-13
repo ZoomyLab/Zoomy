@@ -49,6 +49,6 @@ the LSQ stencils are the zoomy mesh's own.
 [Legacy](../legacy.md).  Firedrake, FEniCSx, DMPlex and DUNE backends do not
 print the symbolic templates.
 
-API: {doc}`zoomy_jax <../api/_apidoc_zoomy_jax/zoomy_jax>`,
-{doc}`zoomy_foam <../api/_apidoc_zoomy_foam/zoomy_foam>`,
-{doc}`zoomy_amrex <../api/_apidoc_zoomy_amrex/zoomy_amrex>`.
+API: {doc}`zoomy_jax <../api/_autodoc2/zoomy_jax/zoomy_jax>`,
+{doc}`zoomy_foam <../api/_autodoc2/zoomy_foam/zoomy_foam>`,
+{doc}`zoomy_amrex <../api/_autodoc2/zoomy_amrex/zoomy_amrex>`.

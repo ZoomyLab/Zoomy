@@ -309,4 +309,4 @@ pip install -e library/zoomy_jax
 ```
 
 **Repository**: [`library/zoomy_jax`](https://github.com/ZoomyLab/zoomy-jax)
-**API reference**: see [zoomy_jax](../api/_apidoc_zoomy_jax/zoomy_jax.rst).
+**API reference**: see [zoomy_jax](../api/_autodoc2/zoomy_jax/zoomy_jax.md).

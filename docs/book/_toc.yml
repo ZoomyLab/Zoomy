@@ -27,18 +27,18 @@ parts:
     chapters:
       - file: api/index
         sections:
-          - file: api/_apidoc_zoomy_core/zoomy_core
+          - file: api/_autodoc2/zoomy_core/zoomy_core
             sections:
-              - glob: api/_apidoc_zoomy_core/zoomy_core.*
-          - file: api/_apidoc_zoomy_jax/zoomy_jax
+              - glob: api/_autodoc2/zoomy_core/zoomy_core.*
+          - file: api/_autodoc2/zoomy_jax/zoomy_jax
             sections:
-              - glob: api/_apidoc_zoomy_jax/zoomy_jax.*
-          - file: api/_apidoc_zoomy_foam/zoomy_foam
+              - glob: api/_autodoc2/zoomy_jax/zoomy_jax.*
+          - file: api/_autodoc2/zoomy_foam/zoomy_foam
             sections:
-              - glob: api/_apidoc_zoomy_foam/zoomy_foam.*
-          - file: api/_apidoc_zoomy_amrex/zoomy_amrex
+              - glob: api/_autodoc2/zoomy_foam/zoomy_foam.*
+          - file: api/_autodoc2/zoomy_amrex/zoomy_amrex
             sections:
-              - glob: api/_apidoc_zoomy_amrex/zoomy_amrex.*
+              - glob: api/_autodoc2/zoomy_amrex/zoomy_amrex.*
       - file: logging
       - file: literature
       - file: acknowledgements

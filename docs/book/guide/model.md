@@ -38,4 +38,4 @@ tag, collected in `BoundaryConditions([...])` or passed as a list:
 (the compressible Euler equations, `zoomy_core.systemmodel.euler.compressible_euler`)
 are built directly as a SystemModel.
 
-API: {doc}`zoomy_core.model <../api/_apidoc_zoomy_core/zoomy_core.model>`.
+API: {doc}`zoomy_core.model <../api/_autodoc2/zoomy_core/zoomy_core.model>`.
