@@ -1,0 +1,251 @@
+Exact VAM projection (ANALYSIS 45, 2026-10-13): prototype, NOT merged.  The pressure residual
+is the constraint (press at dt = 0) of the corrected state, plus the runtime items it needs.
+Base: core 6cbf885, jax 4b2ce3f, foam 250b152, amrex 0270878 (dev/vam-projection); one diff per
+library, each applied in its own checkout from the superrepo root:
+  P=$PWD/docs/dev/symbolic_solver/prototype/exact_projection.patch
+  git -C library/zoomy_core  apply --include='zoomy_core/*' $P
+  git -C library/zoomy_jax   apply --include='zoomy_jax/*' $P
+  git -C library/zoomy_foam  apply --include='symsolver/*' $P
+  git -C library/zoomy_amrex apply --include='Source/*' $P
+
+diff --git a/zoomy_core/symsolver/strategies/chorin.py b/zoomy_core/symsolver/strategies/chorin.py
+index b628673..9c00f25 100644
+--- a/zoomy_core/symsolver/strategies/chorin.py
++++ b/zoomy_core/symsolver/strategies/chorin.py
+@@ -7,7 +7,8 @@ import sympy as sp
+ 
+ from zoomy_core.symsolver.core import LinSolve, While
+ from zoomy_core.symsolver.discretization.residual import (
+-    explicit_step, full_aux, imex_step, implicit_step, mood_step)
++    derivative_rows, explicit_step, full_aux, imex_step, implicit_step,
++    mood_step)
+ from zoomy_core.symsolver.discretization.time import IMEX_RK, SSP_RK, Imex
+ from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
+ from zoomy_core.symsolver.vocabulary import (
+@@ -95,7 +96,8 @@ class ChorinTemplate(HyperbolicTemplate):
+ 
+     def project(self, Q, p, time, dt, mesh):
+         """The pressure solve and the correction of ``Q``."""
+-        Q = pressure(self.press, Q, p, time, dt, mesh, self.pressure_newton)
++        Q = pressure(self.press, Q, p, time, dt, mesh, self.pressure_newton,
++                     self.corr)
+         return correct(self.corr, Q, p, time, dt, mesh)
+ 
+     def predictor(self, Q, Qaux, p, time, dt, mesh, dt_rule=None):
+@@ -119,11 +121,17 @@ class ChorinTemplate(HyperbolicTemplate):
+         return Q, dt
+ 
+ 
+-def pressure(press, Q, p, time, dt, mesh, newton=None):
++def pressure(press, Q, p, time, dt, mesh, newton=None, corr=None):
+     """Solve ``press`` for its own rows with the rest of ``Q`` frozen: one linear solve
+     (GMRES) of the affine residual ``A(P) = R(P) - R(0)``, or Newton from the current
+     pressure with ``newton=(tol, maxit)``.
+ 
++    Args:
++        corr: the corrector; then ``R(P)`` is the constraint (``press`` at ``dt = 0``)
++            of the corrected state ``correct(corr, Q(P))``, the discrete composition, so
++            the corrected state meets it to the solver tolerance (an exact projection).
++            Without it, ``press`` as derived: the corrector substituted before the
++            discretization (an approximate projection, error O(dx^2)).
+     References:
+         Saad, Schultz 1986, https://doi.org/10.1137/0907058
+         Knoll, Keyes 2004, https://doi.org/10.1016/j.jcp.2003.08.010
+@@ -131,15 +139,25 @@ def pressure(press, Q, p, time, dt, mesh, newton=None):
+     rows = tuple(press.equation_to_state_index)
+     Qaux = full_aux(press, Q, zeros(len(press.aux_state), mesh), p, time, dt,
+                     mesh)
++    if corr is not None:
++        crows = tuple(corr.equation_to_state_index)
++        drows = tuple(r for r in derivative_rows(press)[0] if r in crows)
+ 
+     def R(P):
+         """Pressure residual of the constraint at pressure ``P``."""
+         Y = put(Q, rows, halo(P, mesh))
++        if corr is None:
++            Yg = boundary_ghosts(press.call.boundary_ghost_state, Y, Qaux, p,
++                                 time, mesh)
++            Y_aux = derivative_aux(press.call.aux_derivatives, Y, Qaux, mesh,
++                                   Yg, rows)
++            return cells(press.call.source, Y, Y_aux, p, time, dt, mesh)
++        Y = correct(corr, Y, p, time, dt, mesh)
+         Yg = boundary_ghosts(press.call.boundary_ghost_state, Y, Qaux, p, time,
+                              mesh)
+         Y_aux = derivative_aux(press.call.aux_derivatives, Y, Qaux, mesh, Yg,
+-                               rows)
+-        return cells(press.call.source, Y, Y_aux, p, time, dt, mesh)
++                               drows)
++        return cells(press.call.source, Y, Y_aux, p, time, sp.Float(0.0), mesh)
+ 
+     if newton is None:
+         b = R(sp.S.Zero)
+diff --git a/zoomy_jax/symsolver/runtime.py b/zoomy_jax/symsolver/runtime.py
+index 2e7dd19..baa68d2 100644
+--- a/zoomy_jax/symsolver/runtime.py
++++ b/zoomy_jax/symsolver/runtime.py
+@@ -440,8 +440,12 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode="forward", checkpoints=64
+         References:
+             Saad, Schultz 1986, https://doi.org/10.1137/0907058
+         """
+-        return jax_gmres(A, b, atol=0.0, tol=ls["tol"], restart=ls["restart"],
+-                         maxiter=ls["maxiter"])[0]
++        # on b / |b|: jax's GMRES takes a residual below machine epsilon for zero, but a
++        # right-hand side at round-off (an input already projected) is a valid one
++        nb = jnp.linalg.norm(b)
++        s = jnp.where(nb > 0, nb, 1.0)
++        return s * jax_gmres(A, b / s, atol=0.0, tol=ls["tol"], restart=ls["restart"],
++                             maxiter=ls["maxiter"])[0]
+ 
+     def _ls_reject(r):
+         """Raise when the relative residual ``r`` exceeds the accept gate."""
+@@ -1042,19 +1046,25 @@ def _jaxamg():
+ 
+ def _cell_pattern(n, nc, nbrs, n_rows=None):
+     """Sparsity of a cell operator on ``k = n / nc`` cell-major unknowns: each couples to those of
+-    the cells in its LSQ stencil.  Returns ``rows, cols`` in CSR order and a colour per column such
+-    that columns sharing a row differ.
++    the cells in its LSQ stencil's stencil (the pressure operator composes two stencil
++    operators, the correction and the constraint).  Returns ``rows, cols`` in CSR order and a
++    colour per column such that columns sharing a row differ.
+ 
+     References:
+         Griewank, Walther 2008, https://doi.org/10.1137/1.9780898717761
+     """
++    import scipy.sparse as sps
+     k, n_rows = n // nc, nc if n_rows is None else n_rows
+-    nb = np.asarray(nbrs)[:n_rows]
+-    cells = np.concatenate([np.arange(n_rows)[:, None], nb], axis=1)  # self + stencil
+-    c_of = np.repeat(np.arange(n_rows, dtype=np.int64), cells.shape[1])
++    nb = np.asarray(nbrs)
++    n_all = len(nb)
++    cells = np.concatenate([np.arange(n_all)[:, None], nb], axis=1)  # self + stencil
++    c_of = np.repeat(np.arange(n_all, dtype=np.int64), cells.shape[1])
+     d_of = cells.reshape(-1).astype(np.int64)
+-    keep = (d_of >= 0) & (d_of < nc)
+-    code = np.unique(c_of[keep] * nc + d_of[keep])          # sorted (c, d) pairs
++    keep = (d_of >= 0) & (d_of < n_all)
++    S = sps.csr_matrix((np.ones(int(keep.sum()), np.int32), (c_of[keep], d_of[keep])),
++                       shape=(n_all, n_all))
++    S2 = (S[:n_rows] @ S).tocsr()[:, :nc].tocoo()           # stencil of the stencil
++    code = np.unique(S2.row.astype(np.int64) * nc + S2.col)   # sorted (c, d) pairs
+     c, d = code // nc, code % nc
+     # entry (c, r, d, q) of row c k + r: CSR order without a sort
+     ptr = np.searchsorted(c, np.arange(n_rows + 1))
+@@ -1078,7 +1088,7 @@ def _cell_colors(c, d, nc, seed=0):
+         Griewank, Walther 2008, https://doi.org/10.1137/1.9780898717761
+     """
+     import scipy.sparse as sps
+-    P = sps.csr_matrix((np.ones(len(c), np.int8), (c, d)), shape=(int(c.max()) + 1, nc))
++    P = sps.csr_matrix((np.ones(len(c), np.int32), (c, d)), shape=(int(c.max()) + 1, nc))
+     C = (P.T @ P).tocsr()
+     C.setdiag(0)
+     C.eliminate_zeros()
+@@ -1088,17 +1098,21 @@ def _cell_colors(c, d, nc, seed=0):
+         S = C[A]                                       # rows of the uncoloured
+         deg = np.diff(S.indptr)
+         row, nb, has = np.repeat(np.arange(len(A)), deg), S.indices, deg > 0
+-        used, nbc = np.zeros(len(A), np.uint64), colors[S.indices]
+-        if has.any():
+-            used[has] = np.bitwise_or.reduceat(np.where(nbc >= 0, np.left_shift(
+-                np.uint64(1), np.maximum(nbc, 0).astype(np.uint64)), np.uint64(0)),
+-                S.indptr[:-1][has])
+-        free = ~used
+-        low = free & (~free + np.uint64(1))           # lowest free bit
+-        cand = np.full(nc, -1, np.int64)
+-        cand[A] = np.log2(low.astype(np.float64)).round().astype(np.int64)
+-        if (low == 0).any() or (cand[A] >= 63).any():
+-            raise RuntimeError("colouring needs more than 63 colours")
++        nbc, cand = colors[S.indices], np.full(nc, -1, np.int64)
++        todo, base = np.ones(len(A), bool), 0
++        while todo.any():                              # colours base .. base + 62
++            used = np.zeros(len(A), np.uint64)
++            if has.any():
++                inw = (nbc >= base) & (nbc < base + 63)
++                used[has] = np.bitwise_or.reduceat(np.where(inw, np.left_shift(
++                    np.uint64(1), np.clip(nbc - base, 0, 62).astype(np.uint64)),
++                    np.uint64(0)), S.indptr[:-1][has])
++            free = ~used & np.uint64((1 << 63) - 1)
++            low = free & (~free + np.uint64(1))       # lowest free bit
++            ok = todo & (low != 0)
++            cand[A[ok]] = base + np.log2(low[ok].astype(np.float64)).round().astype(np.int64)
++            todo &= ~ok
++            base += 63
+         lose = (cand[nb] == cand[A][row]) & (w[nb] > w[A][row])
+         lost = np.bincount(row[lose], minlength=len(A)) > 0
+         colors[A[~lost]] = cand[A[~lost]]
+diff --git a/symsolver/rt.H b/symsolver/rt.H
+index 6299280..cb0f8ce 100644
+--- a/symsolver/rt.H
++++ b/symsolver/rt.H
+@@ -1130,10 +1130,17 @@ Field linsolve(A op, const Field& b)
+     if (nb == 0.0) return x;
+     std::function<Field(const Field&)> prec = [](const Field& v) { return v; };
+     if (kr.gamg) prec = gamg_preconditioner(op, b, *active());
++    // op(x) as |x| op(x / |x|): a printed op(x) = R(x) - R(0) loses eps |R| absolutely, so a tiny
++    // x (a right-hand side at round-off: an input already projected) would keep no digits
++    auto opx = [&](const Field& v)
++    {
++        const double s = norm(v);
++        return s > 0.0 ? s*op(v/s) : Field(v.nq, v.n);
++    };
+     const int m = o.ls_restart;
+     for (int outer = 0; outer < o.ls_maxiter; ++outer)
+     {
+-        Field r = b - op(x);
++        Field r = b - opx(x);
+         double beta = norm(r);
+         if (beta <= o.ls_tol*nb) break;
+         std::vector<Field> V{r/beta}, Z;
+@@ -1176,7 +1183,7 @@ Field linsolve(A op, const Field& b)
+     }
+     if (o.ls_accept > 0)
+     {
+-        const double rel = norm(op(x) - b)/nb;
++        const double rel = norm(opx(x) - b)/nb;
+         if (rel > o.ls_accept)
+             FatalErrorInFunction << "linsolve: relative residual " << rel
+                 << " > accept gate " << o.ls_accept << Foam::exit(Foam::FatalError);
+diff --git a/Source/symsolver/rt_amrex.H b/Source/symsolver/rt_amrex.H
+index 71c9c70..2a8432f 100644
+--- a/Source/symsolver/rt_amrex.H
++++ b/Source/symsolver/rt_amrex.H
+@@ -1456,7 +1456,7 @@ inline Field newton_update(const Field& x, const Field& r, const std::vector<Fie
+ /// Newton on f(x) = 0 with a per-cell (block-diagonal) Jacobian (newton_cellwise of rt_common.H).
+ template<class F> Field root(F f, Field x) { return newton_cellwise(f, std::move(x)); }
+ 
+-/// amrex::GMRES operator on the printed linear map, right-preconditioned by the exact cell blocks of the operator (probed by colouring: cells R + 1 apart share no stencil) inverted per cell.
++/// amrex::GMRES operator on the printed linear map, right-preconditioned by the exact cell blocks of the operator (probed by colouring: cells 2 R + 1 apart share no stencil of the stencil, as the pressure operator composes the correction and the constraint) inverted per cell.
+ /// Ref: Saad, Schultz 1986, https://doi.org/10.1137/0907058
+ struct LinOp
+ {
+@@ -1487,11 +1487,19 @@ struct LinOp
+         X.mf->emplace_back(x, amrex::make_alias, 0, nq);
+         return X;
+     }
+-    /// Ax = op(x).
++    /// Ax = op(x), as |x| op(x / |x|): a printed op(x) = R(x) - R(0) loses eps |R| absolutely, so a
++    /// tiny x (a right-hand side at round-off: an input already projected) would keep no digits.
+     void apply(amrex::MultiFab& Ax, const amrex::MultiFab& x)
+     {
+-        const Field y = op(wrap(x));
++        const RT s = norm2(x);
++        if (s == 0.0) { Ax.setVal(0.0); return; }
++        amrex::MultiFab xs(M->ba, M->dm, nq, M->NG);
++        xs.setVal(0.0);
++        amrex::MultiFab::Copy(xs, x, 0, 0, nq, 0);
++        xs.mult(1.0/s, 0, nq, 0);
++        const Field y = op(wrap(xs));
+         amrex::MultiFab::Copy(Ax, y[0], 0, 0, nq, 0);
++        Ax.mult(s, 0, nq, 0);
+     }
+     /// l = Binv r, the cell-block preconditioner (defined below).
+     void precond(amrex::MultiFab& l, const amrex::MultiFab& r);
+@@ -1512,7 +1520,7 @@ int colour(const Geo& g, const IV& c, int S)
+ inline void LinOp::blocks()
+ {
+     BL_PROFILE("zs::LinOp::blocks");
+-    const int n = nq, S = M->R + 1;
++    const int n = nq, S = 2*M->R + 1;
+     int ncol = 1;
+     for (int d = 0; d < D; ++d) ncol *= S;
+     AMREX_ALWAYS_ASSERT(n <= MAXR);
