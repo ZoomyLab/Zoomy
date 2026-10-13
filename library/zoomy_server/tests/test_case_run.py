@@ -40,3 +40,16 @@ def test_runner_only_folder_runs_as_a_script(tmp_path):
     d = _folder(tmp_path, {"run.py": "if __name__ == '__main__':\n    open('ran', 'w').write('x')\n"})
     assert not is_case(str(d)) and entry(str(d))[-1] == "run.py"
     assert _run(d).returncode == 0 and (d / "ran").exists()
+
+
+def test_run_h5_path_is_the_jobs_own_store(tmp_path):
+    """Two jobs' solver cards write their stores to their own folders, not one shared file."""
+    paths = []
+    for job in ("a", "b"):
+        d = tmp_path / job
+        d.mkdir()
+        _folder(d, {"mesh.py": "pass\n",
+                    "run.py": "import json\njson.dump(run_h5_path(), open('path.json', 'w'))\n"})
+        assert _run(d).returncode == 0
+        paths.append(json.loads((d / "path.json").read_text()))
+    assert paths == [str(tmp_path / j / "simulation.h5") for j in ("a", "b")]

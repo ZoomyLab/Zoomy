@@ -3,7 +3,9 @@
 Shared by CPython (`python session_runner.py CASE.json ENGINE.py OUT.json`) and Pyodide
 (`pyodide/run.mjs` imports it). Every cell goes through `engine.process_code`, i.e. one
 `exec` in the worker's persistent scope, as a GUI run does. A store is every `*.h5` under the
-working directory; every float dataset in it must be finite.
+working directory; every float dataset in it must be finite. A case that runs a simulation
+must leave the `simulation.h5` the GUI and the server collect with its snapshots up to the
+case's `time_end` (`check_final_store`, also the backend harness's check).
 """
 import json
 import os
@@ -62,6 +64,42 @@ def check_stores(root="."):
     return found
 
 
+#: the store a run leaves for the GUI / the server to collect: the cases copy their solver's
+#: output to it (`output/<name>.h5` is the solver's own, complete even when the copy is not)
+ARTIFACT = "simulation.h5"
+#: a run that marched has at least its initial and its final state
+MIN_SNAPSHOTS = 2
+
+
+def check_final_store(snapshots, t_last, time_end=None, min_snapshots=MIN_SNAPSHOTS):
+    """Why a run's store is not a finished run, else None: fewer than `min_snapshots` snapshots,
+    or, with a `time_end`, a last snapshot before it (relative tolerance 1e-6)."""
+    if (snapshots or 0) < min_snapshots:
+        return f"holds {snapshots or 0} snapshots, a finished run holds at least {min_snapshots}"
+    if time_end is not None and (t_last is None or t_last < time_end - 1e-6 * max(1.0, abs(time_end))):
+        return f"ends at t = {t_last}, before time_end = {time_end}"
+    return None
+
+
+def final_store_problem(stores, time_end=None):
+    """Why the stores a run left (`check_stores`) are not a finished run's, else None. Only the
+    `simulation.h5` counts: the solver's own output (`output/<name>.h5`) holding the snapshots does
+    not make a copy taken before they were written a finished run."""
+    final = next((s for s in stores if s["path"] == ARTIFACT), None)
+    if final is None:
+        return f"the run left no {ARTIFACT}"
+    why = check_final_store(final["snapshots"], final["t_last"], time_end)
+    return f"{ARTIFACT} {why}" if why else None
+
+
+def end_time(spec):
+    """The case's `time_end` in the store's time unit: a number, or an expression over the cells'
+    names (the engine's scope: `settings`, the model cell's constants, ...); None: not known."""
+    if isinstance(spec, str):
+        return float(eval(spec, dict(sys._shallowflow_scope)))
+    return spec
+
+
 def zoomy_packages():
     """`{module: {version, file}}` of the zoomy_core / zoomy_plotting this run imported."""
     from importlib.metadata import PackageNotFoundError, version
@@ -79,7 +117,9 @@ def zoomy_packages():
 
 
 def run_case(case, process_code, workdir):
-    """Run `case` (`{"cells": [[role, code], ...], "needs_store": bool}`) in `workdir`."""
+    """Run `case` (`{"cells": [[role, code], ...], "needs_store": bool, "time_end": number |
+    expression | None}`) in `workdir`. A `needs_store` case must leave a finished `simulation.h5`
+    (`final_store_problem`)."""
     os.makedirs(workdir, exist_ok=True)
     os.chdir(workdir)
     # zoomy_core's main directory: in the browser (no git, no __main__.__file__) it is the cwd.
@@ -95,9 +135,16 @@ def run_case(case, process_code, workdir):
             return report
     stores = check_stores(".")
     report["stores"] = stores
-    if case.get("needs_store") and not any(s["snapshots"] for s in stores):
-        report["ok"] = False
-        report["error"] = "the run wrote no HDF5 store with /fields"
+    if case.get("needs_store"):
+        try:
+            report["time_end"] = end_time(case.get("time_end"))
+        except Exception as e:     # an expression over names the cells did not define
+            report["ok"] = False
+            report["error"] = f"time_end {case.get('time_end')!r}: {type(e).__name__}: {e}"
+            return report
+        why = final_store_problem(stores, report["time_end"])
+        if why:
+            report["ok"], report["error"] = False, why
     bad = [s["path"] for s in stores if s["nonfinite"]]
     if bad:
         report["ok"] = False

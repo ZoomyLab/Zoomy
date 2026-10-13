@@ -5,8 +5,10 @@ case's own steps), the mesh, the solver settings, the run. `zoomy_prepost.case.t
 writes them as model.py (model + steps), mesh.py, settings.json and run.py; each is a cell, not
 a standalone script (a mesh cell may use the model cell's names, a run cell the steps' `nsm`).
 Here they run in that order in one namespace, with the GUI runtime's helpers (engine.py):
-`display` (no output on a server), `typed_kwargs`, and `open_hdf5`, which publishes the run's
-store in the GUI and here makes it the job's `simulation.h5`. As in the GUI, `__name__` is not
+`display` (no output on a server), `typed_kwargs`, `run_h5_path`, where a solver card writes
+the run's store (the GUI: the tab's `/tmp/zoomy_sim/sim.h5`; here the job's own
+`simulation.h5`, so concurrent jobs share no file), and `open_hdf5`, which publishes the store
+in the GUI and here makes it the job's `simulation.h5`. As in the GUI, `__name__` is not
 `"__main__"`.
 
     python -m zoomy_server.case_run          # in the case folder
@@ -45,6 +47,11 @@ def namespace():
     def display(*_a, **_k):
         pass
 
+    def run_h5_path():
+        """Where a solver card writes the run's store: the job's simulation.h5 (the case
+        folder is the job's directory)."""
+        return os.path.abspath(ARTIFACT)
+
     def open_hdf5(path):
         """The run's store: the job's simulation.h5 (published as `store` when zoomy_plotting is
         installed, as the GUI does)."""
@@ -57,7 +64,8 @@ def namespace():
         ns["store"] = zp.read_hdf5(ARTIFACT)
         return ns["store"]
 
-    ns.update(display=display, open_hdf5=open_hdf5, typed_kwargs=typed_kwargs)
+    ns.update(display=display, run_h5_path=run_h5_path, open_hdf5=open_hdf5,
+              typed_kwargs=typed_kwargs)
     return ns
 
 
