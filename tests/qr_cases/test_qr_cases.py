@@ -35,7 +35,7 @@ NOT_IN_BROWSER = ["jax", "jaxlib", "zoomy_jax"]
 #: Time-limited variants, set through the session's own `time_end` knob (GUI Parameters
 #: panel); model, mesh and numerics are unchanged.
 TIME_LIMITS = {("malpasset-session.zip", 0): 2.0,    # Malpasset JAX: 2000 s -> 2 s
-               ("malpasset-session.zip", 1): 2.0}    # Malpasset AMReX: 100 s -> 2 s
+               ("malpasset-session.zip", 1): 2.0}    # Malpasset AMReX: 2000 s -> 2 s
 
 
 def _amrex_sif():
