@@ -36,7 +36,7 @@ def nsm_of():
     import zoomy_core.model.initial_conditions as IC
     from zoomy_core.fvm.riemann_solvers import PositiveHLL
     from zoomy_core.model.boundary_conditions import BoundaryConditions, Wall
-    from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
+    from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec, SourceTreatment
     from zoomy_core.systemmodel import SystemModel
     from zoomy_core.systemmodel.operations import guard_eigenvalue_powers
     bcs = BoundaryConditions([Wall(tag=t, momentum_field_indices=[[2, 3]],
@@ -49,7 +49,7 @@ def nsm_of():
     sm.aux_initial_conditions = IC.Constant(constants=lambda n: np.zeros(n))
     nsm = NumericalSystemModel.from_system_model(
         sm, reconstruction=ReconstructionSpec(order=1), riemann=PositiveHLL,
-        dt_max=5.0, source_treatment="linearized",
+        dt_max=5.0, source_treatment=SourceTreatment.linearized,
         extra_operations=[guard_eigenvalue_powers()])
     return nsm
 
