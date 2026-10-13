@@ -35,6 +35,15 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
         "fastapi>=0.100" "uvicorn[standard]>=0.20" \
         jupyterlab jupyter-server ipykernel
 
+# preCICE 3.4.0 for the coupled AMReX participant (zoomy_amrex symsolver couple=...), as in
+# zoomy_amrex.def: the published .sif is converted from THIS image, so without it no AMReX
+# coupling runs.  3.4.0 = the Python peers' version (preCICE refuses to couple different ones).
+RUN wget -q "https://github.com/precice/precice/releases/download/v3.4.0/libprecice3_3.4.0_noble.deb" \
+        -O /root/libprecice3.deb \
+    && apt-get update && apt-get install -y --no-install-recommends /root/libprecice3.deb \
+    && rm -f /root/libprecice3.deb && rm -rf /var/lib/apt/lists/* \
+    && pkg-config --modversion libprecice
+
 RUN git clone --depth 1 --branch 25.02 \
         https://github.com/AMReX-Codes/amrex.git /opt/amrex \
     && find /opt/amrex -name "*.o" -delete 2>/dev/null || true
