@@ -102,7 +102,7 @@ def time_cxx(backend, make, n_steps, dt, config, work, chorin=False, q0=None):
         cls = SymbolicChorinSolverAmrex if chorin else SymbolicHyperbolicSolverAmrex
         s = cls(ranks=ranks(config), gpu=config.startswith("gpu"), **kw)
         s.run(mesh, systems, Q0, work)
-        march = s.wall
+        march, log = s.wall, s.log
     else:
         from zoomy_foam.symsolver import SymbolicChorinSolverFoam, SymbolicHyperbolicSolverFoam
         cls = SymbolicChorinSolverFoam if chorin else SymbolicHyperbolicSolverFoam
@@ -110,8 +110,14 @@ def time_cxx(backend, make, n_steps, dt, config, work, chorin=False, q0=None):
         log = (Path(work) / "log.symFoam").read_text()
         march = float(re.findall(r"march wall time ([\d.eE+-]+)", log)[-1])
     total = clock.perf_counter() - t0
-    return dict(cells=int(Q0.shape[1]), setup=total - march, ms_step=1e3 * march / n_steps,
-                maxrss_gb=maxrss_gb())
+    res = dict(cells=int(Q0.shape[1]), setup=total - march, ms_step=1e3 * march / n_steps,
+               maxrss_gb=maxrss_gb())
+    m = re.search(r"linsolve summary: ([^,]+), (\d+) solves, ([\d.eE+-]+) iterations/solve, "
+                  r"ms/solve: assembly ([\d.eE+-]+), setup ([\d.eE+-]+), solve ([\d.eE+-]+)", log)
+    if m:      # the pressure solves (C++ backends' own counters)
+        res.update(linsolve=m.group(1), solves=int(m.group(2)), its_solve=float(m.group(3)),
+                   **{f"ms_{k}": float(m.group(i)) for i, k in enumerate(("asm", "setup", "solve"), 4)})
+    return res
 
 
 def hyperbolic(level, backend, config, nx, n_steps=N_STEPS):

@@ -566,7 +566,7 @@ def _c31():
     vam = [Run(f"vam_{s}_k{k}", partial(vam_friction, 60), WAVE["t_end"],
                dt=C31_DT["vam"] / 2 ** k, chorin=True, time_order=to, imex=imex, q0=wave_q0,
                solver=dict(cfl_check_every=0, projection="increment"),
-               backends=("jax", "amrex") if (s, k) == ("ssp2", 0) else ("jax",))
+               backends=JFA if (s, k) == ("ssp2", 0) else ("jax",))
            for s, (imex, to) in C31_VAM.items() for k in C31_K]
     pred = [Run(f"pred_ssp2_k{k}", partial(vam_friction, 60, True), WAVE["t_end"],
                 dt=C31_DT["vam"] / 2 ** k, imex="ssp2", q0=wave_q0,

@@ -83,7 +83,7 @@ if __name__ == "__main__":
     ref = np.load(f"{WORK}/c2dtri{NXT}_ref.npy")
     for n in map(int, sys.argv[2:]):
         sf = SymbolicChorinSolverFoam(time_end=T, cfl=0.9, nprocs=n,
-                                      pressure_preconditioner=os.environ.get("PREC", "gamg"))
+                                      linear_solver=os.environ.get("LINSOLVE", "hypre"))
         t1 = wall.perf_counter()
         t, Qf = sf.run(s.mesh_np, (s.nsm, s.press, s.corr), np.asarray(Q), f"{WORK}/c2dtri{NXT}_np{n}")
         w = wall.perf_counter() - t1

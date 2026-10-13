@@ -23,6 +23,14 @@ built into `~/.cache/zoomy` by `containers/zoomy_amrex/build_hypre_cuda.sh` (CPU
 images have no hypre, and AMReX 25.02's `USE_HYPRE` does not compile against hypre 3.x CUDA).
 Results: `matrix/README.md`.
 
+Implemented on foam (2026-10-13, `rt.H` `hypre_solve`, `linear_solver="hypre"`, the Chorin
+default; `"schur-gamg"` keeps the old path): the same matrix, scaling and CPU settings, rows
+owned per rank in OpenFOAM's global cell numbering (`globalIndex`).  The colouring is the
+driver's: a greedy distance-2 colouring of the global LSQ pattern (`constant/zoomyColours`;
+9 colours on quads), so probes agree across processor boundaries.  symFoam links the same
+static CPU hypre 3.2.0 (the OF13 image has the AMReX image's Ubuntu 24.04, gcc 13.3 and
+OpenMPI 4.1.6), and initializes MPI itself in serial runs.
+
 ## Measured (setup s / solve s / iterations)
 
 | cells | AmgX, JAX's config (raw A) | AmgX classical PMIS (S) | hypre-CUDA PMIS + l1-Jacobi (S) | hypre 2.28 CPU, 8 ranks (S) | pyamg, 1 core (S) |

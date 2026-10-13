@@ -5,6 +5,9 @@
 #   build_hypre_cuda.sh          # CUDA build in zoomy_amrex_gpu.sif -> ~/.cache/zoomy/hypre-cuda-3.2.0
 #   build_hypre_cuda.sh cpu      # CPU build in zoomy_amrex.sif      -> ~/.cache/zoomy/hypre-cpu-3.2.0
 #
+# The CPU build also links into foam's symFoam (zoomy_foam.symsolver, linear_solver='hypre'): the
+# OF13 image has the same Ubuntu 24.04, gcc 13.3 and OpenMPI 4.1.6 as zoomy_amrex.sif.
+#
 # Env: HYPRE_VERSION (3.2.0), CUDA_ARCH (89), ZOOMY_HYPRE_CACHE (~/.cache/zoomy),
 # ZOOMY_AMREX_CONTAINERS (the .sif directory), ZOOMY_AMREX_BUILD_CPUS (16-47), JOBS (16).
 # Installs into a temporary prefix and renames it on success: an interrupted build leaves no
