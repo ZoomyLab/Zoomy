@@ -86,6 +86,38 @@ def _jax(run, reps):
                        detail=f"pressure={s._pressure_backend()}" if run.chorin else None)
 
 
+# ── NumPy ───────────────────────────────────────────────────────────────────
+def _numpy(run, reps):
+    """setup = model + mesh + printing; no compile; march = ``reps`` marches."""
+    import cases
+    from backends import _solver_kw
+    from zoomy_core.symsolver.numpy_backend import (SymbolicChorinSolverNumpy,
+                                                    SymbolicHyperbolicSolverNumpy)
+    t0 = clock.perf_counter()
+    mesh, systems, Q0, names = cases.prepare(run)
+    cls = SymbolicChorinSolverNumpy if run.chorin else SymbolicHyperbolicSolverNumpy
+    kw = dict(_solver_kw(run, cls), cfl_check_every=0)
+    if run.chorin:
+        s = cls(pressure_linear_solver="auto", **kw)         # pyamg when installed
+        Q, A = s.setup(mesh, *systems)
+    else:
+        s = cls(**kw)
+        Q, A = s.setup(mesh, systems)
+    if run.q0 is not None:
+        Q = run.q0([str(v) for v in s.nsm.state], np.asarray(s.mesh_np.cell_centers)[:, :Q.shape[1]])
+        A = s.initial_aux(np.asarray(Q, dtype=float), A)
+    else:
+        Q = np.asarray(Q0)
+    t1, march = clock.perf_counter(), []
+    for _ in range(reps):
+        t = clock.perf_counter()
+        out = s.run(Q, A)
+        march.append(clock.perf_counter() - t)
+    return Measurement(cells=int(Q0.shape[1]), t=float(out[0]), Q=np.asarray(out[1]), names=names,
+                       setup=t1 - t0, compile=0.0, march=march, device="cpu",
+                       detail=f"pressure={s._pressure_backend()}" if run.chorin else None)
+
+
 # ── foam / AMReX ────────────────────────────────────────────────────────────
 def _pin_amrex(module):
     """AMReX runs on the first core of this process's affinity, builds on all of it."""
@@ -149,6 +181,8 @@ def _cxx(run, backend, config, reps, work):
 # ── entry points ────────────────────────────────────────────────────────────
 def _measure(tc, backend, config, reps, work):
     run = tc.run()
+    if backend == "numpy":
+        return _numpy(run, reps)
     return _jax(run, reps) if backend == "jax" else _cxx(run, backend, config, reps, work)
 
 

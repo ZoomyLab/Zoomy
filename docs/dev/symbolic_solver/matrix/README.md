@@ -6,6 +6,18 @@ to round-off (foam uses OpenFOAM's own stencils at second order); every
 backend must pass the same physics checks instead: convergence, exact
 solutions, conservation, symmetry, parallel = serial, GPU = CPU.
 
+**NumPy** (`zoomy_core.symsolver.numpy_backend`, the default install: no JAX, no
+compiler) prints the same templates as JAX and runs serially.  It runs every
+serial JAX run except the fine JAX references the checks read, the `*_pert`
+sensitivity runs, the gate-40 control, AD (C15, C22), preCICE (C16) and AMR
+(C17); gate 39 (C30) checks the fit numpy takes (`GATE39_BACKEND=numpy`: core
+`lsq_derivatives` on the topology); its own order / conservation
+checks are JAX's, plus one row per case `numpy = JAX (max rel, worst run)`:
+round-off (1e-12, or 10 x JAX's `*_pert` sensitivity), or the case's
+implicit-solve tolerance (C8, C10, C31 VAM: 1e-9; C14, C26, C31 SWE, C32: 1e-8;
+C33 imex: 1e-10).  `Root` uses a central-difference cell Jacobian, implicit
+diffusion a finite-difference Newton-GMRES (JAX: exact AD).
+
 ## Coverage: capability x backend -> case
 
 | capability | JAX | foam | AMReX |
@@ -51,7 +63,7 @@ python matrix.py run --tier large L1 jax mpi2   # the large tier (never part of 
 python deliverable.py                           # store -> matrix.png
 ```
 
-BACKEND `jax foam amrex`; CASE `C1`..`C34`; CONFIG `serial` (default)
+BACKEND `jax foam amrex numpy`; CASE `C1`..`C34`; CONFIG `serial` (default)
 `mpi2 mpi4 gpu1 gpu2` (`gpu2` = gpu-mpi: 2 ranks, a GPU each).  A run in the
 store is skipped (`--force` reruns), so a command that times out resumes.
 A run that raises `NotImplementedError` is stored as **unsupported**, any
@@ -133,7 +145,7 @@ Results: the "Large tier" section of `table.md`.
 
 ## Adding a backend
 
-Write one class in `backends.py` and add it to `BACKENDS` (JAX: 42 lines,
+Write one class in `backends.py` and add it to `BACKENDS` (JAX: 42 lines, NumPy: 25,
 foam: 23, AMReX: 20):
 
 ```python

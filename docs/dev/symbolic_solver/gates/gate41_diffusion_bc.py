@@ -156,7 +156,7 @@ def run(kind, case, path, nx, comm=None):
     Q, A = s.setup(mesh, nsm)
     t0 = clock.perf_counter()
     t, Q, A = s.run(Q, A)
-    Q.block_until_ready()
+    getattr(Q, "block_until_ready", lambda: None)()     # numpy: none
     wall = clock.perf_counter() - t0
     if s.partition is not None:
         Q = s.partition.gather(Q)

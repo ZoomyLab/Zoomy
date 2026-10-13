@@ -1,4 +1,4 @@
-"""Timing of the symbolic solvers (JAX, foam, AMReX): each test marches one
+"""Timing of the symbolic solvers (JAX, foam, AMReX, NumPy): each test marches one
 representative case ``ZOOMY_TIMING_REPS`` (3) times, checks the final state,
 and appends a record to timings.jsonl (README.md).
 

@@ -1,6 +1,6 @@
 # Symbolic-solver tests: timing and the matrix
 
-Two suites for the symbolic solvers (JAX, foam, AMReX), over the cross-backend
+Two suites for the symbolic solvers (JAX, foam, AMReX, NumPy), over the cross-backend
 matrix in `docs/dev/symbolic_solver/matrix/`.
 
 | file | marker | what |
@@ -51,7 +51,7 @@ machine shows as spread between the 3 march times: look at `min_s` vs `median_s`
 | `euler3d_o1`, `euler3d_o2` | C20 box | 40^3 cells, 40 steps | O2 with MOOD; the pulse of C20 |
 | `diffusion_impl` | C26 | 48^2 cells, 10 steps | IMEX, NewtonianInPlane; foam differentiates the implicit residual by finite differences (~80x JAX per step) |
 
-Configs: `serial` on every backend; `gpu1` on JAX (child process in the `zoomy-cuda` env, `JAX_PLATFORMS=cuda`)
+Configs: `serial` on every backend (NumPy: serial only, the pressure solver `auto` = pyamg; agreement with JAX serial as the matrix); `gpu1` on JAX (child process in the `zoomy-cuda` env, `JAX_PLATFORMS=cuda`)
 and AMReX (the CUDA container); foam has no GPU.  Choose the GPU with `CUDA_VISIBLE_DEVICES`.  Sizes target a
 march of about 1-20 s on one core; the backends differ by up to 100x per step, so the fastest run is the lower end.
 

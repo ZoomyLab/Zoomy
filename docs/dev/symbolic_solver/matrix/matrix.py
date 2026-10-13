@@ -321,13 +321,13 @@ def euler_checks(add, b, g, J):
                   for im in imgs for r in (0, -1)) / float(np.abs(d["Q"]).max())
         add("C20", f"O{o} mirror / permutation symmetry (max rel)", b, "serial", sym, RO, "")
     d, j = g("C26", "visc"), J("C26", "visc")
-    if b != "jax" and ok(d, j):                 # C26: implicit diffusion vs JAX
+    if b not in ("jax", "numpy") and ok(d, j):  # C26: implicit diffusion vs JAX
         if b == "amrex":
             add("C26", "max rel vs JAX", b, "serial", relmax(d, j),
                 ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)"), "")
         else:
             add("C26", "L1 rel vs JAX", b, "serial", l1rel(d, j), TH.get("C26 foam"), "")
-    if b != "jax":                              # C23: cross-backend
+    if b not in ("jax", "numpy"):               # C23: cross-backend
         for n in (8, 16, 24):
             if ok(g("C23", f"o1_n{n}"), J("C23", f"o1_n{n}")):
                 add("C23", f"O1 n{n} max rel vs JAX", b, "serial",
@@ -452,7 +452,7 @@ def imex_checks(add, b, g, J):
                 "L1(h) of dt/2^k - dt/2^(k+1) " + " / ".join(f"{x:.2e}" for x in d))
     for key, th in (("swe_ssp2_k0", RO), ("vam_ssp2_k0", PRESS)):
         d, j = g("C31", key), J("C31", key)
-        if b != "jax" and ok(d, j):
+        if b not in ("jax", "numpy") and ok(d, j):
             add("C31", f"{key} max rel vs JAX", b, "serial", relmax(d, j), th, "")
 @functools.lru_cache(maxsize=None)
 def _moment_jacobian():
@@ -542,9 +542,47 @@ def visc_checks(add, b, g, J):
                       np.abs(ds[-1]["Q"][names(ds[-1]).index("h")] - M["h"]).max())), RO,
             "theory: no flux divergence, h stays")
         jd = [J("C33", f"{integ}_k{k}") for k in M["ks"]]
-        if b != "jax" and ok(*jd):
+        if b not in ("jax", "numpy") and ok(*jd):
             add("C33", f"{integ} max rel vs JAX", b, "serial", max(relmax(d, j) for d, j in zip(ds, jd)),
                 TH["C33 xb"][integ], "")
+
+
+#: numpy = JAX: the tolerance of a case's implicit solves (Newton / GMRES), else round-off
+NUMPY_TOL = {"C8": PRESS, "C10": PRESS,
+             "C14": ("<=", 1e-8, "tolerance (implicit Newton 1e-8)"),
+             "C26": ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)"),
+             "C32": ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)")}
+
+
+def numpy_checks(add, g, J):
+    """numpy = JAX per case: the max rel difference of the final states over the case's runs
+    (round-off, or the implicit-solve tolerance); custom runs with a `rel_vs_jax` metric."""
+    for case, (_, runs) in CASES.items():
+        worst, tol = None, NUMPY_TOL.get(case, RO)
+        for r in runs:
+            d = g(case, r.key)
+            if d is None or "numpy" not in r.backends:
+                continue
+            if r.custom is not None:            # C27, C34: the run compares with JAX itself
+                v = metrics(d).get("rel_vs_jax") if case in ("C27", "C34") else None
+                th = TH["C34 xb"] if case == "C34" else RO
+            else:
+                j = J(case, r.key)
+                v = None if j is None else relmax(d, j)
+                th = tol
+                if case == "C31":
+                    th = PRESS if r.key.startswith("vam") else NUMPY_TOL["C14"]
+                elif case == "C33":
+                    th = TH["C33 xb"]["imex" if r.key.startswith("imex") else "rk2"]
+                elif J(case, r.key + "_pert") is not None:      # round-off amplified by the run
+                    sens = relmax(J(case, r.key + "_pert"), j)
+                    if 10 * sens > th[1]:
+                        th = ("<=", 10 * sens, f"10 x JAX round-off sensitivity ({sens:.1e})")
+            if v is not None and (worst is None or v / th[1] > worst[0] / worst[1][1]):
+                worst = (v, th, r.key)
+        if worst is not None:
+            add(case, "numpy = JAX (max rel, worst run)", "numpy", "serial", worst[0], worst[1],
+                f"worst run {worst[2]}")
 
 
 def measure():
@@ -582,7 +620,7 @@ def measure():
             """AMReX = JAX (round-off); foam O1 on quads = JAX (the same
             stencil); otherwise the foam - JAX difference shrinks."""
             d = [(g(case, k), J(case, k)) for k in keys]
-            if b == "jax" or not all(ok(*x) for x in d):
+            if b in ("jax", "numpy") or not all(ok(*x) for x in d):
                 return
             if b == "amrex" or ("O1" in label and not tri):
                 # round-off amplified by the run (limiter switches, a
@@ -663,13 +701,13 @@ def measure():
             d = g("C5", "n48", c)
             if d is not None:
                 add("C5", "h_min", b, c, float(h(d).min()), (">=", 0.0, "theory (positivity)"), "")
-        if b != "jax" and ok(g("C5", "n48"), J("C5", "n48")):
+        if b not in ("jax", "numpy") and ok(g("C5", "n48"), J("C5", "n48")):
             fn, th = (l1rel, TH["C5 foam"]) if b == "foam" else (relmax, TH["C5 amrex"])
             add("C5", f"{'L1' if b == 'foam' else 'max'} rel vs JAX", b, "serial",
                 fn(g("C5", "n48"), J("C5", "n48")), th, "")
         for k in ("vam", "vam_newton", "vam_t2", "vam_tri"):    # C8
             d, j = g("C8", k), J("C8", k)
-            if b != "jax" and ok(d, j):
+            if b not in ("jax", "numpy") and ok(d, j):
                 fn, th = (l1rel, TH["C8 foam"]) if b == "foam" else (relmax, PRESS)
                 add("C8", f"{k} {'L1' if b == 'foam' else 'max'} rel vs JAX", b, "serial",
                     fn(d, j), th, "")
@@ -718,6 +756,8 @@ def measure():
                     add("C16", f"{pair} coupled vs single (max)", b, c, m["coupled_vs_single"],
                         TH["couple"], "")
                     add("C16", f"{pair} mass drift", b, c, m["mass"], TH["couple"], "")
+        if b == "numpy":
+            numpy_checks(add, g, J)
         euler_checks(add, b, g, J)
         gate_checks(add, b, g)
         imex_checks(add, b, g, J)
