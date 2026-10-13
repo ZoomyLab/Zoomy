@@ -15,6 +15,7 @@ from zoomy_core.model.models.equations import Stress
 from zoomy_core.numerics import (Limiter, NumericalSystemModel, ReconstructedVariables,
                                  ReconstructionSpec)
 from zoomy_core.symsolver.settings import Imex, PressureSolve, Projection
+from zoomy_core.symsolver.strategies.chorin import predictor_nsm
 from zoomy_core.systemmodel.system_model import SystemModel
 
 ALL = ("serial", "mpi2", "mpi4", "gpu1")
@@ -237,11 +238,10 @@ def bernoulli(variant, x):
 
 # ── C8: VAM(1) Chorin, the gate-21 channel ─────────────────────────────────
 def vam():
-    from gate7_chorin import pred_nsm
     from gate21_parallel_chorin import B, NX
     pred, press, corr = B.split()
     mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.3), nx=NX, ny=NX // 10)
-    return mesh, (pred_nsm(pred, press, corr), press, corr)
+    return mesh, (predictor_nsm(pred, press, corr), press, corr)
 
 
 def vam_q0(names, xc):
@@ -282,21 +282,10 @@ def vam_split(friction=False):
 
 
 def vam_wave(order, nx, friction=False):
-    """Predictor numerics as gate 7 (pred_nsm), reconstruction order ``order``."""
-    from gate7_chorin import pred_nsm
+    """Predictor numerics as gate 7 (`predictor_nsm`), reconstruction order ``order``."""
     pred, press, corr = vam_split(friction)
-    nsm = pred_nsm(pred, press, corr)
-    if order != nsm.reconstruction.order:
-        from zoomy_core.fvm.solver_chorin_vam_numpy import _pad_to_square
-        from zoomy_core.fvm.riemann_solvers import PositiveNonconservativeRusanov
-        sq = _pad_to_square(pred)
-        names = [str(v) for v in sq.state]
-        skip = {names.index("h"), names.index("b"), *map(int, press.equation_to_state_index)}
-        nsm = NumericalSystemModel.from_system_model(
-            sq, riemann=PositiveNonconservativeRusanov,
-            reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod),
-            additional_systems=[press, corr],
-            scaled_q_indices=[i for i in range(sq.n_variables) if i not in skip])
+    nsm = predictor_nsm(pred, press, corr, None if order == 1 else
+                        ReconstructionSpec(order=order, limiter=Limiter.minmod))
     mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.1), nx=nx, ny=2)   # quasi-1-D
     return mesh, (nsm, press, corr)
 
@@ -591,12 +580,12 @@ DIFF_ALL = ("dir0", "neu", "dirL", "per", "steady")
 
 
 def _c28():
-    from custom import diffusion_cxx, diffusion_orders
+    from custom import diffusion_orders, diffusion_run
     runs = [Run(f"orders_{k}_{p}", None, 0.0, custom=lambda b, c, w, k=k, p=p: diffusion_orders(k, p, b),
                 backends=("jax",)) for k in DIFF_KINDS for p in DIFF_PATHS]
     return runs + [Run(f"{k}_{p}_{case}", None, 0.0,
-                       custom=lambda b, c, w, k=k, p=p, case=case: diffusion_cxx(b, k, p, case, w),
-                       backends=("foam",) if k == "tri" else ("foam", "amrex"))   # AMReX: Cartesian
+                       custom=lambda b, c, w, k=k, p=p, case=case: diffusion_run(b, k, p, case, w),
+                       backends=JF if k == "tri" else JFA)   # AMReX: Cartesian
                    for k in DIFF_KINDS for p in DIFF_PATHS for case in DIFF_ALL]
 
 
@@ -793,12 +782,12 @@ CASES = {
 
 # ── the NumPy backend (serial): every serial JAX run, but the fine JAX references
 #    the checks read, the round-off sensitivity runs (*_pert), the gate-40 control,
-#    AD (C15, C22), preCICE (C16) and AMR (C17); C28 also against JAX
+#    AD (C15, C22), preCICE (C16) and AMR (C17)
 NUMPY_SKIP = ("C15", "C16", "C17", "C22")
 NUMPY_REFS = {("C11", "smooth_ref_n1280"), ("C14", "ref_n160"), ("C27", "ode_control")}
 for _case, (_, _runs) in CASES.items():
     for _r in _runs if _case not in NUMPY_SKIP else ():
-        if (("jax" in _r.backends or (_case == "C28" and not _r.key.startswith("orders")))
+        if ("jax" in _r.backends
                 and "serial" in _r.configs and (_case, _r.key) not in NUMPY_REFS
                 and not _r.key.endswith("_pert")):
             _r.backends = _r.backends + ("numpy",)

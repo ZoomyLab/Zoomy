@@ -12,9 +12,7 @@ anti-diffusively)."""
 import sys
 import time as clock
 import numpy as np
-import jax
-import jax.numpy as jnp
-jax.config.update("jax_enable_x64", True)
+import common  # noqa: F401  (x64)
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
@@ -23,7 +21,6 @@ from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressF
 from zoomy_core.model.models.equations import Stress
 from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel
-from zoomy_jax.symsolver.solver import AdMode, SymbolicHyperbolicSolverJax
 from zoomy_core.symsolver.settings import Imex
 
 NU = 1e-3
@@ -67,7 +64,9 @@ def block_vs_legacy():
     """One implicit-diffusion step (dt = 0.01) from the initial state: the
     runtime block vs DenseDiffusionOperatorJAX.implicit_solve (Newton, exact
     jvp, GMRES), both at tight tolerances."""
+    import jax
     from zoomy_jax.fvm.reconstruction_jax import DenseDiffusionOperatorJAX
+    from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
     for label, make, _ in CASES:
         mesh, nsm = make()
         s = SymbolicHyperbolicSolverJax(time_end=0.1, imex=Imex.lie, **TIGHT)
@@ -88,6 +87,7 @@ def block_vs_legacy():
 
 
 def march(make, t_end, comm, **kw):
+    from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
     mesh, nsm = make()
     s = SymbolicHyperbolicSolverJax(time_end=t_end, imex=Imex.lie, comm=comm, **kw)
     Q, A = s.setup(mesh, nsm)
@@ -101,6 +101,9 @@ def march(make, t_end, comm, **kw):
 def ad(make, comm):
     """dJ/dnu, dJ/dg (J = sum h^2 + q^2 over the owned cells, ranks summed):
     forward vs central FD, reverse vs forward; fixed dt."""
+    import jax
+    import jax.numpy as jnp
+    from zoomy_jax.symsolver.solver import AdMode, SymbolicHyperbolicSolverJax
     res = {}
     for mode in (AdMode.forward, AdMode.reverse):
         mesh, nsm = make()

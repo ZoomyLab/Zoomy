@@ -148,12 +148,11 @@ def hyperbolic(level, backend, config, nx, n_steps=N_STEPS):
 
 # ── pressure strong scaling: VAM(1) Chorin channel, ~1M cells ───────────────
 def vam_large(nx):
-    from cases import vam_split
-    from gate7_chorin import pred_nsm
+    from cases import predictor_nsm, vam_split
     from zoomy_core.mesh import LSQMesh
     pred, press, corr = vam_split()
     return (LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.3), nx=nx, ny=nx // 10),
-            (pred_nsm(pred, press, corr), press, corr))
+            (predictor_nsm(pred, press, corr), press, corr))
 
 
 def pressure(backend, config, nx=3200):

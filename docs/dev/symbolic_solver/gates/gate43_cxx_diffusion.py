@@ -29,9 +29,8 @@ import numpy as np
 
 import common  # noqa: F401  (x64)
 from zoomy_core.mesh import ensure_lsq_mesh
-from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 
-from gate41_diffusion_bc import NU, T_END, TIGHT, exact, heat, mesh_of  # noqa: F401
+from gate41_diffusion_bc import NU, T_END, TIGHT, exact, heat, mesh_of, solver_class  # noqa: F401
 from zoomy_core.symsolver.settings import Imex
 
 WORK = os.environ.get("ZOOMY_GATE_WORK", "/tmp/zoomy_gates")
@@ -54,14 +53,23 @@ def setup(kind, case, path, nx):
     return mesh, nsm, np.asarray(Q0, dtype=float), dt
 
 
-def jax_run(kind, case, path, nx):
+def solve(backend, kind, case, path, nx, ranks=1):
+    """(t, u at t_end) on `backend` (jax | numpy: gate 41's solver; foam | amrex)."""
+    if backend in KINDS:
+        return cxx_run(backend, kind, case, path, nx, ranks)
     mesh, nsm, Q0, dt = setup(kind, case, path, nx)
-    s = SymbolicHyperbolicSolverJax(time_end=T_END, dt=dt, cfl_check_every=0,
-                                    imex=Imex.lie if path == "impl" else False, **TIGHT)
+    s = solver_class(backend)(time_end=T_END, dt=dt, cfl_check_every=0,
+                              imex=Imex.lie if path == "impl" else False, **TIGHT)
     _, A = s.setup(mesh, nsm)
-    import jax.numpy as jnp
-    t, Q, _ = s.run(jnp.asarray(Q0), A)
+    if backend == "jax":
+        import jax.numpy as jnp
+        Q0 = jnp.asarray(Q0)
+    t, Q, _ = s.run(Q0, A)
     return float(t), np.asarray(Q)[0]
+
+
+def jax_run(kind, case, path, nx):
+    return solve("jax", kind, case, path, nx)
 
 
 def cxx_run(backend, kind, case, path, nx, ranks=1):

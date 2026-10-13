@@ -31,9 +31,8 @@ import time as clock
 
 import numpy as np
 import sympy as sp
-import jax
-jax.config.update("jax_enable_x64", True)
 
+import common  # noqa: F401  (x64)
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh, ensure_lsq_mesh
@@ -41,7 +40,6 @@ from zoomy_core.mesh.base_mesh import BaseMesh
 from zoomy_core.misc.misc import Zstruct
 from zoomy_core.numerics import NumericalSystemModel, ReconstructionSpec
 from zoomy_core.systemmodel.system_model import SystemModel, face_normal_symbols
-from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 from zoomy_core.symsolver.settings import Imex
 
 NU, T_END = 1.0, 0.05
@@ -140,7 +138,16 @@ def mesh_of(kind, nx):
     return triangles(nx)
 
 
-def run(kind, case, path, nx, comm=None):
+def solver_class(backend="jax"):
+    """The symbolic hyperbolic solver of `backend` (jax | numpy)."""
+    if backend == "numpy":
+        from zoomy_core.symsolver.numpy_backend import SymbolicHyperbolicSolverNumpy
+        return SymbolicHyperbolicSolverNumpy
+    from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+    return SymbolicHyperbolicSolverJax
+
+
+def run(kind, case, path, nx, comm=None, backend="jax"):
     """Returns (u at t_end in global cell order or None, cell centres, wall)."""
     dim = 1 if kind == "1d" else 2
     nsm = heat(dim, case, path)
@@ -152,8 +159,8 @@ def run(kind, case, path, nx, comm=None):
     # triangles
     rho = 4 * dim / h ** 2 if kind != "tri" else 24 / h ** 2
     dt = 0.4 / (rho * NU) if path == "expl" else h / 32
-    s = SymbolicHyperbolicSolverJax(time_end=T_END, dt=dt, cfl_check_every=0,
-                                    imex=Imex.lie if path == "impl" else False, comm=comm, **TIGHT)
+    s = solver_class(backend)(time_end=T_END, dt=dt, cfl_check_every=0,
+                              imex=Imex.lie if path == "impl" else False, comm=comm, **TIGHT)
     Q, A = s.setup(mesh, nsm)
     t0 = clock.perf_counter()
     t, Q, A = s.run(Q, A)
@@ -169,9 +176,9 @@ def run(kind, case, path, nx, comm=None):
     return np.asarray(Q)[0], xc, wall, float(t)
 
 
-def error(kind, case, path, nx):
+def error(kind, case, path, nx, backend="jax"):
     dim = 1 if kind == "1d" else 2
-    u, xc, wall, t = run(kind, case, path, nx)
+    u, xc, wall, t = run(kind, case, path, nx, backend=backend)
     return np.abs(u - exact(case, dim, xc, t)).max(), wall
 
 
