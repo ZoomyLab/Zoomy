@@ -484,8 +484,9 @@ class SpectralRadius(Option):
     """How a Riemann solver bounds the wave speed rho(A_n) when no closed-form eigenvalues exist."""
     #: numerical eigenvalues of A_n
     eig = "eig"
-    #: power iteration on A_n^2 (zoomy_core.symsolver.WAVE_SPEED)
-    power = "power"
+    #: the upper bound `||A_n^m||^(1/m)`, `m = 2^spectral_squarings`, with a Collatz-Wielandt
+    #: step (`kernel_functions.gelfand_bound`; zoomy_core.symsolver.WAVE_SPEED)
+    gelfand = "gelfand"
     #: the closed-form scalar upper bound (cheaper, more diffusive)
     bound = "bound"
 
@@ -1348,15 +1349,14 @@ class SystemModel:
     # per side per step.  So a large-level or coupled production run may well
     # want it; a verification or convergence study must not have it silently on.
     use_spectral_radius_bound = False
-    # Spectral radius of a model without a closed-form spectrum: "eig" (the
-    # numerical eigenvalues; CPU-only in JAX), "power" (power iteration on
-    # A^2, ``spectral_power_steps`` steps x ``spectral_power_safety``; any
-    # device), "bound" (the strict upper bound, = use_spectral_radius_bound).
-    # The symbolic solvers default to "power" on every backend
+    # Spectral radius of a model without a closed-form spectrum: `eig` (the
+    # numerical eigenvalues; CPU-only in JAX), `gelfand` (the upper bound
+    # ||A^m||^(1/m), m = 2^spectral_squarings, any device; ANALYSIS 48),
+    # `bound` (the closed-form |A| bound, = use_spectral_radius_bound).
+    # The symbolic solvers default to `gelfand` on every backend
     # (zoomy_core.symsolver.WAVE_SPEED); this default serves the old solvers.
     spectral_radius_method = SpectralRadius.eig
-    spectral_power_steps = 10
-    spectral_power_safety = 1.06
+    spectral_squarings = 6
 
     @property
     def spectral_radius_bound(self):

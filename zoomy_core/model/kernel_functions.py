@@ -26,17 +26,13 @@ class eigensystem(sp.Function):
         return None  # always keep unevaluated
 
 
-class spectral_radius(sp.Function):
-    """Opaque estimate of `rho(A)` by `k` power-iteration steps on `A^2` (no
-    eigendecomposition, runs on any device). Used as the wave-speed bound of the symbolic
-    solvers.
+class gelfand_bound(sp.Function):
+    """Opaque upper bound on `rho(A)`, the symbolic solvers' wave speed: `||A^m||^(1/m)`,
+    `m = 2^j`, sharpened by a Collatz-Wielandt step on `|A^m|`; `+inf` for a non-finite entry.
+    Called as `gelfand_bound(j, *A_flat)`, `A_flat` row-major.
 
-    Args:
-        k: number of power-iteration steps.
-        safety: multiplicative safety factor on the estimate.
-        A_flat: the `n*n` matrix entries, row-major.
     References:
-        Golub & Van Loan 2013, https://doi.org/10.56021/9781421407944
+        Horn, Johnson 2012 (sections 5.6, 8.1), https://doi.org/10.1017/CBO9781139020411
     """
 
     is_commutative = True

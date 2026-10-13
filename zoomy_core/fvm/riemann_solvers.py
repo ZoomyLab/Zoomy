@@ -21,6 +21,22 @@ from zoomy_core.transformation.to_numpy import (
 )
 
 
+def _spectral_core(M):
+    """Indices left after repeatedly dropping a state whose row or column of the square
+    symbolic matrix `M` is structurally zero: the matrix is then block triangular with a
+    zero block, so the kept block has the same spectral radius (`b`, VAM's pressure rows).
+    """
+    keep = list(range(len(M)))
+    dropped = True
+    while dropped:
+        dropped = False
+        for i in list(keep):
+            if all(M[i][j] == 0 for j in keep) or all(M[j][i] == 0 for j in keep):
+                keep.remove(i)
+                dropped = True
+    return keep or [0]
+
+
 class FieldHandle:
     """A named field resolved to a slot of `Q` or `Qaux`, exposing its face symbols
     `minus` / `plus` and cell symbol `state`. Built by
@@ -422,12 +438,12 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
 
     def local_max_abs_eigenvalue(self, Q=None, Qaux=None, p=None, n=None):
         """Spectral radius at `(Q, Qaux, p, n)`: `Max(|lambda_i|)` over the model's
-        closed-form eigenvalues, else per `spectral_radius_method` an `eig`, a
-        power iteration (the symbolic solvers' default) or the Perron bound. It sets
-        the Rusanov / HLL dissipation and the CFL step.
+        closed-form eigenvalues, else per `spectral_radius_method` an `eig`, the Gelfand
+        upper bound (the symbolic solvers' default) or the Perron bound. It sets the
+        Rusanov / HLL dissipation and the CFL step.
 
         References:
-            Golub, Van Loan 2013, https://doi.org/10.56021/9781421407944
+            Horn, Johnson 2012, https://doi.org/10.1017/CBO9781139020411
         """
         if Q is None:
             return self.local_max_eigenvalue_definition()
@@ -437,27 +453,26 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
             # the CFL, and an upper bound is extra numerical diffusion there
             # (see SystemModel.use_spectral_radius_bound for the measured cost
             # on the Ritter dry dam break).  The cheap bound is opt-in.  The
-            # symbolic solvers set "power" (zoomy_core.symsolver.WAVE_SPEED).
+            # symbolic solvers set `gelfand` (zoomy_core.symsolver.WAVE_SPEED).
             method = SpectralRadius(typed(
                 SpectralRadius, getattr(self.model, "spectral_radius_method",
                                         SystemModel.spectral_radius_method),
                 "spectral_radius_method"))
+            Qaux = self._wave_speed_aux(Q, Qaux)
             if method == "bound" or getattr(self.model, "use_spectral_radius_bound",
                                              SystemModel.use_spectral_radius_bound):
                 return self._spectral_radius_bound(Q, Qaux, p, n)
-            if method == "power":
-                from zoomy_core.model.kernel_functions import spectral_radius
+            if method == "gelfand":
+                from zoomy_core.model.kernel_functions import gelfand_bound
                 A = self._model_eval("quasilinear_matrix", Q, Qaux, p)
                 nrm = list(n)
-                flat = [sum(A[i, j, d] * nrm[d] for d in range(len(nrm)))
-                        for i in range(self.n_variables)
-                        for j in range(self.n_variables)]
-                m = self.model
-                return spectral_radius(
-                    sp.Integer(getattr(m, "spectral_power_steps",
-                                       SystemModel.spectral_power_steps)),
-                    sp.Float(getattr(m, "spectral_power_safety",
-                                     SystemModel.spectral_power_safety)), *flat)
+                M = [[sum(A[i, j, d] * nrm[d] for d in range(len(nrm)))
+                      for j in range(self.n_variables)] for i in range(self.n_variables)]
+                keep = _spectral_core(M)
+                return gelfand_bound(
+                    sp.Integer(getattr(self.model, "spectral_squarings",
+                                       SystemModel.spectral_squarings)),
+                    *[M[i][j] for i in keep for j in keep])
             src = list(sp.flatten(
                 self._model_eval("numerical_eigenvalues", Q, Qaux, p, n)))
             return sp.Max(*[sp.Abs(lam) for lam in src], evaluate=False)
@@ -471,6 +486,20 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         # lowers to ``np.amax``/the backend max UNCHANGED (max is exact +
         # associative → bit-identical numerics).
         return sp.Max(*[sp.Abs(lam) for lam in src], evaluate=False)
+
+    def _wave_speed_aux(self, Q, Qaux):
+        """`Qaux` with the KP `hinv` replaced by the `1/max(1e-14, h)` of the closed-form
+        eigenvalues (`wave_speed_inverse_depth`, REQ-82): the KP value underestimates the speed
+        at a thin reconstructed face and drains cells negative (ANALYSIS 48).
+        """
+        hinv = self.find_field("hinv", required=False)
+        h = self.find_field("h", required=False)
+        if hinv is None or h is None or hinv.container != "qaux":
+            return Qaux
+        from zoomy_core.systemmodel.operations import wave_speed_inverse_depth
+        out = list(Qaux)
+        out[hinv.index] = wave_speed_inverse_depth(h.access(Q, Qaux))
+        return out
 
     def _spectral_radius_bound(self, Q, Qaux, p, n):
         """The model's spectral radius bound at the numerics' state symbols, built from

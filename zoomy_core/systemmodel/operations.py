@@ -502,6 +502,23 @@ _RECONSTRUCTION_OPERATORS = (
 )
 
 
+def wave_speed_inverse_depth(h):
+    """The `1/h` of every wave speed, `1/max(1e-14, h)`, never the KP `hinv`: large but finite
+    at a wet/dry front (REQ-82). Used by `regularize_pow` and the numerical spectral radius.
+    """
+    # eps_h — the wave-speed floor.  Deliberately an INTERNAL constant (user
+    # ruling 2026-07-19, task cid=5): not a parameter, not exposed, not
+    # tunable.  Every PHYSICAL operator uses only the wet/dry KP reciprocal
+    # (u -> 0 as h -> 0); the spectrum needs the OPPOSITE guarantee — large-
+    # but-finite at a wet/dry front — because a KP-damped celerity starves the
+    # Riemann dissipation and drains cells negative (measured: lake h_min
+    # -2.5e-15 with this floor vs -1.6e-2 with KP on the eigenvalues).  A
+    # fully-dry domain's dt is governed by NSM dt_max (REQ-190), so this floor
+    # never sets a global timestep.
+    eps_h = 1e-14
+    return sp.S.One / sp.Max(sp.Float(eps_h), h)
+
+
 def regularize_pow(field: Union[str, sp.Symbol], aux_name: str):
     """Operation: replace every `field**(-n)` in the physical, derived and reconstruction
     operators by `aux_name**n`; eigenvalues get a floored plain `1/max(1e-14, h)` instead.
@@ -516,7 +533,7 @@ def regularize_pow(field: Union[str, sp.Symbol], aux_name: str):
         # ``inv`` is the replacement for ``1/h``: the desingularized ``aux``
         # (``hinv``) for the flux/source/NCP operators, but the plain floored
         # inverse ``1/Max(1e-14, h)`` for the EIGENVALUE / wave-speed (REQ-82 —
-        # see the internal ``eps_h`` at the use site).  See :func:`_pow_rewrite` for the
+        # see `wave_speed_inverse_depth`).  See :func:`_pow_rewrite` for the
         # rewrite rules themselves.
         def _rw(e, inv):
             """Rewrite `e` with `inv` as the replacement for `1/h`."""
@@ -536,18 +553,7 @@ def regularize_pow(field: Union[str, sp.Symbol], aux_name: str):
         #    regulariser suppresses the speed by ``(h*/eps)²`` at a wet/dry
         #    front and starves the dissipation, draining the cell negative
         #    (REQ-82).  The flux velocity already uses this same FP floor.
-        # eps_h — the EIGENVALUE-SLOT wave-speed floor.  Deliberately an
-        # INTERNAL constant of this operator (user ruling 2026-07-19, task
-        # cid=5): not a parameter, not exposed, not tunable.  Every PHYSICAL
-        # operator uses only the wet/dry KP reciprocal (u -> 0 as h -> 0);
-        # the spectrum needs the OPPOSITE guarantee — large-but-finite at a
-        # wet/dry front — because a KP-damped celerity starves the Riemann
-        # dissipation and drains cells negative (measured: lake h_min
-        # -2.5e-15 with this floor vs -1.6e-2 with KP on the eigenvalues).
-        # A fully-dry domain's dt is governed by NSM dt_max (REQ-190), so
-        # this floor never sets a global timestep.
-        eps_h = 1e-14
-        inv_floor = sp.S.One / sp.Max(sp.Float(eps_h), hs)
+        inv_floor = wave_speed_inverse_depth(hs)
         for nm in (_PRIMARY_OPERATORS + _DERIVED_OPERATORS
                    + _RECONSTRUCTION_OPERATORS):
             M = getattr(sm, nm, None)

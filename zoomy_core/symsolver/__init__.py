@@ -8,10 +8,11 @@ from zoomy_core.symsolver.core import (  # noqa: F401
 from zoomy_core.systemmodel.system_model import SpectralRadius
 
 #: Wave speed of a model without closed-form eigenvalues, on every backend and
-#: device: power iteration on A^2 (``SystemModel.spectral_power_steps`` x
-#: ``spectral_power_safety``).  One method everywhere, so backends and devices
-#: run the same arithmetic (JAX's numerical eig is a host callback on a GPU).
-WAVE_SPEED = SpectralRadius.power
+#: device: the upper bound `||A_n^m||^(1/m)` (`kernel_functions.gelfand_bound`,
+#: `m = 2^SystemModel.spectral_squarings`), so the CFL step and the HLL / Rusanov
+#: speeds keep their positivity guarantee.  One method everywhere, so backends and
+#: devices run the same arithmetic (JAX's numerical eig is a host callback on a GPU).
+WAVE_SPEED = SpectralRadius.gelfand
 
 
 def default_wave_speed(nsm):

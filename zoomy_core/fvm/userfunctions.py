@@ -73,18 +73,29 @@ def eigensystem(*a_flat):
         axis=-1).reshape(A.shape[:-2] + (n + 2 * n * n,))
 
 
-def spectral_radius(k, safety, *a_flat):
-    """`safety * sqrt(rho(A^2))` by `k` power steps on `A^2` from
-    `x = 1` (see `kernel_functions.spectral_radius`), batched."""
+def gelfand_bound(j, *a_flat):
+    """`kernel_functions.gelfand_bound`, batched: `j` squarings of `A`, each after dividing
+    by its max row sum `s_i`, then `w = max_i (|C| x)_i / x_i` with `x` the row sums of `|C|`;
+    returns `s_0 sqrt(s_1 sqrt(... sqrt(s_(j-1) sqrt(w))))`, `+inf` for a non-finite entry."""
     n = int(round(len(a_flat) ** 0.5))
-    A = _stack_square(a_flat, n)
-    x = np.ones(A.shape[:-1]) / np.sqrt(n)
-    lam = np.zeros(A.shape[:-2])
-    for _ in range(int(k)):
-        y = np.einsum("...ij,...j->...i", A, np.einsum("...ij,...j->...i", A, x))
-        lam = np.linalg.norm(y, axis=-1)
-        x = y / np.where(lam > 0, lam, 1.0)[..., None]
-    return float(safety) * np.sqrt(lam)
+    C = _stack_square(a_flat, n)
+    finite = np.isfinite(C).all(axis=(-2, -1))
+    C = np.where(finite[..., None, None], C, 0.0)
+    scales = []
+    for _ in range(int(j)):
+        s = np.abs(C).sum(-1).max(-1)
+        s = np.where(s > 0, s, 1.0)
+        C = C / s[..., None, None]
+        scales.append(s)
+        C = C @ C
+    M = np.abs(C)
+    x = M.sum(-1)
+    y = np.einsum("...ik,...k->...i", M, x)
+    w = np.where(x > 0, y / np.where(x > 0, x, 1.0), 0.0).max(-1)
+    t = w
+    for s in reversed(scales):
+        t = s * np.sqrt(t)
+    return np.where(finite, t, np.inf)
 
 
 def eigenvalues(*a_flat):
@@ -221,7 +232,7 @@ KERNELS = {
     "compute_derivative": None,
     "eigensystem": eigensystem,
     "eigenvalues": eigenvalues,
-    "spectral_radius": spectral_radius,
+    "gelfand_bound": gelfand_bound,
     "solve": solve,
     # Component read of a packed kernel result (numpy-internal, not a
     # cross-backend REQUIRED_KERNEL — the per-component C/UFL backends restore
