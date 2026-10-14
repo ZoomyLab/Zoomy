@@ -128,7 +128,7 @@ the model's `chorin_split`, the predictor's numerics, 8 steps of
 
 ```text
 state ['b', 'h', 'q_x_0', 'q_x_1', 'q_y_0', 'q_y_1', 'r_0', 'r_1', 'P_0', 'P_1']
-t = 0.007812, cells = 360, h in [0.01500, 0.34274]
+t = 0.007812, cells = 360, h in [0.01500, 0.34276]
 ```
 
 ## JAX only

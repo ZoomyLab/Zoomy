@@ -1,125 +1,138 @@
-# OpenFOAM backend — zoomyFoam (via preCICE)
+# OpenFOAM backend
 
-```{warning}
-Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+`zoomy_foam` runs the solver templates as a native **OpenFOAM** 13 finite-volume solver,
+`symFoam`.  The driver `zoomy_foam.symsolver` prints the template as C++, builds it with `wmake`
+inside the project's apptainer image, writes the OpenFOAM case, runs it (serial or
+`mpirun -parallel`) and reads the result back.  It takes unstructured meshes and, through
+[preCICE](https://precice.org/), couples a depth-averaged model to another Zoomy participant or to
+a resolved 3-D OpenFOAM region.
+
+## How it is built: print, then compile
+
+Unlike NumPy and JAX, the foam solver is **generated, then compiled**.  The C++ printer of
+`zoomy_core.symsolver` (one printer, shared with AMReX) emits the build tree, and `wmake` compiles
+it:
+
+| File | Contents |
+| --- | --- |
+| `Solver.H` | the printed template: the step, the march, MOOD, IMEX, the pressure solve |
+| `Kernels.H` | the NSM's kernels as C++: flux, nonconservative matrix, eigenvalues, source, boundary ghost states |
+| `rt.H` | the foam runtime: the template's building blocks on OpenFOAM fields (gradients, Riemann problems on all faces, reductions, linear solves) |
+| `rt_common.H` | the part of the runtime shared with AMReX: functors, `configure()` settings, effects, Newton skeletons |
+| `symFoam.C` | the host program |
+
+The binary is cached by a hash of the sources, the build flags and the image
+(`ZOOMY_FOAM_BINCACHE`).  The kernels are the same operators the other backends consume, printed
+as C++ instead of Python, so a foam run matches the [NumPy](numpy.md) and [JAX](jax.md) run to
+round-off at first order and to the discretization error at second order (foam takes its second-order
+gradients from OpenFOAM's own least-squares stencils).  If a run needs different operators, fix the
+derivation, not the printer.
+
+## Solvers
+
+| Class | Template | Call |
+| --- | --- | --- |
+| `SymbolicHyperbolicSolverFoam` | `HyperbolicTemplate` | `time, Q = solver.run(mesh, nsm, Q0, workdir)` |
+| `SymbolicChorinSolverFoam` | `ChorinTemplate` | `time, Q = solver.run(mesh, (pred, press, corr), Q0, workdir)` |
+
+`Q0` is the initial state `(n_state, n_cells)` in the mesh's order and `workdir` the case
+directory: absolute, recreated by the run.  `run` returns the final state in the mesh's order; the
+snapshots of `dt_write` stay in `solver.snapshots`.  A structured mesh is written as a `blockMesh`
+case; any other mesh goes through `gmshToFoam` on the mesh extruded by one layer.
+
+## Settings
+
+The settings shared by all backends are the tables of [Solvers and options](../guide/solvers.md).
+foam adds:
+
+| option | default | meaning |
+|---|---|---|
+| `nprocs` | `1` | MPI ranks: `decomposePar`, then `mpirun -parallel` |
+| `decomposition` | `Decomposition.scotch` | `decomposePar` method: `Decomposition.scotch` (graph partition) or `Decomposition.simple` (`nprocs` slabs along x) |
+| `linear_solver` (Chorin) | `LinearSolver.hypre` | `hypre`, `schur_gamg` or `gmres`, see [Solvers and options](../guide/solvers.md) |
+| `couple`, `subcycling` | `None`, `False` | preCICE participant (dict below); adaptive steps inside a window |
+
+Options are members of `Option` enums, so a plain string raises `TypeError` and names the member:
+
+```python
+from zoomy_foam.symsolver import Decomposition, SymbolicHyperbolicSolverFoam
+
+solver = SymbolicHyperbolicSolverFoam(time_end=1.0, cfl=0.9, nprocs=4,
+                                      decomposition=Decomposition.simple)
+SymbolicHyperbolicSolverFoam(decomposition="simple")
+# TypeError: decomposition='simple': use Decomposition.simple
 ```
 
-`zoomy_foam` runs a Zoomy depth-averaged model as a native **OpenFOAM** finite-volume
-solver, and couples it across an interface to another solver (a second Zoomy
-participant, or a 3-D OpenFOAM region) through the [preCICE](https://precice.org/)
-library. It is the one backend where preCICE is in scope; the coupling is built on
-the `interpolate_to_3d` / `project_from_3d` maps every Zoomy model already carries
-(see [authoring/model.md](../authoring/system-model.md#the-shape-contract)).
+Environment: `ZOOMY_OF_SIF` (the image, default `~/of_build/zoomy_openfoam.sif`),
+`ZOOMY_FOAM_BINCACHE` (the binary cache).  Inside the image the driver builds and runs directly.
 
-## How it is built — code generation, then compile
+## End-to-end example: shallow water dam break
 
-Unlike NumPy/JAX, zoomyFoam is **generated, then compiled**. A C++ code printer
-emits per-case OpenFOAM headers from a frozen `SystemModel` + `Numerics`
-(`zoomy_core/transformation/to_openfoam.py`; see the
-[printer inventory](../authoring/numerics.md#generating-code)):
+The case is `docs/book/examples/dambreak.py` of the [NumPy page](numpy.md).  From
+`docs/book/examples/`, after `source env.sh`:
 
-| Printer | Emits | Contents |
-| --- | --- | --- |
-| `FoamSystemModelPrinter` | `Model.H` | `flux_*`, `nonconservative_matrix_*`, `quasilinear_matrix_*`, `eigenvalues`, `source`, plus `interpolate_to_3d` / `project_from_3d` and the `precice_*` patch metadata. |
-| `FoamNumericsPrinter` | `NumericsKernels.H` | `numerical_flux`, `numerical_fluctuations`. |
-| `FoamUpdateAuxPrinter` | `UpdateAuxVariables.H` | the runtime aux-refresh. |
+```{literalinclude} ../examples/foam_dambreak.py
+:language: python
+```
 
-`zoomy_foam/create_model.py` drives the emit (`build_system_model` / `emit`,
-using `PositiveNonconservativeRusanov` and a `Coupled(tag="coupled",
-mesh_name="interface")` boundary). The generated headers compile into the solver
-binary via `compile.sh` / `wmake`, run inside the project's apptainer image.
+```text
+t = 0.500, cells = 300, h in [1.00000, 2.00000]
+max |h_foam - h_numpy| = 1.73e-09
+```
 
-This is the same symbolic operator surface the other backends consume — the
-printer emits the *same* `numerical_flux` / `quasilinear_matrix_x` kernels as
-C++ instead of lambdifying them, so a coupled run matches the
-[NumPy](numpy.md) / [JAX](jax.md) reference. If a coupled run needs different
-operators, fix the derivation, not the printer.
-
-## The runtime — `zoomyFoam.C`
-
-`zoomy_foam/zoomyFoam.C` is a `SystemModel`-driven explicit finite-volume solver.
-`Q` and `Qaux` are `List<volScalarField*>`; reconstruction `W`/`gradW`, the source
-field, and the cell-interior non-conservative integral are built once. Time
-stepping is explicit forward-Euler or Heun SSP-RK2 — it deliberately bypasses
-`fvm::ddt` so the update matches the NumPy/JAX reference exactly.
+The first run builds `symFoam` (cached afterwards).  The 2-D case of the
+[Quick start](../guide/quickstart.md) runs on foam the same way.
 
 ## preCICE coupling
 
-The adapter is an in-tree preCICE-3 wrapper, `zoomy_foam/precice/PreciceManager.H`
-(`precice::Participant`), driven from the `zoomyFoam.C` time loop. Per window:
-`read` peer data → solve → `write` this participant's data → `advance`, with
-checkpoint write/read around the step and `dt = min(dt, preciceDt)`.
+`couple` makes the run one preCICE participant.  The data is the rows of the state: a participant
+writes `write` and reads `read`, one preCICE data name per state row, preCICE forbids reusing a
+`(data, mesh)` pair, so the two sides name them differently.  A dam break on `[0, 1]` split at
+$x = 0.5$ into two foam participants (Gate 3 of the symbolic-solver gates, matrix case C16):
 
-**What is exchanged.** The canonical 6-field profile column
-`[b, h, u, v, w, p]` — i.e. `interpolate_to_3d` — sampled on a uniform vertical
-grid (`n_faces × nZ` vertices per coupled patch):
+```python
+from zoomy_foam.symsolver import SymbolicHyperbolicSolverFoam
 
-```
-write:  Q on a coupled patch  --interpolate_to_3d(z_k)-->  6 fields
-read:   6 fields  --project_from_3d (depth-average)-->  Q ghost
-```
-
-`write` lifts the interior cell to a ζ-column; `read` reduces the peer column
-back to a state and imposes a ghost cell selected by `preciceGhost`:
-
-- `fullstate` (default) — conservative: set the whole peer state.
-- `characteristic` — only the incoming Riemann invariants, via the
-  eigendecomposition of `A = ∂F/∂Q + B`.
-- `froude` — a Froude-switched primitive Dirichlet–Neumann condition on `h, hu`.
-
-`preciceFrozenMass yes` freezes the coupled-face mass-row flux per window for a
-closed interface mass ledger.
-
-**Participants.** The coupling is symmetric: the *same* model and binary run on
-both sides. preCICE forbids reusing a `(data, mesh)` pair, so each participant
-writes one data set and reads the peer's — e.g. `SmeA` writes `*_1` / reads
-`*_2`, `SmeB` the reverse. Mapping is nearest-neighbour, mesh `dimensions="3"`,
-and the coupling scheme is selectable (`parallel-explicit`, …).
-
-## Setting up a coupled run
-
-A coupled case is generated, not hand-written. The reference lives at
-`thesis/notebooks/coupling/cases/sme_self/`:
-
-```bash
-# emits part1/, part2/, mono/ case dirs + precice-config.xml
-python generate.py LEVEL SCHEME ZSAMPLES DT TEND
-
-# blockMesh/setFields each case, launch both participants in parallel (apptainer)
-./run.sh
+left = dict(participant="Left", config="precice-config.xml", mesh="Left-Mesh",
+            write=["L0", "L1", "L2"], read=["R0", "R1", "R2"], tag="right", side=0)
+solver = SymbolicHyperbolicSolverFoam(cfl=0.9, nprocs=2, couple=left)
 ```
 
-`generate.py` writes the preCICE keys into each case's `system/controlDict`, e.g.:
+| key | meaning |
+|---|---|
+| `participant`, `config`, `mesh` | the preCICE participant, its configuration file, the mesh the data lives on |
+| `write`, `read` | the data names this participant writes (its state rows) and reads (the peer's) |
+| `tag` | the coupled boundary of this domain |
+| `side` | 0 if this domain is the low side of the interface |
 
-```
-preciceParticipant  SmeA;
-preciceConfig       precice-config.xml;
-preciceMeshes       ( MeshA );
-preciceWriteData    ( b_1 h_1 u_1 v_1 w_1 p_1 );
-preciceReadData     ( b_2 h_2 u_2 v_2 w_2 p_2 );
-preciceGhost        fullstate;
-preciceFrozenMass   yes;
-preciceZSamples     16;
-```
+Per window the participant reads the peer's data, takes its step (one step per window with
+`subcycling=False`, exactly conservative; adaptive steps inside the window with `True`), and
+writes its own.  The two-participant reference setup is
+`docs/dev/symbolic_solver/gates/couple_side.py` (the foam and AMReX sides, with the preCICE
+configuration; `participant.py` is the JAX side): the coupled run reproduces the single-domain
+march to round-off with exact mass.  Restarts and checkpoints are not available with coupling.
 
-It produces `mono/` (a single uncoupled run) alongside the two participants so
-the coupled result can be verified against the monolithic one — the standard
-correctness check for a coupling change.
+**A resolved 3-D peer.** `zoomy_foam.vof` is the other side of a depth-averaged | VOF coupling:
+OpenFOAM 13 `incompressibleVoF` in a rectangular tank, with the `swePreciceCoupling` function
+object imposing the depth-averaged arm's column on the coupled patches.  The exchange is the
+canonical six-field column `[b, h, u, v, w, p]` (`<field>_S` written by the depth-averaged arm,
+`<field>_V` by the VOF participant) at the cell-centre heights of the tank, that is the model's
+`interpolate_to_3d` / `project_from_3d`.  The depth-averaged arm is a JAX participant
+(`zoomy_jax.symsolver.coupling.column_participant`) that answers with the Riemann problem towards
+the characteristic ghost (`CoupledFace.characteristic`), see the [JAX page](jax.md).
 
 ## Authoring checklist
 
-- Generate the case with `generate.py`; never hand-edit the emitted headers.
-- Run the `mono/` baseline and confirm the two coupled participants reproduce it.
-- Choose `preciceGhost` (`fullstate` / `characteristic` / `froude`) to match the
-  interface physics; set `preciceFrozenMass` if a closed mass ledger matters.
-- Each participant must `write` one data set and `read` the peer's — never reuse
-  a `(data, mesh)` pair.
+- Run the single-domain march next to the coupled one and confirm the participants reproduce it:
+  the standard correctness check of a coupling change.
+- The coupled data names must be unique per `(data, mesh)` pair: each participant writes one data
+  set and reads the peer's.
+- `workdir` is absolute and is deleted and recreated; do not point it at a folder you keep.
 
 ## Install
 
-Requires OpenFOAM 13 (openfoam.org), preCICE 3, and the project apptainer
-image — `zoomy_openfoam` on the [Installation](../installation.md#what-ships)
-page ships all three. A case `run.sh` shows the apptainer invocation.
+Requires OpenFOAM 13 (openfoam.org) and, for coupling, preCICE 3: the `zoomy_openfoam` image of the
+[Installation](../installation.md) ships both.
 
-**Repository**: [`library/zoomy_foam`](https://github.com/ZoomyLab/zoomy-foam)
-**API reference**: see [zoomy_foam](https://github.com/ZoomyLab/zoomy-foam).
+**Repository**: [`library/zoomy_foam`](https://github.com/ZoomyLab/zoomy-foam)  
+**API reference**: {doc}`zoomy_foam <../api/_autodoc2/zoomy_foam/zoomy_foam>`.
