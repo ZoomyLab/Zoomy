@@ -1037,10 +1037,16 @@ def guard_eigenvalue_powers():
 
 
 def _is_dry_gated(e, h, eps) -> bool:
-    """True when `e` is already `conditional(h > eps, ., 0)`, so re-gating is a no-op."""
+    """True when `e` is already `conditional(h <= eps, 0, .)`, so re-gating is a no-op."""
     return (isinstance(e, sp.Function) and e.func.__name__ == "conditional"
-            and len(e.args) == 3 and e.args[0] == (h > eps)
-            and e.args[2] == sp.S.Zero)
+            and len(e.args) == 3 and e.args[0] == (h <= eps)
+            and e.args[1] == sp.S.Zero)
+
+
+def _dry_gate(h, eps, e):
+    """`e` where `h > eps`, 0 where `h <= eps`; a NaN depth keeps `e` (NaN), so the step of a
+    non-finite state is NaN and the march stops there (`check.march`)."""
+    return sp.Function("conditional")(h <= eps, sp.S.Zero, e)
 
 
 def _cfl_inverse_depth(sm, h) -> dict:
@@ -1057,7 +1063,7 @@ def _cfl_inverse_depth(sm, h) -> dict:
 
 
 def gate_eigenvalues_dry(eps=None):
-    """Operation: publish a timestep-only spectrum `conditional(h > eps, e, 0)` into
+    """Operation: publish a timestep-only spectrum `conditional(h <= eps, 0, e)` into
     `sm.eigenvalues_cfl`, leaving `sm.eigenvalues` physical (with its power guard) for the
     Riemann dissipation.  `eps` defaults to 0: a cell without water (h <= 0) has no wave speed,
     but every cell with h > 0 moves mass with its own velocity (the Audusse states keep it), so
@@ -1085,7 +1091,6 @@ def gate_eigenvalues_dry(eps=None):
             # Before this, the op returned early for these models, which is why
             # the numerical-spectrum path was the one place a backend still had
             # to carry its own dry threshold.
-            cond = sp.Function("conditional")
             # The MODEL may already have published a dt spectrum of its own —
             # SME(level>=2) puts its closed-form ``spectral_radius_bound`` cone
             # here precisely because it has no valid closed-form ``eigenvalues``
@@ -1109,7 +1114,7 @@ def gate_eigenvalues_dry(eps=None):
             # cone comes out wrapped in ``conditional(h>eps, conditional(h>eps,
             # …), 0)`` — same value, twice the tree.
             gated = [e if _is_dry_gated(e, h, e_eps)
-                     else cond(h > e_eps, e, sp.S.Zero)
+                     else _dry_gate(h, e_eps, e)
                      for e in sp.flatten(num)]
             # ``numerical_eigenvalues`` is RANK-1 (length n), but the
             # eigenvalue slot contract is ``(n_eq, 1)`` — the same column shape
@@ -1118,9 +1123,8 @@ def gate_eigenvalues_dry(eps=None):
             # "Dimension of index greater than rank of array".
             sm.eigenvalues_cfl = ZArray(gated).reshape(len(gated), 1)
             return
-        cond = sp.Function("conditional")
         guarded = [_guard_eigenvalue_expr(e, h) for e in flat]
-        gated = [cond(h > e_eps, e, sp.S.Zero) for e in guarded]
+        gated = [_dry_gate(h, e_eps, e) for e in guarded]
         # cid=209: only the GATED copy goes to the dt-only slot.  The ZEROING is
         # what must not reach ``sm.eigenvalues`` (it is the Rusanov dissipation).
         # The power guard is a different thing and DOES belong there: it is
