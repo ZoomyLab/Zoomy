@@ -944,7 +944,8 @@ def measure():
                         f"max over {len(ds)} runs")
         for case, key in (("C1", "o2_n40"), ("C5", "n48"), ("C8", "vam"), ("C13", "o2_x2.5"),
                           ("C14", "o2_n40"), ("C21", "pulse_o1"), ("C21", "pulse_o2"),
-                          ("C21", "sod_y"), ("C26", "visc")):   # C7 / C9: parallel and GPU = serial CPU
+                          ("C21", "sod_y"), ("C26", "visc"), ("C37", "heat_quad_per_k0"),
+                          ("C37", "shear_noslip_n20")):   # C7 / C9: parallel and GPU = serial CPU
             for c in CONFIGS[1:]:
                 d, ser = g(case, key, c), g(case, key)
                 if ok(ser, d):

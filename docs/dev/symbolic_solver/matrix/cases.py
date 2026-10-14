@@ -701,7 +701,8 @@ def _c37():
     tight = dict(cfl_check_every=0, **G50.TIGHT)
     heat = [Run(f"heat_{kind}_{case}_k{k}", partial(G50.heat_case, kind, case),
                 G50.T_END["heat"], dt=G50.DT0 / 2 ** k, imex=Imex.ssp2, solver=tight,
-                backends=JFA if k == 0 else ("jax",))
+                backends=JFA if k == 0 else ("jax",),
+                configs=("serial", "mpi2") if (kind, case, k) == ("quad", "per", 0) else ("serial",))
             for kind, case in C37_HEAT for k in C37_K]
     adv = [Run(f"{pre}_{s}_k{k}", partial(G50.advdiff_case, nu), G50.T_END["advdiff"],
                dt=G50.DT0 / 2 ** k, imex=imex, solver=dict(tight, time_order=to),
@@ -711,7 +712,8 @@ def _c37():
     dt = lambda ny: 1.0 / (ny * SHEAR["steps"])          # noqa: E731  (C32's step)
     shear = [Run(f"shear_{v}_n{ny}", partial(shear_decay, v, ny), SHEAR["t_end"], dt=dt(ny),
                  imex=Imex.ssp2, solver=IMPLICIT,
-                 backends=JFA if ny == SHEAR["ny"][0] else ("jax",))
+                 backends=JFA if ny == SHEAR["ny"][0] else ("jax",),
+                 configs=("serial", "mpi2") if (v, ny) == ("noslip", 20) else ("serial",))
              for v in C37_SHEAR for ny in SHEAR["ny"]]
     ny = SHEAR["ny"][0]
     shear_t = [Run(f"shear_noslip_n{ny}_k{k}", partial(shear_decay, "noslip", ny),
