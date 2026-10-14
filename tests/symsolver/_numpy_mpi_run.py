@@ -1,7 +1,7 @@
 """Run under `mpiexec -n N` by `test_numpy_mpi.py`: the NumPy backend distributed vs serial on one
 rank, its halo exchange, reductions and linear solves.  Prints one JSON line on rank 0.
 
-    mpiexec -n 2 python _numpy_mpi_run.py hyperbolic|linsolve|output
+    mpiexec -n 2 python _numpy_mpi_run.py hyperbolic|linsolve|output|imex_diffusion
 """
 import json
 import sys
@@ -17,6 +17,7 @@ from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressF
 from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.symsolver.numpy_backend import SymbolicHyperbolicSolverNumpy
 from zoomy_core.symsolver.numpy_backend.parallel import MpiLinearSolver
+from zoomy_core.symsolver.settings import Imex
 from zoomy_core.systemmodel.system_model import SystemModel
 
 comm = MPI.COMM_WORLD
@@ -147,6 +148,31 @@ def output():
     import shutil
     shutil.rmtree(d, ignore_errors=True)
     return dict(datasets=n, missing=missing, rel=worst)
+
+
+def imex_diffusion():
+    """IMEX-SSP2 with the implicit diffusion in its stages (`implicit_solve`, the stiff
+    advection-diffusion of `test_imex_diffusion.py`, nu dt / dx^2 = 5): distributed = serial,
+    PETSc and krylov."""
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from test_imex_diffusion import NX, TIGHT, advdiff
+    dt = 5.0 / (0.2 * NX ** 2)                      # nu dt / dx^2 = 5, CFL 0.78
+    out = {}
+    for method in (MpiLinearSolver.petsc, MpiLinearSolver.krylov):
+        res = []
+        for c in (comm, None):
+            if c is None and rank != 0:
+                continue
+            s = SymbolicHyperbolicSolverNumpy(time_end=4 * dt, dt=dt, cfl_check_every=0,
+                                              imex=Imex.ssp2, comm=c, mpi_linear_solver=method,
+                                              **TIGHT)
+            Q, A = s.setup(*advdiff(0.2, 1.0))
+            _, Q, _ = s.run(Q, A)
+            res.append(s.partition.gather(Q) if s.partition else Q)
+        if rank == 0:
+            out[str(method)] = float(np.abs(res[0] - res[1]).max() / np.abs(res[1]).max())
+    return out
 
 
 if __name__ == "__main__":

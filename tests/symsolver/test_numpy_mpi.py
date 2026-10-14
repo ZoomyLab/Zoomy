@@ -73,3 +73,12 @@ def test_distributed_output_equals_serial():
     pytest.importorskip("h5py")
     r = _mpirun("output")
     assert r["datasets"] >= 5 and not r["missing"] and r["rel"] <= 1e-13, r
+
+
+def test_distributed_imex_diffusion_equals_serial():
+    """IMEX-SSP2 with the implicit diffusion in its stages (`implicit_solve`: one Newton over the
+    mesh, owned rows, parallel LU), stiff advection-diffusion on 3 ranks = serial (PETSc,
+    krylov)."""
+    pytest.importorskip("petsc4py")
+    r = _mpirun("imex_diffusion")
+    assert r["petsc"] <= 1e-11 and r["krylov"] <= 1e-11, r
