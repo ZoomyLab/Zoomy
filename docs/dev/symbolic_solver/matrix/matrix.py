@@ -207,8 +207,9 @@ TH = {
                  ("sub", 2): (">=", 1.8, "theory 2"),
                  ("trans", 1): (">=", 0.55, "observed 0.71, pre-asymptotic (theory 1)"),
                  ("trans", 2): (">=", 1.8, "theory 2")},
-    "C5 foam": ("<=", 3.5e-2, "observed (foam 1.7e-2)"),
+    "C5 foam": ("<=", 3.5e-2, "observed (foam 1.7e-2; with the detector 1.5e-2 dam, 6.3e-3 bowl)"),
     "C5 amrex": ("<=", 1e-9, "observed 6e-10 (wet/dry eigenvalue cluster)"),
+    "C5 front acts": (">=", 1e-3, "observed 2.9e-3 foam, 4.8e-2 JAX (the shore cells demoted)"),
     "C8 foam": ("<=", 3e-2, "observed (foam 1.6e-2)"),
     "C10": {(1, 1): (">=", 0.8, "theory 1"), (2, 1): (">=", 0.8, "theory 1 (time)"),
             (2, 2): (">=", 1.5, "observed (theory 2, minmod)")},
@@ -257,6 +258,44 @@ TH.update({
                    "rk2": RO},
     "C33 xb": {"imex": ("<=", 1e-10, "tolerance (Newton 1e-12; observed 1.3e-12)"), "rk2": RO},
 })
+
+
+def front_checks(add, b, g, J):
+    """C5 with the a-priori front detector (front_tol, Venkatakrishnan): the dam break and
+    the bowl with (`*_front`) and without (`*_off`) it: positivity, whether it acts, the
+    cross-backend difference, the bowl vs Thacker's exact depth."""
+    from cases import THACKER, thacker_bed, thacker_eta
+    ok = lambda *ds: all(x is not None for x in ds)  # noqa: E731
+    for k in ("dam", "bowl"):
+        for s in ("front", "off"):
+            for c in CONFIGS:
+                d = g("C5", f"{k}_{s}", c)
+                if d is not None:
+                    add("C5", f"{k}_{s} h_min", b, c, float(h(d).min()),
+                        (">=", 0.0, "theory (positivity)"), "")
+            d, j = g("C5", f"{k}_{s}"), J("C5", f"{k}_{s}")
+            if b not in ("jax", "numpy") and ok(d, j):
+                if b == "amrex":
+                    add("C5", f"{k}_{s} max rel vs JAX", b, "serial", relmax(d, j),
+                        TH["C5 amrex"], "")
+                else:
+                    add("C5", f"{k}_{s} L1 rel vs JAX", b, "serial", l1rel(d, j),
+                        TH["C5 foam"] if s == "front" else None,
+                        "" if s == "front" else "without the detector the limiters differ "
+                        "at a dry front: JAX's Venkatakrishnan (eps^2 = dx^2) overshoots the "
+                        "neighbour bounds, OpenFOAM's cellLimited<Venkatakrishnan> does not")
+            if k == "bowl" and d is not None:
+                cx, cy = THACKER["centre"]
+                r = np.hypot(d["xc"][0] - cx, d["xc"][1] - cy)
+                exact = np.maximum(0.0, thacker_eta(r, float(d["t"])) - thacker_bed(r))
+                add("C5", f"bowl_{s} L1(h - exact)", b, "serial",
+                    float(np.abs(h(d) - exact).mean()), None, "Thacker's paraboloid")
+        on, off = g("C5", f"{k}_front"), g("C5", f"{k}_off")
+        if ok(on, off):
+            add("C5", f"{k} detector acts: front vs off (L1 rel)", b, "serial", l1rel(on, off),
+                TH["C5 front acts"] if k == "bowl" else None,
+                "" if k == "bowl" else "foam 0: OpenFOAM's bounded Venkatakrishnan keeps "
+                "h_f >= 0 over the flat dry bed, nothing to demote")
 
 
 def euler_checks(add, b, g, J):
@@ -744,6 +783,7 @@ def measure():
             fn, th = (l1rel, TH["C5 foam"]) if b == "foam" else (relmax, TH["C5 amrex"])
             add("C5", f"{'L1' if b == 'foam' else 'max'} rel vs JAX", b, "serial",
                 fn(g("C5", "n48"), J("C5", "n48")), th, "")
+        front_checks(add, b, g, J)
         for k in ("vam", "vam_newton", "vam_t2", "vam_tri"):    # C8
             d, j = g("C8", k), J("C8", k)
             if b not in ("jax", "numpy") and ok(d, j):
@@ -832,7 +872,8 @@ def measure():
                 if ds:
                     add("C6", f"{case} mass change (rel)", b, c, max(map(mass, ds)), RO,
                         f"max over {len(ds)} runs")
-        for case, key in (("C1", "o2_n40"), ("C5", "n48"), ("C8", "vam"), ("C13", "o2_x2.5"),
+        for case, key in (("C1", "o2_n40"), ("C5", "n48"), ("C5", "dam_front"),
+                          ("C5", "bowl_front"), ("C8", "vam"), ("C13", "o2_x2.5"),
                           ("C14", "o2_n40"), ("C21", "pulse_o1"), ("C21", "pulse_o2"),
                           ("C21", "sod_y"), ("C26", "visc")):   # C7 / C9: parallel and GPU = serial CPU
             for c in CONFIGS[1:]:

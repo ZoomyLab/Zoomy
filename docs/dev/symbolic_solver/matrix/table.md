@@ -87,11 +87,51 @@
 | C4 | trans O2 max|q/q_in - 1| n100 | numpy | 1.91e-03 | n/a | n/a | n/a | n/a | information |
 | C4 | trans O2 max|q_y| n100 | numpy | 2.58e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (theory (1-D flow, symmetric stencils)) |
 | C4 | trans O2 order 50->100 | numpy | 2.85e+00 PASS | n/a | n/a | n/a | n/a | >= 1.8 (theory 2) |
+| C5 | bowl detector acts: front vs off (L1 rel) | amrex | 4.81e-02 PASS | - | - | - | - | >= 0.001 (observed 2.9e-3 foam, 4.8e-2 JAX (the shore cells demoted)) |
+| C5 | bowl_front L1(h - exact) | amrex | 1.42e-04 | - | - | - | - | information |
+| C5 | bowl_front h_min | amrex | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | - | - | >= 0 (theory (positivity)) |
+| C5 | bowl_front max rel vs JAX | amrex | 9.69e-17 PASS | - | - | - | - | <= 1e-09 (observed 6e-10 (wet/dry eigenvalue cluster)) |
+| C5 | bowl_off L1(h - exact) | amrex | 1.98e-04 | - | - | - | - | information |
+| C5 | bowl_off h_min | amrex | 0.00e+00 PASS | - | - | - | - | >= 0 (theory (positivity)) |
+| C5 | bowl_off max rel vs JAX | amrex | 4.23e-15 PASS | - | - | - | - | <= 1e-09 (observed 6e-10 (wet/dry eigenvalue cluster)) |
+| C5 | dam detector acts: front vs off (L1 rel) | amrex | 8.56e-02 | - | - | - | - | information |
+| C5 | dam_front h_min | amrex | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | - | - | >= 0 (theory (positivity)) |
+| C5 | dam_front max rel vs JAX | amrex | 4.03e-15 PASS | - | - | - | - | <= 1e-09 (observed 6e-10 (wet/dry eigenvalue cluster)) |
+| C5 | dam_off h_min | amrex | 0.00e+00 PASS | - | - | - | - | >= 0 (theory (positivity)) |
+| C5 | dam_off max rel vs JAX | amrex | 2.05e-15 PASS | - | - | - | - | <= 1e-09 (observed 6e-10 (wet/dry eigenvalue cluster)) |
 | C5 | h_min | amrex | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | >= 0 (theory (positivity)) |
 | C5 | max rel vs JAX | amrex | 7.10e-15 PASS | - | - | - | - | <= 1e-09 (observed 6e-10 (wet/dry eigenvalue cluster)) |
-| C5 | L1 rel vs JAX | foam | 1.68e-02 PASS | - | - | n/a | n/a | <= 0.035 (observed (foam 1.7e-2)) |
+| C5 | L1 rel vs JAX | foam | 1.68e-02 PASS | - | - | n/a | n/a | <= 0.035 (observed (foam 1.7e-2; with the detector 1.5e-2 dam, 6.3e-3 bowl)) |
+| C5 | bowl detector acts: front vs off (L1 rel) | foam | 2.94e-03 PASS | - | - | n/a | n/a | >= 0.001 (observed 2.9e-3 foam, 4.8e-2 JAX (the shore cells demoted)) |
+| C5 | bowl_front L1 rel vs JAX | foam | 6.32e-03 PASS | - | - | n/a | n/a | <= 0.035 (observed (foam 1.7e-2; with the detector 1.5e-2 dam, 6.3e-3 bowl)) |
+| C5 | bowl_front L1(h - exact) | foam | 1.24e-04 | - | - | n/a | n/a | information |
+| C5 | bowl_front h_min | foam | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | n/a | n/a | >= 0 (theory (positivity)) |
+| C5 | bowl_off L1 rel vs JAX | foam | 4.74e-02 | - | - | n/a | n/a | information |
+| C5 | bowl_off L1(h - exact) | foam | 1.09e-04 | - | - | n/a | n/a | information |
+| C5 | bowl_off h_min | foam | 0.00e+00 PASS | - | - | n/a | n/a | >= 0 (theory (positivity)) |
+| C5 | dam detector acts: front vs off (L1 rel) | foam | 7.94e-17 | - | - | n/a | n/a | information |
+| C5 | dam_front L1 rel vs JAX | foam | 1.49e-02 PASS | - | - | n/a | n/a | <= 0.035 (observed (foam 1.7e-2; with the detector 1.5e-2 dam, 6.3e-3 bowl)) |
+| C5 | dam_front h_min | foam | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | n/a | n/a | >= 0 (theory (positivity)) |
+| C5 | dam_off L1 rel vs JAX | foam | 9.33e-02 | - | - | n/a | n/a | information |
+| C5 | dam_off h_min | foam | 0.00e+00 PASS | - | - | n/a | n/a | >= 0 (theory (positivity)) |
 | C5 | h_min | foam | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | n/a | n/a | >= 0 (theory (positivity)) |
+| C5 | bowl detector acts: front vs off (L1 rel) | jax | 4.81e-02 PASS | - | - | - | - | >= 0.001 (observed 2.9e-3 foam, 4.8e-2 JAX (the shore cells demoted)) |
+| C5 | bowl_front L1(h - exact) | jax | 1.42e-04 | - | - | - | - | information |
+| C5 | bowl_front h_min | jax | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | - | - | >= 0 (theory (positivity)) |
+| C5 | bowl_off L1(h - exact) | jax | 1.98e-04 | - | - | - | - | information |
+| C5 | bowl_off h_min | jax | 0.00e+00 PASS | - | - | - | - | >= 0 (theory (positivity)) |
+| C5 | dam detector acts: front vs off (L1 rel) | jax | 8.56e-02 | - | - | - | - | information |
+| C5 | dam_front h_min | jax | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | - | - | >= 0 (theory (positivity)) |
+| C5 | dam_off h_min | jax | 0.00e+00 PASS | - | - | - | - | >= 0 (theory (positivity)) |
 | C5 | h_min | jax | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | >= 0 (theory (positivity)) |
+| C5 | bowl detector acts: front vs off (L1 rel) | numpy | 4.81e-02 PASS | n/a | n/a | n/a | n/a | >= 0.001 (observed 2.9e-3 foam, 4.8e-2 JAX (the shore cells demoted)) |
+| C5 | bowl_front L1(h - exact) | numpy | 1.42e-04 | n/a | n/a | n/a | n/a | information |
+| C5 | bowl_front h_min | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | >= 0 (theory (positivity)) |
+| C5 | bowl_off L1(h - exact) | numpy | 1.98e-04 | n/a | n/a | n/a | n/a | information |
+| C5 | bowl_off h_min | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | >= 0 (theory (positivity)) |
+| C5 | dam detector acts: front vs off (L1 rel) | numpy | 8.56e-02 | n/a | n/a | n/a | n/a | information |
+| C5 | dam_front h_min | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | >= 0 (theory (positivity)) |
+| C5 | dam_off h_min | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | >= 0 (theory (positivity)) |
 | C5 | h_min | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | >= 0 (theory (positivity)) |
 | C5 | numpy = JAX (max rel, worst run) | numpy | 6.53e-15 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C1 mass change (rel) | amrex | 1.41e-16 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | - | <= 1e-12 (tolerance (round-off)) |
@@ -104,7 +144,7 @@
 | C6 | C3 mass change (rel) | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C32 mass change (rel) | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C33 mass change (rel) | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
-| C6 | C5 mass change (rel) | amrex | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | <= 1e-12 (tolerance (round-off)) |
+| C6 | C5 mass change (rel) | amrex | 1.66e-13 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 0.00e+00 PASS | <= 1e-12 (tolerance (round-off)) |
 | C6 | C1 mass change (rel) | foam | 1.41e-16 PASS | 0.00e+00 PASS | 0.00e+00 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C11 mass change (rel) | foam | 1.73e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C12 mass change (rel) | foam | 2.82e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
@@ -129,7 +169,7 @@
 | C6 | C32 mass change (rel) | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C33 mass change (rel) | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C6 | C36 mass change (rel) | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
-| C6 | C5 mass change (rel) | jax | 1.95e-16 PASS | 1.95e-16 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 1.95e-16 PASS | <= 1e-12 (tolerance (round-off)) |
+| C6 | C5 mass change (rel) | jax | 1.66e-13 PASS | 1.95e-16 PASS | 1.95e-16 PASS | 0.00e+00 PASS | 1.95e-16 PASS | <= 1e-12 (tolerance (round-off)) |
 | C6 | C1 mass change (rel) | numpy | 1.41e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C11 mass change (rel) | numpy | 3.47e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C12 mass change (rel) | numpy | 2.82e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
@@ -142,7 +182,7 @@
 | C6 | C32 mass change (rel) | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C33 mass change (rel) | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C36 mass change (rel) | numpy | 1.11e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C6 | C5 mass change (rel) | numpy | 1.95e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C6 | C5 mass change (rel) | numpy | 1.66e-13 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C1 o2_n40 parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C13 o2_x2.5 parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C14 o2_n40 parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
@@ -150,6 +190,8 @@
 | C7 | C21 pulse_o2 parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 sod_y parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C26 visc parallel vs serial CPU (max rel) | amrex | - | 2.04e-16 PASS | 2.04e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
+| C7 | C5 bowl_front parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
+| C7 | C5 dam_front parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C5 n48 parallel vs serial CPU (max rel) | amrex | - | 0.00e+00 PASS | 0.00e+00 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C8 vam parallel vs serial CPU (max rel) | amrex | - | 7.69e-12 PASS | 9.56e-12 PASS | - | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C7 | C1 o2_n40 parallel vs serial CPU (max rel) | foam | - | 1.04e-15 PASS | 7.46e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
@@ -158,7 +200,9 @@
 | C7 | C21 pulse_o1 parallel vs serial CPU (max rel) | foam | - | 3.18e-16 PASS | 3.18e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 pulse_o2 parallel vs serial CPU (max rel) | foam | - | 4.31e-16 PASS | 5.74e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 sod_y parallel vs serial CPU (max rel) | foam | - | 7.99e-16 PASS | 9.33e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C7 | C26 visc parallel vs serial CPU (max rel) | foam | - | 6.61e-16 PASS | 8.26e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C7 | C26 visc parallel vs serial CPU (max rel) | foam | - | 5.59e-16 PASS | 7.37e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C7 | C5 bowl_front parallel vs serial CPU (max rel) | foam | - | 1.09e-16 PASS | 1.09e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C7 | C5 dam_front parallel vs serial CPU (max rel) | foam | - | 2.48e-15 PASS | 2.39e-15 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C5 n48 parallel vs serial CPU (max rel) | foam | - | 9.73e-15 PASS | 4.18e-15 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C8 vam parallel vs serial CPU (max rel) | foam | - | 7.98e-12 PASS | 8.56e-12 PASS | n/a | n/a | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C7 | C1 o2_n40 parallel vs serial CPU (max rel) | jax | - | 1.39e-13 PASS | 1.39e-13 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
@@ -168,6 +212,8 @@
 | C7 | C21 pulse_o2 parallel vs serial CPU (max rel) | jax | - | 5.84e-16 PASS | 5.84e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 sod_y parallel vs serial CPU (max rel) | jax | - | 1.78e-15 PASS | 1.15e-15 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C26 visc parallel vs serial CPU (max rel) | jax | - | 6.87e-16 PASS | 6.62e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
+| C7 | C5 bowl_front parallel vs serial CPU (max rel) | jax | - | 3.43e-17 PASS | 3.43e-17 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
+| C7 | C5 dam_front parallel vs serial CPU (max rel) | jax | - | 7.25e-16 PASS | 1.37e-15 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C5 n48 parallel vs serial CPU (max rel) | jax | - | 4.66e-15 PASS | 4.89e-15 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C8 vam parallel vs serial CPU (max rel) | jax | - | 4.25e-11 PASS | 5.27e-11 PASS | - | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C8 | Newton vs linear pressure (max rel) | amrex | 7.53e-12 PASS | - | - | - | - | <= 1e-08 (tolerance (Newton 1e-10 vs GMRES 1e-10, over the steps)) |
@@ -547,10 +593,10 @@
 | C28 | 1d expl per max rel vs JAX | foam | 1.21e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
 | C28 | 1d expl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
 | C28 | 1d expl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C28 | 1d impl dir0 max rel vs JAX | foam | 5.06e-11 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
-| C28 | 1d impl dirL max rel vs JAX | foam | 8.14e-12 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
-| C28 | 1d impl neu max rel vs JAX | foam | 5.44e-11 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
-| C28 | 1d impl per max rel vs JAX | foam | 2.74e-10 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl dir0 max rel vs JAX | foam | 5.98e-11 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl dirL max rel vs JAX | foam | 1.59e-11 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl neu max rel vs JAX | foam | 6.03e-11 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | 1d impl per max rel vs JAX | foam | 1.32e-10 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | 1d impl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | 1d impl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C28 | quad expl dir0 max rel vs JAX | foam | 1.20e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
@@ -562,7 +608,7 @@
 | C28 | quad impl dir0 max rel vs JAX | foam | 1.35e-15 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | quad impl dirL max rel vs JAX | foam | 3.04e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | quad impl neu max rel vs JAX | foam | 6.00e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
-| C28 | quad impl per max rel vs JAX | foam | 1.48e-10 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | quad impl per max rel vs JAX | foam | 2.98e-10 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | quad impl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | quad impl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C28 | tri expl dir0 max rel vs JAX | foam | 5.97e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
@@ -571,10 +617,10 @@
 | C28 | tri expl per max rel vs JAX | foam | 3.52e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
 | C28 | tri expl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance, gate 43: the same two-point fluxes and ghosts) |
 | C28 | tri expl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C28 | tri impl dir0 max rel vs JAX | foam | 7.46e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | tri impl dir0 max rel vs JAX | foam | 6.72e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | tri impl dirL max rel vs JAX | foam | 1.51e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
-| C28 | tri impl neu max rel vs JAX | foam | 7.46e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
-| C28 | tri impl per max rel vs JAX | foam | 1.07e-10 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | tri impl neu max rel vs JAX | foam | 5.97e-16 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
+| C28 | tri impl per max rel vs JAX | foam | 1.05e-10 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | tri impl steady max rel vs JAX | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-09 (tolerance, gate 43: Newton 1e-10, GMRES 1e-13) |
 | C28 | tri impl steady max|u - L| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C28 | 1d expl dir0 L_inf order 32->64 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2, gate 41) |
@@ -750,17 +796,17 @@
 | C32 | free n20 L_inf vs exact | foam | 3.36e-04 PASS | - | - | n/a | n/a | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
 | C32 | free n20 L_inf|foam - JAX| / L_inf(JAX - exact) | foam | 1.93e-01 PASS | - | - | n/a | n/a | <= 0.5 (observed 0.21 (foam's own stencils at second order)) |
 | C32 | free n20 max|h - 1| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C32 | free n20 max|q_y| | foam | 1.14e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | free n20 max|q_y| | foam | 1.12e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | free n20 x-variation of q_x (max rel) | foam | 1.12e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 L_inf vs exact | foam | 3.37e-04 PASS | - | - | n/a | n/a | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
 | C32 | noslip n20 L_inf|foam - JAX| / L_inf(JAX - exact) | foam | 2.14e-02 PASS | - | - | n/a | n/a | <= 0.5 (observed 0.21 (foam's own stencils at second order)) |
 | C32 | noslip n20 max|h - 1| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C32 | noslip n20 max|q_y| | foam | 7.43e-17 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip n20 max|q_y| | foam | 7.28e-17 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip n20 x-variation of q_x (max rel) | foam | 1.03e-15 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip_split n20 L_inf vs exact | foam | 3.38e-04 PASS | - | - | n/a | n/a | <= 0.0007 (observed 3.3e-4 on all three (the O(dy^2) error of the viscous flux)) |
 | C32 | noslip_split n20 L_inf|foam - JAX| / L_inf(JAX - exact) | foam | 1.39e-02 PASS | - | - | n/a | n/a | <= 0.5 (observed 0.21 (foam's own stencils at second order)) |
 | C32 | noslip_split n20 max|h - 1| | foam | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C32 | noslip_split n20 max|q_y| | foam | 6.83e-17 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C32 | noslip_split n20 max|q_y| | foam | 6.55e-17 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | noslip_split n20 x-variation of q_x (max rel) | foam | 9.97e-16 PASS | - | - | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C32 | control: no-slip profile on free-slip walls, L_inf vs the no-slip exact | jax | 4.17e-01 PASS | - | - | - | - | >= 0.1 (observed 0.42 (a wall that acts: the no-slip profile is not a free-slip solution)) |
 | C32 | free L_inf order 40->80 | jax | 1.94e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
@@ -907,6 +953,9 @@ Notes:
 - C12 sub O1 max|q/q_in - 1| n100, jax serial: steady discharge = inflow (open-domain mass balance)
 - C12 sub O2 order 50->100, jax serial: L1(h) 3.29e-03 / 7.65e-04 / 1.43e-04
 - C12 sub O2 max|q/q_in - 1| n100, jax serial: steady discharge = inflow (open-domain mass balance)
+- C5 dam detector acts: front vs off (L1 rel), jax serial: foam 0: OpenFOAM's bounded Venkatakrishnan keeps h_f >= 0 over the flat dry bed, nothing to demote
+- C5 bowl_front L1(h - exact), jax serial: Thacker's paraboloid
+- C5 bowl_off L1(h - exact), jax serial: Thacker's paraboloid
 - C10 space O1 time O1 order (Richardson), jax serial: |h30-h60| 2.79e-04, |h60-h120| 7.38e-05
 - C10 space O2 time O1 order (Richardson), jax serial: |h30-h60| 2.59e-04, |h60-h120| 6.46e-05
 - C10 space O2 time O2 order (Richardson), jax serial: |h30-h60| 2.59e-04, |h60-h120| 6.43e-05
@@ -1025,9 +1074,9 @@ Notes:
 - C6 C1 mass change (rel), jax gpu1: max over 1 runs
 - C6 C2 mass change (rel), jax serial: max over 2 runs
 - C6 C3 mass change (rel), jax serial: max over 2 runs
-- C6 C5 mass change (rel), jax serial: max over 1 runs
-- C6 C5 mass change (rel), jax mpi2: max over 1 runs
-- C6 C5 mass change (rel), jax mpi4: max over 1 runs
+- C6 C5 mass change (rel), jax serial: max over 5 runs
+- C6 C5 mass change (rel), jax mpi2: max over 3 runs
+- C6 C5 mass change (rel), jax mpi4: max over 3 runs
 - C6 C5 mass change (rel), jax gpu1: max over 1 runs
 - C6 C5 mass change (rel), jax gpu2: max over 1 runs
 - C6 C11 mass change (rel), jax serial: max over 7 runs
@@ -1086,6 +1135,11 @@ Notes:
 - C12 sub O2 order 50->100, foam serial: L1(h) 3.18e-03 / 7.85e-04 / 1.16e-04
 - C12 sub O2 max|q/q_in - 1| n100, foam serial: steady discharge = inflow (open-domain mass balance)
 - C12 sub O2 foam-JAX L1 diff order 50->100, foam serial: 1.2e-03 / 5.2e-04 / 1.2e-04
+- C5 dam_off L1 rel vs JAX, foam serial: without the detector the limiters differ at a dry front: JAX's Venkatakrishnan (eps^2 = dx^2) overshoots the neighbour bounds, OpenFOAM's cellLimited<Venkatakrishnan> does not
+- C5 dam detector acts: front vs off (L1 rel), foam serial: foam 0: OpenFOAM's bounded Venkatakrishnan keeps h_f >= 0 over the flat dry bed, nothing to demote
+- C5 bowl_front L1(h - exact), foam serial: Thacker's paraboloid
+- C5 bowl_off L1 rel vs JAX, foam serial: without the detector the limiters differ at a dry front: JAX's Venkatakrishnan (eps^2 = dx^2) overshoots the neighbour bounds, OpenFOAM's cellLimited<Venkatakrishnan> does not
+- C5 bowl_off L1(h - exact), foam serial: Thacker's paraboloid
 - C10 space O1 time O1 order (Richardson), foam serial: |h30-h60| 2.79e-04, |h60-h120| 7.38e-05
 - C10 space O2 time O1 order (Richardson), foam serial: |h30-h60| 2.60e-04, |h60-h120| 6.51e-05
 - C10 space O2 time O2 order (Richardson), foam serial: |h30-h60| 2.60e-04, |h60-h120| 6.48e-05
@@ -1153,9 +1207,9 @@ Notes:
 - C28 tri impl steady max rel vs JAX, foam serial: L_inf vs exact 0.00e+00
 - C28 tri impl steady max|u - L|, foam serial: on the backend itself
 - C34 nx 16 max rel |L - L_JAX|, foam serial: vs the exact div(h tau') 3.55e-02 / 5.83e-02
-- C35 c1: misspelt restart_from fails at once, foam serial: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/foam/serial/C35/c1_hlf': no such file; did you mean 'c1_half'?
-- C35 c1: misspelt restart_from fails at once, foam mpi2: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/foam/mpi2/C35/c1_hlf': no such file; did you mean 'c1_half'?
-- C35 c8: misspelt restart_from fails at once, foam serial: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/foam/serial/C35/c8_hlf': no such file; did you mean 'c8_half'?
+- C35 c1: misspelt restart_from fails at once, foam serial: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-foamfix/docs/dev/symbolic_solver/matrix/work/foam/serial/C35/c1_hlf': no such file; did you mean 'c1_half'?
+- C35 c1: misspelt restart_from fails at once, foam mpi2: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-foamfix/docs/dev/symbolic_solver/matrix/work/foam/mpi2/C35/c1_hlf': no such file; did you mean 'c1_half'?
+- C35 c8: misspelt restart_from fails at once, foam serial: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-foamfix/docs/dev/symbolic_solver/matrix/work/foam/serial/C35/c8_hlf': no such file; did you mean 'c8_half'?
 - C32 noslip n20 max|h - 1|, foam serial: theory: h stays 1
 - C32 noslip n20 max|q_y|, foam serial: theory: v stays 0
 - C32 noslip n20 x-variation of q_x (max rel), foam serial: theory: u = u(y)
@@ -1179,9 +1233,9 @@ Notes:
 - C6 C1 mass change (rel), foam mpi4: max over 1 runs
 - C6 C2 mass change (rel), foam serial: max over 2 runs
 - C6 C3 mass change (rel), foam serial: max over 2 runs
-- C6 C5 mass change (rel), foam serial: max over 1 runs
-- C6 C5 mass change (rel), foam mpi2: max over 1 runs
-- C6 C5 mass change (rel), foam mpi4: max over 1 runs
+- C6 C5 mass change (rel), foam serial: max over 5 runs
+- C6 C5 mass change (rel), foam mpi2: max over 3 runs
+- C6 C5 mass change (rel), foam mpi4: max over 3 runs
 - C6 C11 mass change (rel), foam serial: max over 6 runs
 - C6 C12 mass change (rel), foam serial: max over 6 runs
 - C6 C13 mass change (rel), foam serial: max over 4 runs
@@ -1213,6 +1267,9 @@ Notes:
 - C11 sub O1 max|q/q_in - 1| n100, amrex serial: steady discharge = inflow (open-domain mass balance)
 - C11 sub O2 order 50->100, amrex serial: L1(h) 8.32e-03 / 2.82e-03 / 5.82e-04
 - C11 sub O2 max|q/q_in - 1| n100, amrex serial: steady discharge = inflow (open-domain mass balance)
+- C5 dam detector acts: front vs off (L1 rel), amrex serial: foam 0: OpenFOAM's bounded Venkatakrishnan keeps h_f >= 0 over the flat dry bed, nothing to demote
+- C5 bowl_front L1(h - exact), amrex serial: Thacker's paraboloid
+- C5 bowl_off L1(h - exact), amrex serial: Thacker's paraboloid
 - C10 space O1 time O1 order (Richardson), amrex serial: |h30-h60| 2.79e-04, |h60-h120| 7.38e-05
 - C10 space O2 time O1 order (Richardson), amrex serial: |h30-h60| 2.59e-04, |h60-h120| 6.46e-05
 - C10 space O2 time O2 order (Richardson), amrex serial: |h30-h60| 2.59e-04, |h60-h120| 6.43e-05
@@ -1294,9 +1351,9 @@ Notes:
 - C6 C1 mass change (rel), amrex gpu1: max over 1 runs
 - C6 C2 mass change (rel), amrex serial: max over 2 runs
 - C6 C3 mass change (rel), amrex serial: max over 2 runs
-- C6 C5 mass change (rel), amrex serial: max over 1 runs
-- C6 C5 mass change (rel), amrex mpi2: max over 1 runs
-- C6 C5 mass change (rel), amrex mpi4: max over 1 runs
+- C6 C5 mass change (rel), amrex serial: max over 5 runs
+- C6 C5 mass change (rel), amrex mpi2: max over 3 runs
+- C6 C5 mass change (rel), amrex mpi4: max over 3 runs
 - C6 C5 mass change (rel), amrex gpu1: max over 1 runs
 - C6 C5 mass change (rel), amrex gpu2: max over 1 runs
 - C6 C11 mass change (rel), amrex serial: max over 6 runs
@@ -1337,6 +1394,9 @@ Notes:
 - C12 sub O1 max|q/q_in - 1| n100, numpy serial: steady discharge = inflow (open-domain mass balance)
 - C12 sub O2 order 50->100, numpy serial: L1(h) 3.29e-03 / 7.65e-04 / 1.43e-04
 - C12 sub O2 max|q/q_in - 1| n100, numpy serial: steady discharge = inflow (open-domain mass balance)
+- C5 dam detector acts: front vs off (L1 rel), numpy serial: foam 0: OpenFOAM's bounded Venkatakrishnan keeps h_f >= 0 over the flat dry bed, nothing to demote
+- C5 bowl_front L1(h - exact), numpy serial: Thacker's paraboloid
+- C5 bowl_off L1(h - exact), numpy serial: Thacker's paraboloid
 - C10 space O1 time O1 order (Richardson), numpy serial: |h30-h60| 2.79e-04, |h60-h120| 7.38e-05
 - C10 space O2 time O1 order (Richardson), numpy serial: |h30-h60| 2.59e-04, |h60-h120| 6.46e-05
 - C10 space O2 time O2 order (Richardson), numpy serial: |h30-h60| 2.59e-04, |h60-h120| 6.43e-05
@@ -1511,7 +1571,7 @@ Notes:
 - C6 C1 mass change (rel), numpy serial: max over 6 runs
 - C6 C2 mass change (rel), numpy serial: max over 2 runs
 - C6 C3 mass change (rel), numpy serial: max over 2 runs
-- C6 C5 mass change (rel), numpy serial: max over 1 runs
+- C6 C5 mass change (rel), numpy serial: max over 5 runs
 - C6 C11 mass change (rel), numpy serial: max over 6 runs
 - C6 C12 mass change (rel), numpy serial: max over 6 runs
 - C6 C13 mass change (rel), numpy serial: max over 4 runs
@@ -1522,4 +1582,4 @@ Notes:
 - C6 C33 mass change (rel), numpy serial: max over 6 runs
 - C6 C36 mass change (rel), numpy serial: max over 1 runs
 
-Summed run wall time (s, without process start-up): amrex 5233, foam 5111, jax 9280, numpy 3532
+Summed run wall time (s, without process start-up): amrex 5386, foam 6165, jax 9460, numpy 3600

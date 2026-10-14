@@ -27,6 +27,7 @@ diffusion a finite-difference Newton-GMRES (JAX: exact AD).
 | well-balanced (lake at rest) | C3 | C3 | C3 |
 | BCs: wall, Dirichlet, InflowOutflow, Extrapolation, FromModel | C4 | C4 | C4 |
 | wet/dry, positivity | C5 | C5 | C5 |
+| wet/dry front detector (`front_tol`): dam break, Thacker's bowl; the flag's halo (MPI) | C5 | C5 | C5 |
 | conservation (closed domains) | C6 | C6 | C6 |
 | MPI = serial (hyperbolic) | C7 | C7 | C7 |
 | pressure (VAM(1) Chorin): linear, Newton, time_order 2 | C8 | C8 | C8 |
@@ -94,7 +95,7 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C2 shock | bump, flow (0.3, 0.1) into walls, O2 + MOOD, t 0.5, nx 40/80 | order 40->80 vs JAX nx 320 >= 0.6 (spec); foam L1 vs JAX <= 1.5e-3 (observed) |
 | C3 well-balanced | lake at rest over b = 0.2 exp(-r^2/2), nx 24, dt 0.01 x 100 | max abs(u) <= 1e-12 (round-off) |
 | C4 boundaries | channel 25 x 1 (ny 2), smooth bump, frictionless, t 3 from the exact state, nx 25/50/100. `sub`: q by `Dirichlet`, h by `Dirichlet`; `trans`: q by `InflowOutflow`, outflow `Extrapolation`; sides `Wall` | L1(h) vs Bernoulli, order 50->100: O1 >= 0.45 / 0.55 (observed, pre-asymptotic), O2 >= 1.8 (theory); max abs(q_y) <= 1e-12 (1-D flow); max abs(q/q_in - 1) (information: the open-domain mass balance) |
-| C5 wet/dry | `common.dry_dambreak_2d`, nx 48, O2 eta + MOOD, CFL 0.45, t 0.02 | h_min >= 0; foam L1 vs JAX <= 3.5e-2 (observed); AMReX max rel <= 1e-9 (observed 6e-10, wet/dry eigenvalue cluster) |
+| C5 wet/dry | `common.dry_dambreak_2d`, nx 48, O2 eta + MOOD, CFL 0.45, t 0.02. Front detector (`ReconstructionSpec.front_tol` 0.5, Venkatakrishnan, the Malpasset thesis configuration): `dam_front` / `dam_off` the same dam break with / without it; `bowl_front` / `bowl_off` Thacker's axisymmetric paraboloid bowl (SWASHES 2-D, a 1, r0 0.8, h0 0.1, [0, 4]^2, nx 48, t 0.5), centred at (1.8, 2.15) so that the 2- and 4-rank cuts are no symmetry lines of the state (centred, the flag's halo was never exercised: no exchange = exchange, bitwise); `*_front` serial, mpi2, mpi4 | h_min >= 0; foam L1 vs JAX <= 3.5e-2 (observed; `*_off`: information, the limiters differ at a dry front: JAX's Venkatakrishnan (eps^2 = dx^2) overshoots the neighbour bounds, OpenFOAM's cellLimited<Venkatakrishnan> does not); AMReX max rel <= 1e-9 (observed 6e-10, wet/dry eigenvalue cluster); bowl: the detector acts, front vs off L1 rel >= 1e-3 (observed 2.9e-3 foam, 4.8e-2 JAX), L1(h - exact) information; `*_front` ranks = serial (C7: the flag's halo; without the exchange foam mpi2 / mpi4 differ by 6e-6 / 8e-4) |
 | C6 conservation | every run of the closed cases (C1-C3, C5, C11-C14, C20, C23, C32, C33, C36) on every config | rel. mass change <= 1e-12 |
 | C7 parallel | C1 O2 nx 40, C5, C13, C14, C21 on 2 and 4 ranks | max rel vs the same backend serial <= 1e-12 |
 | C8 pressure | VAM(1) Chorin, gate-21 channel (60 x 6), t 0.05: `vam` (linear), `vam_newton`, `vam_t2` (time_order 2), `vam_tri` (triangles) | foam L1 vs JAX <= 3e-2 (observed); AMReX max rel vs JAX <= 1e-9; Newton vs linear <= 1e-8; ranks / GPU vs serial <= 1e-9 (10 x the pressure rtol 1e-10, over the steps) |

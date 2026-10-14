@@ -643,6 +643,65 @@ def full_stress_level1(nx=FULL1["nx"]):
     return LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=nx, ny=nx), nsm
 
 
+# ── C5 front runs: the a-priori wet/dry front detector (ReconstructionSpec.front_tol) ─
+#: Thacker's axisymmetric paraboloid bowl (SWASHES, Delestre et al. 2013, 2-D, choice 1):
+#: bed -h0 (1 - r^2 / a^2), a periodic radial oscillation, the shore moving over the bed
+#: centre off the domain centre: the 2- and 4-rank cuts (x = 2, y = 2) must not be symmetry
+#: lines of the state, or the front flag's halo is never exercised (centred: no flag exchange
+#: gives the same state as the exchange, bitwise)
+THACKER = dict(a=1.0, r0=0.8, h0=0.1, L=4.0, centre=(1.8, 2.15), nx=48, t_end=0.5)
+THACKER["A"] = (THACKER["a"] ** 2 - THACKER["r0"] ** 2) / (THACKER["a"] ** 2 + THACKER["r0"] ** 2)
+THACKER["omega"] = np.sqrt(8 * G * THACKER["h0"]) / THACKER["a"]
+#: front_tol and limiter of the Malpasset thesis configuration (results/wavespeed_bound/run.py):
+#: with minmod a flat dry bed never trips the detector (the limited eta keeps h_f >= 0)
+FRONT = dict(front_tol=0.5, limiter=Limiter.venkatakrishnan)
+
+
+def thacker_eta(r, t):
+    """The exact free surface eta(r, t) of the bowl; h = max(0, eta - b)."""
+    a, h0, A, w = (THACKER[k] for k in ("a", "h0", "A", "omega"))
+    c = 1 - A * np.cos(w * t)
+    return h0 * (np.sqrt(1 - A ** 2) / c - 1 - r ** 2 / a ** 2 * ((1 - A ** 2) / c ** 2 - 1))
+
+
+def thacker_bed(r):
+    return -THACKER["h0"] * (1 - r ** 2 / THACKER["a"] ** 2)
+
+
+def thacker_bowl(front_tol):
+    """SME(0), walls (never reached), at rest in the exact state at t = 0; O2 Venkatakrishnan
+    + MOOD, the detector at ``front_tol`` (None: off)."""
+    sm = SystemModel.from_model(C.sme(0, 3, ("left", "right", "bottom", "top"), "wall"))
+    names = [str(s) for s in sm.state]
+    c = THACKER["centre"]
+
+    def ic(x):
+        q = np.zeros(len(names))
+        r = np.hypot(x[0] - c[0], x[1] - c[1])
+        b = thacker_bed(r)
+        q[names.index("b")], q[names.index("h")] = b, max(0.0, thacker_eta(r, 0.0) - b)
+        return q
+    sm.initial_conditions = IC.UserFunction(function=ic)
+    nsm = NumericalSystemModel.from_system_model(sm, reconstruction=ReconstructionSpec(
+        order=2, limiter=FRONT["limiter"], front_tol=front_tol))
+    n, L = THACKER["nx"], THACKER["L"]
+    return LSQMesh.create_2d(domain=(0, L, 0, L), nx=n, ny=n), nsm
+
+
+def _c5_front():
+    """The radial dry dam break and the bowl, each with the detector (configs: the
+    flag's halo) and without (serial: whether the detector acts)."""
+    dam = lambda ft: partial(C.dry_dambreak_2d, nx=48, front_tol=ft, limiter=FRONT["limiter"])  # noqa: E731
+    out = []
+    for key, make, t_end in (("dam", dam, 0.02), ("bowl", thacker_bowl, THACKER["t_end"])):
+        out += [Run(f"{key}_front", make(FRONT["front_tol"]) if key == "dam"
+                    else partial(make, FRONT["front_tol"]), t_end, cfl=0.45, mood=True,
+                    configs=("serial", "mpi2", "mpi4")),
+                Run(f"{key}_off", make(None) if key == "dam" else partial(make, None), t_end,
+                    cfl=0.45, mood=True)]
+    return out
+
+
 def _c32():
     """The viscous walls (no-slip, free-slip, split) on ny 20 / 40 / 80 (JAX); foam and
     AMReX on ny 20; the controls ``ctrl`` (walls act), ``inviscid`` and ``inviscid_split``
@@ -694,9 +753,10 @@ CASES = {
            + [Run(f"{v}_o{o}_n{n}_pert", partial(channel, v, o, n), CHANNEL[v]["t_end"],
                   backends=("jax",), perturb=PERTURB)
               for v in CHANNEL for o in (1, 2) for n in C4_N]),
-    "C5": ("radial dry dam break, O2 eta + MOOD",
+    "C5": ("radial dry dam break, O2 eta + MOOD; with the front detector (front_tol): the dam "
+           "break and Thacker's paraboloid bowl, Venkatakrishnan",
            [Run("n48", partial(C.dry_dambreak_2d, nx=48), 0.02, cfl=0.45, mood=True,
-                configs=ALL5)]),
+                configs=ALL5)] + _c5_front()),
     "C8": ("VAM(1) Chorin channel (gate 21): linear / Newton / time_order 2 / triangles", _c8()),
     "C10": ("VAM(1) Chorin convergence: smooth wave over the bump",
             [Run(f"s{o}_t{to}_n{n}", partial(vam_wave, o, n), WAVE["t_end"], chorin=True,

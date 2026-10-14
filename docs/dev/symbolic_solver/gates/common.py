@@ -42,11 +42,12 @@ def bump_2d(order, nx=40, flow=(0.0, 0.0), variables=ReconstructedVariables.cons
     return LSQMesh.create_2d(domain=(0, 10, 0, 10), nx=nx, ny=nx), nsm
 
 
-def dry_dambreak_2d(nx=48, ties=None):
+def dry_dambreak_2d(nx=48, ties=None, front_tol=None, limiter=Limiter.minmod):
     """Radial dry dam break, the model's reconstruction variables (eta = b + h,
     u = hinv q) + MOOD (tests/runtime/test_radial_dry_dambreak.py).  ``ties``:
     "old" = the old eta reconstruction's (b, momenta limited no more than
-    eta)."""
+    eta).  ``front_tol``: the a-priori wet/dry front detector
+    (``ReconstructionSpec.front_tol``; None: off); ``limiter`` of every row."""
     sm = SystemModel.from_model(sme(0, 3, ("left", "right", "bottom", "top"), "wall"))
     names = [str(s) for s in sm.state]
 
@@ -58,8 +59,8 @@ def dry_dambreak_2d(nx=48, ties=None):
     if ties == "old":
         ties = {n: "h" for n in names if n == "b" or n.startswith("q_")}
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod,
-                                              ties=ties or {}))
+        sm, reconstruction=ReconstructionSpec(order=2, limiter=limiter,
+                                              ties=ties or {}, front_tol=front_tol))
     return LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=nx, ny=nx), nsm
 
 
