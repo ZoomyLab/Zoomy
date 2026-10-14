@@ -273,29 +273,40 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         return D.at[r[:, None, None], np.arange(len(cols))[None, :, None],
                     c[None, None, :]].set(vals)
 
-    def gradient(W, Wg, mesh):
+    def _shore(W, args):
+        """`(mesh, (row, dry))` of the trailing block arguments `(mesh,)` or
+        `((eta, h), eps, mesh)`: `dry` the cells with `W[h] <= eps`."""
+        if len(args) == 1:
+            return args[0], None
+        (row, depth), eps, mesh = args
+        return mesh, (int(row), W[int(depth)] <= eps)
+
+    def gradient(W, Wg, *args):
         """LSQ gradient of every row of `W` per cell, closed at the boundary by constraints or by
-        the ghost samples `Wg`.
+        the ghost samples `Wg`; `(W, Wg, (eta, h), eps, mesh)`: in row `eta` a dry neighbour
+        (`W[h] <= eps`) enters as `min(W[eta, k], W[eta, i])` (`vocabulary.gradient`).
 
         References:
             Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
         """
         # ``Wg``: the ghosts; a row the BC fixes closes by its constraint,
         # every other row samples the ghost at the mirror image
+        mesh, shore = _shore(W, args)
         R = _with_geometry(lsq, mesh, mesh_np, nc)
-        G = R._compute_gradients(W, W.shape[0], Wg)
+        G = R._compute_gradients(W, W.shape[0], Wg, shore)
         return closed(G, W, Wg, recon_classes, topo.lsq_grad_cols, mesh)
 
-    def ghost_bounds(R, u, ug):
+    def ghost_bounds(R, u, ug, dry=None):
         """Min and max of `u` over the face neighbours and the boundary ghosts `ug` (a ghost
-        bounds its face's owner).
+        bounds its face's owner); a `dry` neighbour bounds as `min(u_k, u_i)` (`gradient`).
         """
         # min/max over the face neighbours and the boundary ghosts ``ug``
         # (as in ``gradient``).  A ghost bounds its face's OWNER (on a
         # periodic seam ``_bf_cells`` is the partner cell)
         lo = hi = u
         for a, b in ((R._iA_int, R._iB_int), (R._iB_int, R._iA_int)):
-            lo, hi = lo.at[a].min(u[b]), hi.at[a].max(u[b])
+            v = u[b] if dry is None else jnp.where(dry[b], jnp.minimum(u[b], u[a]), u[b])
+            lo, hi = lo.at[a].min(v), hi.at[a].max(v)
         return lo.at[R._iInner_bnd].min(ug), hi.at[R._iInner_bnd].max(ug)
 
     def limiter(name):
@@ -307,13 +318,16 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
             Venkatakrishnan 1995, https://doi.org/10.1006/jcph.1995.1084
             Sweby 1984, https://doi.org/10.1137/0721062
         """
-        def factors(rows, W, Wg, G, mesh):
-            """Limiter factors for the state `rows` (1 elsewhere)."""
+        def factors(rows, W, Wg, G, *args):
+            """Limiter factors for the state `rows` (1 elsewhere); `(rows, W, Wg, G, (eta, h),
+            eps, mesh)`: the bounds of row `eta` with `gradient`'s shore values."""
+            mesh, shore = _shore(W, args)
             R = _with_geometry(lsq, mesh, mesh_np, nc)
             fn = getattr(R, name)
             phi = jnp.ones((W.shape[0], nc), dtype=W.dtype)
             for v in rows:
-                lo, hi = ghost_bounds(R, W[v], Wg[v])
+                dry = shore[1] if shore is not None and v == shore[0] else None
+                lo, hi = ghost_bounds(R, W[v], Wg[v], dry)
                 phi = phi.at[v].set(fn(W[v], G[v], lo, hi))
             return phi
         return factors

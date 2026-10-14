@@ -432,7 +432,7 @@ class LSQMUSCLReconstructionJAX:
 
     # ── LSQ gradient via vmap over cells ────────────────────────────
 
-    def _lsq_gradient_scalar(self, u, u_bf):
+    def _lsq_gradient_scalar(self, u, u_bf, dry=None):
         """Cell-center gradient for a single scalar field via the LSQ
         stencil.  vmap'd over the cell axis inside `_compute_gradients`.
 
@@ -479,6 +479,8 @@ class LSQMUSCLReconstructionJAX:
             nbr_idx = neighbors[i]
             u_i = u[i]
             u_cells = u[nbr_idx] - u_i
+            if dry is not None:     # a dry neighbour: the hydrostatic extension
+                u_cells = jnp.where(dry[nbr_idx], jnp.minimum(u_cells, 0.0), u_cells)
             if has_bdy:
                 bf = bdy_nbr[i]
                 # ``bf < 0`` means "no boundary face on this side"; ``u_bf is
@@ -523,13 +525,17 @@ class LSQMUSCLReconstructionJAX:
 
         return jax.vmap(per_cell)(jnp.arange(nc)).T   # (dim, nc)
 
-    def _compute_gradients(self, Q, n_var, bf_face_values):
+    def _compute_gradients(self, Q, n_var, bf_face_values, shore=None):
+        """LSQ gradients of every row; ``shore = (row, dry)``: in ``row`` a neighbour with
+        ``dry`` set enters as ``min(u_k, u_i)`` (the hydrostatic extension of the free
+        surface, ``zoomy_core.symsolver.discretization.reconstruction.shore_extension``)."""
         nc = self._nc
         grads = jnp.zeros((n_var, self.dim, nc))
         for v in range(n_var):
             u_bf = (bf_face_values[v]
                     if bf_face_values is not None else None)
-            grads = grads.at[v].set(self._lsq_gradient_scalar(Q[v, :], u_bf))
+            dry = shore[1] if shore is not None and v == shore[0] else None
+            grads = grads.at[v].set(self._lsq_gradient_scalar(Q[v, :], u_bf, dry))
         return grads
 
     # ── Limiter bounds (interior + boundary passes) ─────────────────
