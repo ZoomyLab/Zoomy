@@ -252,6 +252,15 @@ class interface_flux(Block):
     """
 
 
+class lifted_interface_flux(Block):
+    """`(sides, aux, n_aux, side, own, peer, rows, p, mesh)` -> per face the rows `rows` of
+    this participant's side of one Riemann problem posed low -> high in the model of `sides`
+    (the interface model) on the interface states `own`, `peer` (`(rows of that model, coupled
+    faces)`), the aux rebuilt from each state alone (`aux` on a zero aux of `n_aux` rows; `aux`
+    False: the zero aux); zero off the coupled faces. Both sides pose the same problem.
+    """
+
+
 class characteristic_ghost(Block):
     """`(A, own, Aown, peer, p, mesh)` -> per coupled face the transmission state towards a
     peer of another model: with `A_n = sum_d A(own, Aown)[:, :, d] n_d` (`A` the quasilinear
@@ -300,6 +309,7 @@ class couple:                    # one preCICE participant
     advance = Effect(1)          # (dt) -> coupling ongoing
     window_complete = Effect(1)  # () -> the last advance completed a time window
     read_round_trip = Effect(1)  # () -> the own interface states as the peer reads them
+                                 #    (in the interface model of a lifted shared face)
 
 
 class check:

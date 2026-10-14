@@ -12,14 +12,15 @@ from zoomy_core.symsolver.discretization.time import (
     IMEX_RK, SSP_RK, CflWaveSpeed, Imex, cfl_dt, checked, face_dt, face_rule, step_size)
 from zoomy_core.symsolver.vocabulary import (
     characteristic_ghost, couple, coupled_faces, ghost_flux, interface_flux,
-    interface_states, io, replace_row, select)
+    interface_states, io, lifted_interface_flux, replace_row, select)
 
 
 class CoupledFace(Option):
     """The Riemann problem of a coupled face (preCICE).
     """
-    #: the same model on both sides: one Riemann problem on (own, peer) posed low -> high,
-    #: which both participants solve alike (the exchanged data: the cell states)
+    #: one Riemann problem on (own, peer) posed low -> high, which both participants solve
+    #: alike (the exchanged data: the cell states); a peer of another level of the same model
+    #: hierarchy: posed in the interface model (`precice_march(interface=)`)
     shared = "shared"
     #: a peer of another model (SME <-> VOF): the Riemann problem (own, ghost), the ghost
     #: taking the entering characteristics from the peer and the leaving ones from the own
@@ -134,7 +135,7 @@ class HyperbolicTemplate:
                           self.dt_checkpoint)
 
     def precice_march(self, Q, Qaux, p, time, mesh, *, side, subcycling=False,
-                      face=CoupledFace.shared, frozen_mass_row=False):
+                      face=CoupledFace.shared, frozen_mass_row=False, interface=None):
         """The march as one preCICE participant; preCICE ends the loop and the coupled
         faces carry the interface answer (`face`).
 
@@ -150,9 +151,20 @@ class HyperbolicTemplate:
                 the window at its value at the window start, of the Riemann problem (own as
                 the peer reads it, ghost): what the peer charges for the same window, from
                 the same exchanged data.
+            interface: (`shared`, column exchange) the NumericalSystemModel the Riemann problem
+                of the coupled face is posed in when the peer runs another level of the model
+                (the richer of the two), its kernels printed as `interface.<slot>`: both
+                participants lift the pair, own as the peer reads it
+                (`couple.read_round_trip`) and peer (`couple.read`), into its state (the lower
+                level's missing moments zero), solve the same problem and keep the rows of
+                their own state (by name). Its state must contain the own state's names, its
+                parameters must be the own model's.
 
         References:
             Chourdakis et al. 2022, https://doi.org/10.12688/openreseurope.14445.2
+            Dahm, Giesselmann & Helzel 2024 (Theorem 4.4: both states in the higher-order
+                model, the lower one zero-padded; only the lower model's components update
+                its cell), https://doi.org/10.1016/j.jcp.2024.113162
         """
         nsm, cfl, dimension = self.nsm, self.cfl, self.dimension
         dt_constant, cfl_check_every = self.dt_constant, self.cfl_check_every
@@ -164,6 +176,21 @@ class HyperbolicTemplate:
         depth = getattr(nsm.roles, "depth", None)
         if frozen_mass_row and depth is None:
             raise ValueError("frozen_mass_row: the model declares no depth row")
+        if interface is not None:
+            if characteristic:
+                raise ValueError("interface needs face=CoupledFace.shared")
+            names_i = [str(s) for s in interface.sm.state]
+            missing = [str(s) for s in nsm.sm.state if str(s) not in names_i]
+            if missing:
+                raise ValueError(f"interface: its state {names_i} lacks the own rows {missing}")
+            if list(interface.parameters.keys()) != list(nsm.parameters.keys()):
+                raise ValueError("interface: its parameters differ from the own model's: "
+                                 f"{list(interface.parameters.keys())} vs "
+                                 f"{list(nsm.parameters.keys())}")
+            rows = tuple(names_i.index(str(s)) for s in nsm.sm.state)
+            n_aux_i = len(interface.sm.aux_state)
+            sides_i = interface.call.numerical_face_sides
+            aux_i = interface.call.update_aux_variables or sp.S.false
         sides = nsm.call.numerical_face_sides
         aux = nsm.call.update_aux_variables or sp.S.false
 
@@ -179,6 +206,10 @@ class HyperbolicTemplate:
             the aux the column is written with (`characteristic`: the step's, its derivatives
             with the ghost on the coupled faces; else `Qaux`)."""
             peer = couple.read()
+            if interface is not None:
+                return lifted_interface_flux(sides_i, aux_i, n_aux_i, side,
+                                             couple.read_round_trip(), peer, rows, p,
+                                             mesh), Wf, Qaux
             if not characteristic:
                 return interface_flux(sides, aux, side, Q, Qaux, peer, p, mesh), Wf, Qaux
             own, Aown = interface_states(Q, mesh), interface_states(Qaux, mesh)
