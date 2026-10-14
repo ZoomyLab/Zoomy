@@ -1043,18 +1043,35 @@ def _is_dry_gated(e, h, eps) -> bool:
             and e.args[2] == sp.S.Zero)
 
 
+def _cfl_inverse_depth(sm, h) -> dict:
+    """`{hinv: 1/max(1e-14, h)}` (`wave_speed_inverse_depth`) for the CFL spectrum; the legacy
+    KP `hinv` equals `1/h` above its `eps` and is kept there (the same rounding as before).
+    """
+    out = {}
+    for a in sm.aux_state:
+        if str(a) == "hinv":
+            out[a] = wave_speed_inverse_depth(h)
+            if getattr(sm, "depth_regularization", None) is None:        # desingularize_hinv
+                out[a] = sp.Function("conditional")(h > _wet_dry_eps(sm), a, out[a])
+    return out
+
+
 def gate_eigenvalues_dry(eps=None):
     """Operation: publish a timestep-only spectrum `conditional(h > eps, e, 0)` into
     `sm.eigenvalues_cfl`, leaving `sm.eigenvalues` physical (with its power guard) for the
-    Riemann dissipation.
+    Riemann dissipation.  `eps` defaults to 0: a cell without water (h <= 0) has no wave speed,
+    but every cell with h > 0 moves mass with its own velocity (the Audusse states keep it), so
+    its speed bounds the step however thin it is (ANALYSIS 49).
     The dry gate carries the power guard because a branchless backend evaluates both arms; without
-    a closed form it gates `numerical_eigenvalues` (or the model's published
-    `eigenvalues_cfl`) and is idempotent.
+    a closed form it gates `numerical_eigenvalues` of `A_n` with `hinv` -> `1/max(1e-14, h)` (the
+    Riemann speeds' matrix, `wave_speed_inverse_depth`), or the model's published
+    `eigenvalues_cfl`, and is idempotent.
     """
     def _op(sm):
         """Apply the operation to `sm` in place."""
         ev, flat = _flat_eigenvalues(sm, "gate_eigenvalues_dry")
         h = _depth_state(sm, "gate_eigenvalues_dry")
+        e_eps = sp.S.Zero if eps is None else sp.Float(eps)
         if ev is None:
             # NO CLOSED FORM (SME / VAM): the model computes its wave speeds by
             # a runtime eigensolve.  EMBED that computation inside the gate
@@ -1068,7 +1085,6 @@ def gate_eigenvalues_dry(eps=None):
             # Before this, the op returned early for these models, which is why
             # the numerical-spectrum path was the one place a backend still had
             # to carry its own dry threshold.
-            e_eps = _wet_dry_eps(sm, eps)
             cond = sp.Function("conditional")
             # The MODEL may already have published a dt spectrum of its own —
             # SME(level>=2) puts its closed-form ``spectral_radius_bound`` cone
@@ -1079,7 +1095,11 @@ def gate_eigenvalues_dry(eps=None):
             # numerical eigen-decomposition back on the dt path of exactly the
             # models that had gone to the trouble of avoiding one.
             published = getattr(sm, "eigenvalues_cfl", None)
-            num = published if published is not None else sm.numerical_eigenvalues
+            if published is not None:
+                num = published
+            else:                        # A_n of the Riemann speeds: 1/h floored, not the KP hinv
+                num = [sp.sympify(e).xreplace(_cfl_inverse_depth(sm, h))
+                       for e in sp.flatten(sm.numerical_eigenvalues)]
             # IDEMPOTENT.  The closed-form branch below rebuilds the gated copy
             # from ``sm.eigenvalues`` (which this op never zeroes), so applying
             # it twice is harmless there.  This branch reads the slot it also
@@ -1098,7 +1118,6 @@ def gate_eigenvalues_dry(eps=None):
             # "Dimension of index greater than rank of array".
             sm.eigenvalues_cfl = ZArray(gated).reshape(len(gated), 1)
             return
-        e_eps = _wet_dry_eps(sm, eps)
         cond = sp.Function("conditional")
         guarded = [_guard_eigenvalue_expr(e, h) for e in flat]
         gated = [cond(h > e_eps, e, sp.S.Zero) for e in guarded]
@@ -1113,8 +1132,8 @@ def gate_eigenvalues_dry(eps=None):
         sm.eigenvalues_cfl = ZArray(gated).reshape(*ev.shape)
 
     _op.name = "gate_eigenvalues_dry"
-    _op.description = ("publish dt-only eigenvalues_cfl gated to 0 for dry "
-                       "cells (h < eps); guard sqrt(h) args")
+    _op.description = ("publish dt-only eigenvalues_cfl gated to 0 where h <= eps "
+                       "(default 0); guard sqrt(h) args")
     return _op
 
 
