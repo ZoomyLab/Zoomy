@@ -863,9 +863,11 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
     def _operator():
         """The TPFA operator and the static geometry of its interior faces: owner, neighbour,
         normal, unit cell-to-cell vector `e`, distance, floored `|n.e|`, `|f| / |V|` of both.
+        Built eagerly (constants), also when first needed inside a traced solve.
         """
         if not tpfa:
-            op = DenseDiffusionOperatorJAX(mesh_np, mesh_np.dimension, rt.n_state)
+            with jax.ensure_compile_time_eval():
+                op = DenseDiffusionOperatorJAX(mesh_np, mesh_np.dimension, rt.n_state)
             cc = np.asarray(mesh_np.cell_centers)[:dim]
             f = np.flatnonzero((fc0 < nc) & (fc1 < nc))
             dx = cc[:, fc1[f]] - cc[:, fc0[f]]
@@ -950,11 +952,29 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         D, C = _div(k, bc, Q, Qaux, p, time, mesh)
         return D + C
 
+    def diffusion_tpfa(k, bc, Q, Qaux, p, time, mesh):
+        """The two-point part of `diffusion`."""
+        return _div(k, bc, Q, Qaux, p, time, mesh, correction=False)[0]
+
+    def diffusion_correction(k, bc, Q, Qaux, p, time, mesh):
+        """`diffusion` beyond its two-point part (zero in 1-D)."""
+        return _div(k, bc, Q, Qaux, p, time, mesh)[1]
+
     def _norm(r):
         """Euclidean norm of `r` (distributed: over the owned cells of all ranks)."""
         if partition is None:
             return jnp.linalg.norm(r)
         return jnp.sqrt(gsum(jnp.sum(jnp.where(own_cell, r, 0.0) ** 2)))
+
+    def implicit_solve(R, x0):
+        """Newton on `R(x) = 0`, `R` coupling face neighbours, each update a `linsolve` of the
+        exact (AD) Jacobian action; differentiable through the root.
+
+        References:
+            Knoll, Keyes 2004, https://doi.org/10.1016/j.jcp.2003.08.010
+        """
+        return newton_root(R, x0, lambda x, v: jax.jvp(R, (x,), (v,))[1], linsolve,
+                           tol=imp["tol"], maxiter=imp["maxiter"], norm=_norm)
 
     def implicit_diffusion(k, bc, Q, Qaux, p, time, dt, mesh):
         """One Crank-Nicolson step of the two-point part of `div(A(X) : grad X)` from `time`
@@ -1089,7 +1109,9 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         reduce_max=jnp.max, logical_and=jnp.logical_and,
         select=select, while_loop=while_loop, cond=cond, io_write=io_write,
         io_save_state=io_save_state, io_load_state=io_load_state,
-        root=root, linsolve=linsolve, implicit_diffusion=implicit_diffusion,
+        root=root, linsolve=linsolve, implicit_solve=implicit_solve,
+        diffusion_tpfa=diffusion_tpfa, diffusion_correction=diffusion_correction,
+        implicit_diffusion=implicit_diffusion,
         diffusion=diffusion,
         check_cfl=check_cfl, check_march=check_march, march_failures=march_failures,
         march_checks=march_checks,
