@@ -13,7 +13,7 @@
   variables (h, eta, u) map through the model's W(Q).
 * A vector group closed in the normal frames (one joint fit of its
   components) reproduces polynomial vector fields on oblique walls and at
-  their corners (ANALYSIS 49).
+  their corners (ANALYSIS 57).
 * Rotating the mesh rotates every derivative (the decoupled ghost fit in the
   wall frame, the vector closure): the same stencils, the derivative tensors
   rotated to round-off.
@@ -305,7 +305,7 @@ def test_wall_ghost_informs_the_normal_axis():
     it informs the derivative along the normal's axis, also on triangles stretched along the
     wall (there x_f - x_c points mostly along the wall).  A field of x alone, exact ghosts:
     the spurious wall-normal derivative stays small (0.16 with the ghost on the tangential
-    axis, ANALYSIS 49)."""
+    axis, ANALYSIS 57)."""
     nx, ny, L = 25, 2, (0.0, 25.0, 0.0, 1.0)
     xs, ys = np.linspace(L[0], L[1], nx + 1), np.linspace(L[2], L[3], ny + 1)
     X = np.array([[x, y] for x in xs for y in ys]).T
