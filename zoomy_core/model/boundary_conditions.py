@@ -1235,6 +1235,19 @@ class BoundaryConditions(param.Parameterized):
         ]
         self._boundary_tags = [bc.tag for bc in self.boundary_conditions_list]
 
+    def __reduce__(self):
+        """Pickle as the constructor call on the BC list, never as the `param` instance state.
+
+        The derived kernel lists (`_boundary_functions`, `_boundary_tags`) are assigned after
+        construction, so `param` keeps an instance copy of each declared `List` Parameter in the
+        object's private state. A default pickle embeds those Parameter objects with their
+        `param`-version-specific slots (`default_factory` exists from 2.3, `class_` before 2.2), and
+        the `SystemModel` pickles shipped in `systemmodel/_prebuilt` then fail to load under any
+        other `param` than the one that wrote them. The constructor call re-derives the lists, so
+        the pickle holds no `param` internals.
+        """
+        return (type(self), (list(self.boundary_conditions_list),))
+
     @property
     def list_sorted_function_names(self):
         """Tags in kernel-branch order."""
