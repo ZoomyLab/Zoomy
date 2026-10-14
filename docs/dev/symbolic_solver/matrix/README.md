@@ -28,19 +28,19 @@ diffusion a finite-difference Newton-GMRES (JAX: exact AD).
 |---|---|---|---|
 | SWE 2-D quads, O1 / O2: smooth convergence | C1 | C1 | C1 |
 | shock, O2 + MOOD | C2 | C2 | C2 |
-| well-balanced (lake at rest) | C3 | C3 | C3 |
+| well-balanced (lake at rest), pressure in P (SME(0)) or in F (SWE) | C3 | C3 | C3 |
 | BCs: wall, Dirichlet, InflowOutflow, Extrapolation, FromModel | C4 | C4 | C4 |
 | wet/dry, positivity | C5 | C5 | C5 |
 | wet/dry front detector (`front_tol`): dam break, Thacker's bowl; the flag's halo (MPI) | C5 | C5 | C5 |
 | conservation (closed domains) | C6 | C6 | C6 |
 | MPI = serial (hyperbolic; NumPy too) | C7 | C7 | C7 |
-| pressure (VAM(1) Chorin): linear, Newton, time_order 2 | C8 | C8 | C8 |
+| pressure (VAM(1) Chorin): linear, Newton, time_order 2, periodic (default solver) | C8 | C8 | C8 |
 | pressure on triangles | C8 | C8 | n/a (Cartesian) |
 | GPU = CPU | C9 | n/a | C9 |
 | pressure convergence (Chorin, Richardson) | C10 | C10 | C10 |
 | 1-D | C11 | C11 | C11 |
 | triangles | C12 | C12 | n/a (Cartesian) |
-| periodic, serial and distributed | C13 | C13 | C13 |
+| periodic, serial and distributed; the seam face's aux | C13 | C13 | C13 |
 | IMEX (implicit source) | C14 | C14 | C14 |
 | implicit diffusion (IMEX), distributed | C26 | C26 | C26 |
 | IMEX time order: Lie vs IMEX-SSP2(2,2,2), hyperbolic and Chorin | C31 | C31 (SSP2 = JAX) | C31 (SSP2 = JAX) |
@@ -98,17 +98,17 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 |---|---|---|
 | C1 smooth | `common.bump_2d`, flow 0, walls, t 2.5, O1 / O2, nx 20/40/80 | L1(h) vs JAX nx 320 (8 ranks); order 40->80: O1 >= 0.6 (observed 0.71, pre-asymptotic), O2 >= 1.8 (theory); AMReX = JAX (round-off); foam-JAX difference shrinks (order >= 0.5, observed) |
 | C2 shock | bump, flow (0.3, 0.1) into walls, O2 + MOOD, t 0.5, nx 40/80 | order 40->80 vs JAX nx 320 >= 0.6 (spec); foam L1 vs JAX <= 1.5e-3 (observed) |
-| C3 well-balanced | lake at rest over b = 0.2 exp(-r^2/2), nx 24, dt 0.01 x 100 | max abs(u) <= 1e-12 (round-off) |
+| C3 well-balanced | lake at rest over b = 0.2 exp(-r^2/2), nx 24, dt 0.01 x 100; `swe_<flux>_o{1,2}`: the hand-written `SWE` (pressure in its flux, `P = 0`) with PositiveHLL / PositiveRusanov / PositiveNonconservativeRusanov / PositiveQuasilinearRusanov (ANALYSIS 58) | max abs(u) <= 1e-12 (round-off) |
 | C4 boundaries | channel 25 x 1 (ny 2), smooth bump, frictionless, t 3 from the exact state, nx 25/50/100. `sub`: q by `Dirichlet`, h by `Dirichlet`; `trans`: q by `InflowOutflow`, outflow `Extrapolation`; sides `Wall` | L1(h) vs Bernoulli, order 50->100: O1 >= 0.45 / 0.55 (observed, pre-asymptotic), O2 >= 1.8 (theory); max abs(q_y) <= 1e-12 (1-D flow); max abs(q/q_in - 1) (information: the open-domain mass balance) |
 | C5 wet/dry | `common.dry_dambreak_2d`, nx 48, O2 eta + MOOD, CFL 0.45, t 0.02. Front detector (`ReconstructionSpec.front_tol` 0.5, Venkatakrishnan, the Malpasset thesis configuration): `dam_front` / `dam_off` the same dam break with / without it; `bowl_front` / `bowl_off` Thacker's axisymmetric paraboloid bowl (SWASHES 2-D, a 1, r0 0.8, h0 0.1, [0, 4]^2, nx 48, t 0.5), centred at (1.8, 2.15) so that the 2- and 4-rank cuts are no symmetry lines of the state (centred, the flag's halo was never exercised: no exchange = exchange, bitwise); `*_front` serial, mpi2, mpi4 | h_min >= 0; foam L1 vs JAX <= 3.5e-2 (observed; `*_off`: information, the limiters differ at a dry front: JAX's Venkatakrishnan (eps^2 = dx^2) overshoots the neighbour bounds, OpenFOAM's cellLimited<Venkatakrishnan> does not); AMReX max rel <= 1e-9 (observed 6e-10, wet/dry eigenvalue cluster); bowl: the detector acts, front vs off L1 rel >= 1e-3 (observed 2.9e-3 foam, 4.8e-2 JAX), L1(h - exact) information; `*_front` ranks = serial (C7: the flag's halo; without the exchange foam mpi2 / mpi4 differ by 6e-6 / 8e-4) |
 | C6 conservation | every run of the closed cases (C1-C3, C5, C11-C14, C20, C23, C32, C33, C36) on every config | rel. mass change <= 1e-12 |
 | C7 parallel | C1 O2 nx 40, C5, C13, C14, C21 on 2 and 4 ranks | max rel vs the same backend serial <= 1e-12 |
-| C8 pressure | VAM(1) Chorin, gate-21 channel (60 x 6), t 0.05: `vam` (linear), `vam_newton`, `vam_t2` (time_order 2), `vam_tri` (triangles) | foam L1 vs JAX <= 3e-2 (observed); AMReX max rel vs JAX <= 1e-9; Newton vs linear <= 1e-8; ranks / GPU vs serial <= 1e-9 (10 x the pressure rtol 1e-10, over the steps) |
+| C8 pressure | VAM(1) Chorin, gate-21 channel (60 x 6), t 0.05: `vam` (linear), `vam_newton`, `vam_t2` (time_order 2), `vam_tri` (triangles); `per`: a channel periodic in x (32 x 2, h = 0.5 + 0.05 sin(pi x), u = 0.1, dt 0.01 x 5), each backend's default pressure solver (foam / AMReX hypre; JAX / NumPy here GMRES), `per_auto` (JAX, NumPy): the assembled 'auto' (hypre / PyAMG; ANALYSIS 58) | foam L1 vs JAX <= 3e-2 (observed); AMReX max rel vs JAX <= 1e-9; Newton vs linear <= 1e-8; `per_auto` vs `per` <= 1e-9; ranks / GPU vs serial <= 1e-9 (10 x the pressure rtol 1e-10, over the steps) |
 | C9 GPU | C1, C5, C8, C14 on gpu1 / gpu-mpi | max rel vs the same backend CPU serial (round-off; C8 pressure tolerance) |
 | C10 Chorin convergence | VAM(1), smooth wave (a 0.01, sigma 0.3) over the bump, no inflow, t 0.2, nx 30/60/120; space O1 (gate 7's config) and O2 minmod, time_order 1 / 2 | Richardson order log2(abs(h30-h60)/abs(h60-h120)): >= 0.8 (theory 1), space O2 + time 2 >= 1.5 (observed) |
 | C11 1-D | smooth wave (walls) nx 40/80/160 vs JAX nx 1280; C4 `sub` in 1-D | as C1 / C4 (O1 >= 0.9, O2 >= 1.8: theory) |
 | C12 triangles | C1 on triangles nx 10/20/40 (vs the C1 reference, sampled); C4 `sub` on triangles refined in x and y (ny 1/2/4; at a fixed ny foam O2 loses its order on the stretched wall triangles) | O1 >= 0.5, O2 >= 1.4 (observed, coarse); C4 as above |
-| C13 periodic | bump in a uniform flow 0.3, periodic in x, walls in y, t 1, at x0 = 2.5 and 7.5 | the two runs equal up to the shift by L/2 (round-off); foam O1 = JAX (round-off) |
+| C13 periodic | bump in a uniform flow 0.3, periodic in x, walls in y, t 1, at x0 = 2.5 and 7.5; `nc_*`: the same with `NonconservativeRusanov`, whose face kernel reads both cells' aux (the seam face: the partner's, ANALYSIS 58) | the two runs equal up to the shift by L/2 (round-off); foam O1 = JAX (round-off) |
 | C14 IMEX | bump in flow + Manning n 0.5 (implicit source), t 0.3, nx 20/40/80 vs JAX nx 160 | order >= 0.5 (O1, observed) / 0.8 (O2, Lie splitting); mass; parallel; GPU |
 | C15 AD (JAX) | hyperbolic and IMEX bump 12^2, Chorin C10 wave 30 x 3; dJ/dg | abs(FD - jvp) <= 1e-5 (rel); abs(rev - jvp) <= 1e-10; mpi2 / gpu1 jvp vs serial <= 1e-12 |
 | C16 preCICE | gates 28 (jax-jax), 10 (jax-foam), 26 (foam-foam): 2 x 100 cells, O1, window 1e-3 | coupled vs single domain and mass drift <= 1e-14 (gate 26) |
@@ -197,6 +197,33 @@ Not part of the matrix: 8 model goldens in zoomy_core (m01-m04, m06-m08,
 s01) fail on the base checkout too (pre-existing).  The diffusion_matrix
 sign fix (cfc19a85) changes no matrix case except C26: every other model
 here has nu = 0.
+
+## Results (table.md, 2026-10-14, dev/migration-defects: ANALYSIS 58)
+
+Full rerun of serial (all four backends) and mpi2 / mpi4 (JAX, foam, AMReX) on cores 64-71; the
+GPU columns and the JAX mpi8 references are the 2026-10-14 store's (no GPU here).  **845 PASS,
+0 FAIL**; 44 new rows, none removed:
+
+- C3 `SWE (pressure in F) <flux>`, O1 / O2, four Positive* fluxes on plain `SWE`, every backend:
+  max |u| <= 2.5e-15 (before the fix: 8.5e-2, the bed slope lost).
+- C13 `NonconservativeRusanov (seam aux) shift by L/2`, O1 / O2, every backend: 0 (before, JAX /
+  NumPy: the seam face read the inner cell's aux on both sides).
+- C8 `per` (a periodic VAM(1) channel): foam (hypre) L1 rel vs JAX 8e-15, AMReX (hypre) max rel
+  3.5e-14; `per_auto` (the assembled default: JAX hypre, NumPy PyAMG) vs GMRES: JAX 5.0e-14,
+  NumPy 1.1e-11 (the 1e-10 pressure tolerance; before: both failed their accept gate, NumPy's
+  relative residual 0.39).
+
+Changed rows (relative change > 1e-6): C14 `O1 max rel vs JAX` amrex 1.50e-12 -> 1.52e-12, foam
+1.50e-12 -> 1.51e-12; C31 `numpy = JAX` 1.08e-13 -> 1.16e-13: round-off (the implicit Newton /
+GMRES tolerances; the landing merges a floating-point sliver step into the last step).  Every
+other row equal to 1e-6.  AMReX C17 `dry` does not finish within a 15-min command (no row, as in
+the 2026-10-14 store).
+
+After merging integ/20261014 (march check and step guard, Davis speeds, IMEX diffusion, shore
+fix, C37): C3, C8, C13, C14, C31, C37 rerun serial (four backends) and mpi2 (JAX, foam, AMReX):
+all PASS, 0 FAIL in the table (960 PASS rows; the other cases' rows are the pre-merge runs, so
+integ's new C5 front rows are absent here).  Against integ's table the six cases differ in the
+same three round-off rows as above; C37 (115 rows) all PASS.
 
 ## Results (2026-10-14, dev/numerics-robust: march check, thin cells, HLL Davis bounds, Manning at rest)
 

@@ -851,13 +851,17 @@ def measure():
             cross("C2", "", ["n40", "n80"], (40, 80))
             cross("C3", "", ["o1", "o2"], (24,))
             cross("C13", "", ["o1_x2.5", "o2_x2.5"], (40,))
+        from cases import LAKE_SWE
         for c in CONFIGS:                       # C3
             for o in (1, 2):
-                d = g("C3", f"o{o}", c)
-                if d is not None:
-                    q = d["Q"][[i for i, n in enumerate(names(d)) if n.startswith("q")]]
-                    add("C3", f"O{o} max|u| after 100 steps", b, c,
-                        float(np.abs(q / h(d)).max()), TH["C3"], "")
+                for pre, what in (("", ""), *((f"swe_{f}_", f" SWE (pressure in F) {f}")
+                                              for f in LAKE_SWE)):
+                    d = g("C3", f"{pre}o{o}", c)
+                    if d is not None:
+                        q = d["Q"][[i for i, n in enumerate(names(d))
+                                    if n.startswith(("q", "hu", "hv"))]]
+                        add("C3", f"O{o}{what} max|u| after 100 steps", b, c,
+                            float(np.abs(q / h(d)).max()), TH["C3"], "")
         for case, vs in (("C4", ("sub", "trans")), ("C11", ("sub",)), ("C12", ("sub",))):
             for v in vs:                        # C4 / C11 / C12: Bernoulli
                 for o in (1, 2):
@@ -884,12 +888,15 @@ def measure():
             add("C5", f"{'L1' if b == 'foam' else 'max'} rel vs JAX", b, "serial",
                 fn(g("C5", "n48"), J("C5", "n48")), th, "")
         front_checks(add, b, g, J)
-        for k in ("vam", "vam_newton", "vam_t2", "vam_tri"):    # C8
+        for k in ("vam", "vam_newton", "vam_t2", "vam_tri", "per"):    # C8
             d, j = g("C8", k), J("C8", k)
             if b not in ("jax", "numpy") and ok(d, j):
                 fn, th = (l1rel, TH["C8 foam"]) if b == "foam" else (relmax, PRESS)
                 add("C8", f"{k} {'L1' if b == 'foam' else 'max'} rel vs JAX", b, "serial",
                     fn(d, j), th, "")
+        if ok(g("C8", "per_auto"), g("C8", "per")):
+            add("C8", "periodic: default (assembled) vs GMRES pressure solve (max rel)", b,
+                "serial", relmax(g("C8", "per_auto"), g("C8", "per")), PRESS, "")
         if ok(g("C8", "vam_newton"), g("C8", "vam")):
             add("C8", "Newton vs linear pressure (max rel)", b, "serial",
                 relmax(g("C8", "vam_newton"), g("C8", "vam")), TH["newton"], "")
@@ -902,15 +909,16 @@ def measure():
                     f"|h{C10_N[0]}-h{C10_N[1]}| {d1:.2e}, |h{C10_N[1]}-h{C10_N[2]}| {d2:.2e}")
         for c in CONFIGS:                       # C13: periodic shift invariance
             for o in (1, 2):
-                a, s = g("C13", f"o{o}_x2.5", c), g("C13", f"o{o}_x7.5", c)
-                if ok(a, s):
-                    from cases import PERIODIC
-                    L = PERIODIC["L"]
-                    ka = np.lexsort((a["xc"][0], a["xc"][1]))
-                    ks = np.lexsort(((s["xc"][0] - L / 2) % L, s["xc"][1]))
-                    add("C13", f"O{o} shift by L/2 (max rel)", b, c,
-                        float(np.abs(a["Q"][:, ka] - s["Q"][:, ks]).max() / np.abs(a["Q"]).max()),
-                        RO, "")
+                for pre, what in (("", ""), ("nc_", " NonconservativeRusanov (seam aux)")):
+                    a, s = g("C13", f"{pre}o{o}_x2.5", c), g("C13", f"{pre}o{o}_x7.5", c)
+                    if ok(a, s):
+                        from cases import PERIODIC
+                        L = PERIODIC["L"]
+                        ka = np.lexsort((a["xc"][0], a["xc"][1]))
+                        ks = np.lexsort(((s["xc"][0] - L / 2) % L, s["xc"][1]))
+                        add("C13", f"O{o}{what} shift by L/2 (max rel)", b, c,
+                            float(np.abs(a["Q"][:, ka] - s["Q"][:, ks]).max()
+                                  / np.abs(a["Q"]).max()), RO, "")
         if b == "foam" and ok(g("C13", "o1_x2.5"), J("C13", "o1_x2.5")):
             add("C13", "O1 max rel vs JAX", b, "serial",
                 relmax(g("C13", "o1_x2.5"), J("C13", "o1_x2.5")), RO, "O1: the same stencil")

@@ -2461,3 +2461,149 @@ partition; at `implicit_tol` 1e-14 ranks = serial 8.0e-15.  The C7 threshold of 
 therefore the Newton tolerance, 1e-10 (`NUMPY_NEWTON_C37`).  numpy = JAX: C37 4.3e-12 serial,
 1.9e-12 mpi2; C32 1.6e-12; C26 2.3e-14 on every config.  Test: IMEX-SSP2 stiff
 advection-diffusion on 3 ranks = serial 2e-13 (PETSc) / 7e-13 (krylov).
+
+## 58. Library defects from the thesis-case migrations (2026-10-14, dev/migration-defects)
+
+Seven defects the migrations found, each a silent wrong answer or a run that failed where the
+scheme is fine.  Numbers: NumPy unless stated; the matrix rows are in the results section of
+`matrix/README.md`.
+
+**1. The hydrostatic reconstruction with the pressure in the flux.**  Audusse et al. (2004)
+restore, per face side, the flux a lake at rest keeps: `S~ = Pi(q_i) - Pi(q_i*)`.  The code read
+`Pi` from `hydrostatic_pressure`, but the hand-written `SWE` keeps `g h^2 / 2` in its `flux`
+(`P = 0`): `S~ = 0`, and `PositiveRusanov` / `PositiveHLL` / `PositiveNonconservativeHLL` (the
+path integral runs between the reconstructed states, where `b* - b* = 0`) lost the bed slope
+entirely; `PositiveNonconservativeRusanov` integrated the raw states.  Lake at rest over
+`b = 0.2 exp(-(x-5)^2/2)`, 40 cells, 20 steps of 0.01, max |hu|:
+
+| flux | before: SWE O1 | SME(0) O1 | SWE O2 | SME(0) O2 | after (all, O1 / O2) |
+|---|---|---|---|---|---|
+| PositiveRusanov | 8.5e-2 | 0 | 8.8e-2 | 8.6e-2 | <= 1.3e-16 |
+| PositiveHLL | 8.5e-2 | 1.8e-16 | 8.8e-2 | 8.6e-2 | <= 2.3e-16 |
+| PositiveNonconservativeHLL | 8.5e-2 | 1.8e-16 | 5.0e-3 | 1.9e-16 | <= 2.3e-16 |
+| PositiveNonconservativeRusanov | 1.2e-2 | 0 | 2.5e-3 | 1.3e-16 | <= 1.3e-16 |
+| PositiveQuasilinearRusanov | 0 | 8.6e-2 | 4.2e-18 | 5.0e-3 | <= 4.3e-18 |
+| Rusanov, HLL, HLLC | 8.0e-2 (bed dropped) | 8.0e-2 | | | raise at setup |
+
+The fix is one derivation: `Pi` is the physical flux `F + P` at the lake at rest of the face
+state (depth and bed kept, every other row zero; `Numerics.rest_flux_definition`), the flux the
+conservative numerical flux evaluates at the reconstructed states.  For every derived model
+(SME 0-2, ML-SME, VAM(1) predictor, MalpassetSWE) it is `P` symbolically (their `F` vanishes at
+rest), so their kernels are unchanged; for `SWE` it is `g h^2 / 2`.  Two more defects of the same
+scheme surfaced in the sweep: (a) at order 2 `PositiveRusanov` / `PositiveHLL` had no in-cell bed
+term (the reconstructed bed varies inside the cell; the path-conservative classes carry it in
+`numerical_cell_edge_source`): they now add Audusse's centred source
+`g (h_c + h_e)/2 (b_e - b_c)` (the bed column of `B` by the same Gauss rule, exact for `g h`);
+(b) `PositiveQuasilinearRusanov` has no conservative flux (the quasilinear path integral between
+the reconstructed states already carries `g h* (eta_R - eta_L)`, zero at rest), so its `S~` is
+zero: adding it counted the pressure jump twice (not WB, and inconsistent).  A class whose face
+terms do not discretize a live column of the nonconservative matrix now raises at setup, naming
+the flux and the columns (`check_numerics`): Rusanov / HLL / HLLC on any model with a bed;
+`PositiveRusanov` / `PositiveHLL` on a model whose `B` couples more than the bed (SME(1)).
+`NonconservativeRusanov` / `QuasilinearRusanov` stay offered: consistent, not well-balanced by
+construction (Rusanov dissipation on the depth jump; 3.5e-3 above on both models alike).  A flow
+over the bump (40 steps): SWE (pressure in `F`) and SME(0) (in `P`) now agree to 1.6e-13 (HLL,
+Davis speeds since 52c), 1.7e-6 (the Rusanov family: SME(0) has no closed-form spectrum, its
+dissipation speed is the Gelfand bound) and exactly (`NonconservativeRoe`).  Before, SWE + PositiveHLL was off by O(0.1) (the river case's 57 %).  Matrix: C3 on
+plain SWE with four Positive* fluxes, O1 / O2, all four backends: max |u| <= 2.5e-15.
+
+**2. The periodic seam's `face_aux`.**  NumPy and JAX gave a boundary face the inner cell's aux on
+both sides, also at a periodic seam, where the Riemann problem's outer state is the partner's
+trace: a face kernel reading aux (the regularised `hinv` of `NonconservativeRusanov`; the
+Positive* classes rebuild it from the reconstructed depth, which hid the defect in C13) took
+`hu_R * hinv_L`.  One step, 40 cells, seam moved by 7 cells: the 2 seam cells' momentum differed
+by 1.1e-4; now 0.  The seam face now reads the partner cell's aux and CFL speed
+(`fc_other`, `fc_cfl`), the reconstruction's seam ghost the partner's aux.  foam (cyclic patches
+are coupled faces with a halo column) and AMReX (a periodic side is no boundary) were right.
+Matrix: C13 with `NonconservativeRusanov`, shift by L/2: 0 on all four backends.
+
+**3. The sliver step at the end time.**  The time is a floating-point sum: ten steps of 0.005 end
+at 0.05 - 6.9e-18 (one step of 1e-3 to 2: 1.1e-13), and the march took a further step of that
+size; the Chorin projection (`1/dt^2` in its pressure operator) failed there (VAM(1), 1-D:
+relative residual 9.4e-3 > the gate).  `landed(dt, cap)` merges a leftover to the next instant
+(end, write, checkpoint) below `LANDING_TOL = 1e-6` of the step into the step: after n steps the
+sum is off by up to ~n^2 u in units of the step, so 1e-6 merges every such residue up to n ~ 1e5
+(worst case) and lengthens the merged step by at most 1e-6 (no CFL margin is that thin).  A
+genuine remainder (0.05 / 0.004) is still its own step.  In the template (`face_rule`, the cells
+rule): every backend; runs without a sliver are bitwise unchanged.
+
+**4. JAX `initial_aux`** converts array-likes (`jnp.asarray`; tracers pass): a NumPy `Q` reached
+the vmapped BC kernels of the derivative aux and raised `TracerArrayConversionError`.
+
+**5. `equilibrium_reconstruction`** `'bernoulli'` / `'projected_bernoulli'` (moving-equilibrium
+well-balancing) were ignored by the symbolic solvers: setup now raises `NotImplementedError`;
+`'audusse'` with a Riemann class without a hydrostatic reconstruction raises `ValueError`.
+
+**6. The default pressure solve on a periodic channel.**  Not a null space and not the smoother:
+the assembled solvers (NumPy / JAX `pyamg`, JAX `hypre`, `amgx`) colour-assemble the operator on
+a sparsity pattern, and that pattern was the mesh's LSQ stencil (`mesh.lsq_neighbors`), which
+ends at a periodic seam, while the derivative aux the operator is built from samples the
+topology's stencil (`topo.lsq_neighbors`, wrapped across the seam since ANALYSIS 33) and the
+cells behind the boundary ghosts (calibration case, 8 cells: cell 0's pattern {0, 1}, its fit
+samples 7 too; 2-D: a seam cell samples both cells across).  The matrix lacked the cross-seam
+entries, GMRES converged on it, and the true residual stayed O(1): 0.78 (calibration VAM(3)),
+2.2 (VAM(1) wave, 1-D, 16 cells), 0.39 (2-D channel, C8 `per_auto`); the same solve on a dense
+pattern converged.  `operator_neighbors(topo, mesh)` is the samples of the fit: the topology's
+stencil and the cell behind each boundary-face sample (`boundary_face_cells`: inner, or the
+partner across the seam); checked against the dense operator (2-D, 16 and 48 cells: no entry
+outside it).  NumPy pyamg = GMRES to 3e-12; JAX pyamg / hypre / auto (= hypre on the CPU) failed
+before (the accept gate in the host callback) and equal NumPy's GMRES to 3e-12 now.  Matrix: C8
+`per` (each backend's default solver on a periodic VAM(1) channel; foam / AMReX: hypre, right
+before too) and `per_auto` (JAX, NumPy: 'auto' vs GMRES).
+
+**7. Derivative aux no backend computes.**  An `aux_registry` entry of target `unknown` (a
+compound such as `h*zeta`), a `limited_derivative`, or (foam / AMReX) a derivative of an aux
+function was read as 0 (JAX), skipped (NumPy `derivative_aux`) or dropped from `Kernels.H`
+(foam / AMReX).  Setup now raises, naming the aux and its target (`check_derivative_aux`; NumPy and
+JAX compute state and function targets, foam and AMReX state targets).  The one model that hit
+it, the full-stress `Sigma3D` (`d_x zc` of its in-plane stress term, `zc = b + h zeta`), takes
+`d_x b + zeta d_x h` by the chain rule (as ML-VAM's layer depths, 45i): golden m16 changes
+`h*zeta_x` (target unknown) to `h_x` (state) with `zeta` in the source term; equal after
+`h*zeta_x := zeta h_x`.  No matrix case has another target than a state row.
+
+**Matrix** (`matrix/README.md`, results 2026-10-14 dev/migration-defects): full rerun, serial
+on all four backends, mpi2 / mpi4 on JAX, foam, AMReX: 845 PASS, 0 FAIL, 44 new rows (C3 plain
+SWE, C13 seam aux, C8 periodic pressure); three rows moved at round-off (C14 1.50e-12 ->
+1.52e-12, C31 1.08e-13 -> 1.16e-13), every other row equal to 1e-6.  zoomy_core: small 451 pass,
+large / rederive only the known m05 golden and cache-correctness failures; QR (`-m qr`): 20 pass,
+10 skip (Pyodide not installed here).  After the merge of integ/20261014 (52's step guard
+`Cond(time_new > time, ...)` and `check.march` in `_time_loop`, the nested checkpoint `Cond`;
+`landed` acts on the step inside `step`, so both compose: a merged sliver gives `time_new = time
++ cap`, i.e. the instant itself): zoomy_core small 473 pass, the same two known large / rederive
+failures; C3 / C8 / C13 / C14 / C31 / C37 serial + mpi2 all PASS; QR 20 pass, 10 skip.
+
+### 58a. Moving-equilibrium well-balancing on the symbolic solvers: a plan
+
+*What the old solver does* (`zoomy_core/fvm/bernoulli_wb.py`, NumPy only, 1-D only): per face,
+each side's state is reconstructed to the common bed `b* = max(b_L, b_R)` preserving the
+discharge `q` and the per-streamline Bernoulli head `H(s) = u^2/2 + g (b + h)` (`bernoulli`:
+discharge-fraction streamline label; `projected_bernoulli`: layered, sigma-parameterised
+`|u|` weighting with signed velocity, Newton on the surface, the moments reprojected by
+quadrature); the Riemann solver and the moment NCP act on the reconstructed pair and the
+consistency source is the jump of the full conservative flux `Fc(q) - Fc(q*)` (the mass row
+cancels: `q` is preserved).  At level 0 the reconstruction is a cubic (closed form); it is exact
+for frictionless steady flows only (`H` is not conserved with friction).
+
+*Literature.*  The general form (Castro, Pares and co-workers; Gomez-Bueno et al. 2023, Zotero
+785VK5FP): a fully well-balanced reconstruction finds in each cell the stationary solution of the
+local steady ODE `F(U)_x + B U_x = S(U) H_x` (friction in `S`) with the cell's average, reconstructs
+only the fluctuation around it and subtracts the stationary flux / source; without a closed form
+the local ODE is integrated numerically (collocation RK).  Koellermeier and Pimentel-Garcia 2022
+(8FC5TJIS) is the blueprint for the shallow-water moment equations, Pimentel-Garcia's friction
+chapter (D93ZEV5W) integrates `U_x = -(J_F + B)^{-1} (S H_x + R)` to the interfaces.  The Bernoulli
+reconstruction above is the frictionless closed-form corner of this.
+
+*Where it would go.*  (1) A model operator, not a solver option: the SystemModel already carries
+`quasilinear_matrix`, `source` and the bed role, so `steady_ode_rhs(U, b_x) = -(A_n)^{-1}(S + B_b
+b_x)` is derivable symbolically (a `solve` kernel per cell, as `SourceTreatment.linearized`).
+(2) A reconstruction mode `ReconstructionSpec(equilibrium=Equilibrium.moving)` in
+`discretization/reconstruction.py`: per face, integrate the local ODE from the cell to the face
+centre (a fixed number of RK stages in the template: no new block; or a `Root` for the closed-form
+Bernoulli corner) to get `q_e*`, then add the limited fluctuation at order 2.  (3) A Riemann class
+whose consistency flux is the full `Fc` at the reconstructed states (`consistency_flux_definition`
+of item 1 generalises to it: `Pi = F + P` without the rest projection), plus the cell term
+`Fc(q_e*) - Fc(q_c)` minus the source integral along the same ODE path (zero for the exact
+stationary solution).  (4) Tests: MacDonald-type steady states (prescribed `h(x)`, the bed
+integrated from it: the exact discrete steady state is known), frictionless and with Manning,
+levels 0-2; the lake at rest as its `u = 0` corner; every backend through the template.  2-D
+needs the streamline (a velocity vector), as in the old code's 1-D restriction.

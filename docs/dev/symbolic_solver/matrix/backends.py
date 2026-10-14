@@ -60,10 +60,10 @@ class Jax:
         cls = SymbolicChorinSolverJax if r.chorin else SymbolicHyperbolicSolverJax
         kw = dict(_solver_kw(r, cls), comm=comm)
         if r.chorin:
-            # MATRIX_JAX_PRESSURE: the pressure solver (gmres; pyamg, hypre, auto)
-            s = SymbolicChorinSolverJax(
-                pressure_linear_solver=LinearSolver(os.environ.get("MATRIX_JAX_PRESSURE", "gmres")),
-                **kw)
+            # the Run's pressure solver, else MATRIX_JAX_PRESSURE (gmres; pyamg, hypre, auto)
+            pls = kw.pop("pressure_linear_solver", None) or LinearSolver(
+                os.environ.get("MATRIX_JAX_PRESSURE", "gmres"))
+            s = SymbolicChorinSolverJax(pressure_linear_solver=pls, **kw)
             Q, A = s.setup(mesh, *systems)
         else:
             s = SymbolicHyperbolicSolverJax(**kw)
@@ -136,7 +136,8 @@ class Numpy:
         kw = dict(_solver_kw(r, cls), comm=comm, mpi_linear_solver=MpiLinearSolver(
             os.environ.get("MATRIX_NUMPY_MPI_SOLVER", "auto")))
         if r.chorin:
-            s = cls(pressure_linear_solver=LinearSolver.gmres, **kw)
+            pls = kw.pop("pressure_linear_solver", None) or LinearSolver.gmres
+            s = cls(pressure_linear_solver=pls, **kw)
             Q, A = s.setup(mesh, *systems)
         else:
             s = cls(**kw)
