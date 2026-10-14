@@ -1,80 +1,38 @@
-# dev/solver-combos (wt-features) — status
+# dev/precice-chorin (wt-chorincpl) — status
 
-Worktrees: superrepo + zoomy_core, zoomy_jax, zoomy_foam, zoomy_amrex on `dev/solver-combos`
-(not pushed, not merged).  Details and measurements: ANALYSIS.md section 49.
+Worktrees: superrepo + zoomy_core, zoomy_jax (changed), zoomy_foam, zoomy_amrex (unchanged, for the
+C16 runs) on `dev/precice-chorin` from `integ/20261014`; zoomy_gui detached at integ (QR suite).
+Not pushed, not merged.  Details and measurements: ANALYSIS.md section 56.
 
-## 1. IMEX-SSP2 + implicit diffusion — done
+## preCICE + Chorin: overlapping Schwarz inside an implicit coupling window
 
-- core f5b690e, jax 162e785, foam c6bb3b0, amrex a3dec89; superrepo 873fd401 (gate 50, C37).
-- `implicit_stage` (residual.py): X - Y - A_ii dt (D(X) + S(X)) = 0 by one Newton over the mesh
-  (`implicit_solve`), D the two-point part (`diffusion_tpfa`), the rest of the flux
-  (`diffusion_correction`) explicit; Chorin's projected stages take it too.
-- gate 50 (JAX, NumPy): 0 FAIL; matrix C37 (heat, advection-diffusion vs the matrix-form scheme,
-  shear decay, VAM Stress.full Chorin; foam / AMReX = JAX <= 1.9e-14; mpi2 = serial): all PASS.
+**Design (as built).**  `ChorinTemplate.precice_march`: each participant's mesh reaches W cell
+rings across the interface (the overlap, `zoomy_core.mesh.overlap.overlap_layers`: W rings from
+the boundary tag `couple['tag']`); one step per window of an implicit preCICE scheme.  Each
+coupling iteration runs the whole step from the window start (the template keeps the window start:
+the checkpoint), the overlap holding the peer's state at the window start (`couple.read`, relative
+time 0): predictor and aux run over the overlap too (redundant; the outer rings are invalid, W must
+cover the own cells' stencils: W >= 2 for VAM(1) O1), the pressure solve keeps the overlap's
+pressure at the peer's last iterate (`couple.read_iterate`, the window end: identity rows, a
+Dirichlet subdomain solve, `pressure(dirichlet=)`), the participant writes all rows of its mirror
+cells; `couple.repeat` after `advance` restarts the window.  At the fixed point every own-cell
+equation reads the peer's values: the single-domain step to the coupling / pressure tolerances.
+Exchanged data: the n_state rows of the mirror cells (as the hyperbolic full-state exchange, on W
+rings), no stage data.
 
-## 2. AMR + diffusion (AMReX) — done
+## Milestones
 
-- core 129e32e, amrex c49e2ef; superrepo 0c165125 (gate 51, C17 `diff_*`).
-- Diffusive face fluxes refluxed (stage log entries; Crank-Nicolson by share of dt in `dlog`);
-  the levels' linear solves get their mesh; AMR `dt_of` honours a constant dt.
-- gate 51 / C17: covering level = fine single level (bitwise / 6e-16), patch mass 2e-16 with
-  reflux (3e-4 without), L1(AMR - fine) / L1(coarse - fine) 0.37 (explicit), 0.59 (implicit:
-  O(dt) halo lag, 0.38 at dt / 8).
+1. JAX, VAM(1) | VAM(1) 1-D — done: gate 54 (`gates/gate54_chorin_precice.py`), C10's wave 30 | 30
+   cells, dt = window 2^-7, t 0.25.  max|coupled - single| 6.9e-16 (standard projection), 4.7e-16
+   (increment), |mass coupled - single| 0; serial-implicit + IQN-ILS on P: 6-7 iterations per
+   window (no acceleration: 19-23, independent of W: the subdomain solve covers the own cells only).
+   W = 1: 1.4e-3 (refused now), W = 2, 3, 6: round-off.
+2. NumPy — see below.  foam / AMReX: see below.
+3. Matrix C16 — see below.
 
 ## Verification
 
-- Matrix (scratch store = main's + C17, C26, C28, C31-C34, C36 rerun, C37 new; no GPU): touched
-  cases 478 rows, 0 FAIL except C17 `dry` (NaN, pre-existing: main's libraries give the identical
-  NaN; main's store had no `dry` run).  table.md not committed (mixed-provenance store).
-- zoomy_core 362 passed; QR 27 passed, 3 skipped.
-
-## 3. preCICE + Chorin — not implemented (multi-day): plan
-
-**Where it is refused.**  `zoomy_core/symsolver/strategies/chorin.py`: `ChorinTemplate.precice_march`
-raises `NotImplementedError("Chorin with preCICE coupling")`; every backend prints the march from
-the template (JAX `SymbolicChorinSolverJax(couple=...)`, foam / AMReX `CxxChorinBackend` with
-`couple`), so all refuse there.  No matrix case covers it (C16: SME only).
-
-**Why the hyperbolic coupling does not carry over.**  `HyperbolicTemplate.precice_march` exchanges
-the O1 states next to the coupled faces once per window; both sides solve the same Riemann problem
-(`interface_flux`), so at O1 with one step per window the coupled run is the single domain to
-round-off (C16).  A Chorin step also needs (a) the predictor's derivative aux (LSQ stencils of
-radius R reach R cells across the interface: VAM's h_x, b_x, ...), (b) one elliptic pressure solve
-coupling every cell of both domains (LSQ second-derivative stencils across the interface), (c) the
-corrector's derivative aux.  No single exchange of interface states reproduces (b).
-
-**Design: overlapping Schwarz inside a preCICE implicit coupling window.**
-1. Overlap: each participant's mesh gets R_o = R + 1 layers of the peer's cells beyond the coupled
-   face (a new boundary role, filled like a distributed halo: `zoomy_core.mesh.distributed` HALO
-   cells, where the other "rank" is reached over preCICE).  Coupling mesh = the overlap cell
-   centres (read) and the own mirror layers (write).  One window = one Chorin step (constant dt,
-   MOOD off: the stage sequence must be data-independent).
-2. Window loop = preCICE implicit coupling (`serial-implicit`, IQN-ILS acceleration, relative
-   convergence 1e-12 on the exchanged data), with checkpoints: on
-   `requires_writing_checkpoint` save (Q, Qaux; with `Projection.increment` the lagged pressure is
-   in Q), on `requires_reading_checkpoint` restore.  Iteration k: the whole step (predictor,
-   pressure, correction) with every overlap read from iteration k - 1's data, the pressure solve
-   local with the peer's pressure as Dirichlet data in the overlap (Schwarz subdomain solve); at
-   the fixed point every stencil reads the peer's converged values: the single-domain step to the
-   coupling tolerance.
-3. Stage data: the states the template halos in a step (predictor input, predictor output, the
-   pressure iterate after the solve, the corrected state; IMEX-SSP2 / time_order 2: per stage),
-   one preCICE data field per (stage, row); the template numbers the halo points of the step
-   (`overlap(X, k, mesh)` block: fill stage k's overlap from the read data; `overlap_states(X, k,
-   mesh)`: the own layers to write).  Krylov iterations inside `linsolve` never exchange (the
-   outer Schwarz iteration does).
-4. Template: `ChorinTemplate.precice_march` = a While over windows, inside a While over coupling
-   iterations; new effects `couple.checkpoint()` -> (write?, read?) and `couple.converged()`;
-   `couple.read/write` take the stage-indexed data.  JAX: `PreciceAdapter` (+ checkpoint flags,
-   stage data), the overlap fill in `runtime.py` next to `_coupling`; foam: the overlap as a
-   cellZone set from data (OpenFOAM has no ghost cells on a patch); AMReX: ghost cells beyond the
-   coupled side filled from data (`couple_setup`, `Interface`).
-5. Test (gate 52, matrix C16 `vam_vam`): C10's wave, VAM(1), O1, 60 cells split 30 | 30, constant
-   dt = window: coupled vs single domain <= 1e-10 (coupling tol 1e-12, pressure rtol 1e-10), mass
-   drift <= 1e-12, coupling iterations per window reported; JAX first, then foam / AMReX, then
-   mpi2 participants.
-6. Risks: Schwarz convergence of the non-hydrostatic pressure (a Helmholtz-type operator with the
-   depth as length scale; overlap R + 1 cells; IQN needed); the volume of stage data; JAX Chorin
-   setup ~130 s per participant (the coupled gate needs both alive in one window budget).
-
-Estimate: 3-4 days (template + JAX + gate: 2; foam / AMReX overlap: 1-2).
+- C16 (all pairs, serial + mpi2, scratch store): identical to table.md (jax_jax 3.61e-15, jax_foam
+  4.94e-15, foam_foam 5.16e-15, amrex_amrex 3.55e-15, amrex_jax 3.33e-15, mass 0).
+- zoomy_core 397 passed (default tier); QR 27 passed, 3 skipped; zoomy_jax
+  test_lifted_shared_face 3 passed.
