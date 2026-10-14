@@ -2257,3 +2257,106 @@ Open:
   step collapses and the march raises.
 - HLL's normal frame needs the model's vector groups (`derive_momentum_field_indices`) and 2
   horizontal directions; otherwise the lab frame (symmetric only for walls along the axes).
+
+## 53. IMEX-SSP2 with the implicit diffusion; diffusion on AMReX AMR levels (2026-10-14, dev/solver-combos)
+
+**IMEX-SSP2 + implicit diffusion** (was `NotImplementedError` in `imex_step`).  The implicit part
+g of the tableau (Pareschi, Russo 2005, Table II) is the implicit source plus the two-point part
+D of `diffusion_matrix`; the rest of that diffusion's face flux (`diffusion_correction`: the
+tangential / non-orthogonal part, zero in 1-D and on Cartesian faces without mixed entries) is in
+the explicit part f.  Stage i: R_i = Q + sum_{j<i} (At_ij F_j + A_ij G_j), then one Newton solve
+over the mesh of X - R_i - A_ii dt (D(X) + S(X)) = 0 (`implicit_stage`; the pointwise aux follows
+the iterate, the derivative aux is frozen at R_i), F_i = dt f(Y_i) (the explicit residual with
+`split_diffusion`), G_i = dt (S(Y_i) + D(Y_i)).  Without diffusion the stage is the per-cell root
+as before (printed graph unchanged).  New vocabulary: `diffusion_tpfa`, `diffusion_correction`
+(their sum is `diffusion`) and `implicit_solve` (a Newton whose residual couples face neighbours:
+NumPy sparse LU of the coloured FD Jacobian, JAX `newton_root` + `linsolve` (exact jvp), foam /
+AMReX Jacobian-free Newton-Krylov).  The Chorin template's projected IMEX-SSP2 stages take the same
+implicit stage.  JAX: the TPFA operator is built under `ensure_compile_time_eval` (first used
+inside a traced solve it leaked a tracer).
+
+- Gate 52 (`gates/gate52_imex_diffusion.py`; JAX and NumPy identical to the digits shown), errors
+  against the exact solution of the semi-discrete system at dt = 0.0125 / 2^k, k = 0..3:
+
+| problem | errors k = 0..3 | order 2 -> 3 |
+|---|---|---|
+| heat 1-D periodic, nu dt / dx^2 = 12.8 at k = 0 | 2.03e-2 / 4.93e-3 / 1.22e-3 / 3.03e-4 | 2.01 |
+| heat 1-D Dirichlet | 3.07e-4 / 7.62e-5 / 1.90e-5 / 4.74e-6 | 2.00 |
+| heat quads periodic / Dirichlet | 1.68e-1 ... 2.43e-3 / 2.53e-3 ... 3.80e-5 | 2.02 / 2.00 |
+| advection-diffusion (walls), nu 0.02: ssp2 / lie1 / lie2 | 3.10e-2 ... 6.24e-4 / 9.68e-2 ... 9.62e-3 / 1.03e-1 ... 1.28e-2 | 1.96 / 1.04 / 1.01 |
+| the same, nu 0.2 (stiff): ssp2 / lie1 / lie2 | 2.59e-2 ... 1.28e-3 / 4.38e-2 ... 5.12e-3 / 4.29e-2 ... 5.31e-3 | 1.65 / 1.01 / 1.00 |
+
+  Every advection-diffusion run equals the scheme written in matrix form (L_a, L_d probed on the
+  NumPy backend; the stage solves (I - A_ii dt L_d) Y_i = R_i, Lie's Crank-Nicolson): JAX
+  <= 3.6e-14, NumPy <= 4.2e-12.  The stiff ssp2 order (1.23 / 1.46 / 1.65) is IMEX-SSP2's own:
+  the matrix form gives the same numbers and reaches 1.80 / 1.89 / 1.94 at dt / 16 .. / 64 (the
+  implicit DIRK is not stiffly accurate: its last row (1 - 2g, g) is not w = (1/2, 1/2), so the
+  stiff modes of the stages are damped but not exact; order reduction in the stiff regime, a
+  property of the tableau, not of the stage solve); periodic, the two operators are
+  circulant and commute, so the walls are needed to see Lie's order 1.
+- C32's viscous shear decay with IMEX-SSP2 (JAX, ny 20): L_inf vs exact 3.37e-4 (= the Lie run's
+  spatial error); time order (Richardson, dt / 2^k) 2.0001 / 2.0001.
+- Chorin, VAM(1) + Newtonian Stress.full (the predictor's diffusion_matrix, 34 nonzeros), C10's
+  wave, nu 0.01, increment projection, dt 8e-3 / 2^k, NumPy: projected IMEX-SSP2 stages L1(h)
+  Richardson 1.96 / 1.96 (q_x_0: 1.93 / 1.95), Lie per stage (time_order 2) 1.14 / 0.99 (0.69 /
+  0.71).  At nu 0.1 the Lie run (unchanged code) also fails (NumPy: singular cell Jacobian of the
+  implicit source after a few steps; JAX: NaN): not this change.
+- C++ = JAX (gate 41's heat equation, IMEX-SSP2, nx 16): AMReX 1-D 3.6e-10 (Newton 1e-10), quads
+  1.1e-15; foam quads 9.0e-16.
+
+**AMR + diffusion (AMReX).**  `diffusion_tpfa` refused AMR (`M.log`: diffusive fluxes not
+refluxed).  Now every diffusion block logs its face fluxes on an AMR level: the explicit ones (the
+`diffusion` block in an SSP-RK stage, the IMEX stage's `diffusion_correction` and its G_i
+`diffusion_tpfa`) are added to the current stage's (Wm, Wp) entry, so they carry the stage's RK
+weight (IMEX-SSP2: wt = w = 1/2, asserted in `_amr_procedures`); Crank-Nicolson's go to `M.dlog`
+with their share of dt (1/2 two-point at the start, 1 the deferred correction, 1/2 two-point at
+the end); residual evaluations inside implicit solves log nothing (`NoLog`).  `sync` integrates
+both into the flux register (Berger, Colella 1989).  New kernels `tpfa_faces` /
+`correction_faces` (the cell kernels unchanged; the correction's gradients are computed in the
+ghost layer instead of halo-filled: an AMR halo fills only state / aux rows).  Two defects of the
+AMR loop on the way: the levels' linear solves had no mesh (`the_mesh()` was null: every implicit
+solve on AMR crashed), and `dt_of` ignored a constant `dt` (a heat equation, wave speed 0, took
+one step of t_end).
+
+- Gate 53 (`gates/gate53_amrex_amr_diffusion.py`; heat equation nu 0.05, base 16^2 + one level,
+  a bump across the interface of the static patch [0.25, 0.75]^2, t 0.1; Neumann and periodic):
+
+| path | covering level vs fine single | mass, reflux / no reflux | L1(AMR - fine) / L1(coarse - fine) |
+|---|---|---|---|
+| explicit slot, SSP-RK, dt 3.2e-3 | 0 / 0 | 2.1e-16 / 2.7e-4 | 0.37 / 0.38 |
+| Lie (Crank-Nicolson), dt 1e-2 | 0 / 0 | 2.1e-16, 0 / 3.7e-4 | 0.59 / 0.59 |
+| IMEX-SSP2, dt 1e-2 | 4.4e-16 / 5.9e-16 | 0 / 3.7e-4 | 0.59 / 0.59 |
+
+  (Neumann / periodic.)  The implicit paths' larger ratio is a time lag at the interface, not the
+  refluxing: the fine halo takes the coarse level's state after its step in every stage (the
+  AMR loop's one dt, coarse first); Lie at dt / 2, / 4, / 8: 0.45 / 0.40 / 0.38, toward the explicit
+  0.37 (spatial).  C32's viscous SME (Stress.full: state-dependent, mixed A; x-varying u0), Lie,
+  covering level vs fine single: 0 (the momentum rows carry the bed's nonconservative product and
+  are not refluxed, as without diffusion).
+
+**Matrix** (serial, mpi2 / mpi4 where configured; no GPU; scratch store: main's store with C17, C26,
+C28, C31-C34, C36 rerun and C37 new; 478 rows of the touched cases): **0 FAIL** apart from C17
+`dry` (below).  C26, C28, C31, C32, C33, C34, C36: every row equals main's table to the printed
+digits (the source-only IMEX-SSP2 path and the Lie paths are unchanged; C31 VAM ssp2 1.96, SWE ssp2
+2.07).  C37: heat 2.00-2.02, advection-diffusion ssp2 1.96 / lie1 1.04 / lie2 1.01, every run =
+the matrix-form scheme (JAX <= 3.6e-14, NumPy <= 4.2e-12), shear decay ny 20 / 40 / 80 orders 1.94
+(the C32 numbers), time order 2.000, VAM(1) Stress.full Chorin ssp2 1.96 vs Lie per stage 0.99
+(JAX = NumPy); foam / AMReX vs JAX <= 1.0e-14 (heat, advection-diffusion, VAM 1.9e-14; AMReX shear
+4.4e-16, foam shear ratio 0.014 - 0.20 as C32); mpi2 = serial: JAX 1.3e-13, foam 8.0e-15, AMReX
+7.1e-15.  C17 `diff_*`: as gate 53.  zoomy_core: 362 passed (2 new: `tests/symsolver/
+test_imex_diffusion.py`); QR suite 27 passed, 3 skipped (the backend-only sessions).
+
+**C17 `dry` (pre-existing, not changed here).**  The regrid case had no run in main's store; run
+now, its final state has NaN in 796 coarse cells (mass drift NaN; `h_min` passes because it takes
+`nanmin`), identical with main's libraries (core 082acb3, amrex a177451).  No NaN to t 0.044 (the
+fine level covers the domain), NaN from a step after the regrid that shrinks the fine level
+(t 0.046 -> 0.048 with the matrix's steps; with `dt_write` 5e-4 only in the last step): erratic in
+the step sequence.  Dry coarse cells carry q != 0 at h = 0 (|q| / h up to 1e292).  Not diagnosed
+further (outside these items).
+
+**Open.**  (1) The AMR fine halo takes the coarse level after its step in every stage (time lag
+O(dt) at the interface, above); time interpolation of the coarse state needs the stage time in
+the halo fill.  (2) VAM(1) Stress.full at nu 0.1 on C10's wave fails with the unchanged Lie path
+too (NumPy singular cell Jacobian, JAX NaN).  (3) GPU configs not rerun (C9: C26 `visc`, C17 gpu1).
+(4) preCICE + Chorin: not implemented, plan in `STATUS.md` (the pressure solve couples both
+domains: overlapping Schwarz inside a preCICE implicit-coupling window).
