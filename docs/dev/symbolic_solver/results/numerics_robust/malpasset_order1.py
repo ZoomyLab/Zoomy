@@ -1,4 +1,4 @@
-"""ANALYSIS 49c: Malpasset SME(1) mixing length, order 1, CFL 0.4, HLL + hydrostatic reconstruction
+"""ANALYSIS 52c: Malpasset SME(1) mixing length, order 1, CFL 0.4, HLL + hydrostatic reconstruction
 ('hr'), point-implicit source, faces rule (--rule), to t = 120 s: closed-form vs numerical spectrum,
 the numerical one with HLL's Davis bounds or the former Rusanov pair (--hll rusanov).  Prints h_min
 over the writes, the water in the initially dry cells ("released") and the volumes.

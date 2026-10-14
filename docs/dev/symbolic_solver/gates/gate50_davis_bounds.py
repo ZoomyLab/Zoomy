@@ -1,4 +1,4 @@
-"""Gate 50: HLL's wave speeds without a closed-form spectrum (ANALYSIS 49) are bounds of the
+"""Gate 50: HLL's wave speeds without a closed-form spectrum (ANALYSIS 52) are bounds of the
 signed extremes of the spectrum: s_L <= min Re lambda(A), s_R >= max Re lambda(A), from the
 Gelfand bound of shifted matrices, s_R = min(G(A + a I) - a, a), s_L = max(a - G(a I - A), -a),
 a = G(A) (`Numerics._gelfand_extremes`; for any real c, rho(A + c I) >= max Re lambda + c).

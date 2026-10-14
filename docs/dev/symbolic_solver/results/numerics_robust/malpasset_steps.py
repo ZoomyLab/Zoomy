@@ -1,4 +1,4 @@
-"""ANALYSIS 49b: Malpasset on the thesis configuration (`../wavespeed_bound/run.py`'s settings), cells
+"""ANALYSIS 52b: Malpasset on the thesis configuration (`../wavespeed_bound/run.py`'s settings), cells
 rule, to --t-end: the step count (check.march's outputs of the JAX program) and the march wall
 time; --old-gate adds the former dt gate h > wet_dry_eps (1e-3).  Environment as malpasset_order1.py.
 """

@@ -2111,12 +2111,12 @@ Open:
 
 The four open items of section 48.
 
-### 49a. A step that does not advance the time ends the march with an error
+### 52a. A step that does not advance the time ends the march with an error
 
 - **Defect.** `_time_loop` ran `While(time < time_end)`.  A NaN `dt` made `time` NaN and the loop
   ended as if done, returning the NaN state (section 48: Malpasset at t = 687 s, 939 s).  A `dt` of 0
   (the Gelfand bound and the `eigenvalues` kernel return `+inf` for a non-finite entry) never ended
-  it: the Manning reproduction of 49d did not return within 300 s on main.
+  it: the Manning reproduction of 52d did not return within 300 s on main.
 - **Fix** (`strategies/hyperbolic.py`, `vocabulary.check.march`).  The body takes a step only if
   `time + dt > time` (a `Cond`; else the state is kept and `going = 0`); the loop runs while `time <
   time_end` and `going`; after it `check.march(time, time_end, dt, n_step, max|Q|)` raises unless
@@ -2131,7 +2131,7 @@ The four open items of section 48.
   (`amrex::Abort`), and the AMR level loop checks `t + dt > t` itself; both drivers raise
   `FloatingPointError` with the runtime's line.  The AMReX `cond` unifies tuple branches entry by
   entry (expression / Field).  Legacy JAX `run_simulation` and `run_jit_steps` raise on a NaN end.
-- **A NaN depth keeps its speed.**  The dt spectrum is `conditional(h <= 0, 0, e)` (49b): a NaN depth
+- **A NaN depth keeps its speed.**  The dt spectrum is `conditional(h <= 0, 0, e)` (52b): a NaN depth
   gives a NaN (closed form) or infinite (numerical) speed, so the march stops at the step after the
   one that produced it; `conditional(h > eps, e, 0)` gave it speed 0 and the march ran on.
 - Tests: `tests/symsolver/test_march_check.py` (NaN cell: stops at t = 0, step 1; constant dt:
@@ -2140,7 +2140,7 @@ The four open items of section 48.
   `test_march_check.py` (marked large: they build).  `sp.Abs(Q, evaluate=False)`: sympy's
   `Abs.eval` walked the whole loop graph and the IMEX-SSP2 print did not return.
 
-### 49b. The cells rule bounds every speed that moves mass
+### 52b. The cells rule bounds every speed that moves mass
 
 - **Derivation** (order 1, Rusanov / HLL on the Audusse states, `h*_K <= h_K`, the velocity kept):
   `F_h(U*_K, U*_N) = 1/2 h*_K (u_K.n + a_f) + 1/2 h*_N (u_N.n - a_f) <= 1/2 h*_K (|u_K| + a_f)` as
@@ -2172,7 +2172,7 @@ The four open items of section 48.
   27,252 with the former gate (+18 %: cells below 1e-3 m now bound the step); 2000 s wall 671 s
   against 478 s (the GPU shared with another job).
 
-### 49c. HLL's Davis speeds without a closed-form spectrum
+### 52c. HLL's Davis speeds without a closed-form spectrum
 
 - **Bound.**  For any real c, `rho(A + c I) >= max_i |lambda_i + c| >= max Re lambda + c`, so
   `s_R = min(G(A + a I) - a, a) >= max Re lambda` and `s_L = max(a - G(a I - A), -a) <= min Re
@@ -2198,7 +2198,7 @@ The four open items of section 48.
   three, mass to 3e-16.  Cost: 298 s against 68 s (six Gelfand calls per face instead of two).  Unit
   test: SME(0) 1-D dam break onto a bed step, order 1: h >= 0, mass to 1e-12.
 
-### 49d. Manning friction at rest
+### 52d. Manning friction at rest
 
 - **Expression.**  The friction rows `-g n^2 hinv^(4/3) q_x sqrt(hinv^2 q_x^2 + hinv^2 q_y^2)`; their
   derivative contains `hinv^2 q_x^2 / sqrt(...)`, 0/0 at q = 0.  JAX's implicit source (Lie,
@@ -2223,7 +2223,7 @@ The four open items of section 48.
   `zoomy_jax/tests/symsolver/test_manning_at_rest.py` (Lie, IMEX-SSP2).  Golden
   `n01_swe2d_order2` re-blessed (the source rows).
 
-### 49e. Matrix and tests
+### 52e. Matrix and tests
 
 - **Matrix** (`matrix/README.md`, results 2026-10-14 dev/numerics-robust): every serial run rerun on
   NumPy, JAX, foam and AMReX (830 runs): 754 bitwise equal to the base store, 75 at round-off (JAX
@@ -2253,7 +2253,7 @@ Open:
   Malpasset numerical-spectrum session under the cells rule did not reach 120 s in 25 min on the GPU
   (faces rule: 5 min).  The Gelfand bound would unify it with the Riemann speeds (wet-cell steps up
   to 6 % smaller).
-- Unlimited order 2 grows thin-cell velocities without bound (the film of 49b): h stays >= 0, the
+- Unlimited order 2 grows thin-cell velocities without bound (the film of 52b): h stays >= 0, the
   step collapses and the march raises.
 - HLL's normal frame needs the model's vector groups (`derive_momentum_field_indices`) and 2
   horizontal directions; otherwise the lab frame (symmetric only for walls along the axes).
