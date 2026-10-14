@@ -80,7 +80,10 @@ class cell_traces(Block):
 
 class gradient(Block):
     """`(W, Wg, mesh)` -> LSQ gradient of every row of `W` per cell, boundary faces
-    closed from the ghost values `Wg`.
+    closed from the ghost values `Wg`.  `(W, Wg, (eta, h), eps, mesh)`: in row `eta` a
+    neighbour `k` with `W[h, k] <= eps` enters cell `i`'s stencil as `min(W[eta, k],
+    W[eta, i])` (the hydrostatic extension of the free surface, `reconstruction.
+    shore_extension`).
 
     References:
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
@@ -90,7 +93,8 @@ class gradient(Block):
 class minmod(Block):
     """`(rows, W, Wg, G, mesh)` -> limiter factors in [0, 1] per row and cell (1 off
     `rows`): the largest keeping every face extrapolation within the bounds of the
-    face neighbours and boundary ghosts `Wg`.
+    face neighbours and boundary ghosts `Wg`.  `(rows, W, Wg, G, (eta, h), eps, mesh)`:
+    the bounds of row `eta` from the neighbour values of `gradient`'s shore form.
 
     References:
         Sweby 1984, https://doi.org/10.1137/0721062

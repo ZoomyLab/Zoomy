@@ -179,30 +179,43 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         WL[:, bf_face] = Q[:, inner]
         return _traces(WL, WR)
 
-    def _lsq(U, Ug, classes=None):
+    def _lsq(U, Ug, classes=None, shore=None):
         """Scaled LSQ coefficients `(rows, cells, monomials)` of `U` (core `lsq_derivatives`),
-        the boundary-face samples `Ug` (`None`: the cell value) and the closure `classes`.
+        the boundary-face samples `Ug` (`None`: the cell value), the closure `classes` and the
+        `shore` extension `(row, dry)`.
         """
         return lsq_derivatives(topo, geom, np.asarray(U, dtype=float),
                                None if Ug is None else np.asarray(Ug, dtype=float),
-                               classes if classes else None)
+                               classes if classes else None, shore)
 
-    def gradient(W, Wg, mesh):
+    def _shore(W, args):
+        """`(mesh, (row, dry))` of the trailing block arguments `(mesh,)` or
+        `((eta, h), eps, mesh)`: `dry` the cells with `W[h] <= eps`."""
+        if len(args) == 1:
+            return args[0], None
+        (row, depth), eps, mesh = args
+        return mesh, (int(row), np.asarray(W[int(depth)]) <= float(eps))
+
+    def gradient(W, Wg, *args):
         """LSQ gradient of every row of `W` per cell, closed at the boundary by constraints or by
-        the ghost samples `Wg`.
+        the ghost samples `Wg`; `(W, Wg, (eta, h), eps, mesh)`: in row `eta` a dry neighbour
+        (`W[h] <= eps`) enters as `min(W[eta, k], W[eta, i])` (`vocabulary.gradient`).
 
         References:
             Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
         """
-        D = _lsq(W, Wg, recon_classes)
+        _, shore = _shore(W, args)
+        D = _lsq(W, Wg, recon_classes, shore)
         return np.transpose(D[:, :, topo.lsq_grad_cols], (0, 2, 1))
 
-    def ghost_bounds(u, ug):
-        """Min and max of `u` over the face neighbours and the boundary ghosts `ug`."""
+    def ghost_bounds(u, ug, dry=None):
+        """Min and max of `u` over the face neighbours and the boundary ghosts `ug`; a `dry`
+        neighbour bounds as `min(u_k, u_i)` (`gradient`)."""
         lo, hi = u.copy(), u.copy()
         for a, b in ((iA, iB), (iB, iA)):
-            np.minimum.at(lo, a, u[b])
-            np.maximum.at(hi, a, u[b])
+            v = u[b] if dry is None else np.where(dry[b], np.minimum(u[b], u[a]), u[b])
+            np.minimum.at(lo, a, v)
+            np.maximum.at(hi, a, v)
         np.minimum.at(lo, inner, ug)
         np.maximum.at(hi, inner, ug)
         return lo, hi
@@ -247,11 +260,14 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         """Limiter factory: factors in [0, 1] for the state `rows` (1 elsewhere), bounded by the
         face neighbours and the ghosts.
         """
-        def factors(rows, W, Wg, G, mesh):
-            """Limiter factors for the state `rows`."""
+        def factors(rows, W, Wg, G, *args):
+            """Limiter factors for the state `rows`; `(rows, W, Wg, G, (eta, h), eps, mesh)`: the
+            bounds of row `eta` with `gradient`'s shore values."""
+            _, shore = _shore(W, args)
             phi = np.ones((W.shape[0], nc))
             for v in rows:
-                lo, hi = ghost_bounds(W[v], Wg[v])
+                dry = shore[1] if shore is not None and v == shore[0] else None
+                lo, hi = ghost_bounds(W[v], Wg[v], dry)
                 phi[v] = _limit(kind, W[v], G[v], lo, hi)
             return phi
         return factors
