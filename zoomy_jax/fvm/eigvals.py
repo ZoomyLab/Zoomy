@@ -1,24 +1,27 @@
 """Eigenvalues of a batch of small real nonsymmetric matrices, computed on the device.
 
 `jnp.linalg.eigvals` on a CUDA GPU runs cuSOLVER `Xgeev` once per matrix of the batch (a
-hybrid host / device routine with its own synchronisations): ~0.6 ms per 14 x 14 matrix on an
-L40S, 37 ms for the 61 cells of a 60-cell mesh, while LAPACK on the host takes 4 ms for the
-same batch.  `eigvals_device` follows LAPACK `dgeev`'s path for the eigenvalues (`dgebal`
+hybrid host / device routine with its own synchronisations): 0.55 ms per 14 x 14 matrix on an
+L40S, 67 ms for the 122 face sides of a 60-cell mesh (LAPACK on the host: 8 ms; this module's
+Triton kernel: 0.9 ms).  `eigvals_device` follows LAPACK `dgeev`'s path for the eigenvalues (`dgebal`
 isolation and power-of-two scaling, `dgehd2` Householder reduction, `dlahqr` double-shift QR
-with the Ahues-Tisseur deflation test, `dlanv2` for the converged 2 x 2 blocks), written with
-static indices, masks and rank-one updates, so one batched XLA program treats every matrix at
-once.  It is the same algorithm with a different order of floating-point operations: the
-eigenvalues agree with LAPACK's to round-off, not bitwise, and come in another order.
-`eigvals` keeps `jnp.linalg.eigvals` (LAPACK) on the CPU.
+with the Ahues-Tisseur deflation test, `dlanv2` for the converged 2 x 2 blocks).  The
+reduction and the QR iteration are written on whole `N x N` blocks (`N` the power of two >=
+n) with masks, never an indexed load, so that the same code is one Triton kernel on a CUDA
+GPU (Pallas: a program per matrix, the matrix in registers, the loop inside the kernel) and
+a vmapped XLA loop elsewhere.  It is LAPACK's algorithm in another order of floating-point
+operations: the eigenvalues agree with LAPACK's to round-off, not bitwise, and come in
+another order.  `eigvals` keeps `jnp.linalg.eigvals` (LAPACK) on the CPU.
 
-Derivatives (jvp, vjp) of `eigvals_device` are those of `jnp.linalg.eigvals`, which are
-evaluated for them (its primal and ordering).
+Derivatives (jvp, vjp) of `eigvals_device` are those of `jnp.linalg.eigvals`, evaluated for
+them (its primal and ordering).
 
 References:
     Anderson et al. 1999, LAPACK Users' Guide, https://doi.org/10.1137/1.9780898719604
     Francis 1961, https://doi.org/10.1093/comjnl/4.3.265
     Ahues, Tisseur 1997, LAPACK Working Note 122
     Parlett, Reinsch 1969, https://doi.org/10.1007/BF02165404
+    Tillet, Kung, Cox 2019, https://doi.org/10.1145/3315508.3329973
 """
 from __future__ import annotations
 
@@ -33,82 +36,58 @@ __all__ = ["eigvals", "eigvals_device"]
 _KEXSH, _DAT1, _DAT2 = 10, 0.75, -0.4375
 
 
-def _isolate(A):
-    """`dgebal`'s permutation as a mask: a row (column) of the active principal submatrix whose
-    off-diagonal entries inside it are all zero isolates its diagonal entry as an eigenvalue;
-    drop such rows and columns until none is left.  Returns the active mask `(n,)`."""
-    n = A.shape[-1]
-    off = (A != 0) & ~jnp.eye(n, dtype=bool)
-
-    def body(_, act):
-        act = act & (off & act[None, :]).any(axis=1)        # a zero row isolates
-        return act & (off & act[:, None]).any(axis=0)       # a zero column isolates
-    return lax.fori_loop(0, n, body, jnp.ones(n, bool))
+# ── scalar helpers (Triton-lowerable: no copysign / hypot primitives there) ──────────────
+def _signbit(x):
+    """The sign bit of the float `x` (true for -0.0)."""
+    bits = lax.bitcast_convert_type(x, jnp.uint64 if x.dtype == jnp.float64 else jnp.uint32)
+    return lax.shift_right_logical(bits, jnp.asarray(8 * x.dtype.itemsize - 1,
+                                                     bits.dtype)) != 0
 
 
-def _balance(B, sweeps=4):
-    """Scale `B` by `D^-1 B D`, `D` diagonal of powers of two (exact): per sweep every row /
-    column pair whose off-diagonal 1-norms `r`, `c` are brought closer by `2^k`, `4^k ~ r / c`,
-    where that lowers `r + c` by 5 % (Parlett-Reinsch, all pairs of a sweep at once)."""
-    n = B.shape[-1]
-    offd = jnp.asarray(~np.eye(n, dtype=bool))
-    one = jnp.ones((), B.dtype)
-    for _ in range(sweeps):
-        M = jnp.where(offd, jnp.abs(B), 0.0)
-        c, r = M.sum(axis=0), M.sum(axis=1)
-        ok = (c > 0) & (r > 0)
-        _, ec = jnp.frexp(jnp.where(ok, c, 1.0))
-        _, er = jnp.frexp(jnp.where(ok, r, 1.0))
-        f = jnp.ldexp(one, (er - ec) // 2)
-        f = jnp.where(ok & (c * f + r / f < 0.95 * (c + r)), f, 1.0)
-        B = B / f[:, None] * f[None, :]
-    return B
+def _copysign(x, y):
+    """`|x|` with the sign of `y` (Fortran `SIGN(x, y)`)."""
+    return jnp.where(_signbit(y), -jnp.abs(x), jnp.abs(x))
 
 
-def _householder(alpha, x):
-    """`dlarfg`: `(beta, tau, v)` with `(I - tau [1; v] [1; v]^T) [alpha; x] = [beta; 0]`."""
-    xnorm = jnp.sqrt(jnp.sum(x * x, axis=0))
+def _hypot(a, b):
+    """`dlapy2`: `sqrt(a^2 + b^2)` without unnecessary overflow."""
+    a, b = jnp.abs(a), jnp.abs(b)
+    w, z = jnp.maximum(a, b), jnp.minimum(a, b)
+    ws = jnp.where(w == 0, 1.0, w)
+    return jnp.where(z == 0, w, w * jnp.sqrt(1.0 + (z / ws) * (z / ws)))
+
+
+def _householder(alpha, x1, x2):
+    """`dlarfg` of `[alpha; x1; x2]`: `(beta, tau, v1, v2)`."""
+    xnorm = jnp.sqrt(x1 * x1 + x2 * x2)
     zero = xnorm == 0
-    beta = -jnp.copysign(jnp.hypot(alpha, xnorm), alpha)
-    beta_s = jnp.where(zero, 1.0, beta)
-    tau = jnp.where(zero, 0.0, (beta - alpha) / beta_s)
-    v = x * jnp.where(zero, 0.0, 1.0 / jnp.where(zero, 1.0, alpha - beta))
-    return jnp.where(zero, alpha, beta), tau, v
-
-
-def _hessenberg(B):
-    """`dgehd2`: the upper Hessenberg form of `B` by Householder reflections."""
-    n = B.shape[-1]
-    rows = np.arange(n)
-    for k in range(n - 2):
-        beta, tau, v = _householder(B[k + 1, k], B[k + 2:, k])
-        u = jnp.concatenate([jnp.zeros((k + 1,), B.dtype), jnp.ones((1,), B.dtype), v])
-        B = B - tau * jnp.outer(B @ u, u) * (rows[None, :] > k)        # from the right
-        B = B - tau * jnp.outer(u, u @ B) * (rows[None, :] > k)        # from the left
-        B = jnp.where((rows[:, None] == k + 1) & (rows[None, :] == k), beta,
-                      jnp.where((rows[:, None] > k + 1) & (rows[None, :] == k), 0.0, B))
-    return B
+    beta = -_copysign(_hypot(alpha, xnorm), alpha)
+    tau = jnp.where(zero, 0.0, (beta - alpha) / jnp.where(zero, 1.0, beta))
+    s = jnp.where(zero, 0.0, 1.0 / jnp.where(zero, 1.0, alpha - beta))
+    return jnp.where(zero, alpha, beta), tau, x1 * s, x2 * s
 
 
 def _lanv2(a, b, c, d):
     """`dlanv2`: the eigenvalues `(rt1r, rt1i, rt2r, rt2i)` of `[[a, b], [c, d]]` from its
     standardised Schur factorisation."""
-    eps = jnp.finfo(a.dtype).eps
-    sgn = lambda x: jnp.copysign(1.0, x)              # noqa: E731  (Fortran SIGN(1, x))
+    eps = float(np.finfo(np.float64).eps) if a.dtype == jnp.float64 else float(
+        np.finfo(np.float32).eps)
+    sgn = lambda x: _copysign(jnp.ones_like(x), x)         # noqa: E731  (SIGN(1, x))
     temp = a - d
     p = 0.5 * temp
     bcmax = jnp.maximum(jnp.abs(b), jnp.abs(c))
     bcmis = jnp.minimum(jnp.abs(b), jnp.abs(c)) * sgn(b) * sgn(c)
     scale = jnp.maximum(jnp.abs(p), bcmax)
-    z = (p / jnp.where(scale == 0, 1.0, scale)) * p + (bcmax / jnp.where(scale == 0, 1.0, scale)) * bcmis
+    sc = jnp.where(scale == 0, 1.0, scale)
+    z = (p / sc) * p + (bcmax / sc) * bcmis
     real = z >= 4.0 * eps
     # real eigenvalues
-    zr = p + jnp.copysign(jnp.sqrt(scale) * jnp.sqrt(jnp.where(real, z, 0.0)), p)
+    zr = p + _copysign(jnp.sqrt(scale) * jnp.sqrt(jnp.where(real, z, 0.0)), p)
     a_r = d + zr
     d_r = d - (bcmax / jnp.where(zr == 0, 1.0, zr)) * bcmis
     # complex or nearly equal eigenvalues: rotate to equal diagonal entries
     sigma = b + c
-    tau = jnp.hypot(sigma, temp)
+    tau = _hypot(sigma, temp)
     tau = jnp.where(tau == 0, 1.0, tau)
     cs = jnp.sqrt(0.5 * (1.0 + jnp.abs(sigma) / tau))
     sn = -(p / (tau * cs)) * sgn(sigma)
@@ -117,7 +96,7 @@ def _lanv2(a, b, c, d):
     b2, c2 = bb * cs + dd * sn, -aa * sn + cc * cs
     t = 0.5 * ((aa * cs + cc * sn) + (-bb * sn + dd * cs))
     split = (c2 != 0) & (b2 != 0) & (sgn(b2) == sgn(c2))          # real after all
-    pr = jnp.copysign(jnp.sqrt(jnp.abs(b2)) * jnp.sqrt(jnp.abs(c2)), c2)
+    pr = _copysign(jnp.sqrt(jnp.abs(b2)) * jnp.sqrt(jnp.abs(c2)), c2)
     a_c, d_c = jnp.where(split, t + pr, t), jnp.where(split, t - pr, t)
     b_c = jnp.where(split, b2 - c2, jnp.where((c2 != 0) & (b2 == 0), -c2, b2))
     c_c = jnp.where(split | (b2 == 0), 0.0, c2)
@@ -134,64 +113,122 @@ def _lanv2(a, b, c, d):
     return A, im, D, -im
 
 
-def _hqr(H, hi0):
+# ── whole-block access (masks and reductions only) ──────────────────────────────────────
+class _Block:
+    """Index grids of an `N x N` block: `r`, `c` (row, column of each entry), `v` (vector)."""
+
+    def __init__(self, N):
+        self.N = N
+        self.r = lax.broadcasted_iota(jnp.int32, (N, N), 0)
+        self.c = lax.broadcasted_iota(jnp.int32, (N, N), 1)
+        self.v = lax.broadcasted_iota(jnp.int32, (N,), 0)
+
+    def get(self, H, i, j):
+        """`H[i, j]`."""
+        return jnp.sum(jnp.where((self.r == i) & (self.c == j), H, 0.0))
+
+    def row(self, H, i):
+        """`H[i, :]`."""
+        return jnp.sum(jnp.where(self.r == i, H, 0.0), axis=0)
+
+    def col(self, H, j):
+        """`H[:, j]`."""
+        return jnp.sum(jnp.where(self.c == j, H, 0.0), axis=1)
+
+    def at(self, x, i):
+        """`x[i]` of a vector."""
+        return jnp.sum(jnp.where(self.v == i, x, 0.0))
+
+    def diag(self, H, offset=0):
+        """`d[r] = H[r, r + offset]` (0 outside)."""
+        return jnp.sum(jnp.where(self.c == self.r + offset, H, 0.0), axis=1)
+
+    def down(self, x):
+        """`y[r] = x[r - 1]` (0 at r = 0)."""
+        return jnp.sum(jnp.where(self.r == self.c + 1, x[None, :], 0.0), axis=1)
+
+    def up(self, x):
+        """`y[r] = x[r + 1]` (0 at r = N - 1)."""
+        return jnp.sum(jnp.where(self.c == self.r + 1, x[None, :], 0.0), axis=1)
+
+
+def _hessenberg(H, X):
+    """`dgehd2`: the upper Hessenberg form of `H` by Householder reflections."""
+    N = X.N
+    for k in range(N - 2):
+        colk = X.col(H, k)
+        alpha = X.at(colk, k + 1)
+        x = jnp.where(X.v >= k + 2, colk, 0.0)
+        xnorm = jnp.sqrt(jnp.sum(x * x))
+        zero = xnorm == 0                                        # H = I: column k stays
+        beta = -_copysign(_hypot(alpha, xnorm), alpha)
+        tau = jnp.where(zero, 0.0, (beta - alpha) / jnp.where(zero, 1.0, beta))
+        s = jnp.where(zero, 0.0, 1.0 / jnp.where(zero, 1.0, alpha - beta))
+        beta = jnp.where(zero, alpha, beta)
+        u = jnp.where(X.v == k + 1, 1.0, x * s)
+        right = X.c > k
+        Hu = jnp.sum(H * u[None, :], axis=1)                     # from the right
+        H = jnp.where(right, H - tau * Hu[:, None] * u[None, :], H)
+        uH = jnp.sum(u[:, None] * H, axis=0)                     # from the left
+        H = jnp.where(right, H - tau * u[:, None] * uH[None, :], H)
+        H = jnp.where((X.c == k) & (X.r == k + 1), beta,
+                      jnp.where((X.c == k) & (X.r > k + 1), 0.0, H))
+    return H
+
+
+def _hqr(H, hi0, X):
     """`dlahqr` (eigenvalues only, `wantt = wantz = false`) on the block `[0, hi0]` of the upper
-    Hessenberg `H`; returns `(wr, wi, ok)`, `ok` false when an eigenvalue took more than
-    `dlahqr`'s `30 max(10, hi0 + 1)` iterations."""
-    n = H.shape[-1]
+    Hessenberg `H`: `(wr, wi, ok)`, `ok` false when an eigenvalue took more than `dlahqr`'s
+    `30 max(10, hi0 + 1)` iterations."""
+    N = X.N
     dt = H.dtype
-    ulp = jnp.finfo(dt).eps
-    smlnum = jnp.finfo(dt).tiny * ((hi0 + 1).astype(dt) / ulp)
+    ulp = float(jnp.finfo(dt).eps)
+    smlnum = float(jnp.finfo(dt).tiny) * ((hi0 + 1).astype(dt) / ulp)
     itmax = 30 * jnp.maximum(10, hi0 + 1)
-    idx = np.arange(n)
-    ks = np.arange(1, n)                           # subdiagonal positions H[k, k-1]
-    ms = np.arange(max(n - 2, 0))                  # candidate start rows of a sweep
-    eye = np.eye(n)
+    v = X.v
 
     def body(state):
         H, i, kdefl, wr, wi, ok = state
-        dg, sub, sup = jnp.diagonal(H), jnp.diagonal(H, -1), jnp.diagonal(H, 1)
+        dg, sub, sup = X.diag(H), X.diag(H, -1), X.diag(H, 1)       # H[r,r], H[r,r-1], H[r,r+1]
+        dgm = X.down(dg)                                             # H[r-1, r-1]
         # -- deflation: the largest k <= i whose H[k, k-1] is negligible (Ahues-Tisseur test)
         a = jnp.abs(sub)
-        hkk = jnp.abs(dg[1:])
-        tst = jnp.abs(dg[:-1]) + hkk
-        below = jnp.concatenate([jnp.zeros((1,), dt), jnp.abs(sub[:-1])])   # |H[k-1, k-2]|
-        above = jnp.concatenate([jnp.abs(sub[1:]), jnp.zeros((1,), dt)])    # |H[k+1, k]|
-        tst = jnp.where(tst == 0, tst + below + jnp.where(ks + 1 <= hi0, above, 0.0), tst)
-        ab, ba = jnp.maximum(a, jnp.abs(sup)), jnp.minimum(a, jnp.abs(sup))
-        diff = jnp.abs(dg[:-1] - dg[1:])
+        hkk = jnp.abs(dg)
+        tst = jnp.abs(dgm) + hkk
+        below = X.down(jnp.abs(sub))                                 # |H[k-1, k-2]|
+        above = X.up(jnp.abs(sub))                                   # |H[k+1, k]|
+        tst = jnp.where(tst == 0, tst + below + jnp.where(v + 1 <= hi0, above, 0.0), tst)
+        hup = jnp.abs(X.down(sup))                                   # |H[k-1, k]|
+        ab, ba = jnp.maximum(a, hup), jnp.minimum(a, hup)
+        diff = jnp.abs(dgm - dg)
         aa, bb = jnp.maximum(hkk, diff), jnp.minimum(hkk, diff)
         s = aa + ab
         s = jnp.where(s == 0, 1.0, s)
         neg = (a <= smlnum) | ((a <= ulp * tst)
                                & (ba * (ab / s) <= jnp.maximum(smlnum, ulp * (bb * (aa / s)))))
-        l = jnp.max(jnp.where(neg & (ks <= i), ks, 0), initial=0)
-        H = jnp.where((idx[:, None] == l) & (idx[None, :] == l - 1), 0.0, H)
+        l = jnp.max(jnp.where(neg & (v >= 1) & (v <= i), v, 0))
+        H = jnp.where((X.r == l) & (X.c == l - 1), 0.0, H)
         one, two = l >= i, l == i - 1
         sweep = ~one & ~two
         # -- converged: one eigenvalue, or the two of a 2 x 2 block
         im1 = jnp.maximum(i - 1, 0)
-        r1r, r1i, r2r, r2i = _lanv2(H[im1, im1], H[im1, i], H[i, im1], H[i, i])
-        at_i, at_im1 = idx == i, (idx == im1) & two
-        wr = jnp.where(at_i & one, H[i, i], jnp.where(at_i & two, r2r,
-                                                      jnp.where(at_im1, r1r, wr)))
-        wi = jnp.where(at_i & one, 0.0, jnp.where(at_i & two, r2i,
-                                                  jnp.where(at_im1, r1i, wi)))
+        hii, hi1i1 = X.get(H, i, i), X.get(H, im1, im1)
+        hi1i, hii1 = X.get(H, im1, i), X.get(H, i, im1)
+        r1r, r1i, r2r, r2i = _lanv2(hi1i1, hi1i, hii1, hii)
+        at_i, at_im1 = v == i, (v == im1) & two
+        wr = jnp.where(at_i & one, hii, jnp.where(at_i & two, r2r, jnp.where(at_im1, r1r, wr)))
+        wi = jnp.where(at_i & one, 0.0, jnp.where(at_i & two, r2i, jnp.where(at_im1, r1i, wi)))
         kd = kdefl + 1
-        if n < 3:                           # no sweep: every block converges as is
-            return H, jnp.where(one, i - 1, i - 2), kdefl, wr, wi, ok
         # -- shifts: the trailing 2 x 2 block's eigenvalues (exceptional every 10th / 20th)
         ex_bot = (kd % (2 * _KEXSH)) == 0
         ex_top = ~ex_bot & ((kd % _KEXSH) == 0)
-        im2 = jnp.maximum(i - 2, 0)
-        lp2 = jnp.minimum(l + 2, n - 1)
-        s_ex = jnp.where(ex_bot, jnp.abs(H[i, im1]) + jnp.abs(H[im1, im2]),
-                         jnp.abs(H[l + 1, l]) + jnp.abs(H[lp2, l + 1]))
         ex = ex_bot | ex_top
-        h11 = jnp.where(ex, _DAT1 * s_ex + jnp.where(ex_bot, H[i, i], H[l, l]), H[im1, im1])
-        h21 = jnp.where(ex, s_ex, H[i, im1])
-        h12 = jnp.where(ex, _DAT2 * s_ex, H[im1, i])
-        h22 = jnp.where(ex, h11, H[i, i])
+        s_ex = jnp.where(ex_bot, jnp.abs(hii1) + jnp.abs(X.get(H, im1, jnp.maximum(i - 2, 0))),
+                         jnp.abs(X.get(H, l + 1, l)) + jnp.abs(X.get(H, l + 2, l + 1)))
+        h11 = jnp.where(ex, _DAT1 * s_ex + jnp.where(ex_bot, hii, X.get(H, l, l)), hi1i1)
+        h21 = jnp.where(ex, s_ex, hii1)
+        h12 = jnp.where(ex, _DAT2 * s_ex, hi1i)
+        h22 = jnp.where(ex, h11, hii)
         s = jnp.abs(h11) + jnp.abs(h12) + jnp.abs(h21) + jnp.abs(h22)
         zs = s == 0
         ss = jnp.where(zs, 1.0, s)
@@ -207,94 +244,137 @@ def _hqr(H, hi0):
         rt1i = jnp.where(zs | ~cplx, 0.0, rtdisc * s)
         rt2i = -rt1i
         # -- the start row m: from i-2 down to l, the first with two small subdiagonals
-        Hmm, Hm1m, Hmm1 = dg[:-2], sub[:-1], sup[:-1]
-        Hm1m1, Hm2m1 = dg[1:-1], sub[1:]
-        sm = jnp.abs(Hmm - rt2r) + jnp.abs(rt2i) + jnp.abs(Hm1m)
+        hm1m = X.up(sub)                                             # H[m+1, m]
+        hm1m1 = X.up(dg)                                             # H[m+1, m+1]
+        hm2m1 = X.up(hm1m)                                           # H[m+2, m+1]
+        sm = jnp.abs(dg - rt2r) + jnp.abs(rt2i) + jnp.abs(hm1m)
         sm = jnp.where(sm == 0, 1.0, sm)
-        h21s = Hm1m / sm
-        v0 = h21s * Hmm1 + (Hmm - rt1r) * ((Hmm - rt2r) / sm) - rt1i * (rt2i / sm)
-        v1 = h21s * (Hmm + Hm1m1 - rt1r - rt2r)
-        v2 = h21s * Hm2m1
+        h21s = hm1m / sm
+        v0 = h21s * sup + (dg - rt1r) * ((dg - rt2r) / sm) - rt1i * (rt2i / sm)
+        v1 = h21s * (dg + hm1m1 - rt1r - rt2r)
+        v2 = h21s * hm2m1
         sv = jnp.abs(v0) + jnp.abs(v1) + jnp.abs(v2)
         sv = jnp.where(sv == 0, 1.0, sv)
         v0, v1, v2 = v0 / sv, v1 / sv, v2 / sv
-        Hmm_1 = jnp.concatenate([jnp.zeros((1,), dt), sub[:-2]])           # H[m, m-1]
-        Hm_1m_1 = jnp.concatenate([jnp.zeros((1,), dt), dg[:-3]])          # H[m-1, m-1]
-        h00 = jnp.abs(Hmm_1) * (jnp.abs(v1) + jnp.abs(v2))
-        h01 = jnp.abs(v0) * (jnp.abs(Hm_1m_1) + jnp.abs(Hmm) + jnp.abs(Hm1m1))
-        brk = ((ms == l) | (h00 <= ulp * h01)) & (ms >= l) & (ms <= i - 2)
-        m = jnp.max(jnp.where(brk, ms, -1))
-        mm = jnp.maximum(m, 0)
-        vm = (v0[mm], v1[mm], v2[mm])
+        h00 = jnp.abs(sub) * (jnp.abs(v1) + jnp.abs(v2))             # H[m, m-1]
+        h01 = jnp.abs(v0) * (jnp.abs(dgm) + jnp.abs(dg) + jnp.abs(hm1m1))
+        brk = ((v == l) | (h00 <= ulp * h01)) & (v >= l) & (v <= i - 2)
+        m = jnp.max(jnp.where(brk, v, -1))
+        vm0, vm1, vm2 = X.at(v0, m), X.at(v1, m), X.at(v2, m)
         # -- the double-shift QR sweep, k = m..i-1, on rows / columns l..i
-        Hs = H
-        for k in range(n - 1):
-            act = sweep & (k >= m) & (k <= i - 1)
+        def chase(k, Hs):
+            """Bulge-chasing step `k`: the reflector of `H[k:k+3, k-1]` (the shift vector at
+            `k = m`) from the left on rows k..k+2 and from the right on columns k..k+2."""
             three = k < i - 1                                  # NR = 3, else 2
             first = k == m
-            has3 = k + 2 <= n - 1
-            if k > 0:
-                c0, c1 = Hs[k, k - 1], Hs[k + 1, k - 1]
-                c2 = jnp.where(three, Hs[k + 2, k - 1], 0.0) if has3 else 0.0 * c0
-                x0 = jnp.where(first, vm[0], c0)
-                x1 = jnp.where(first, vm[1], c1)
-                x2 = jnp.where(first, vm[2], c2)
-            else:
-                x0, x1, x2 = vm
-            x2 = jnp.where(three, x2, 0.0)
-            beta, t1, w = _householder(x0, jnp.stack([x1, x2]))
-            w2, w3 = w[0], jnp.where(three, w[1], 0.0)
+            r0, r1, r2 = X.row(Hs, k), X.row(Hs, k + 1), X.row(Hs, k + 2)
+            x0 = jnp.where(first, vm0, X.at(r0, k - 1))
+            x1 = jnp.where(first, vm1, X.at(r1, k - 1))
+            x2 = jnp.where(three, jnp.where(first, vm2, X.at(r2, k - 1)), 0.0)
+            beta, t1, w2, w3 = _householder(x0, x1, x2)
+            w3 = jnp.where(three, w3, 0.0)
             t2, t3 = t1 * w2, t1 * w3
-            if k > 0:                                          # the bulge column k-1
-                upd = act & ~first
-                keep = act & first & (m > l)
-                col = idx[None, :] == k - 1
-                Hs = jnp.where(col & (idx[:, None] == k) & upd, beta,
-                               jnp.where(col & (idx[:, None] == k) & keep, Hs * (1.0 - t1),
-                                         jnp.where(col & (idx[:, None] == k + 1) & upd, 0.0,
-                                                   jnp.where(col & (idx[:, None] == k + 2)
-                                                             & upd & three, 0.0, Hs))))
-            # from the left: rows k, k+1 (, k+2) on columns k..i
-            cmask = act & (idx >= k) & (idx <= i)
-            r3 = Hs[k + 2] if has3 else jnp.zeros((n,), dt)
-            srow = jnp.where(three, Hs[k] + w2 * Hs[k + 1] + w3 * r3, Hs[k] + w2 * Hs[k + 1])
-            crow = t1 * eye[k] + t2 * eye[k + 1] + (t3 * eye[k + 2] if has3 else 0.0)
+            colk = X.c == k - 1                                # the bulge column k-1
+            Hs = jnp.where(colk & (X.r == k), jnp.where(first, jnp.where(m > l, Hs * (1.0 - t1),
+                                                                         Hs), beta),
+                           jnp.where(colk & ((X.r == k + 1) | ((X.r == k + 2) & three))
+                                     & ~first, 0.0, Hs))
+            crow = jnp.where(v == k, t1, jnp.where(v == k + 1, t2,
+                                                   jnp.where(v == k + 2, t3, 0.0)))
+            # from the left: rows k, k+1 (, k+2) on columns k..i (column k-1 is not among them)
+            srow = jnp.where(three, r0 + w2 * r1 + w3 * r2, r0 + w2 * r1)
+            cmask = (v >= k) & (v <= i)
             Hs = jnp.where(cmask[None, :] & (crow != 0)[:, None],
                            Hs - crow[:, None] * srow[None, :], Hs)
             # from the right: columns k, k+1 (, k+2) on rows l..min(k+3, i)
-            rmask = act & (idx >= l) & (idx <= jnp.minimum(k + 3, i))
-            c3 = Hs[:, k + 2] if has3 else jnp.zeros((n,), dt)
-            scol = jnp.where(three, Hs[:, k] + w2 * Hs[:, k + 1] + w3 * c3,
-                             Hs[:, k] + w2 * Hs[:, k + 1])
-            Hs = jnp.where(rmask[:, None] & (crow != 0)[None, :],
-                           Hs - scol[:, None] * crow[None, :], Hs)
+            c0, c1, c2 = X.col(Hs, k), X.col(Hs, k + 1), X.col(Hs, k + 2)
+            scol = jnp.where(three, c0 + w2 * c1 + w3 * c2, c0 + w2 * c1)
+            rmask = (v >= l) & (v <= jnp.minimum(k + 3, i))
+            return jnp.where(rmask[:, None] & (crow != 0)[None, :],
+                             Hs - scol[:, None] * crow[None, :], Hs)
+        Hs = lax.fori_loop(jnp.where(sweep, m, 0), jnp.where(sweep, i, 0), chase, H)
         H = jnp.where(sweep, Hs, H)
         i = jnp.where(one, i - 1, jnp.where(two, i - 2, i))
         kdefl = jnp.where(sweep, kd, 0)
         ok = ok & ~(sweep & (kd > itmax))
         return H, i, kdefl, wr, wi, ok
 
-    z = jnp.zeros((n,), dt)
+    z = jnp.zeros((N,), dt)
     _, _, _, wr, wi, ok = lax.while_loop(
         lambda s: (s[1] >= 0) & s[5], body,
-        (H, hi0, jnp.zeros((), jnp.int32), z, z, jnp.ones((), bool)))
+        (H, hi0, jnp.zeros((), jnp.int32), z, z, jnp.ones((), jnp.bool_)))
     return wr, wi, ok
 
 
-def _eigvals_one(A):
-    """`(wr, wi)` of one real matrix by `dgeev`'s path (eigenvalues only)."""
+def _schur_eigvals(H, hi0):
+    """Hessenberg reduction and QR iteration of one `N x N` block, active block `[0, hi0]`."""
+    X = _Block(H.shape[-1])
+    return _hqr(_hessenberg(H, X), hi0, X)
+
+
+def _qr_xla(B, hi0):
+    """`_schur_eigvals` of every matrix, vmapped XLA."""
+    wr, wi, ok = jax.vmap(_schur_eigvals)(B, hi0)
+    return wr, wi, jnp.broadcast_to(ok.astype(jnp.int32)[:, None], wr.shape)
+
+
+def _qr_triton(B, hi0):
+    """`_schur_eigvals` of every matrix in one Triton kernel (Pallas), a program per matrix."""
+    from jax.experimental import pallas as pl
+    from jax.experimental.pallas import triton as plt
+    nb, N, _ = B.shape
+    hiv = jnp.broadcast_to(hi0[:, None], (nb, N)).astype(jnp.int32)
+
+    def kernel(h_ref, hi_ref, wr_ref, wi_ref, ok_ref):
+        """One matrix: its eigenvalues and the convergence flag (broadcast over the row)."""
+        wr, wi, ok = _schur_eigvals(h_ref[0], jnp.max(hi_ref[0]))
+        wr_ref[0] = wr
+        wi_ref[0] = wi
+        ok_ref[0] = jnp.where(ok, 1, 0) + jnp.zeros((N,), jnp.int32)
+
+    vec = pl.BlockSpec((1, N), lambda b: (b, 0))
+    return pl.pallas_call(
+        kernel,
+        out_shape=(jax.ShapeDtypeStruct((nb, N), B.dtype), jax.ShapeDtypeStruct((nb, N), B.dtype),
+                   jax.ShapeDtypeStruct((nb, N), jnp.int32)),
+        grid=(nb,),
+        in_specs=[pl.BlockSpec((1, N, N), lambda b: (b, 0, 0)), vec],
+        out_specs=(vec, vec, vec),
+        compiler_params=plt.CompilerParams(num_warps=2),     # 1: ptxas fails; 4: slower
+    )(B, hiv)
+
+
+def _isolate(A):
+    """`dgebal`'s permutation as a mask: a row (column) of the active principal submatrix whose
+    off-diagonal entries inside it are all zero isolates its diagonal entry as an eigenvalue;
+    drop such rows and columns until none is left (at most n rounds).  Returns the active mask
+    `(..., n)`."""
     n = A.shape[-1]
-    act = _isolate(A)
-    perm = jnp.argsort(~act, stable=True)                  # the active rows first
-    m = jnp.sum(act).astype(jnp.int32)
-    idx = jnp.arange(n)
-    inside = (idx[:, None] < m) & (idx[None, :] < m)
-    B = jnp.where(inside, A[perm][:, perm], 0.0)
-    wr, wi, ok = _hqr(_hessenberg(_balance(B)), m - 1)
-    wr = jnp.where(idx < m, wr, jnp.diagonal(A)[perm])     # the isolated eigenvalues
-    wi = jnp.where(idx < m, wi, 0.0)
-    nan = jnp.asarray(jnp.nan, A.dtype)
-    return jnp.where(ok, wr, nan), jnp.where(ok, wi, nan)
+    off = (A != 0) & ~jnp.eye(n, dtype=bool)
+    act = jnp.ones(A.shape[:-1], bool)
+    for _ in range(n):              # unrolled: no loop condition to read back on a GPU
+        act = act & (off & act[..., None, :]).any(axis=-1)          # a zero row isolates
+        act = act & (off & act[..., :, None]).any(axis=-2)          # a zero column isolates
+    return act
+
+
+def _balance(B, sweeps=4):
+    """Scale `B` by `D^-1 B D`, `D` diagonal of powers of two (exact): per sweep every row /
+    column pair whose off-diagonal 1-norms `r`, `c` are brought closer by `2^k`, `4^k ~ r / c`,
+    where that lowers `r + c` by 5 % (Parlett-Reinsch, all pairs of a sweep at once)."""
+    n = B.shape[-1]
+    offd = jnp.asarray(~np.eye(n, dtype=bool))
+    one = jnp.ones((), B.dtype)
+    for _ in range(sweeps):
+        M = jnp.where(offd, jnp.abs(B), 0.0)
+        c, r = M.sum(axis=-2), M.sum(axis=-1)
+        ok = (c > 0) & (r > 0)
+        _, ec = jnp.frexp(jnp.where(ok, c, 1.0))
+        _, er = jnp.frexp(jnp.where(ok, r, 1.0))
+        f = jnp.ldexp(one, (er - ec) // 2)
+        f = jnp.where(ok & (c * f + r / f < 0.95 * (c + r)), f, 1.0)
+        B = B / f[..., :, None] * f[..., None, :]
+    return B
 
 
 @jax.custom_jvp
@@ -303,10 +383,25 @@ def eigvals_device(A):
     on the device (module docstring); NaN for a matrix whose QR iteration does not converge, as
     `jnp.linalg.eigvals` gives."""
     batch, n = A.shape[:-2], A.shape[-1]
-    flat = A.reshape((-1, n, n))
-    if flat.shape[0] == 0 or n == 0:
+    A = A.reshape((-1, n, n))
+    if A.shape[0] == 0 or n == 0:
         return jnp.zeros(batch + (n,), jnp.result_type(A.dtype, 1j))
-    wr, wi = jax.vmap(_eigvals_one)(flat)
+    N = max(2, 1 << (n - 1).bit_length())                  # the block: a power of two >= n
+    act = _isolate(A)
+    perm = jnp.argsort(~act, axis=-1, stable=True)          # the active rows first
+    m = jnp.sum(act, axis=-1).astype(jnp.int32)
+    idx = jnp.arange(n)
+    inside = (idx[:, None] < m[:, None, None]) & (idx[None, :] < m[:, None, None])
+    P = jnp.take_along_axis(jnp.take_along_axis(A, perm[:, :, None], 1), perm[:, None, :], 2)
+    B = _balance(jnp.where(inside, P, 0.0))
+    B = jnp.pad(B, ((0, 0), (0, N - n), (0, N - n)))
+    wr, wi, ok = lax.platform_dependent(B, m - 1, cuda=_qr_triton, default=_qr_xla)
+    wr, wi, ok = wr[:, :n], wi[:, :n], ok[:, :1] != 0
+    diag = jnp.take_along_axis(jnp.diagonal(A, axis1=1, axis2=2), perm, 1)
+    wr = jnp.where(idx < m[:, None], wr, diag)                # the isolated eigenvalues
+    wi = jnp.where(idx < m[:, None], wi, 0.0)
+    nan = jnp.asarray(jnp.nan, A.dtype)
+    wr, wi = jnp.where(ok, wr, nan), jnp.where(ok, wi, nan)
     return lax.complex(wr, wi).reshape(batch + (n,))
 
 

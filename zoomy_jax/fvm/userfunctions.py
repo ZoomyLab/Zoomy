@@ -104,7 +104,7 @@ def eigenvalues(*a_flat):
     inside the fused `lax.while_loop`.  CPU: `jnp.linalg.eigvals` (LAPACK);
     GPU: `zoomy_jax.fvm.eigvals.eigvals_device`, LAPACK's algorithm batched on
     the device (cuSOLVER `Xgeev`, what `jnp.linalg.eigvals` runs there, takes
-    one host-synchronised call per matrix: 7x slower for a 60-cell mesh).
+    one host-synchronised call per matrix: ~75x slower for a 60-cell mesh).
     Batched: each arg may be a scalar or a `(n_faces,)` array."""
     from zoomy_jax.fvm.eigvals import eigvals
     n = int(round(len(a_flat) ** 0.5))
