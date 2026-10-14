@@ -26,7 +26,8 @@ from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_closure_derivative
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
 from zoomy_core.symsolver.discretization.residual import check_derivative_aux
-from zoomy_core.symsolver.numpy_backend.assembly import cell_pattern, host_amg_solve
+from zoomy_core.symsolver.numpy_backend.assembly import (cell_pattern, host_amg_solve,
+                                                          operator_neighbors)
 from zoomy_jax.fvm.implicit_ad import cellwise_solve, newton_root
 from zoomy_jax.mesh.mesh import lsq_gradient_per_field
 from zoomy_jax.fvm.reconstruction_jax import (
@@ -496,7 +497,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
     pyamg = _pyamg() if ls.get("backend") == "pyamg" else None
     hyp = _hypre() if ls.get("backend") == "hypre" else None
     patterns = {}
-    lsq_nbrs = (np.asarray(mesh_np.lsq_neighbors)
+    # the assembled sparsity: the LSQ stencil and the periodic partners (operator_neighbors)
+    lsq_nbrs = (operator_neighbors(mesh_np)
                 if amgx is not None or pyamg is not None or hyp is not None else None)
 
     def assembled(op, n, ncells=nc, n_rows=None):
