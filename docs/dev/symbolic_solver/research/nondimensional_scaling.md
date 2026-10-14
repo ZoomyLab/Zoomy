@@ -1,4 +1,4 @@
-# Non-dimensional shallow scaling: design (agreed 2026-10-13, not implemented)
+# Non-dimensional shallow scaling: design (agreed 2026-10-13; implemented 2026-10-14 on dev/nondim, opt-in `scaling=` on SME / VAM / ML-SME, ANALYSIS 49)
 
 Goal: replace the hand-made truncations of the moment-model derivation (`moment_scaling`'s in-plane
 drop, the hydrostatic step's dropped vertical inertia, `small_slope_scaling`, the `nu d_e d_e w` drop
