@@ -34,6 +34,10 @@ __all__ = ["eigvals", "eigvals_device"]
 
 #: `dlahqr`'s exceptional-shift period and weights
 _KEXSH, _DAT1, _DAT2 = 10, 0.75, -0.4375
+#: the largest block a Triton program takes (L40S, 122 matrices: n = 14, 2 warps 0.9 ms; n = 30,
+#: 2 warps 5.9 ms; n = 40, 8 warps 34 ms, compiled in 50 s; cuSOLVER 67 / 137 / 180 ms): above,
+#: the vmapped XLA loop
+_TRITON_MAX = 64
 
 
 # ── scalar helpers (Triton-lowerable: no copysign / hypot primitives there) ──────────────
@@ -340,7 +344,7 @@ def _qr_triton(B, hi0):
         grid=(nb,),
         in_specs=[pl.BlockSpec((1, N, N), lambda b: (b, 0, 0)), vec],
         out_specs=(vec, vec, vec),
-        compiler_params=plt.CompilerParams(num_warps=2),     # 1: ptxas fails; 4: slower
+        compiler_params=plt.CompilerParams(num_warps=2 if N <= 32 else 8),  # 1: ptxas fails
     )(B, hiv)
 
 
@@ -395,7 +399,10 @@ def eigvals_device(A):
     P = jnp.take_along_axis(jnp.take_along_axis(A, perm[:, :, None], 1), perm[:, None, :], 2)
     B = _balance(jnp.where(inside, P, 0.0))
     B = jnp.pad(B, ((0, 0), (0, N - n), (0, N - n)))
-    wr, wi, ok = lax.platform_dependent(B, m - 1, cuda=_qr_triton, default=_qr_xla)
+    if N <= _TRITON_MAX:
+        wr, wi, ok = lax.platform_dependent(B, m - 1, cuda=_qr_triton, default=_qr_xla)
+    else:
+        wr, wi, ok = _qr_xla(B, m - 1)
     wr, wi, ok = wr[:, :n], wi[:, :n], ok[:, :1] != 0
     diag = jnp.take_along_axis(jnp.diagonal(A, axis1=1, axis2=2), perm, 1)
     wr = jnp.where(idx < m[:, None], wr, diag)                # the isolated eigenvalues
