@@ -273,6 +273,23 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         WL[:, interior], WR[:, interior], WL[:, bf_face] = L, R, B
         return _traces(WL, WR)
 
+    def front_cells(Q, G, phi, rows, tol, mesh):
+        """Cells whose depth `Q[depth] + phi[depth] G[w] . r_f` falls below
+        `-(1/tol - 1) Q[depth]` at a face, `(depth, w) = rows`: the a-priori front detector
+        (`ReconstructionSpec.front_tol`).
+
+        References:
+            Gallardo, Pares, Castro 2007, https://doi.org/10.1016/j.jcp.2007.08.007
+        """
+        depth, w = (int(r) for r in rows)
+        h = np.asarray(Q, dtype=float)[depth:depth + 1]
+        phi = np.broadcast_to(np.asarray(phi, dtype=float), (G.shape[0], nc))
+        hL, hR = extrapolate(h, G[w:w + 1] * phi[depth:depth + 1, None, :], 1.0, mesh)
+        low = np.full(nc, np.inf)
+        np.minimum.at(low, fc0, hL[0])
+        np.minimum.at(low, iB, hR[0, interior])
+        return low < h[0] * (1.0 - 1.0 / float(tol))
+
     nbr = np.where(is_bnd, nc, fc1)          # neighbour, or nc (dropped) at a boundary face
 
     def divergence(Wm, Wp, mesh):
@@ -660,7 +677,8 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         boundary_states=boundary_states, boundary_traces=boundary_traces,
         boundary_ghosts=boundary_ghosts, pointwise=pointwise, cell_traces=cell_traces,
         gradient=gradient, minmod=limiter("minmod"), venkatakrishnan=limiter("vk"),
-        barth_jespersen=limiter("bj"), extrapolate=extrapolate, divergence=divergence,
+        barth_jespersen=limiter("bj"), extrapolate=extrapolate, front_cells=front_cells,
+        divergence=divergence,
         edge_source=edge_source, derivative_aux=derivative_aux,
         inadmissible=inadmissible, reduce_min=np.min, reduce_any=np.any,
         halo=lambda X, mesh: X, put=put, zeros=zeros, clean_round_off=clean_round_off,

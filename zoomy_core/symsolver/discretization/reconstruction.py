@@ -7,7 +7,7 @@ import sympy as sp
 
 from zoomy_core.symsolver.core import unpack
 from zoomy_core.symsolver.vocabulary import (
-    barth_jespersen, boundary_states, cell_traces, extrapolate, face_aux,
+    barth_jespersen, boundary_states, cell_traces, extrapolate, face_aux, front_cells,
     gradient, minimum, minmod, pointwise, put, select, take, venkatakrishnan)
 
 LIMITERS = {"minmod": minmod, "venkatakrishnan": venkatakrishnan,
@@ -52,6 +52,9 @@ def reconstruct(nsm, Q, Qaux, p, time, order, demote, mesh):
             Wg = put(Wg, (bed,), take(Qg, (depth,)))
         G = gradient(W, Wg, mesh)
         phi = limited(nsm, W, Wg, G, mesh)
+        front = front_demotion(nsm, Q, G, phi, rows, mesh)
+        if front is not None:
+            demote = front if demote is sp.S.false else select(demote, sp.S.true, front)
         if demote is not sp.S.false:
             phi = select(demote, 0, phi)
         WL, WR = unpack(extrapolate(W, G, phi, mesh), 2)
@@ -61,6 +64,26 @@ def reconstruct(nsm, Q, Qaux, p, time, order, demote, mesh):
         return WL, WR
     AL, AR = unpack(face_aux(Qaux, mesh), 2)
     return pointwise(to_q, WL, AL, p), pointwise(to_q, WR, AR, p)
+
+
+def front_demotion(nsm, Q, G, phi, rows, mesh):
+    """The cells the a-priori front detector (`ReconstructionSpec.front_tol`) demotes to
+    first order, or None when it is off: the depth `h` extrapolated with the gradient of
+    `h` and the limiter factor of the free-surface row `eta`, i.e. the depth the limited
+    `eta` and the bed imply.
+
+    References:
+        Gallardo, Pares, Castro 2007, https://doi.org/10.1016/j.jcp.2007.08.007
+    """
+    tol = getattr(nsm.reconstruction, "front_tol", None)
+    if tol is None:
+        return None
+    if rows is None:
+        raise ValueError("ReconstructionSpec(front_tol=...) needs the free-surface "
+                         "reconstruction (variables 'model' with the pair h, eta = b + h "
+                         "and bed 'derived')")
+    bed, depth = rows                  # W: h in the bed's slot, eta in the depth's
+    return front_cells(Q, G, phi, (depth, bed), sp.Float(tol), mesh)
 
 
 def maps(nsm):

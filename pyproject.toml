@@ -23,7 +23,7 @@ classifiers = [
 
 dependencies = [
   "sympy>=1.14",
-  "numpy",
+  "numpy>=2",                # the array-API `rtol=` of linalg.pinv (mesh/geometry_xp.py)
   "scipy",
   "param",
   "loguru",

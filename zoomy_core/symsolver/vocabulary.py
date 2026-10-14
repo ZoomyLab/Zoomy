@@ -113,6 +113,18 @@ class barth_jespersen(Block):
     """
 
 
+class front_cells(Block):
+    """`(Q, G, phi, (depth, w), tol, mesh)` -> cell mask: the cells whose depth
+    `h_f = Q[depth] + phi[depth] G[w] . r_f` falls below `-(1/tol - 1) Q[depth]` at a face
+    `f` (`G` the gradients of the reconstruction variables, `phi` their limiter factors,
+    `r_f` from the cell centre to the face centre), i.e. whose positivity factor
+    `h / (h - min_f h_f)` is below `tol`.
+
+    References:
+        Gallardo, Pares, Castro 2007, https://doi.org/10.1016/j.jcp.2007.08.007
+    """
+
+
 class extrapolate(Block):
     """`(W, G, phi, mesh)` -> `(WL, WR)`: each cell's `W` moved to the face centre
     by `phi * G`; `WR` on a boundary face is a placeholder for

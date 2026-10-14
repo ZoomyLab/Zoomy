@@ -105,7 +105,7 @@ aux_registry:
 == numerics ==
 riemann: PositiveNonconservativeRusanov
 riemann_explicit: False
-reconstruction: ReconstructionSpec(order=2, limiter=Limiter.venkatakrishnan, free_surface_aware=False, positivity='', variables=ReconstructedVariables.model, bed=BedReconstruction.derived, limiters={}, ties={})
+reconstruction: ReconstructionSpec(order=2, limiter=Limiter.venkatakrishnan, free_surface_aware=False, positivity='', variables=ReconstructedVariables.model, bed=BedReconstruction.derived, limiters={}, ties={}, front_tol=None)
 diffusion: DiffusionSpec(enabled=False, scheme='crank_nicolson', nu=None)
 eigenvalue_eps: 1e-08
 dt_max: 5.0
@@ -114,6 +114,6 @@ regularization_eps: 0.01
 eigenvalue_treatment: 'regularize'
 eigenvalue_guard: 'gate'
 normalize_normal: True
-source_treatment: 'explicit'
+source_treatment: SourceTreatment.explicit
 default_operations: ['_op', '_op', '_op']
 extra_operations: []

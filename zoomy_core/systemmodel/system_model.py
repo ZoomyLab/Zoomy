@@ -1380,7 +1380,7 @@ class SystemModel:
         mutated) primaries; `eigenvalues=True` also re-derives the spectrum.
         """
         self.quasilinear_matrix = self._compute_quasilinear_matrix()
-        # POINT-IMPLICIT SOURCE: once ``source_treatment='linearized'`` has
+        # POINT-IMPLICIT SOURCE: once ``source_treatment=SourceTreatment.linearized`` has
         # rewritten ``source`` into ``(I − dt·J)⁻¹ S``, that expression is a
         # single OPAQUE per-cell ``solve`` kernel.  ``sp.diff`` through an
         # opaque Function does not evaluate — it yields
@@ -1398,7 +1398,8 @@ class SystemModel:
         # new column is genuinely zero here — ``register_aux`` runs BEFORE
         # ``regularize_pow``, so the freshly added aux does not yet occur in the
         # source — so pad instead of recomputing.
-        if getattr(self, "source_treatment", "explicit") == "linearized":
+        from zoomy_core.numerics.numerical_system_model import SourceTreatment
+        if getattr(self, "source_treatment", None) is SourceTreatment.linearized:
             self.source_jacobian_wrt_aux_variables = _to_zarray(
                 self._pad_aux_jacobian_columns(
                     self.source_jacobian_wrt_aux_variables))

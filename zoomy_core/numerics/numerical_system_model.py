@@ -20,6 +20,14 @@ class Limiter(Option):
     barth_jespersen = "barth_jespersen"
 
 
+class SourceTreatment(Option):
+    """How the NSM supplies the source term to every backend solver."""
+    #: the raw source `S`
+    explicit = "explicit"
+    #: the point-implicit update `S_lin = (I - dt J)^-1 S`, `J = dS/dQ + dS/daux daux/dQ`
+    linearized = "linearized"
+
+
 class ReconstructedVariables(Option):
     """What the symbolic solvers reconstruct."""
     #: the model's reconstruction variables W(Q) (e.g. SWE / SME: eta = b + h, u = hinv q)
@@ -449,7 +457,8 @@ class ReconstructionSpec:
     Positivity on the symbolic solvers (`zoomy_core.symsolver`) is the hydrostatic
     reconstruction and the CFL step at order 1, MOOD (the solver's `mood`) at order 2;
     `positivity` is read by the legacy `zoomy_core.fvm` solvers only and the symbolic
-    solvers reject a non-empty value.
+    solvers reject a non-empty value.  `front_tol` is MOOD's a-priori companion at a wet/dry
+    front: it demotes cells to order 1 before the step, never caps a value.
 
     References:
         van Leer 1979, https://doi.org/10.1016/0021-9991(79)90145-1
@@ -479,8 +488,19 @@ class ReconstructionSpec:
     bed: BedReconstruction = BedReconstruction.derived
     limiters: dict = field(default_factory=dict)
     ties: dict = field(default_factory=dict)
+    # ``front_tol``: the a-priori wet/dry front detector of the order-2 free-surface
+    # reconstruction (bed derived), in (0, 1], or None (off).  Each step every cell whose
+    # depth, extrapolated with the free-surface (eta) row's limiter, would fall below
+    # -(1/front_tol - 1) h at a face is reconstructed at first order (Gallardo et al. 2007:
+    # first order at the wet/dry front), before the step and in every MOOD redo; MOOD still
+    # repairs what remains inadmissible.  Without it the order-2 candidate at a fast wet/dry
+    # front is inadmissible on most steps and MOOD's whole-step fallback makes the run first
+    # order.
+    front_tol: Optional[float] = None
 
     def __post_init__(self):
+        if self.front_tol is not None and not 0 < float(self.front_tol) <= 1:
+            raise ValueError(f"front_tol {self.front_tol!r}: in (0, 1], or None")
         self.limiter = Limiter(typed(Limiter, self.limiter, "limiter"))
         self.variables = ReconstructedVariables(typed(ReconstructedVariables, self.variables,
                                                       "variables"))
@@ -512,7 +532,7 @@ def _linearize_source(sm):
     n = sm.n_equations
     if sm.n_state != n:
         raise ValueError(
-            "source_treatment='linearized' requires a square system "
+            "source_treatment=SourceTreatment.linearized requires a square system "
             f"(n_equations == n_state); got n_equations={n}, "
             f"n_state={sm.n_state}.")
     if sm.source is None:
@@ -625,14 +645,14 @@ class NumericalSystemModel(SystemModel):
     # right list at setup time and passes it here.
     scaled_q_indices: Optional[list] = None
     # How the NSM supplies the source to every backend solver:
-    #   "explicit"   — raw ``S`` (default, unchanged behaviour);
-    #   "linearized" — the point-implicit update ``S_lin = (I − dt·J)⁻¹ S`` with
+    #   SourceTreatment.explicit   — raw ``S`` (default, unchanged behaviour);
+    #   SourceTreatment.linearized — the point-implicit update ``S_lin = (I − dt·J)⁻¹ S`` with
     #                  the consistent ``J = J_var + J_aux · (∂aux/∂Q)``.
     # The transform happens ONCE at construction (``_linearize_source``); every
     # backend then consumes ``source`` as an ordinary source, the only new atom
     # being the per-cell opaque ``solve``.  This is an NSM-level knob, NOT a
     # per-backend solver mode.
-    source_treatment: str = "explicit"
+    source_treatment: SourceTreatment = SourceTreatment.explicit
 
     # ── REQ-194 depth-law axes (all default to TODAY'S behaviour) ──
     #
@@ -962,7 +982,7 @@ class NumericalSystemModel(SystemModel):
         extra_operations: Optional[list] = None,
         additional_systems: Optional[list] = None,
         scaled_q_indices: Optional[list] = None,
-        source_treatment: str = "explicit",
+        source_treatment: SourceTreatment = SourceTreatment.explicit,
         depth_regularization: Optional[str] = None,
         regularization_eps: float = 1e-2,
         eigenvalue_treatment: str = "regularize",
@@ -987,7 +1007,7 @@ class NumericalSystemModel(SystemModel):
             extra_operations: opt-in operations run by `derive`.
             additional_systems: co-running sub-systems whose derivatives size the LSQ stencil.
             scaled_q_indices: rows a hydrostatic reconstruction rescales by `h*/h`.
-            source_treatment: `"explicit"` or `"linearized"` (point-implicit).
+            source_treatment: a `SourceTreatment`: `explicit`, or `linearized` (point-implicit).
             depth_regularization, regularization_eps, eigenvalue_treatment, eigenvalue_guard, normalize_normal: depth-law axes, see `depth_law_study`.
 
         Returns:
@@ -1042,11 +1062,9 @@ class NumericalSystemModel(SystemModel):
             reconstruction = ReconstructionSpec()
         if diffusion is None:
             diffusion = DiffusionSpec(enabled=_diffusion_auto_enabled(sm))
-        if source_treatment not in ("explicit", "linearized"):
-            raise ValueError(
-                "source_treatment must be 'explicit' or 'linearized'; "
-                f"got {source_treatment!r}.")
-        if source_treatment == "linearized":
+        source_treatment = SourceTreatment(
+            typed(SourceTreatment, source_treatment, "source_treatment"))
+        if source_treatment is SourceTreatment.linearized:
             _linearize_source(sm)
 
         # The NSM IS-A SystemModel, so PROMOTE the frozen ``sm`` instance
