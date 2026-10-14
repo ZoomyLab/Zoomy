@@ -7,7 +7,10 @@ docs/dev/symbolic_solver/matrix/store). Every stored array (t, Q, Q0, xc, vol) m
 the matrix's tolerance for two runs of the case (`tol`); of a custom run's metrics the values
 (`VALUES`: J, the derivatives, an error), not the round-off measures; the timing / provenance
 keys are ignored. Then the matrix's own checks of the case (`matrix_driver.py --checks`: the
-table's thresholds, C6 mass, C7 parallel = serial) must pass on the container's runs.
+table's thresholds, C6 mass, C7 parallel = serial, C9 GPU = serial CPU) must pass on the
+container's runs. GPU configs (`GPU`, the container started with `--nv`): the container's GPU
+run = the host's GPU run (JAX: the zoomy-cuda env; AMReX: apptainer --nv, the same image), and
+C9 against the container's serial CPU run; skipped without enough GPUs (`E2E_GPUS`).
 """
 import json
 import math
@@ -55,6 +58,11 @@ DISTRIBUTED = {"jax": [("mpi2", "C1", ("o2_n40",)), ("mpi2", "C35", C35_C1)],
                "openfoam": [("mpi2", "C1", ("o2_n40",)), ("mpi2", "C35", C35_C1)],
                "amrex": [("mpi2", "C1", ("o2_n40",)), ("mpi2", "C35", C35_C1),
                          ("mpi2", "C17", ("box",))]}
+#: GPU runs: backend -> (config, case, runs), in the container with `--nv` (gpuN: N GPUs, one
+#: rank each); = the host's run of the config, and the matrix's C9 (= the serial CPU run in the
+#: image). Only the GPU-capable images (numpy, foam: no GPU path)
+GPU = {"jax": [("gpu1", "C1", ("o2_n40",)), ("gpu2", "C5", ("n48",))],
+       "amrex": [("gpu1", "C1", ("o2_n40",)), ("gpu2", "C5", ("n48",))]}
 #: custom runs: the metrics that are values (= host to `tol`); the others are measures at
 #: round-off (a mass drift, coupled - single) or noise (|FD - jvp|, seconds, messages naming
 #: paths), judged by the matrix's checks
@@ -87,8 +95,12 @@ def _params():
         out += [pytest.param(b, "serial", c, SUBSET[c], marks=pytest.mark.backend_e2e,
                              id=f"{b}-{c}-serial") for c in SUBSET if b in ONLY.get(c, (b,))]
         out += [pytest.param(b, cfg, c, keys, marks=pytest.mark.backend_e2e, id=f"{b}-{c}-{cfg}")
-                for cfg, c, keys in DISTRIBUTED.get(b, ())]
+                for cfg, c, keys in DISTRIBUTED.get(b, []) + GPU.get(b, [])]
     return out
+
+
+def _n_gpus(config: str) -> int:
+    return int(config[3:]) if config.startswith("gpu") else 0
 
 
 def _result(log: Path) -> dict:
@@ -142,9 +154,9 @@ def compare(pa: Path, pb: Path, values=None) -> dict:
     return out
 
 
-def _host(backend, image, snap, case, keys, base, config) -> tuple[Path, dict, float]:
+def _host(backend, image, snap, case, keys, base, config, gpus=()) -> tuple[Path, dict, float]:
     """The same runs on the host (this Python, the snapshot library; foam / AMReX through
-    apptainer with the same image)."""
+    apptainer with the same image; a GPU config: JAX in the zoomy-cuda env, AMReX `--nv`)."""
     store = base / "host" / "store"
     for d in ("amrex_cache", "foam_cache", "run"):
         (base / "host" / d).mkdir(parents=True, exist_ok=True)
@@ -154,6 +166,8 @@ def _host(backend, image, snap, case, keys, base, config) -> tuple[Path, dict, f
                ZOOMY_AMREX_SYMCACHE=str(base / "host" / "amrex_cache"),
                ZOOMY_FOAM_BINCACHE=str(base / "host" / "foam_cache"),
                ZOOMY_AMREX_BUILD_CPUS=H.cpus(), ZOOMY_AMREX_RUN_CPUS=H.cpus())
+    if gpus:
+        env["CUDA_VISIBLE_DEVICES"] = ",".join(gpus)
     if backend.name == "openfoam":
         env["ZOOMY_OF_SIF"] = image
     if backend.name == "amrex":
@@ -192,6 +206,12 @@ def test_matrix_in_container(backend, config, case, runs, snap, report, request)
     img, how = H.image(b)
     if img is None:
         pytest.skip(how)
+    gpus = tuple(H.gpus()[:_n_gpus(config)])
+    if len(gpus) < _n_gpus(config):
+        pytest.skip(f"{config} needs {_n_gpus(config)} GPU(s), found {len(gpus)} "
+                    "(E2E_GPUS, CUDA_VISIBLE_DEVICES, nvidia-smi)")
+    if gpus and H.runtime() != "apptainer":
+        pytest.skip("the GPU configs' host reference runs through apptainer --nv")
     if (b.name in ("openfoam", "amrex") and H.runtime() != "apptainer"
             and not os.environ.get("E2E_MATRIX_HOST_STORE")):
         pytest.skip("the host reference runs foam / AMReX through apptainer "
@@ -200,9 +220,9 @@ def test_matrix_in_container(backend, config, case, runs, snap, report, request)
     base.mkdir(parents=True, exist_ok=True)
     keys = ",".join(runs)
     row = {"test": request.node.name, "backend": backend, "case": case, "config": config,
-           "image": how}
+           "image": how, "gpus": ",".join(gpus)}
 
-    c = H.Container(b, img, snap, base / "container", dev=H.MODE == "dev")
+    c = H.Container(b, img, snap, base / "container", dev=H.MODE == "dev", gpus=gpus)
 
     def in_image(cfg):
         log = base / f"container-{case}-{cfg}.log"
@@ -226,16 +246,18 @@ def test_matrix_in_container(backend, config, case, runs, snap, report, request)
 
     cstore = base / "container" / "store"
     ref, what = "serial", "container vs host"
+    if gpus:                                          # GPU: container = host, both on GPUs
+        ref = config
     if config != "serial" and custom:                 # the matrix's checks alone
         hstore, hres = None, None
-    elif config != "serial":                          # matrix C7: the ranks = serial, in the image
+    elif config != "serial" and not gpus:             # matrix C7: the ranks = serial, in the image
         hstore, hres, what = cstore, serial, f"{config} vs serial (container)"
     elif os.environ.get("E2E_MATRIX_HOST_STORE"):
         hstore, hres = Path(os.environ["E2E_MATRIX_HOST_STORE"]), None
     elif "ok" not in got.values():                    # nothing to compare with
         hstore, hres = base / "host" / "store", None
     else:
-        hstore, hres, secs = _host(b, img, snap, case, keys, base, config)
+        hstore, hres, secs = _host(b, img, snap, case, keys, base, config, gpus)
         row["host_seconds"], row["host"] = round(secs, 1), hres
     problems, diffs = [], {}
     for k, status in got.items():

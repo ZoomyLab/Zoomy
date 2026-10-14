@@ -5,7 +5,10 @@ own `run` (same store format), here: inside a backend container or on the host.
     python matrix_driver.py ROOT STORE --checks BACKEND CASE
 
 ROOT holds docs/dev/symbolic_solver/{matrix,gates} of the tested checkout; CONFIG serial
-(default) or mpiN (matrix.py launches the ranks with the image's mpiexec). The case builders
+(default), mpiN (matrix.py launches the ranks with the image's mpiexec) or gpu1 / gpu2 (the
+container started with the GPUs; JAX: the image's Python with JAX_PLATFORMS=cuda instead of
+the host's zoomy-cuda env, gpu2 one rank per GPU through `zoomy_jax.gpurank`; AMReX: the
+CUDA build, as on the host). The case builders
 import no backend, so every image builds every case. In a container the foam / AMReX drivers
 build natively (`ZOOMY_{FOAM,AMREX}_IN_IMAGE=1`); for older drivers that always call
 `apptainer exec <image>`, the apptainer shim (shim/) stands in for it.
@@ -39,6 +42,17 @@ def main(root, store, work, backend, case, keys, config="serial", in_container=F
         os.environ["ZOOMY_AMREX_CONTAINERS"] = str(fake)
         os.environ.setdefault("ZOOMY_FOAM_IN_IMAGE", "1")    # drivers that build natively
         os.environ.setdefault("ZOOMY_AMREX_IN_IMAGE", "1")
+        import backends
+        host_launch = backends.Jax.launch
+
+        def launch(self, config):            # the image's Python, not the host's zoomy-cuda env
+            if not config.startswith("gpu"):
+                return host_launch(self, config)
+            gpu = ["env", "JAX_PLATFORMS=cuda", "XLA_PYTHON_CLIENT_PREALLOCATE=false"]
+            n = int(config[3:])
+            return gpu + ([sys.executable] if n == 1 else
+                          ["mpiexec", "-n", str(n), sys.executable, "-m", "zoomy_jax.gpurank"])
+        backends.Jax.launch = launch
     import cases
     import matrix
 

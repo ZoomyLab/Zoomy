@@ -66,7 +66,7 @@ Q_all = s.partition.gather(Q)                   # rank 0
   PETSc via petsc4py (GMRES matrix-free for `gmres`, FGMRES + BoomerAMG on the
   colour-assembled rows for `pyamg`, MUMPS LU for the implicit diffusion's
   Jacobian), or without petsc4py a distributed FGMRES (block-Jacobi: the rank's
-  LU / SA V-cycle).  ANALYSIS.md section 50.
+  LU / SA V-cycle).  ANALYSIS.md section 54.
 - `mpiexec -n 4 python run.py`; keep `OMP_NUM_THREADS=1`.
 
 GPU transport (`bench_halo.py`: 1000 halo exchanges in one compiled loop,

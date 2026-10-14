@@ -259,19 +259,20 @@ C10_VARIANTS = ((1, 1), (2, 1), (2, 2))     # (space order, time_order); O1 = ga
 WAVE = dict(H=0.34, a=0.01, x0=-0.5, s=0.3, t_end=0.2)   # waves stay off the ends
 
 
-def vam_split(friction=False):
+def vam_split(friction=False, stress=Stress.shallow):
     """VAM(1) split for C10 (the gate-21 boundaries with no inflow: left
     q = r = 0 (Dirichlet), right P = 0, sides Extrapolation); ``friction``:
-    Manning bed friction (C31), in the predictor's implicit source.  ~16 s; not
-    cached: a second NSM built from the same split SMs after a JAX setup fails
-    in deepcopy (Max(Abs(eigenvalues(0, 0, 0, 0))) not comparable)."""
+    Manning bed friction (C31), in the predictor's implicit source; ``stress``:
+    ``Stress.full`` gives the predictor an implicit diffusion_matrix (C37).  ~16 s
+    (Stress.full ~40 s); not cached: a second NSM built from the same split SMs after a
+    JAX setup fails in deepcopy (Max(Abs(eigenvalues(0, 0, 0, 0))) not comparable)."""
     from zoomy_core.model.initial_conditions import Constant
     from zoomy_core.model.models.vam import VAM
     from zoomy_core.systemmodel.system_model import _DT_SYMBOL
     bcs = ([BC.Dirichlet("left", on=f, value=0.0) for f in ("q_x_0", "q_x_1", "r_0", "r_1")]
            + [BC.Dirichlet("right", on=f"P_{i}", value=0.0) for i in range(2)]
            + [BC.Extrapolation(tag=t) for t in ("bottom", "top")])
-    model = VAM(level=1, dimension=3, boundary_conditions=bcs,
+    model = VAM(level=1, dimension=3, boundary_conditions=bcs, stress=stress,
                 closures=[Newtonian(), *([ManningFriction()] if friction else []),
                           StressFree()])
     sm = SystemModel.from_model(model)
@@ -538,11 +539,17 @@ def _c16():
             for pair in ("jax_jax", "jax_foam", "foam_foam", "amrex_amrex", "amrex_jax")]
 
 
+C17_DIFF = tuple(f"diff_{bc}_{path}" for bc in ("neu", "per") for path in ("expl", "impl", "ssp2")
+                 ) + ("diff_shear_impl",)
+
+
 def _c17():
-    from custom import amr
+    from custom import amr, amr_diffusion
     return [Run(case, None, 0.0, custom=lambda b, c, w, case=case: amr(case, c, w),
                 configs=("serial", "mpi2", "gpu1"), backends=("amrex",), launch=False)
-            for case in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry")]
+            for case in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry")
+            ] + [Run(key, None, 0.0, custom=lambda b, c, w, key=key: amr_diffusion(
+                *key.split("_")[1:], w), backends=("amrex",), launch=False) for key in C17_DIFF]
 
 
 def _c27():
@@ -643,6 +650,65 @@ def full_stress_level1(nx=FULL1["nx"]):
     return LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=nx, ny=nx), nsm
 
 
+# ── C5 front runs: the a-priori wet/dry front detector (ReconstructionSpec.front_tol) ─
+#: Thacker's axisymmetric paraboloid bowl (SWASHES, Delestre et al. 2013, 2-D, choice 1):
+#: bed -h0 (1 - r^2 / a^2), a periodic radial oscillation, the shore moving over the bed
+#: centre off the domain centre: the 2- and 4-rank cuts (x = 2, y = 2) must not be symmetry
+#: lines of the state, or the front flag's halo is never exercised (centred: no flag exchange
+#: gives the same state as the exchange, bitwise)
+THACKER = dict(a=1.0, r0=0.8, h0=0.1, L=4.0, centre=(1.8, 2.15), nx=48, t_end=0.5)
+THACKER["A"] = (THACKER["a"] ** 2 - THACKER["r0"] ** 2) / (THACKER["a"] ** 2 + THACKER["r0"] ** 2)
+THACKER["omega"] = np.sqrt(8 * G * THACKER["h0"]) / THACKER["a"]
+#: front_tol and limiter of the Malpasset thesis configuration (results/wavespeed_bound/run.py):
+#: with minmod a flat dry bed never trips the detector (the limited eta keeps h_f >= 0)
+FRONT = dict(front_tol=0.5, limiter=Limiter.venkatakrishnan)
+
+
+def thacker_eta(r, t):
+    """The exact free surface eta(r, t) of the bowl; h = max(0, eta - b)."""
+    a, h0, A, w = (THACKER[k] for k in ("a", "h0", "A", "omega"))
+    c = 1 - A * np.cos(w * t)
+    return h0 * (np.sqrt(1 - A ** 2) / c - 1 - r ** 2 / a ** 2 * ((1 - A ** 2) / c ** 2 - 1))
+
+
+def thacker_bed(r):
+    return -THACKER["h0"] * (1 - r ** 2 / THACKER["a"] ** 2)
+
+
+def thacker_bowl(front_tol):
+    """SME(0), walls (never reached), at rest in the exact state at t = 0; O2 Venkatakrishnan
+    + MOOD, the detector at ``front_tol`` (None: off)."""
+    sm = SystemModel.from_model(C.sme(0, 3, ("left", "right", "bottom", "top"), "wall"))
+    names = [str(s) for s in sm.state]
+    c = THACKER["centre"]
+
+    def ic(x):
+        q = np.zeros(len(names))
+        r = np.hypot(x[0] - c[0], x[1] - c[1])
+        b = thacker_bed(r)
+        q[names.index("b")], q[names.index("h")] = b, max(0.0, thacker_eta(r, 0.0) - b)
+        return q
+    sm.initial_conditions = IC.UserFunction(function=ic)
+    nsm = NumericalSystemModel.from_system_model(sm, reconstruction=ReconstructionSpec(
+        order=2, limiter=FRONT["limiter"], front_tol=front_tol))
+    n, L = THACKER["nx"], THACKER["L"]
+    return LSQMesh.create_2d(domain=(0, L, 0, L), nx=n, ny=n), nsm
+
+
+def _c5_front():
+    """The radial dry dam break and the bowl, each with the detector (configs: the
+    flag's halo) and without (serial: whether the detector acts)."""
+    dam = lambda ft: partial(C.dry_dambreak_2d, nx=48, front_tol=ft, limiter=FRONT["limiter"])  # noqa: E731
+    out = []
+    for key, make, t_end in (("dam", dam, 0.02), ("bowl", thacker_bowl, THACKER["t_end"])):
+        out += [Run(f"{key}_front", make(FRONT["front_tol"]) if key == "dam"
+                    else partial(make, FRONT["front_tol"]), t_end, cfl=0.45, mood=True,
+                    configs=("serial", "mpi2", "mpi4")),
+                Run(f"{key}_off", make(None) if key == "dam" else partial(make, None), t_end,
+                    cfl=0.45, mood=True)]
+    return out
+
+
 def _c32():
     """The viscous walls (no-slip, free-slip, split) on ny 20 / 40 / 80 (JAX); foam and
     AMReX on ny 20; the controls ``ctrl`` (walls act), ``inviscid`` and ``inviscid_split``
@@ -663,6 +729,61 @@ def _c33():
     return [Run(f"{integ}_k{k}", partial(moment_decay, 2), M["t_end"], dt=M["dt0"] / 2 ** k,
                 imex=Imex.lie if integ == "imex" else False, solver=IMPLICIT)
             for integ in ("imex", "rk2") for k in M["ks"]]
+
+
+# ── C37: IMEX-SSP2 with the implicit diffusion in its stages (gate 52) ─────
+C37_K = (0, 1, 2, 3)        # dt / 2^k
+C37_VAM = {"ssp2": (Imex.ssp2, 2), "t2": (Imex.lie, 2)}
+VISC_VAM = dict(nu=0.01, dt=8e-3)
+
+
+def vam_viscous(nx):
+    """C10's wave (space O1, gate 7's predictor) with VAM(1) + Newtonian, stress=Stress.full
+    (the predictor's implicit diffusion_matrix: in-plane tau_de, tau_zz), nu VISC_VAM['nu']."""
+    pred, press, corr = vam_split(stress=Stress.full)
+    nsm = predictor_nsm(pred, press, corr)
+    nsm.sm.parameter_values.nu = VISC_VAM["nu"]
+    mesh = LSQMesh.create_2d(domain=(-1.5, 1.5, 0.0, 0.1), nx=nx, ny=2)   # quasi-1-D
+    return mesh, (nsm, press, corr)
+C37_HEAT = tuple((kind, case) for kind in ("1d", "quad") for case in ("per", "dir0"))
+C37_SHEAR = ("noslip", "free", "noslip_split")
+
+
+def _c37():
+    """Gate 52's heat equation (stiff, IMEX-SSP2) and advection-diffusion (ssp2 / lie1 / lie2
+    at nu 0.02, and stiff at nu 0.2) at dt / 2^k, the C++ backends at k = 0; C32's viscous
+    shear decay with IMEX-SSP2 (ny 20 / 40 / 80; ny 20 on every backend; noslip at dt / 2^k:
+    the time order); Chorin: C10's wave with VAM(1) Stress.full (`vam_viscous`), projected
+    IMEX-SSP2 stages with the implicit diffusion (increment projection) and Lie (time_order 2)
+    at dt / 2^k (Richardson), ssp2 k = 0 on every backend."""
+    import gate52_imex_diffusion as G50
+    tight = dict(cfl_check_every=0, **G50.TIGHT)
+    heat = [Run(f"heat_{kind}_{case}_k{k}", partial(G50.heat_case, kind, case),
+                G50.T_END["heat"], dt=G50.DT0 / 2 ** k, imex=Imex.ssp2, solver=tight,
+                backends=JFA if k == 0 else ("jax",),
+                configs=("serial", "mpi2") if (kind, case, k) == ("quad", "per", 0) else ("serial",))
+            for kind, case in C37_HEAT for k in C37_K]
+    adv = [Run(f"{pre}_{s}_k{k}", partial(G50.advdiff_case, nu), G50.T_END["advdiff"],
+               dt=G50.DT0 / 2 ** k, imex=imex, solver=dict(tight, time_order=to),
+               backends=JFA if (pre, s, k) == ("advdiff", "ssp2", 0) else ("jax",))
+           for pre, nu in (("advdiff", G50.NU_ADV), ("stiff", G50.NU_STIFF))
+           for s, (imex, to) in G50.SCHEMES.items() for k in C37_K]
+    dt = lambda ny: 1.0 / (ny * SHEAR["steps"])          # noqa: E731  (C32's step)
+    shear = [Run(f"shear_{v}_n{ny}", partial(shear_decay, v, ny), SHEAR["t_end"], dt=dt(ny),
+                 imex=Imex.ssp2, solver=IMPLICIT,
+                 backends=JFA if ny == SHEAR["ny"][0] else ("jax",),
+                 configs=("serial", "mpi2") if (v, ny) == ("noslip", 20) else ("serial",))
+             for v in C37_SHEAR for ny in SHEAR["ny"]]
+    ny = SHEAR["ny"][0]
+    shear_t = [Run(f"shear_noslip_n{ny}_k{k}", partial(shear_decay, "noslip", ny),
+                   SHEAR["t_end"], dt=dt(ny) / 2 ** k, imex=Imex.ssp2, solver=IMPLICIT,
+                   backends=("jax",)) for k in C37_K[1:]]
+    vam = [Run(f"vam_{s}_k{k}", partial(vam_viscous, 60), WAVE["t_end"],
+               dt=VISC_VAM["dt"] / 2 ** k, chorin=True, time_order=to, imex=imex, q0=wave_q0,
+               solver=dict(cfl_check_every=0, projection=Projection.increment, **IMPLICIT),
+               backends=JFA if (s, k) == ("ssp2", 0) else ("jax",))
+           for s, (imex, to) in C37_VAM.items() for k in C37_K]
+    return heat + adv + shear + shear_t + vam
 
 
 #: why a backend has no run of a case (measure(): the label of its n/a row)
@@ -694,9 +815,10 @@ CASES = {
            + [Run(f"{v}_o{o}_n{n}_pert", partial(channel, v, o, n), CHANNEL[v]["t_end"],
                   backends=("jax",), perturb=PERTURB)
               for v in CHANNEL for o in (1, 2) for n in C4_N]),
-    "C5": ("radial dry dam break, O2 eta + MOOD",
+    "C5": ("radial dry dam break, O2 eta + MOOD; with the front detector (front_tol): the dam "
+           "break and Thacker's paraboloid bowl, Venkatakrishnan",
            [Run("n48", partial(C.dry_dambreak_2d, nx=48), 0.02, cfl=0.45, mood=True,
-                configs=ALL5)]),
+                configs=ALL5)] + _c5_front()),
     "C8": ("VAM(1) Chorin channel (gate 21): linear / Newton / time_order 2 / triangles", _c8()),
     "C10": ("VAM(1) Chorin convergence: smooth wave over the bump",
             [Run(f"s{o}_t{to}_n{n}", partial(vam_wave, o, n), WAVE["t_end"], chorin=True,
@@ -730,7 +852,8 @@ CASES = {
             + [Run("ref_n160", partial(imex_bump, 2, 160), 0.3, imex=Imex.lie, backends=("jax",))]),
     "C15": ("AD (JAX): jvp vs central FD, reverse vs forward, dJ/dg", _c15()),
     "C16": ("preCICE: coupled (2 x 100 cells, window 1e-3, O1) vs single domain", _c16()),
-    "C17": ("AMR (AMReX, gate 37): covering, static patch, reflux, lake, regrid", _c17()),
+    "C17": ("AMR (AMReX, gates 37, 51): covering, static patch, reflux, lake, regrid; diffusion",
+            _c17()),
     "C18": ("Euler 3-D Sod along x, y, z (n x 2 x 2), HLL, t = 0.2",
             [Run(f"o{o}_n{n}_ax{a}", partial(sod, 3, o, n, a), 0.2, cfl=0.45, mood=o == 2,
                  backends=EU) for o in (1, 2) for n in (50, 100) for a in (0, 1, 2)]),
@@ -777,6 +900,8 @@ CASES = {
     "C36": ("full Newtonian stress at level 1 (SME(1), Stress.full): periodic smooth state, IMEX",
             [Run("sme1", full_stress_level1, FULL1["t_end"], dt=FULL1["dt"], imex=Imex.lie,
                  solver=IMPLICIT, backends=("jax",))]),
+    "C37": ("IMEX-SSP2 with the implicit diffusion in its stages (gate 52): stiff heat equation, "
+            "advection-diffusion, viscous shear decay", _c37()),
 }
 
 

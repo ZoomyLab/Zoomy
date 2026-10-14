@@ -1,4 +1,4 @@
-"""Distributed NumPy backend (ANALYSIS 50): setup and march time against the number of ranks.
+"""Distributed NumPy backend (ANALYSIS 54): setup and march time against the number of ranks.
 
     mpiexec -n R python bench_numpy_parallel.py swe N STEPS              # SWE bump O2 + MOOD, N x N
     mpiexec -n R python bench_numpy_parallel.py vam NX STEPS SOLVER METHOD
