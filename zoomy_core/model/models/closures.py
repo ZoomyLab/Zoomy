@@ -486,6 +486,21 @@ class NavierSlip(Closure):
         return {"normal": None,
                 "tangent": [s.par.lambda_s * ut for ut in s.u_tangent]}
 
+    def dimensions(self):
+        """Dimension of `lambda_s` (stress per velocity), for the non-dimensional scaling."""
+        from zoomy_core.model.derivation.nondim import STRESS, VELOCITY
+        return {"lambda_s": STRESS / VELOCITY}
+
+    def scaling_groups(self, st):
+        """The slip group `k_l = lambda_s / (rho U)` of the scaled frame `st` and its default
+        order 1, Marche 2007 eq. (5.1) `k_l' = eps r_0` (`k_l' = k_l / V`, `k_l = lambda_s / rho`
+        of eq. (2.6)), https://doi.org/10.1016/j.euromechflu.2006.04.007.
+        """
+        u = st.blueprint["uvel"][0]
+        rho = sp.Symbol("rho", positive=True)
+        lam = sp.Symbol("lambda_s", positive=True)
+        return {sp.Symbol("k_l", positive=True): lam / (rho * st.scale_of(u))}, {"k_l": 1}
+
 
 class RoughWall(Closure):
     """Turbulent rough-wall bed drag `tau_b = rho C_f u_b |u_b|` with ``C_f =
@@ -599,6 +614,22 @@ class ManningFriction(Closure):
         speed = sp.sqrt(sum(ut ** 2 for ut in s.u_tangent))
         return {"normal": None,
                 "tangent": [s.par.rho * Cf * speed * ut for ut in s.u_tangent]}
+
+    def dimensions(self):
+        """Dimension of the Manning coefficient `n` (`T L^(-1/3)`)."""
+        from zoomy_core.model.derivation.nondim import Dim
+        return {"n": Dim(L=sp.Rational(-1, 3), T=1)}
+
+    def scaling_groups(self, st):
+        """The friction group `C_n = g n^2 L / H^(4/3)` (the bed drag over the inertia in the
+        depth-averaged row) and its default order 0, which keeps the drag at the order of the
+        inertia (Marche 2007 eq. (5.1) puts its quadratic friction at O(eps) instead).
+        """
+        bp = st.blueprint
+        Lx, Hz = st.scale_of(bp["horiz"][0]), st.scale_of(bp["z"])
+        g, n = sp.Symbol("g", positive=True), sp.Symbol("n", positive=True)
+        return ({sp.Symbol("C_n", positive=True): g * n ** 2 * Lx / Hz ** sp.Rational(4, 3)},
+                {"C_n": 0})
 
 
 class EddyViscosity(Closure):
