@@ -1469,7 +1469,7 @@ the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Det
   the compound-aux pattern 45b found; backends likely read it as 0.  (Fixed: 45i.)
 - **Open.**  ML-VAM w rows: the vertical balance is pointwise per layer, so its interface traces
   of tau_ez are one-sided (single-valued for continuous profiles only); a single-valued vertical
-  traction there is a model choice.  ML with `Stress.shallow` keeps the one-sided interface shear
+  traction there is a model choice (45j).  ML with `Stress.shallow` keeps the one-sided interface shear
   (45f item (4)), unchanged by spec.  `interpolate_rows` slot 5 is still the hydrostatic part
   (45f item (2)).  small_slope=False with the full stress is not run.
 
@@ -1509,7 +1509,92 @@ the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Det
   same pattern, zeta a coordinate there).  NumPy's `derivative_aux` raises on any non-state
   target when the BC ghosts are present (JAX skips it, reading 0).
 
-## 46. JAX distributed pressure solve (pyamg): the iteration count does not scale (2026-10-13)
+### 45j. ML-VAM w rows: the interface trace of tau_ez (2026-10-14, dev/mlvam-aux)
+
+- **What the rows do.**  With `Stress.full` the vertical row keeps d_e tau_ez = d_e f_e,
+  f_e = rho nu d_z u_e (the eps^2 part rho nu d_e d_e w dropped, 45h), projected pointwise per
+  layer: the w row (l, k) has RHS (2k+1)/rho <phi_k, h_l d_e f_e> (gate 48).  By Leibniz
+  <phi_k, h_l d_e f> = d_e(h_l <phi_k f>) + <phi_k' (d_e z_(l-1) + zeta d_e h_l) f>
+  - phi_k(1) f(z_l^-).grad z_l + phi_k(0) f(z_(l-1)^+).grad z_(l-1): the interface terms use the
+  layer's own trace.  The ML ansatz is discontinuous at z_a, so the two layers use different
+  values and the layer sum of the mode-0 rows keeps -(f(z_a^-) - f(z_a^+)).grad z_a, a vertical
+  momentum source wherever the shear jumps at a sloping interface.  Level 0: f = 0 in every layer
+  (u constant per layer), nothing to choose; level >= 1 only.
+- **Options.**  (1) one-sided (the pointwise projection, current); (2) the mean of the two traces;
+  (3) upwind by the sign of G; (2)/(3) as a convex combination, one value per interface; (4) a
+  value independent of the profiles from the two layer states, e.g. a finite difference across
+  the interface (Audusse et al. below); (5) a traction continuity condition: for a weak solution
+  the interface traction is continuous up to the momentum flux through the moving interface
+  (Garres-Diaz et al. (A.1)), which fixes the jump of the traction, not the value the projection
+  needs; the value is a numerical-flux choice, (2) to (4).
+- **Literature** (Zotero; equations as in the papers).
+  - Garres-Diaz, Escalante, Morales de Luna, Castro Diaz 2023, "A general vertical decomposition of
+    Euler equations: Multilayer-moment models" (attachment ER5MCUCF), App. A, the viscous
+    multilayer-moment system: "[u omega + tau_xz - d_x(h xi + b) tau_xx]_(alpha+1/2) = 0, or
+    equivalently [-tau_xz + d_x(h xi + b) tau_xx]_(alpha+1/2) = [u]_(alpha+1/2) omega_(alpha+1/2)"
+    (A.1); with sigma = -tau_xz + d_x(h xi + b) tau_xx the layer integral leaves
+    sigma^-_(alpha+1/2), sigma^+_(alpha-1/2) "where sigma^-, sigma^+ should be correctly defined.
+    In [30], this is done by means of a centered approximation sigma~ = (sigma^+ + sigma^-)/2.
+    Nevertheless, one could do other possible choices", (A.2) "sigma~ = G(sigma^-, sigma^+) =
+    (sigma^+ + sigma^-)/2 - Lambda/2 (sigma^+ - sigma^-)", "Lambda allows us to include an upwind
+    term".  ([30]: Fernandez-Nieto, Kone, Chacon Rebollo 2014, J. Sci. Comput., not in Zotero.)
+    Horizontal momentum only (hydrostatic).
+  - Fernandez-Nieto, Parisot, Penel, Sainte-Marie 2018, "A hierarchy of dispersive layer-averaged
+    approximations of Euler equations" (4S8BGCKE): the pressure continuous, "[[q]]_(alpha+1/2) = 0"
+    (3.2b); every interface value "f~_(alpha+1/2) = (1 - gamma) f^+ + gamma f^-, gamma in [0, 1],
+    any convex combination providing a mean value at the interface" (3.3); vertical momentum
+    (3.8c) "d_t(h_alpha w_alpha) + d_x(h_alpha u_alpha w_alpha) + w~_(alpha+1/2) Gamma_(alpha+1/2)
+    + q_(alpha+1/2) - w~_(alpha-1/2) Gamma_(alpha-1/2) - q_(alpha-1/2) = 0": every interface term
+    single-valued (inviscid).
+  - Escalante, Fernandez-Nieto, Morales de Luna, Castro 2019, two-layer non-hydrostatic
+    (86BQYCRP): (14) "d_t(h_1 w_1) + d_x(h_1 u_1 w_1) + (w_1 + w_2)/2 Gamma_I + p_(I^-) - p_b = 0",
+    (15) "d_t(h_2 w_2) + d_x(h_2 u_2 w_2) - (w_1 + w_2)/2 Gamma_I - p_(I^+) = 0", closed by (16)
+    "p_(I^+) = gamma_1 p_b + gamma_2 p_I": a two-valued interface pressure on purpose, free
+    parameters for the dispersion relation ("for gamma_1 = 0, gamma_2 = 1 we recover the original
+    system", the continuous one).  Inviscid.
+  - Audusse, Bristeau, Perthame, Sainte-Marie 2011 (5ALPFGP8), viscous, hydrostatic: the viscous
+    pressure "int d_x(2 nu d_x u) = d_x(2 nu h_alpha d_x u_alpha) + 2 nu [d_x z_j d_x
+    u_j]_(j=alpha-1/2)^(j=alpha+1/2)", one value u_j per interface (the interface velocity
+    (2.10), upwind by G in (2.23)); the vertical shear "using finite differences along the
+    vertical ... ~ 2 nu (u_(alpha+1) - u_alpha)/(h_(alpha+1) + h_alpha) - 2 nu (u_alpha -
+    u_(alpha-1))/(h_alpha + h_(alpha-1))".
+  - Not found: a multilayer model with the viscous tau_ez in the vertical momentum (the
+    non-hydrostatic ones are inviscid, the viscous ones hydrostatic).  The common rule: an
+    interface term is single-valued (centered, convex combination, upwind, finite difference);
+    the one exception is Escalante et al.'s pressure, two-valued as a dispersion tuning.
+- **Recommendation: (2) / (3) through the existing stress `InterfaceFlux`.**  The horizontal rows
+  already take T* = tau*_dz - s*.grad z_a from `InterfaceFlux(quantity=InterfaceQuantity.stress)`
+  (mean by default, `UpwindInterface` by G): Garres-Diaz (A.2) with Lambda = 0 / sign.  The
+  vertical component of the same traction at the same interface is p - tau_zz (continuous: the
+  pressure unknown is -sigma_zz, 45f) plus the tau_ez part; f* from the same scheme makes the
+  whole traction vector single-valued by one closure, keeps gate 48's reduction (identical layer
+  states: f^- = f^+ = f*, so the ML rows still sum to VAM's), and makes the mode-0 w rows
+  telescope.  (4) changes the value for continuous profiles too (breaks that reduction), and at
+  level 0 it is the vertical shear between layers (45f item (4)), a different model.
+- **Prototype.**  `MLVAM(vertical_traction=VerticalTraction.one_sided | shared)` (typed `Option`,
+  default `one_sided`; `shared` with `Stress.shallow` raises): w row (l, k) gets
+  sgn phi_k(side) (f* - f_own).grad z_a / (rho mu_k) (+ at the top of the lower layer, - at the
+  bottom of the upper), the form of the u* transfer; f* by the stress `InterfaceFlux`.  Default
+  byte-identical: the six 45i configs' SystemModels equal those before the change.
+- **Checks.**  Gate 48 (`mlvam:L:D:ws`, new): level 1 1-D and 2-D, level 2 1-D: w rows = the
+  pointwise reference (`one_sided`) / reference + the correction (`shared`), exactly; horizontal
+  rows unchanged; identical layer states: `shared` = `one_sided`; mode-0 layer sum: `shared` =
+  d_e sum_l h_l <f_l> - f(eta).grad eta + f(b).grad b, `one_sided` that minus
+  (f(z_1^-) - f(z_1^+)).grad z_1 / rho.  0 unclassified.  Test
+  `tests/model/test_mlvam_vertical_traction.py` (the residual difference = the formula; shallow
+  raises).  Gate 48's other specs (ML-SME 0 / 1, ML-VAM 0 / 1, ML-VAM 1 upwind; 1-D) still 0 /
+  0 after 45i and this change.
+- **Effect** (45i's run with `Stress.full`, q_2 = 1.2 q_1, q_l_1 = 0.1 q_l_0 (a shear jump at
+  z_1), JAX, t = 0.5).  nu = 1e-3: `shared` - `one_sided` max abs / max |Q_row| 3e-7 (h), 2e-6 to
+  1.2e-5 (q), 1.1e-5 to 3.3e-5 (r), 1.1e-5 to 5.2e-5 (P); the viscous terms themselves
+  (nu = 1e-3 vs 0) move the state by 1.6e-3 (h), 7e-3 to 0.25 (q), 1.4e-2 to 8.4e-2 (r), 1.5e-2 to
+  2.7e-2 (P): the trace choice is 1e-4 to 2e-3 of the viscous effect here.  nu = 1e-4: both ten
+  times smaller.  NumPy = JAX (`shared`, nu = 1e-2) 4.4e-10.
+- **Open.**  nu = 1e-2 grows in both variants (h 0.38 -> 0.51 by t = 0.5, q_2_1 0.01 -> 0.27;
+  explicit predictor, Chorin), not investigated.  With `UpwindInterface(quantity=stress)` the
+  setup of a run (JAX and NumPy, `one_sided` too) did not finish in 14 min; the derivation does
+  (0 unclassified, no non-state aux).
+ (pyamg): the iteration count does not scale (2026-10-13)
 
 L2P's VAM Chorin at nx 256 (65k cells), `pressure_linear_solver=LinearSolver.pyamg`, 3 constant steps
 (`scratchpad/l2p_prof.py`: pyamg wrapped to count and time V-cycles; `ZOOMY_KRYLOV_LOG=1`).
