@@ -22,7 +22,8 @@ from jax.scipy.sparse.linalg import gmres as jax_gmres
 from zoomy_core.misc.logger_config import logger
 from zoomy_core.misc.options import Option
 from zoomy_core.solver.constants import TPFA_COS_FLOOR
-from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_closure_derivatives
+from zoomy_core.mesh.geometry_xp import (closure_rows, compute_geometry,
+                                         lsq_closure_derivatives)
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
 from zoomy_core.symsolver.discretization.residual import check_derivative_aux
@@ -273,13 +274,16 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
     closure_cells = (topo.lsq_plan.get("closure") or {}).get("cells")
     recon_classes = topo.lsq_closure_class.get((owner, "reconstruction"), ())
 
-    def closed(D, U, Ug, classes, cols, mesh):
+    def closed(D, U, Ug, classes, cols, mesh, out=None):
         """`D` `(rows, len(cols), cells)` with the closure fits written at the closure cells for
-        the rows that have a class (monomial columns `cols`).
+        the rows that have a class (monomial columns `cols`); with `out` only that row of `U`,
+        written to `D`'s single row.
         """
         rows, Dc = lsq_closure_derivatives(topo, mesh.lsq_closure, U, Ug, classes)
         if not rows:
             return D
+        if out is not None:
+            Dc, rows = Dc[rows.index(out)][None], [0]
         r, c = np.asarray(rows), j(closure_cells)
         vals = jnp.transpose(Dc[:, :, np.asarray(cols)], (0, 2, 1))
         return D.at[r[:, None, None], np.arange(len(cols))[None, :, None],
@@ -426,8 +430,11 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
             grad = lsq_gradient_per_field(traced, Q[s], u_bf=Qg[s],
                                           multi_index=e["multi_index"])
             col = mis.index(tuple(int(k) for k in e["multi_index"]))
-            grad = closed(grad[None, None], Q[s][None], Qg[s][None],
-                          (e["closure"],), (col,), mesh)[0, 0]
+            # the row's closure terms read the rows `src` (a vector row: its group)
+            src, cls = closure_rows(s, e["closure"])
+            idx = np.asarray(src)
+            grad = closed(grad[None, None], Q[idx], Qg[idx], cls, (col,), mesh,
+                          out=src.index(s))[0, 0]
             Qaux = Qaux.at[e["row"], :grad.shape[0]].set(grad)
         return Qaux
 
