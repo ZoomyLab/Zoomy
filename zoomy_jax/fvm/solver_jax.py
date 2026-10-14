@@ -2251,10 +2251,12 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             (time, iteration, i_snapshot, last_written, Qnew, Qauxnew,
              acc) = _while_loop(proceed, loop_body, loop_val)
             if check_end:           # a NaN time ends the loop: raise, never return it
-                jax.debug.callback(
-                    _raise_march_error, *map(jax.lax.stop_gradient, (
-                        time, jnp.asarray(time_end, time.dtype), jnp.nan, iteration,
-                        jnp.max(jnp.abs(Qnew)))), ordered=True)
+                args = tuple(map(jax.lax.stop_gradient, (
+                    time, jnp.asarray(time_end, time.dtype), jnp.nan, iteration,
+                    jnp.max(jnp.abs(Qnew)))))
+                jax.lax.cond((args[0] >= args[1]) & jnp.isfinite(args[4]), lambda: None,
+                             lambda: jax.debug.callback(_raise_march_error, *args,
+                                                        ordered=True))
 
             # The end state.  The write stamps are ``i_snapshot * dt_snapshot``
             # with ``dt_snapshot = time_end / (snapshots - 1)``, so the last
