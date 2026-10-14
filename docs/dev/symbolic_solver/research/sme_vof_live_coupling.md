@@ -1,4 +1,4 @@
-# STATUS: SME-VOF live coupling on the symbolic solvers (branch dev/smevof-live)
+# SME | VOF live coupling on the symbolic solvers (dev/smevof-live, merged 2026-10-14)
 
 Goal: GUI sessions `coupling-live-0`, `coupling-triple-live-0` run LIVE on the symbolic
 solvers (SME arm: JAX symsolver in the JAX image; VOF: OpenFOAM 13 incompressibleVoF +
