@@ -24,11 +24,26 @@ from zoomy_core.model.derivation.system_extract import HydrostaticPressure
 from zoomy_core.model.operations import Multiply, ProductRule, KinematicBC
 from zoomy_core.model.models.walls import register_free_slip_wall
 from zoomy_core.model.models.equations import evaluate_time_derivatives, Stress
-from zoomy_core.misc.options import OptionParam
+from zoomy_core.misc.options import Option, OptionParam
 from zoomy_core.systemmodel import SystemModel
 
 t, x, y, z = C.t, C.x, C.y, C.z
 zeta = sp.Symbol("zeta", real=True)
+
+
+class VerticalTraction(Option):
+    """The interface trace of `tau_ez` in ML-VAM's vertical (w) rows at an internal layer
+    interface z_a (`Stress.full`, level >= 1; at level 0 both traces are 0).  The w rows project
+    the vertical balance pointwise per layer, which carries the Leibniz terms
+    `-/+ phi_k(side) tau_ez d_e z_a` of the layer's own trace (ANALYSIS 45j).
+    """
+    #: each layer its own trace (the pointwise projection; single-valued for continuous profiles)
+    one_sided = "one_sided"
+    #: one interface value of the two traces by the `InterfaceFlux(quantity=
+    #: InterfaceQuantity.stress)` closure of the horizontal traction (mean by default,
+    #: `UpwindInterface` by the sign of G), like the u* transfer: the vertical traction is
+    #: single-valued and the w rows telescope over the layers
+    shared = "shared"
 
 
 class MLVAM(BaseModel):
@@ -53,6 +68,9 @@ class MLVAM(BaseModel):
     stress = OptionParam(Stress, default=Stress.shallow, doc=(
         "How much of the bulk closure's stress the model keeps (`moment_scaling`): "
         "`Stress.shallow` the vertical shear only, `Stress.full` the whole Newtonian tensor."))
+    vertical_traction = OptionParam(VerticalTraction, default=VerticalTraction.one_sided, doc=(
+        "The w rows' trace of tau_ez at an internal interface (`Stress.full` only): "
+        "`one_sided` each layer's own, `shared` the stress InterfaceFlux value of both."))
     closures = param.List(default=[], doc=(
         "Composable Closure pieces (closures.py): stress AND the interface "
         "transfer scheme (MeanInterface/UpwindInterface). Default interface "
@@ -113,6 +131,10 @@ class MLVAM(BaseModel):
         # runs (modes k ≥ 1) and by package_viscous (mode 0); b is a state so topography
         # couplings stay live.
         full_stress = Stress(self.stress) == Stress.full
+        shared_vertical = VerticalTraction(self.vertical_traction) == VerticalTraction.shared
+        if shared_vertical and not full_stress:
+            raise ValueError("vertical_traction=VerticalTraction.shared needs stress=Stress.full "
+                             "(with Stress.shallow the w rows carry no tau_ez)")
 
         # inner (per-layer) basis object: the per-layer modal reconstruction,
         # top-mode closures and interface traces all go through it, so the
@@ -409,6 +431,17 @@ class MLVAM(BaseModel):
         l_par = [sp.Symbol(f"l_{j}", positive=True) for j in range(1, N)]
         l_all = [*l_par, sp.S.One - sum(l_par)]
         frac = {hl[j]: l_all[j] * ht for j in range(N)}
+
+        def _frac(e):
+            """`e` with the layer depths h_ℓ = l_ℓ h.  The fractions l_ℓ are constants, so a
+            derivative of a layer depth is l_ℓ times that of h (chain rule): a bare `.subs(frac)`
+            leaves the compound ∂(l_ℓ h), which the lifting registers as an aux of the non-state
+            target `h*l_ℓ` that no backend computes (the w rows' interface-slope terms read 0).
+            """
+            e = sp.sympify(e)
+            return e.xreplace({D: l_all[j] * sp.Derivative(ht, *D.variable_count)
+                               for D in e.atoms(sp.Derivative)
+                               for j in range(N) if D.expr == hl[j]}).subs(frac)
         q_mod = {ell: {xd: [sp.Function(qname(xd, ell), real=True)(k, t, *horiz)
                             for k in range(Nu + 1)] for xd in horiz}
                  for ell in range(1, N + 1)}
@@ -488,6 +521,31 @@ class MLVAM(BaseModel):
                 tr = interface_traction(self.closures, self.stress, _layer_state(a, 1),
                                         _layer_state(a + 1, 0), G_sol[Gf[a]])
                 iface_tr[a] = [sp.expand(e.doit()) for e in tr]
+        # VerticalTraction.shared: the w rows' Leibniz terms -/+ phi_k(side) f.grad z_a, f_e =
+        # rho nu d_z u_e (the part of tau_ez the vertical row keeps), take one interface value
+        # f* of the two traces (the stress InterfaceFlux closure, as interface_traction); the
+        # row gets sgn phi_k(side) (f* - f_own).grad z_a / (rho mu_k), like the u* transfer
+        w_tr = {}
+        if shared_vertical:
+            from zoomy_core.model.models.closures import (
+                InterfaceQuantity, MeanInterface, full_tensor_closures, interface_closure)
+            full = full_tensor_closures(self.closures, self.stress)
+            scheme = (interface_closure(self.closures, quantity=InterfaceQuantity.stress)
+                      or MeanInterface(quantity=InterfaceQuantity.stress))
+
+            def _vshear(s):
+                """`rho nu d_z u_e` at the trace of `s`, per horizontal direction."""
+                return [sum(s.trace(c.expression(s.bulk(alias={"u": HNAME[xe]}))) for c in full)
+                        for xe in horiz]
+            for a in range(1, N):
+                below, above = _layer_state(a, 1), _layer_state(a + 1, 0)
+                fb, fa = _vshear(below), _vshear(above)
+                slope = below.interface_slopes
+                star = sum(scheme.expression(fb[e], fa[e], G_sol[Gf[a]]) * slope[e]
+                           for e in range(len(horiz)))
+                for ell, side, f in ((a, 1, fb), (a + 1, 0, fa)):
+                    w_tr[(ell, side)] = sp.expand(
+                        (star - sum(f[e] * slope[e] for e in range(len(horiz)))).doit())
         m.add_equation("bottom", d.t(b))
         m.add_equation("continuity", sp.expand(glob_c.subs(par)))
         for ell in range(1, N + 1):
@@ -498,7 +556,7 @@ class MLVAM(BaseModel):
                     # frac (h_ℓ→l_ℓ·h) then evaluate ONLY the fraction's ∂_t
                     # (so ∂_t(l_ℓ·h)→l_ℓ·∂_t h feeds the global-mass sub) —
                     # keep ∂_x(F) folded so the momentum flux stays conservative.
-                    row = evaluate_time_derivatives(momd[xd][k].subs(frac), t)
+                    row = evaluate_time_derivatives(_frac(momd[xd][k]), t)
                     row = sp.expand(row).subs(sp.Derivative(ht, t), dth_glob)
                     for a, side, sgn in ((ell, 1, +1), (ell - 1, 0, -1)):
                         if 1 <= a <= N - 1:
@@ -523,8 +581,12 @@ class MLVAM(BaseModel):
                                    sp.expand(evaluate_time_derivatives(
                                        row.subs(par), t)))
             for k in range(Nu + 1):                       # vertical (no swap)
-                row = evaluate_time_derivatives(momz[k].subs(frac), t)
+                row = evaluate_time_derivatives(_frac(momz[k]), t)
                 row = sp.expand(row).subs(sp.Derivative(ht, t), dth_glob).subs(G_sol)
+                for side, sgn in ((1, +1), (0, -1)):
+                    if (ell, side) in w_tr:            # shared vertical traction
+                        row = row + (sgn * inner_basis.eval(k, side) * w_tr[(ell, side)]
+                                     / rho_s / mus[k])
                 m.add_equation(f"momentum_z_{ell}_{k}",
                                sp.expand(evaluate_time_derivatives(
                                    row.subs(par), t)))
@@ -533,7 +595,7 @@ class MLVAM(BaseModel):
                 # (1/h)·∂_x(h·q_k) folded (→ nonconservative routing, as VAM's
                 # mass modes) — a blanket doit distributes it into a bare flux
                 # + a B[h] term and breaks the MLVAM(1)==VAM P-row reduction.
-                cst = sp.expand(evaluate_time_derivatives(cst.subs(frac), t))
+                cst = sp.expand(evaluate_time_derivatives(_frac(cst), t))
                 cst = sp.expand(cst.subs(sp.Derivative(ht, t), dth_glob)).subs(G_sol)
                 m.add_equation(f"constraint_{ell}_{j}",
                                sp.expand(evaluate_time_derivatives(
