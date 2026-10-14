@@ -38,6 +38,31 @@ def cell_pattern(n, nc, nbrs, n_rows=None):
                         + unknown % k).astype(np.int32)
 
 
+def operator_neighbors(mesh_np):
+    """Per cell the cells an operator of the derivative aux couples it to, the sparsity
+    `cell_pattern` assembles: its LSQ stencil (`lsq_neighbors`) and, across a periodic seam,
+    the partner cell, whose value the seam face's ghost sample is (the stencil ends at the
+    seam).  Without the partner the assembled matrix lacks the cross-seam entries: the AMG
+    solve of a periodic pressure system then converged to the wrong matrix (relative
+    residual 0.78 of the true operator).  Rows padded with -1.
+    """
+    nb = np.asarray(mesh_np.lsq_neighbors)
+    n_bf = int(mesh_np.n_boundary_faces)
+    bf_face = np.asarray(mesh_np.boundary_face_face_indices, dtype=int)[:n_bf]
+    inner = np.asarray(mesh_np.face_cells)[0][bf_face]
+    partner = np.asarray(mesh_np.boundary_face_cells, dtype=int)[:n_bf]
+    seam = (partner != inner) & (inner < nb.shape[0])
+    if not seam.any():
+        return nb
+    cells, partners = inner[seam], partner[seam]
+    count = np.bincount(cells, minlength=nb.shape[0])
+    extra = -np.ones((nb.shape[0], int(count.max())), dtype=nb.dtype)
+    o = np.argsort(cells, kind="stable")
+    slot = np.arange(len(o)) - np.repeat(np.cumsum(count) - count, count)
+    extra[cells[o], slot] = partners[o]
+    return np.concatenate([nb, extra], axis=1)
+
+
 def cell_colors(c, d, nc, seed=0):
     """Distance-2 colouring of the stencil pairs `(c, d)` by speculative parallel greedy (a clash
     with a heavier random-weight neighbour retries).

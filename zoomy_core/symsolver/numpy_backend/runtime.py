@@ -19,7 +19,8 @@ from zoomy_core.misc.logger_config import logger
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
 from zoomy_core.symsolver.discretization.residual import check_derivative_aux
-from zoomy_core.symsolver.numpy_backend.assembly import cell_pattern, host_amg_solve
+from zoomy_core.symsolver.numpy_backend.assembly import (cell_pattern, host_amg_solve,
+                                                          operator_neighbors)
 
 
 class Geometry(NamedTuple):
@@ -439,7 +440,7 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
     if ls.get("backend") == "pyamg":
         import pyamg
     patterns, amg_cache = {}, {}
-    lsq_nbrs = np.asarray(mesh_np.lsq_neighbors)
+    lsq_nbrs = operator_neighbors(mesh_np)        # the stencil and the periodic partners
 
     def _gmres(mv, b):
         """Restarted GMRES of the flat system `mv(x) = b`.
