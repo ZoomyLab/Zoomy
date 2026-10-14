@@ -26,6 +26,7 @@ from zoomy_core.mesh.geometry_xp import (closure_rows, compute_geometry,
                                          lsq_closure_derivatives)
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
+from zoomy_core.symsolver.vocabulary import march_error
 from zoomy_core.symsolver.numpy_backend.assembly import cell_pattern, host_amg_solve
 from zoomy_jax.fvm.implicit_ad import cellwise_solve, newton_root
 from zoomy_jax.mesh.mesh import lsq_gradient_per_field
@@ -277,29 +278,40 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         return D.at[r[:, None, None], np.arange(len(cols))[None, :, None],
                     c[None, None, :]].set(vals)
 
-    def gradient(W, Wg, mesh):
+    def _shore(W, args):
+        """`(mesh, (row, dry))` of the trailing block arguments `(mesh,)` or
+        `((eta, h), eps, mesh)`: `dry` the cells with `W[h] <= eps`."""
+        if len(args) == 1:
+            return args[0], None
+        (row, depth), eps, mesh = args
+        return mesh, (int(row), W[int(depth)] <= eps)
+
+    def gradient(W, Wg, *args):
         """LSQ gradient of every row of `W` per cell, closed at the boundary by constraints or by
-        the ghost samples `Wg`.
+        the ghost samples `Wg`; `(W, Wg, (eta, h), eps, mesh)`: in row `eta` a dry neighbour
+        (`W[h] <= eps`) enters as `min(W[eta, k], W[eta, i])` (`vocabulary.gradient`).
 
         References:
             Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
         """
         # ``Wg``: the ghosts; a row the BC fixes closes by its constraint,
         # every other row samples the ghost at the mirror image
+        mesh, shore = _shore(W, args)
         R = _with_geometry(lsq, mesh, mesh_np, nc)
-        G = R._compute_gradients(W, W.shape[0], Wg)
+        G = R._compute_gradients(W, W.shape[0], Wg, shore)
         return closed(G, W, Wg, recon_classes, topo.lsq_grad_cols, mesh)
 
-    def ghost_bounds(R, u, ug):
+    def ghost_bounds(R, u, ug, dry=None):
         """Min and max of `u` over the face neighbours and the boundary ghosts `ug` (a ghost
-        bounds its face's owner).
+        bounds its face's owner); a `dry` neighbour bounds as `min(u_k, u_i)` (`gradient`).
         """
         # min/max over the face neighbours and the boundary ghosts ``ug``
         # (as in ``gradient``).  A ghost bounds its face's OWNER (on a
         # periodic seam ``_bf_cells`` is the partner cell)
         lo = hi = u
         for a, b in ((R._iA_int, R._iB_int), (R._iB_int, R._iA_int)):
-            lo, hi = lo.at[a].min(u[b]), hi.at[a].max(u[b])
+            v = u[b] if dry is None else jnp.where(dry[b], jnp.minimum(u[b], u[a]), u[b])
+            lo, hi = lo.at[a].min(v), hi.at[a].max(v)
         return lo.at[R._iInner_bnd].min(ug), hi.at[R._iInner_bnd].max(ug)
 
     def limiter(name):
@@ -311,13 +323,16 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
             Venkatakrishnan 1995, https://doi.org/10.1006/jcph.1995.1084
             Sweby 1984, https://doi.org/10.1137/0721062
         """
-        def factors(rows, W, Wg, G, mesh):
-            """Limiter factors for the state `rows` (1 elsewhere)."""
+        def factors(rows, W, Wg, G, *args):
+            """Limiter factors for the state `rows` (1 elsewhere); `(rows, W, Wg, G, (eta, h),
+            eps, mesh)`: the bounds of row `eta` with `gradient`'s shore values."""
+            mesh, shore = _shore(W, args)
             R = _with_geometry(lsq, mesh, mesh_np, nc)
             fn = getattr(R, name)
             phi = jnp.ones((W.shape[0], nc), dtype=W.dtype)
             for v in rows:
-                lo, hi = ghost_bounds(R, W[v], Wg[v])
+                dry = shore[1] if shore is not None and v == shore[0] else None
+                lo, hi = ghost_bounds(R, W[v], Wg[v], dry)
                 phi = phi.at[v].set(fn(W[v], G[v], lo, hi))
             return phi
         return factors
@@ -855,9 +870,11 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
     def _operator():
         """The TPFA operator and the static geometry of its interior faces: owner, neighbour,
         normal, unit cell-to-cell vector `e`, distance, floored `|n.e|`, `|f| / |V|` of both.
+        Built eagerly (constants), also when first needed inside a traced solve.
         """
         if not tpfa:
-            op = DenseDiffusionOperatorJAX(mesh_np, mesh_np.dimension, rt.n_state)
+            with jax.ensure_compile_time_eval():
+                op = DenseDiffusionOperatorJAX(mesh_np, mesh_np.dimension, rt.n_state)
             cc = np.asarray(mesh_np.cell_centers)[:dim]
             f = np.flatnonzero((fc0 < nc) & (fc1 < nc))
             dx = cc[:, fc1[f]] - cc[:, fc0[f]]
@@ -942,11 +959,29 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         D, C = _div(k, bc, Q, Qaux, p, time, mesh)
         return D + C
 
+    def diffusion_tpfa(k, bc, Q, Qaux, p, time, mesh):
+        """The two-point part of `diffusion`."""
+        return _div(k, bc, Q, Qaux, p, time, mesh, correction=False)[0]
+
+    def diffusion_correction(k, bc, Q, Qaux, p, time, mesh):
+        """`diffusion` beyond its two-point part (zero in 1-D)."""
+        return _div(k, bc, Q, Qaux, p, time, mesh)[1]
+
     def _norm(r):
         """Euclidean norm of `r` (distributed: over the owned cells of all ranks)."""
         if partition is None:
             return jnp.linalg.norm(r)
         return jnp.sqrt(gsum(jnp.sum(jnp.where(own_cell, r, 0.0) ** 2)))
+
+    def implicit_solve(R, x0):
+        """Newton on `R(x) = 0`, `R` coupling face neighbours, each update a `linsolve` of the
+        exact (AD) Jacobian action; differentiable through the root.
+
+        References:
+            Knoll, Keyes 2004, https://doi.org/10.1016/j.jcp.2003.08.010
+        """
+        return newton_root(R, x0, lambda x, v: jax.jvp(R, (x,), (v,))[1], linsolve,
+                           tol=imp["tol"], maxiter=imp["maxiter"], norm=_norm)
 
     def implicit_diffusion(k, bc, Q, Qaux, p, time, dt, mesh):
         """One Crank-Nicolson step of the two-point part of `div(A(X) : grad X)` from `time`
@@ -970,7 +1005,11 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         return halo(X, mesh)
 
     # ── effects ────────────────────────────────────────────────────────────
-    warned = []
+    warned, march_failures, march_checks = [], [], []
+    try:                    # host callbacks need a CPU device (JAX_PLATFORMS=cuda has none)
+        has_cpu = bool(jax.devices("cpu"))
+    except RuntimeError:
+        has_cpu = False
 
     def check_cfl(tok, dt_cfl, dt):
         """Warn once (host callback) when `dt` exceeds the CFL step `dt_cfl`; returns the next
@@ -985,6 +1024,24 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         a, b = lax.stop_gradient(dt_cfl), lax.stop_gradient(dt)
         lax.cond(b > a * (1 + 1e-12), lambda: jax.debug.callback(host, a, b),
                  lambda: None)
+        return (tok + 1,)
+
+    def check_march(tok, time, time_end, dt, n_step, q_max):
+        """The march's end check: its arguments become extra outputs of the printed program
+        (`march_checks`; the solver's `run` raises `FloatingPointError` from them), and where
+        a CPU device takes host callbacks a callback raises on failure (also under AD).
+        Returns the next order token.
+        """
+        args = tuple(map(lax.stop_gradient, (time, time_end, dt, n_step, q_max)))
+        march_checks.append(args)
+        if has_cpu:
+            def host(*a):
+                """Record and raise the failure."""
+                msg = march_error(*a)
+                march_failures.append(msg)
+                raise FloatingPointError(msg)
+            ok = (args[0] >= args[1]) & jnp.isfinite(args[4])
+            lax.cond(ok, lambda: None, lambda: jax.debug.callback(host, *args, ordered=True))
         return (tok + 1,)
 
     def io_write(tok, time, Q, Qaux):
@@ -1059,9 +1116,12 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         reduce_max=jnp.max, logical_and=jnp.logical_and,
         select=select, while_loop=while_loop, cond=cond, io_write=io_write,
         io_save_state=io_save_state, io_load_state=io_load_state,
-        root=root, linsolve=linsolve, implicit_diffusion=implicit_diffusion,
+        root=root, linsolve=linsolve, implicit_solve=implicit_solve,
+        diffusion_tpfa=diffusion_tpfa, diffusion_correction=diffusion_correction,
+        implicit_diffusion=implicit_diffusion,
         diffusion=diffusion,
-        check_cfl=check_cfl,
+        check_cfl=check_cfl, check_march=check_march, march_failures=march_failures,
+        march_checks=march_checks,
         minimum=jnp.minimum, maximum=jnp.maximum, abs=jnp.abs, floor=jnp.floor)
     if couple is not None:
         m.update(_coupling(couple, rt, mesh_np, fc0, nf, partition))
@@ -1259,6 +1319,7 @@ class PreciceAdapter:
         if self.p.requires_initial_data():
             self._write(q)
         self.p.initialize()
+        self._checkpoints()
         return np.bool_(self.p.is_coupling_ongoing())
 
     def max_dt(self):
@@ -1278,11 +1339,106 @@ class PreciceAdapter:
     def advance(self, dt):
         """Advance by `dt`; returns whether coupling is ongoing."""
         self.p.advance(float(dt))
+        self._checkpoints()
         return np.bool_(self.p.is_coupling_ongoing())
+
+    def window_complete(self):
+        """Whether the last `advance` completed a time window."""
+        return np.bool_(self.p.is_time_window_complete())
+
+    def _checkpoints(self):
+        """Answer preCICE's checkpoint queries (an implicit-class scheme, e.g. `multi`, asks at
+        every window start): writing one is a no-op, one window is never repeated."""
+        if self.p.requires_reading_checkpoint():
+            raise NotImplementedError(
+                "preCICE asks to repeat a window (implicit coupling iterations): this "
+                "participant keeps no checkpoint; use an explicit scheme or max-iterations 1")
+        self.p.requires_writing_checkpoint()
 
     def finalize(self):
         """Finalize the participant."""
         self.p.finalize()
+
+
+class ColumnPreciceAdapter(PreciceAdapter):
+    """A participant exchanging the model's vertical column with a resolved peer (VOF) or with
+    another level of the model: it writes `interpolate_to_3d` of the cells next to the coupled
+    faces and reads the peer's column back through `project_from_3d` (of the interface model,
+    when `bind` is given one), as the six canonical fields `[b, h, u, v, w, p]`
+    (`write`, `read`: six data names each) at the `nz` cell-centre heights
+    `sigma_k = (k + 1/2)/nz` of each coupled face, vertex `(x_face, y, sigma_k)`.
+    `read_round_trip()` is the own state as the peer reads it, `P(I(q))`, of the last write.
+    `model` and `parameters` are bound by the runtime (`bind`).
+    """
+
+    def __init__(self, name, config, mesh_name, write, read, nz, comm=None, y=0.5):
+        """As `PreciceAdapter`; `nz` heights per face, `y` the vertices' second coordinate."""
+        if len(write) != 6 or len(read) != 6:
+            raise ValueError("a column participant writes and reads the six fields "
+                             "[b, h, u, v, w, p]")
+        super().__init__(name, config, mesh_name, write, read, comm)
+        self.nz, self.y, self.columns, self.rt = int(nz), float(y), None, None
+
+    def bind(self, model, parameters, interface=None):
+        """The model (its `interpolate_to_3d`, `project_from_3d` and aux order) and the
+        parameter vector; `interface` (a SystemModel): the columns, the peer's and the own
+        round trip, are projected to its state instead (a lifted shared face)."""
+        from zoomy_core.systemmodel.column import ColumnMap
+        self.columns = ColumnMap(model, self.nz)
+        self.lift = self.columns if interface is None else ColumnMap(interface, self.nz)
+        self.parameters = np.asarray(parameters, dtype=float)
+        self.read_rows = self.lift.n_state
+
+    def set_vertices(self, coords):
+        """`nz` vertices `(x, y, sigma_k)` per coupled face centre in `coords`, face-major."""
+        coords = np.asarray(coords, dtype=float).reshape(len(coords), -1)
+        self.n_faces = len(coords)
+        verts = [(c[0], self.y, s) for c in coords for s in self.columns.nodes]
+        dim = self.p.get_mesh_dimensions(self.mesh)
+        self.ids = self.p.set_mesh_vertices(self.mesh, np.asarray(verts)[:, :dim])
+
+    def _column(self, q, qaux):
+        """The columns `(6, nz, faces)` of the states `q` with aux `qaux` (`None`: a zero aux,
+        as a `CoupledFace.shared` march sends the states alone; the rows the projection reads,
+        `b`, `h` and the horizontal velocities, need none)."""
+        q = np.asarray(q)
+        if qaux is None:
+            qaux = np.zeros((self.columns.n_aux, q.shape[1]))
+        return self.columns.interpolate(q, np.asarray(qaux), self.parameters)
+
+    def _write(self, C):
+        """Write the columns `C` `(6, nz, faces)`, face-major."""
+        for i, n in enumerate(self.wn):
+            self.p.write_data(self.mesh, n, self.ids, np.ascontiguousarray(C[i].T).ravel())
+
+    def init(self, q, qaux=None):
+        """Write the initial column if required, initialise; returns whether coupling is
+        ongoing."""
+        C = self._column(q, qaux)
+        self.rt = self.lift.project(C)
+        if self.p.requires_initial_data():
+            self._write(C)
+        self.p.initialize()
+        self._checkpoints()
+        return np.bool_(self.p.is_coupling_ongoing())
+
+    def write(self, q, qaux=None):
+        """Write the column of `q`; keeps its round trip."""
+        C = self._column(q, qaux)
+        self.rt = self.lift.project(C)
+        self._write(C)
+        return ()
+
+    def read(self):
+        """The peer's states `(n_state, faces)` (`interface`: its rows), projected from its
+        columns (all zero before the peer has written)."""
+        C = np.stack([self.p.read_data(self.mesh, n, self.ids, 0.0)
+                      .reshape(self.n_faces, self.nz).T for n in self.rn])
+        return self.lift.project(C)
+
+    def read_round_trip(self):
+        """The own states of the last write as the peer reads them, `P(I(q))`."""
+        return self.rt
 
 
 def coupled_face_indices(mesh_np, tag):
@@ -1312,11 +1468,18 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
         order = lambda tok: mpi4jax.allreduce(tok, MPI.MAX, comm=comm)  # noqa: E731
     faces_c = coupled_face_indices(mesh_np, cfg["tag"])
     faces_c = faces_c[fc0[faces_c] < n_own]
+    interface = cfg.get("interface")           # the NSM of a lifted shared face
+    if interface is not None and not hasattr(a, "read_round_trip"):
+        raise ValueError("couple['interface'] needs a column exchange (ColumnPreciceAdapter)")
+    if hasattr(a, "bind"):                     # a column participant: the model's maps
+        a.bind(rt.sm, np.asarray(rt.parameters),
+               interface=None if interface is None else interface.sm)
     a.set_vertices(np.asarray(mesh_np.face_centers)[faces_c])
     cells_c = fc0[faces_c]
     mask = np.zeros(nf, dtype=bool)
     mask[faces_c] = True
     n_state = int(rt.n_state)
+    fcj = jnp.asarray(faces_c)
 
     def coupled_faces(mesh):
         """Mask of the coupled faces."""
@@ -1344,9 +1507,57 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
         out = jnp.zeros((n_state, nf), dtype=Q.dtype)
         return out.at[:, jnp.asarray(faces_c)].set(c)
 
+    def lifted_interface_flux(k, kaux, n_aux, side, own, peer, rows, p, mesh):
+        """The rows `rows` of this participant's side of one Riemann problem posed low -> high
+        in the interface model on the lifted pair (`own`, `peer`), zero off the coupled faces;
+        the aux rebuilt from each state alone, so both sides pose the same problem."""
+        zero = jnp.zeros((int(n_aux), own.shape[1]), dtype=own.dtype)
+        aux = (lambda q: zero) if kaux is False else (lambda q: kaux(q, zero, p))
+        n_out = mesh.face_normals[:, fcj]
+        low, high, n = (own, peer, n_out) if int(side) == 0 else (peer, own, -n_out)
+        c = k(low, high, aux(low), aux(high), p, n)[int(side)]
+        return jnp.zeros((n_state, nf), dtype=own.dtype).at[:, fcj].set(
+            c[jnp.asarray(rows)])
+
+    def characteristic_ghost(kA, own, Aown, peer, p, mesh):
+        """Per coupled face the entering characteristics of `A_n` from `peer`, the leaving ones
+        from `own`; `peer` where the eigenvectors are singular, `own` before the peer wrote."""
+        n_out = mesh.face_normals[:, fcj]                          # (dim, faces)
+        A = kA(own, Aown, p)                                       # (n, n, dim, faces)
+        An = jnp.einsum("ijdf,df->fij", A, n_out)
+        lam, R = jnp.linalg.eig(An)
+        lam, R = jnp.real(lam), jnp.real(R)                        # (faces, n), (faces, n, n)
+        sv = jnp.linalg.svd(R, compute_uv=False)
+        regular = sv[:, -1] > R.shape[-1] * jnp.finfo(R.dtype).eps * sv[:, 0]
+        L = jnp.linalg.inv(jnp.where(regular[:, None, None], R, jnp.eye(R.shape[-1])))
+        w_own = jnp.einsum("fij,jf->fi", L, own)
+        w_peer = jnp.einsum("fij,jf->fi", L, peer)
+        ghost = jnp.einsum("fij,fj->if", R, jnp.where(lam < 0, w_peer, w_own))
+        ghost = jnp.where(regular[None, :], ghost, peer)
+        return jnp.where(jnp.all(peer == 0, axis=0)[None, :], own, ghost)
+
+    def ghost_flux(k, kaux, own, Aown, ghost, p, mesh):
+        """The own cell's row of the Riemann problem `(own, ghost)` on the coupled faces (outward
+        normal), zero elsewhere."""
+        Ag = Aown if kaux is False else kaux(ghost, jnp.zeros_like(Aown), p)
+        c = k(own, ghost, Aown, Ag, p, mesh.face_normals[:, fcj])[0]
+        return jnp.zeros((n_state, nf), dtype=own.dtype).at[:, fcj].set(c)
+
+    def replace_row(A, i, B):
+        """`A` with row `i` from `B`."""
+        return A.at[int(i)].set(B[int(i)])
+
+    bf_face = np.asarray(mesh_np.boundary_face_face_indices, dtype=int)
+    bf_c = jnp.asarray([int(np.flatnonzero(bf_face == f)[0]) for f in faces_c], dtype=int)
+
+    def coupled_ghosts(Qg, own, face, mesh):
+        """The boundary ghosts with the coupled faces' the mirror images `2 face - own`."""
+        return Qg.at[:, bf_c].set(2 * face - own)
+
     S = jax.ShapeDtypeStruct
     T, F, B = S((), jnp.int64), S((), jnp.float64), S((), jnp.bool_)
-    Qe = S((len(a.rn), len(faces_c)), jnp.float64)
+    Qe = S((getattr(a, "read_rows", len(a.rn)), len(faces_c)), jnp.float64)
+    Qs = S((getattr(a, "read_rows", n_state), len(faces_c)), jnp.float64)
 
     def eff(host, *outs):
         """Effect body: the host call takes the token and returns the next one plus its outputs."""
@@ -1361,11 +1572,21 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
             return (order(out[0]), *out[1:])
         return body
 
-    return dict(coupled_faces=coupled_faces, interface_states=interface_states,
-                interface_flux=interface_flux,
-                couple_init=eff(a.init, B), couple_max_dt=eff(a.max_dt, F),
-                couple_read=eff(a.read, Qe), couple_write=eff(a.write),
-                couple_advance=eff(a.advance, B))
+    out = dict(coupled_faces=coupled_faces, interface_states=interface_states,
+               interface_flux=interface_flux, lifted_interface_flux=lifted_interface_flux,
+               characteristic_ghost=characteristic_ghost,
+               ghost_flux=ghost_flux, replace_row=replace_row, coupled_ghosts=coupled_ghosts,
+               couple_init=eff(a.init, B), couple_max_dt=eff(a.max_dt, F),
+               couple_read=eff(a.read, Qe), couple_write=eff(a.write),
+               couple_advance=eff(a.advance, B),
+               couple_window_complete=eff(a.window_complete, B))
+    if hasattr(a, "read_round_trip"):
+        out["couple_read_round_trip"] = eff(a.read_round_trip, Qs)
+    if interface is not None:                  # its kernels, printed as `interface.<slot>`
+        from zoomy_jax.transformation.jax_runtime import JaxRuntime
+        out["interface"] = JaxRuntime.from_nsm(interface)
+        _face_kernel(out["interface"], "numerical_face_sides")
+    return out
 
 
 def hoisted_jit(fn):
