@@ -20,14 +20,14 @@ SSP_RK = {1: ((0, 0),),
 
 class Imex(Option):
     """How a step treats the SystemModel's implicit slots: `lie` splits them off after
-    the SSP-RK step (first order), `ssp2` solves the implicit source in every stage
-    of IMEX-SSP2(2,2,2).
+    the SSP-RK step (first order), `ssp2` solves them in every stage of
+    IMEX-SSP2(2,2,2).
     """
     #: Lie splitting: the explicit SSP-RK step, then implicit diffusion and
     #: implicit Euler on the source (first order)
     lie = "lie"
-    #: IMEX-SSP2(2,2,2) (:data:`IMEX_RK`): the implicit source in every stage
-    #: (second order; no implicit diffusion)
+    #: IMEX-SSP2(2,2,2) (:data:`IMEX_RK`): the implicit source and the two-point part
+    #: of the implicit diffusion in every stage (second order)
     ssp2 = "ssp2"
 
 
@@ -111,7 +111,7 @@ def step_size(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant, time,
 #: ~n u |time| (u = 2^-53), i.e. n^2 u in units of a constant step dt = time / n, so
 #: n dt lands short of n dt by a sliver of ~1e-13 (dt 1e-3, t 2; 1e-17 at dt 5e-3, t 0.05)
 #: and a further step of that size is taken: a Chorin projection solves its pressure with
-#: 1 / dt^2 in the operator and fails there (ANALYSIS 50).  1e-6 merges every such residue
+#: 1 / dt^2 in the operator and fails there (ANALYSIS 58).  1e-6 merges every such residue
 #: up to n ~ 1e5 steps (worst case) and lengthens the merged step by at most 1e-6 of
 #: itself: far below any CFL margin.
 LANDING_TOL = 1e-6

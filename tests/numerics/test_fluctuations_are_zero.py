@@ -13,7 +13,7 @@ model-only test can pass both:
   of the model (the symbolic solvers refuse that pair at setup: it drops the bed
   slope).  A model-only detector blocks the conservative fast path here.
 * ``PositiveRusanov`` on the same SWE emits a fluctuation: Audusse's
-  consistency source restoring the pressure SWE keeps in its flux (ANALYSIS 50;
+  consistency source restoring the pressure SWE keeps in its flux (ANALYSIS 58;
   until 2026-10-14 it read only ``hydrostatic_pressure``, empty for SWE, and the
   lake at rest moved).
 """
@@ -98,7 +98,7 @@ def test_positive_nonconservative_hll_carries_swe_consistency_source():
     """Single-dissipation PosNCHLL on SWE: the reconstruction equalises ``b*``
     (kills the bed-column NCP) and the LF ``s_max·Id·Δq`` lives ONLY in the HLL
     flux, but the consistency source ``S~`` of the pressure SWE keeps in its flux
-    remains (ANALYSIS 50)."""
+    remains (ANALYSIS 58)."""
     assert _nsm(_swe(), PositiveNonconservativeHLL).fluctuations_are_zero \
         is False
 

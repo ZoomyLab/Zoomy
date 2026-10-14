@@ -1,6 +1,6 @@
 """A model's `equilibrium_reconstruction` the symbolic solvers do not honour raises at setup
 (before 2026-10-14 it was silently ignored): moving-equilibrium well-balancing (`bernoulli`,
-`projected_bernoulli`) is not implemented (ANALYSIS 50); `audusse` needs the hydrostatic
+`projected_bernoulli`) is not implemented (ANALYSIS 58); `audusse` needs the hydrostatic
 reconstruction of a Positive* Riemann class."""
 import pytest
 

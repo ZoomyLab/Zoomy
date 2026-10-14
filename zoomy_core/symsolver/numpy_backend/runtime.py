@@ -19,6 +19,7 @@ from zoomy_core.misc.logger_config import logger
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
 from zoomy_core.symsolver.discretization.residual import check_derivative_aux
+from zoomy_core.symsolver.vocabulary import march_error
 from zoomy_core.symsolver.numpy_backend.assembly import (cell_pattern, host_amg_solve,
                                                           operator_neighbors)
 
@@ -190,30 +191,43 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         WL[:, bf_face] = Q[:, inner]
         return _traces(WL, WR)
 
-    def _lsq(U, Ug, classes=None):
+    def _lsq(U, Ug, classes=None, shore=None):
         """Scaled LSQ coefficients `(rows, cells, monomials)` of `U` (core `lsq_derivatives`),
-        the boundary-face samples `Ug` (`None`: the cell value) and the closure `classes`.
+        the boundary-face samples `Ug` (`None`: the cell value), the closure `classes` and the
+        `shore` extension `(row, dry)`.
         """
         return lsq_derivatives(topo, geom, np.asarray(U, dtype=float),
                                None if Ug is None else np.asarray(Ug, dtype=float),
-                               classes if classes else None)
+                               classes if classes else None, shore)
 
-    def gradient(W, Wg, mesh):
+    def _shore(W, args):
+        """`(mesh, (row, dry))` of the trailing block arguments `(mesh,)` or
+        `((eta, h), eps, mesh)`: `dry` the cells with `W[h] <= eps`."""
+        if len(args) == 1:
+            return args[0], None
+        (row, depth), eps, mesh = args
+        return mesh, (int(row), np.asarray(W[int(depth)]) <= float(eps))
+
+    def gradient(W, Wg, *args):
         """LSQ gradient of every row of `W` per cell, closed at the boundary by constraints or by
-        the ghost samples `Wg`.
+        the ghost samples `Wg`; `(W, Wg, (eta, h), eps, mesh)`: in row `eta` a dry neighbour
+        (`W[h] <= eps`) enters as `min(W[eta, k], W[eta, i])` (`vocabulary.gradient`).
 
         References:
             Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
         """
-        D = _lsq(W, Wg, recon_classes)
+        _, shore = _shore(W, args)
+        D = _lsq(W, Wg, recon_classes, shore)
         return np.transpose(D[:, :, topo.lsq_grad_cols], (0, 2, 1))
 
-    def ghost_bounds(u, ug):
-        """Min and max of `u` over the face neighbours and the boundary ghosts `ug`."""
+    def ghost_bounds(u, ug, dry=None):
+        """Min and max of `u` over the face neighbours and the boundary ghosts `ug`; a `dry`
+        neighbour bounds as `min(u_k, u_i)` (`gradient`)."""
         lo, hi = u.copy(), u.copy()
         for a, b in ((iA, iB), (iB, iA)):
-            np.minimum.at(lo, a, u[b])
-            np.maximum.at(hi, a, u[b])
+            v = u[b] if dry is None else np.where(dry[b], np.minimum(u[b], u[a]), u[b])
+            np.minimum.at(lo, a, v)
+            np.maximum.at(hi, a, v)
         np.minimum.at(lo, inner, ug)
         np.maximum.at(hi, inner, ug)
         return lo, hi
@@ -258,11 +272,14 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         """Limiter factory: factors in [0, 1] for the state `rows` (1 elsewhere), bounded by the
         face neighbours and the ghosts.
         """
-        def factors(rows, W, Wg, G, mesh):
-            """Limiter factors for the state `rows`."""
+        def factors(rows, W, Wg, G, *args):
+            """Limiter factors for the state `rows`; `(rows, W, Wg, G, (eta, h), eps, mesh)`: the
+            bounds of row `eta` with `gradient`'s shore values."""
+            _, shore = _shore(W, args)
             phi = np.ones((W.shape[0], nc))
             for v in rows:
-                lo, hi = ghost_bounds(W[v], Wg[v])
+                dry = shore[1] if shore is not None and v == shore[0] else None
+                lo, hi = ghost_bounds(W[v], Wg[v], dry)
                 phi[v] = _limit(kind, W[v], G[v], lo, hi)
             return phi
         return factors
@@ -586,6 +603,47 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         D, C = _div(k, bc, Q, Qaux, p, time, mesh)
         return D + C
 
+    def diffusion_tpfa(k, bc, Q, Qaux, p, time, mesh):
+        """The two-point part of `diffusion`."""
+        return _div(k, bc, Q, Qaux, p, time, mesh, correction=False)[0]
+
+    def diffusion_correction(k, bc, Q, Qaux, p, time, mesh):
+        """`diffusion` beyond its two-point part (zero in 1-D)."""
+        return _div(k, bc, Q, Qaux, p, time, mesh)[1]
+
+    def _jacobian(R, x):
+        """The sparse Jacobian of `R` at `x` (cell-major unknowns) by central differences,
+        one pair of evaluations per colour of the face-neighbour pattern."""
+        import scipy.sparse as sps
+        k_, n = x.shape[0], x.size
+        if n not in two_point:
+            two_point[n] = cell_pattern(n, nc, face_nbrs)
+        rows, cols, colors = two_point[n]
+        xc = x.T.reshape(-1)
+        hx = 6e-6 * np.maximum(1.0, np.abs(xc))
+        vals = np.empty(len(rows))
+        for c in range(int(colors.max()) + 1):
+            e = np.where(colors == c, hx, 0.0)
+            dR = (R((xc + e).reshape(-1, k_).T) - R((xc - e).reshape(-1, k_).T)).T.reshape(-1)
+            pick = colors[cols] == c
+            vals[pick] = dR[rows[pick]] / (2.0 * hx[cols[pick]])
+        return sps.csc_matrix((vals, (rows, cols)), shape=(n, n))
+
+    def implicit_solve(R, x0):
+        """Newton on `R(x) = 0`, `R` coupling face neighbours: each update a sparse LU of the
+        coloured finite-difference Jacobian (the face-neighbour pattern, periodic partners
+        included).
+
+        References:
+            Knoll, Keyes 2004, https://doi.org/10.1016/j.jcp.2003.08.010
+        """
+        from scipy.sparse.linalg import splu
+
+        def update(x, r):
+            """The Newton update at `x`."""
+            return splu(_jacobian(R, x)).solve(-r.T.reshape(-1)).reshape(-1, x.shape[0]).T
+        return _newton(R, np.asarray(x0, dtype=float), update)
+
     def implicit_diffusion(k, bc, Q, Qaux, p, time, dt, mesh):
         """One Crank-Nicolson step of the two-point part of `div(A(X) : grad X)` from `time` to
         `time + dt`, A at the new state, by Newton on a coloured finite-difference Jacobian
@@ -603,24 +661,6 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
             return X - b - 0.5 * dt * _div(k, bc, X, Qaux, p, time + dt, mesh,
                                            correction=False)[0]
 
-        def jacobian(x):
-            """The sparse Jacobian of `R` at `x` (cell-major unknowns) by central differences,
-            one pair of evaluations per colour of the face-neighbour pattern."""
-            import scipy.sparse as sps
-            k_, n = x.shape[0], x.size
-            if n not in two_point:
-                two_point[n] = cell_pattern(n, nc, face_nbrs)
-            rows, cols, colors = two_point[n]
-            xc = x.T.reshape(-1)
-            hx = 6e-6 * np.maximum(1.0, np.abs(xc))
-            vals = np.empty(len(rows))
-            for c in range(int(colors.max()) + 1):
-                e = np.where(colors == c, hx, 0.0)
-                dR = (R((xc + e).reshape(-1, k_).T) - R((xc - e).reshape(-1, k_).T)).T.reshape(-1)
-                pick = colors[cols] == c
-                vals[pick] = dR[rows[pick]] / (2.0 * hx[cols[pick]])
-            return sps.csc_matrix((vals, (rows, cols)), shape=(n, n))
-
         last = [None]
         lu = jacobians.setdefault((Q.size, k), {})
 
@@ -631,7 +671,7 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
             nr = np.linalg.norm(r)
             if (lu.get("dt") != dt or "lu" not in lu
                     or (last[0] is not None and nr > 0.1 * last[0])):
-                lu.update(lu=splu(jacobian(x)), dt=dt)
+                lu.update(lu=splu(_jacobian(R, x)), dt=dt)
             last[0] = nr
             return lu["lu"].solve(-r.T.reshape(-1)).reshape(-1, x.shape[0]).T
         return _newton(R, np.asarray(Q, dtype=float), update)
@@ -645,6 +685,14 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
             warned.append(True)
             logger.warning(f"time step {float(dt):.3e} exceeds the CFL step "
                            f"{float(dt_cfl):.3e} (warned once)")
+        return (tok + 1,)
+
+    def check_march(tok, time, time_end, dt, n_step, q_max):
+        """Raise `FloatingPointError` if the march stopped before `time_end` or ended with a
+        non-finite state (`vocabulary.march_error`); returns the next order token."""
+        msg = march_error(time, time_end, dt, n_step, q_max)
+        if msg is not None:
+            raise FloatingPointError(msg)
         return (tok + 1,)
 
     def io_write(tok, time, Q, Qaux):
@@ -696,8 +744,10 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         take=lambda Q, rows: np.asarray(Q)[list(rows)], reduce_max=np.max,
         logical_and=np.logical_and, select=select, while_loop=while_loop, cond=cond,
         io_write=io_write, io_save_state=io_save_state, io_load_state=io_load_state,
-        root=root, linsolve=linsolve,
-        implicit_diffusion=implicit_diffusion, diffusion=diffusion, check_cfl=check_cfl,
+        root=root, linsolve=linsolve, implicit_solve=implicit_solve,
+        implicit_diffusion=implicit_diffusion, diffusion=diffusion,
+        diffusion_tpfa=diffusion_tpfa, diffusion_correction=diffusion_correction,
+        check_cfl=check_cfl, check_march=check_march,
         minimum=np.minimum, maximum=np.maximum, abs=np.abs, floor=np.floor)
     return m
 

@@ -398,9 +398,10 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         if sL + sR == 0:                           # the Rusanov pair (-a, a)
             return sR
         # max(|s_L|, |s_R|) from the clamped pair the HLL flux itself builds
-        # (min(s_L, 0), max(s_R, 0)), so the printed silo shares it
-        return sp.Max(-sp.Min(sL, sp.Integer(0)), sp.Max(sR, sp.Integer(0)),
-                      evaluate=False)
+        # (min(s_L, 0), max(s_R, 0)), so the printed silo shares it; the Abs makes a dry
+        # face's speed +0, never -0 (a CFL step of -inf)
+        return sp.Abs(sp.Max(-sp.Min(sL, sp.Integer(0)), sp.Max(sR, sp.Integer(0)),
+                             evaluate=False), evaluate=False)
 
     def face_sides_speed(self, flux, fluctuations):
         """`face_sides` plus a third row carrying `face_wave_speed`, shape
@@ -484,29 +485,13 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
             # (see SystemModel.use_spectral_radius_bound for the measured cost
             # on the Ritter dry dam break).  The cheap bound is opt-in.  The
             # symbolic solvers set `gelfand` (zoomy_core.symsolver.WAVE_SPEED).
-            method = SpectralRadius(typed(
-                SpectralRadius, getattr(self.model, "spectral_radius_method",
-                                        SystemModel.spectral_radius_method),
-                "spectral_radius_method"))
-            Qaux = self._wave_speed_aux(Q, Qaux)
-            if method == "bound" or getattr(self.model, "use_spectral_radius_bound",
-                                             SystemModel.use_spectral_radius_bound):
-                return self._spectral_radius_bound(Q, Qaux, p, n)
+            method = self._spectral_method()
+            if method == "bound":
+                return self._spectral_radius_bound(Q, self._wave_speed_aux(Q, Qaux), p, n)
             if method == "gelfand":
-                from zoomy_core.model.kernel_functions import gelfand_bound
-                A = self._model_eval("quasilinear_matrix", Q, Qaux, p)
-                nrm = list(n)
-                M = [[sum(A[i, j, d] * nrm[d] for d in range(len(nrm)))
-                      for j in range(self.n_variables)] for i in range(self.n_variables)]
-                keep = _spectral_core(M)
-                return gelfand_bound(
-                    sp.Integer(getattr(self.model, "spectral_squarings",
-                                       SystemModel.spectral_squarings)),
-                    sp.Float(getattr(self.model, "spectral_cw_offset",
-                                     SystemModel.spectral_cw_offset)),
-                    *[M[i][j] for i in keep for j in keep])
-            src = list(sp.flatten(
-                self._model_eval("numerical_eigenvalues", Q, Qaux, p, n)))
+                return self._gelfand(self._speed_matrix(Q, Qaux, p, n))
+            src = list(sp.flatten(self._model_eval(
+                "numerical_eigenvalues", Q, self._wave_speed_aux(Q, Qaux), p, n)))
             return sp.Max(*[sp.Abs(lam) for lam in src], evaluate=False)
         src = list(sp.flatten(self._model_eval("eigenvalues", Q, Qaux, p, n)))
         # ``evaluate=False``: ``Max`` over a wave spectrum is a runtime
@@ -518,6 +503,84 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         # lowers to ``np.amax``/the backend max UNCHANGED (max is exact +
         # associative → bit-identical numerics).
         return sp.Max(*[sp.Abs(lam) for lam in src], evaluate=False)
+
+    def _spectral_method(self):
+        """The `SpectralRadius` of a model without a closed-form spectrum."""
+        if getattr(self.model, "use_spectral_radius_bound", SystemModel.use_spectral_radius_bound):
+            return SpectralRadius.bound
+        return SpectralRadius(typed(
+            SpectralRadius, getattr(self.model, "spectral_radius_method",
+                                    SystemModel.spectral_radius_method),
+            "spectral_radius_method"))
+
+    def _speed_matrix(self, Q, Qaux, p, n, normal_frame=False):
+        """`A_n = sum_d A[:, :, d] n_d` at `(Q, Qaux)` (the wave-speed aux), restricted to the
+        rows and columns that carry its spectrum (`_spectral_core`), as a list of rows; with
+        `normal_frame` in the face's (normal, tangential) frame (`_normal_frame`).
+        """
+        A = self._model_eval("quasilinear_matrix", Q, self._wave_speed_aux(Q, Qaux), p)
+        nrm = list(n)
+        M = [[sum(A[i, j, d] * nrm[d] for d in range(len(nrm)))
+              for j in range(self.n_variables)] for i in range(self.n_variables)]
+        if normal_frame:
+            M = self._normal_frame(M, nrm)
+        keep = _spectral_core(M)
+        return [[M[i][j] for j in keep] for i in keep]
+
+    def _normal_frame(self, M, nrm):
+        """`T M T^T`, `T` rotating each horizontal vector `(q_x, q_y)` of the state to `(q.n, q.t)`,
+        `t = (-n_y, n_x)`: a similarity (same spectrum), in which a wall's reflected state has a
+        signed permutation of the inner state's matrix, so the bounds of the two are mirror images
+        and a wall's HLL mass flux vanishes.  2 horizontal directions; else `M`.
+        """
+        from zoomy_core.model.boundary_conditions import derive_momentum_field_indices
+        try:
+            groups = derive_momentum_field_indices(self.model)
+        except RuntimeError:
+            return M
+        if len(nrm) != 2 or any(len(g) != 2 for g in groups):
+            return M
+        T = sp.eye(len(M))
+        for i, j in groups:
+            T[i, i], T[i, j], T[j, i], T[j, j] = nrm[0], nrm[1], -nrm[1], nrm[0]
+        R = T * sp.Matrix(M) * T.T
+        return [[R[i, j] for j in range(len(M))] for i in range(len(M))]
+
+    def _gelfand(self, M):
+        """`gelfand_bound` of the square matrix `M` (list of rows): an upper bound of rho(M)."""
+        from zoomy_core.model.kernel_functions import gelfand_bound
+        return gelfand_bound(
+            sp.Integer(getattr(self.model, "spectral_squarings",
+                               SystemModel.spectral_squarings)),
+            sp.Float(getattr(self.model, "spectral_cw_offset",
+                             SystemModel.spectral_cw_offset)),
+            *[x for row in M for x in row])
+
+    def _gelfand_extremes(self, qL, qR, auxL, auxR, p, n):
+        """`(s_L, s_R)` with `s_L <= min Re lambda` and `s_R >= max Re lambda` over the
+        spectra of `A_n` at both face states, from Gelfand bounds of shifted matrices: for any
+        real `c`, `rho(A + c I) >= max_i |lambda_i + c| >= max_i Re lambda_i + c`, so
+        `s_R = bound(A + a I) - a`, `s_L = a - bound(a I - A)`; `a` the face's bound of rho (the
+        Rusanov speed), both clamped to `[-a, a]`; the shifted matrices in the face's normal
+        frame, so a wall's pair is symmetric (no mass through it).  Branch-free, every backend.
+
+        References:
+            Horn, Johnson 2012 (sections 5.6, 8.1), https://doi.org/10.1017/CBO9781139020411
+            Davis 1988, https://doi.org/10.1137/0909030
+        """
+        a = self.face_max_abs_eigenvalue(qL, qR, auxL, auxR, p, n)
+        shifted = []
+        for sign in (1, -1):                     # bound(A + a I), bound(a I - A), both states
+            per_state = []
+            for q, aux in ((qL, auxL), (qR, auxR)):
+                M = self._speed_matrix(q, aux, p, n, normal_frame=True)
+                per_state.append(self._gelfand(
+                    [[sign * x + (a if i == j else 0) for j, x in enumerate(row)]
+                     for i, row in enumerate(M)]))
+            shifted.append(sp.Max(*per_state, evaluate=False))
+        sR = sp.Min(shifted[0] - a, a, evaluate=False)
+        sL = sp.Max(a - shifted[1], -a, evaluate=False)
+        return sL, sR
 
     def _wave_speed_aux(self, Q, Qaux):
         """`Qaux` with the KP `hinv` replaced by the `1/max(1e-14, h)` of the closed-form
@@ -878,8 +941,8 @@ class Rusanov(Numerics):
 
 class HLL(Numerics):
     """HLL approximate Riemann solver, model-agnostic: it needs the flux, hydrostatic
-    pressure and eigenvalues, and without a closed-form spectrum reduces to local
-    Lax-Friedrichs. The flux is one branch-free expression (wave speeds clamped by
+    pressure and eigenvalues; without a closed-form spectrum its wave speeds are Gelfand
+    bounds of the signed extremes. The flux is one branch-free expression (wave speeds clamped by
     `Min(s_L, 0)` / `Max(s_R, 0)`), so it codegens to every backend.
 
     References:
@@ -901,14 +964,17 @@ class HLL(Numerics):
         )
 
     def wave_speed_bounds(self, qL, qR, auxL, auxR, p, n):
-        """Davis estimates, the min / max over the spectrum of both face states; the
-        Lax-Friedrichs pair without a closed-form spectrum.
+        """Davis estimates, the min / max over the spectrum of both face states; without a
+        closed-form spectrum bounds of them from the Gelfand bound (`_gelfand_extremes`), and
+        the Lax-Friedrichs pair for the `bound` method.
 
         References:
             Toro 2009, https://doi.org/10.1007/b79761
             Davis 1988, https://doi.org/10.1137/0909030
         """
         if self.model.eigenvalues is None:
+            if self._spectral_method() == "gelfand":
+                return self._gelfand_extremes(qL, qR, auxL, auxR, p, n)
             return super().wave_speed_bounds(qL, qR, auxL, auxR, p, n)
         eig = list(sp.flatten(self._model_eval("eigenvalues", qL, auxL, p, n)))
         eig += list(sp.flatten(self._model_eval("eigenvalues", qR, auxR, p, n)))
