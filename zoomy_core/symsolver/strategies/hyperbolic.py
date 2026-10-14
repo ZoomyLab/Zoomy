@@ -4,14 +4,27 @@ configuration and its methods are the graphs a backend prints.
 """
 import sympy as sp
 
-from zoomy_core.misc.options import typed
+from zoomy_core.misc.options import Option, typed
 from zoomy_core.symsolver.core import Cond, While
 from zoomy_core.symsolver.discretization.residual import (
     explicit_step, full_aux, imex_step, implicit_step, mood_step, post_step)
 from zoomy_core.symsolver.discretization.time import (
     IMEX_RK, SSP_RK, CflWaveSpeed, Imex, cfl_dt, checked, face_dt, face_rule, step_size)
 from zoomy_core.symsolver.vocabulary import (
-    couple, coupled_faces, interface_flux, interface_states, io)
+    characteristic_ghost, couple, coupled_faces, ghost_flux, interface_flux,
+    interface_states, io, replace_row, select)
+
+
+class CoupledFace(Option):
+    """The Riemann problem of a coupled face (preCICE).
+    """
+    #: the same model on both sides: one Riemann problem on (own, peer) posed low -> high,
+    #: which both participants solve alike (the exchanged data: the cell states)
+    shared = "shared"
+    #: a peer of another model (SME <-> VOF): the Riemann problem (own, ghost), the ghost
+    #: taking the entering characteristics from the peer and the leaving ones from the own
+    #: cell (`characteristic_ghost`); the exchanged data: the cell states and their aux
+    characteristic = "characteristic"
 
 
 class HyperbolicTemplate:
@@ -120,15 +133,23 @@ class HyperbolicTemplate:
         return _time_loop(Q, Qaux, time, time_end, self.dt_write, step,
                           self.dt_checkpoint)
 
-    def precice_march(self, Q, Qaux, p, time, mesh, *, side, subcycling=False):
+    def precice_march(self, Q, Qaux, p, time, mesh, *, side, subcycling=False,
+                      face=CoupledFace.shared, frozen_mass_row=False):
         """The march as one preCICE participant; preCICE ends the loop and the coupled
-        faces carry the shared interface answer on (own, peer).
+        faces carry the interface answer (`face`).
 
         Args:
-            side: 0 if this domain is the low side of the interface.
+            side: 0 if this domain is the low side of the interface (`CoupledFace.shared`).
             subcycling: `False`: one step per window (warns above the CFL step), mass
                 conserved exactly. `True`: adaptive steps inside the window, mass not
                 exactly conserved.
+            face: `CoupledFace.shared`: one Riemann problem on (own, peer) that both sides
+                solve alike; `CoupledFace.characteristic`: the Riemann problem (own, ghost)
+                towards a peer of another model, the own cells' states and aux exchanged.
+            frozen_mass_row: (`characteristic`) the depth row of the coupled faces held over
+                the window at its value at the window start, of the Riemann problem (own as
+                the peer reads it, ghost): what the peer charges for the same window, from
+                the same exchanged data.
 
         References:
             Chourdakis et al. 2022, https://doi.org/10.12688/openreseurope.14445.2
@@ -136,9 +157,40 @@ class HyperbolicTemplate:
         nsm, cfl, dimension = self.nsm, self.cfl, self.dimension
         dt_constant, cfl_check_every = self.dt_constant, self.cfl_check_every
         dt_write, wave_speed = self.dt_write, self.wave_speed
+        face = CoupledFace(typed(CoupledFace, face, "face"))
+        characteristic = face == CoupledFace.characteristic
+        if frozen_mass_row and not characteristic:
+            raise ValueError("frozen_mass_row needs face=CoupledFace.characteristic")
+        depth = getattr(nsm.roles, "depth", None)
+        if frozen_mass_row and depth is None:
+            raise ValueError("frozen_mass_row: the model declares no depth row")
+        sides = nsm.call.numerical_face_sides
+        aux = nsm.call.update_aux_variables or sp.S.false
 
-        def body(time, Q, Qaux, going, n_write):
-            """One coupling step inside the window, with its output."""
+        def exchanged(Q, Qaux):
+            """What this participant writes: the cell states next to the coupled faces, with
+            their aux towards a peer of another model."""
+            q = interface_states(Q, mesh)
+            return (q, interface_states(Qaux, mesh)) if characteristic else (q,)
+
+        def coupled_face(Q, Qaux, Wf, fresh):
+            """`(Wc, Wf)`: the coupled faces' contribution, the window's frozen depth row."""
+            peer = couple.read()
+            if not characteristic:
+                return interface_flux(sides, aux, side, Q, Qaux, peer, p, mesh), Wf
+            own, Aown = interface_states(Q, mesh), interface_states(Qaux, mesh)
+            ghost = characteristic_ghost(nsm.call.quasilinear_matrix, own, Aown, peer,
+                                         p, mesh)
+            Wc = ghost_flux(sides, aux, own, Aown, ghost, p, mesh)
+            if frozen_mass_row:
+                Wf = select(fresh, ghost_flux(sides, sp.S.false, couple.read_round_trip(),
+                                              Aown, ghost, p, mesh), Wf)
+                Wc = replace_row(Wc, depth, Wf)
+            return Wc, Wf
+
+        def body(time, Q, Qaux, going, n_write, fresh, Wf):
+            """One coupling step inside the window, with its output; `(fresh, Wf)`: the
+            window start flag and the frozen depth row (`frozen_mass_row`)."""
             window = couple.max_dt()
             if subcycling:                          # adaptive inside the window
                 cap = window if dt_write is None else sp.Min(
@@ -158,10 +210,7 @@ class HyperbolicTemplate:
                 dt = checked(window, time, cfl_check_every,
                              lambda: cfl_dt(nsm, Q, Qaux, p, mesh, cfl,
                                             dimension))
-            peer = couple.read()
-            Wc = interface_flux(nsm.call.numerical_face_sides,
-                                nsm.call.update_aux_variables or sp.S.false,
-                                side, Q, Qaux, peer, p, mesh)
+            Wc, Wf = coupled_face(Q, Qaux, Wf, fresh)
             if wave_speed == "faces":
                 Q, Qaux, dt = self.step(Q, Qaux, p, time, None, mesh,
                                         coupled=(coupled_faces(mesh), Wc),
@@ -169,21 +218,35 @@ class HyperbolicTemplate:
             else:
                 Q, Qaux, dt = self.step(Q, Qaux, p, time, dt, mesh,
                                         coupled=(coupled_faces(mesh), Wc))
-            couple.write(interface_states(Q, mesh))
+            couple.write(*exchanged(Q, Qaux))
             going = couple.advance(dt)
+            if frozen_mass_row:
+                fresh = couple.window_complete()
             time = time + dt
             if dt_write is not None:
                 n_write = Cond(
                     time >= (n_write - sp.Rational(1, 10**9)) * dt_write,
                     lambda: _write(time, Q, Qaux, n_write),
                     lambda: n_write)
-            return time, Q, Qaux, going, n_write
+            return time, Q, Qaux, going, n_write, fresh, Wf
 
-        going = couple.init(interface_states(Q, mesh))
+        going = couple.init(*exchanged(Q, Qaux))
         if dt_write is not None:
             io.write(time, Q, Qaux)
+        if frozen_mass_row:        # carry the window start flag and the frozen depth row
+            own = interface_states(Q, mesh)
+            Wf = ghost_flux(sides, sp.S.false, own, interface_states(Qaux, mesh), own, p,
+                            mesh)                     # a placeholder: replaced at the start
+            time, Q, Qaux, *_ = While(
+                lambda time, Q, Qaux, going, n_write, fresh, Wf: going, body,
+                (time, Q, Qaux, going, 1, sp.S.true, Wf))
+            return time, Q, Qaux
+
+        def body_live(time, Q, Qaux, going, n_write):
+            """`body` without the frozen row."""
+            return body(time, Q, Qaux, going, n_write, None, None)[:5]
         time, Q, Qaux, *_ = While(
-            lambda time, Q, Qaux, going, n_write: going, body,
+            lambda time, Q, Qaux, going, n_write: going, body_live,
             (time, Q, Qaux, going, 1))
         return time, Q, Qaux
 
