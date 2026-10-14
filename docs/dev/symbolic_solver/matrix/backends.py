@@ -115,31 +115,41 @@ class Amrex:
 
 
 class Numpy:
-    """zoomy_core's NumPy backend (the default install): serial only."""
-    configs = ("serial",)
+    """zoomy_core's NumPy backend (the default install); mpiN: mpiexec, mpi4py (+ petsc4py for
+    the linear solves; MATRIX_NUMPY_MPI_SOLVER: auto, petsc, krylov)."""
+    configs = ("serial", "mpi2", "mpi4")
 
     def launch(self, config):
+        if config.startswith("mpi"):
+            return ["mpiexec", "-n", str(_ranks(config)), sys.executable]
         return None
 
     def run(self, r, mesh, systems, Q0, config, work):
         from zoomy_core.symsolver.numpy_backend import (SymbolicChorinSolverNumpy,
                                                         SymbolicHyperbolicSolverNumpy)
+        from zoomy_core.symsolver.numpy_backend.parallel import MpiLinearSolver
+        comm = None
+        if _ranks(config) > 1:
+            from mpi4py import MPI
+            comm = MPI.COMM_WORLD
         cls = SymbolicChorinSolverNumpy if r.chorin else SymbolicHyperbolicSolverNumpy
-        kw = _solver_kw(r, cls)
+        kw = dict(_solver_kw(r, cls), comm=comm, mpi_linear_solver=MpiLinearSolver(
+            os.environ.get("MATRIX_NUMPY_MPI_SOLVER", "auto")))
         if r.chorin:
             s = cls(pressure_linear_solver=LinearSolver.gmres, **kw)
             Q, A = s.setup(mesh, *systems)
         else:
             s = cls(**kw)
             Q, A = s.setup(mesh, systems)
-        if r.q0 is not None:
+        if r.q0 is not None:           # on this rank's cells
             names = [str(v) for v in s.nsm.state]
             Q = r.q0(names, np.asarray(s.mesh_np.cell_centers)[:, :Q.shape[1]])
             A = s.initial_aux(np.asarray(Q, dtype=float), A)
-        else:
+        elif comm is None:
             Q = np.asarray(Q0)
         t, Q, _ = s.run(Q, A)
-        return float(t), np.asarray(Q)
+        Q = s.partition.gather(np.asarray(Q)) if s.partition else np.asarray(Q)
+        return None if Q is None else (float(t), Q)
 
 
 BACKENDS = {"jax": Jax, "foam": Foam, "amrex": Amrex, "numpy": Numpy}

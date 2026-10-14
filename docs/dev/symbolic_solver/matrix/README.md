@@ -7,7 +7,10 @@ backend must pass the same physics checks instead: convergence, exact
 solutions, conservation, symmetry, parallel = serial, GPU = CPU.
 
 **NumPy** (`zoomy_core.symsolver.numpy_backend`, the default install: no JAX, no
-compiler) prints the same templates as JAX and runs serially.  It runs every
+compiler) prints the same templates as JAX and runs serially, and distributed
+(`mpi2`, `mpi4`: mpi4py, JAX's partition; linear solves by PETSc through petsc4py,
+or a distributed FGMRES; ANALYSIS 50) wherever JAX has these configs (C1, C5, C8,
+C13, C14, C21, C26, C35).  It runs every
 serial JAX run except the fine JAX references the checks read, the `*_pert`
 sensitivity runs, the gate-40 control, AD (C15, C22), preCICE (C16) and AMR
 (C17); gate 39 (C30) checks the fit numpy takes (`GATE39_BACKEND=numpy`: core
@@ -15,7 +18,8 @@ sensitivity runs, the gate-40 control, AD (C15, C22), preCICE (C16) and AMR
 checks are JAX's, plus one row per case `numpy = JAX (max rel, worst run)`:
 round-off (1e-12, or 10 x JAX's `*_pert` sensitivity), or the case's
 implicit-solve tolerance (C8, C10, C31 VAM: 1e-9; C14, C26, C31 SWE, C32: 1e-8;
-C33 imex: 1e-10).  `Root` uses a central-difference cell Jacobian, implicit
+C33 imex: 1e-10); its `mpi2` / `mpi4` runs against JAX serial in the same row, and
+against numpy serial in C7 (round-off; C8 the pressure tolerance).  `Root` uses a central-difference cell Jacobian, implicit
 diffusion a finite-difference Newton-GMRES (JAX: exact AD).
 
 ## Coverage: capability x backend -> case
@@ -28,7 +32,7 @@ diffusion a finite-difference Newton-GMRES (JAX: exact AD).
 | BCs: wall, Dirichlet, InflowOutflow, Extrapolation, FromModel | C4 | C4 | C4 |
 | wet/dry, positivity | C5 | C5 | C5 |
 | conservation (closed domains) | C6 | C6 | C6 |
-| MPI = serial (hyperbolic) | C7 | C7 | C7 |
+| MPI = serial (hyperbolic; NumPy too) | C7 | C7 | C7 |
 | pressure (VAM(1) Chorin): linear, Newton, time_order 2 | C8 | C8 | C8 |
 | pressure on triangles | C8 | C8 | n/a (Cartesian) |
 | GPU = CPU | C9 | n/a | C9 |

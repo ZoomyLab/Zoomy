@@ -44,6 +44,31 @@ solves: 'gmres' (distributed FGMRES), 'pyamg' (FGMRES + per-rank AMG + coarse
 correction), 'amgx' (one global AmgX solve in AmgX's MPI mode; AmgX and
 JAX-AMG built with MPI, see AMG.md).  ANALYSIS.md section 25.
 
+NumPy backend (`zoomy_core.symsolver.numpy_backend`, no JAX): the same `comm=`
+API, partition and halo layers (`zoomy_core.mesh.distributed`), mpi4py only in a
+distributed run (the serial backend and the browser import without it).
+
+```python
+from mpi4py import MPI
+from zoomy_core.symsolver.numpy_backend import SymbolicHyperbolicSolverNumpy
+s = SymbolicHyperbolicSolverNumpy(time_end=0.5, comm=MPI.COMM_WORLD)
+Q, Qaux = s.setup(mesh, model)                  # the local piece
+time, Q, Qaux = s.run(Q, Qaux)
+mass = s.integral(Q)                            # a collective: every rank
+Q_all = s.partition.gather(Q)                   # rank 0
+```
+
+- Halo: point-to-point (Isend / Irecv) of the exchange lists; reductions over
+  the cells / faces each rank counts (`Partition.owned`, JAX's rule); min / max
+  NaN-propagating (gathered, then `np.min`: MPI.MIN drops a NaN).
+- Implicit solves: Newton norms global (every rank the same updates); the
+  linear solves `mpi_linear_solver=MpiLinearSolver.auto | petsc | krylov`:
+  PETSc via petsc4py (GMRES matrix-free for `gmres`, FGMRES + BoomerAMG on the
+  colour-assembled rows for `pyamg`, MUMPS LU for the implicit diffusion's
+  Jacobian), or without petsc4py a distributed FGMRES (block-Jacobi: the rank's
+  LU / SA V-cycle).  ANALYSIS.md section 50.
+- `mpiexec -n 4 python run.py`; keep `OMP_NUM_THREADS=1`.
+
 GPU transport (`bench_halo.py`: 1000 halo exchanges in one compiled loop,
 4 L40S, 4 rows; `bench_parallel.py`: whole step, 160k cells, 400 steps):
 

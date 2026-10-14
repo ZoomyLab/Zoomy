@@ -1954,3 +1954,91 @@ refused by `InsertClosure` (their shallow-only closure needs a scaled form first
 wired; `small_slope_scaling` (frame slopes O(eps)) is still a separate step; SME's surface
 normal-stress condition `p(eta) = tau_zz(eta)` is used when the vertical row keeps a stress (same
 group, eps^2/De), not scaled as its own boundary row.
+
+## 50. The NumPy backend distributed (MPI) (2026-10-14, dev/numpy-mpi)
+
+`SymbolicHyperbolicSolverNumpy(comm=MPI.COMM_WORLD)` / `SymbolicChorinSolverNumpy(comm=...)`: the
+JAX API (`setup` takes the global mesh, returns the rank's piece; `partition.gather`), mpi4py only.
+
+**Design.**
+
+- One partition, one template.  The piece and its exchange lists are JAX's
+  (`mesh.distributed.distribute`, `Partition`: owned cells, two halo layers, cut faces tagged
+  `halo`); the template's own `halo` / `reduce_*` blocks carry the rest.  The rule which rank
+  counts a face or a cell moved from `zoomy_jax.symsolver.parallel.blocks` to
+  `Partition.owned` (core); JAX uses it, bitwise unchanged (matrix C1, C8, C13, C21 mpi2).
+- `numpy_backend/parallel.py`, `Distributed`: `halo` = Isend / Irecv of the exchange lists for any
+  `(..., cells)` array -- the state after every stage, the aux and derivative aux after `full_aux`,
+  the LSQ gradients of the diffusion correction, the pressure iterate inside its residual; the
+  identity inside `no_halo` (assembly by colouring: each rank probes its own rows alone, the halo
+  columns numbered by their owners, no collective inside the probes).  Cut faces: no BC kernel,
+  no diffusion flux (as JAX).
+- MOOD flags are not exchanged: `inadmissible` reads the halo'd candidate state, so every copy of
+  a cell flags as its owner (C5 and the MOOD test = serial to 5e-15).
+- Reductions: min / max gathered, then `np.min` / `np.max`: a NaN on any rank is the result on
+  every rank (MPI.MIN on MPICH 4.3.2 dropped it in the test, `mpi_min_swallows`); sums gathered
+  and added in rank order, the same bits on every rank, so the decisions taken on them (Newton
+  stop, lagged-Jacobian refactorization, the accept gate, FGMRES exit) agree -- no rank-local
+  branch in front of a collective.  `solver.integral(Q)` (mass) is a collective.
+- IMEX source: the cell-local Newton runs on the owned and the halo cells (copies of the same
+  inputs), its norm global: the serial number of updates.
+- Implicit diffusion: the Crank-Nicolson residual halos its iterate; the Jacobian's owned rows by
+  the coloured central differences (halo off), lagged as the serial `splu` (new dt, or an update
+  reducing the global residual less than 10x).
+- Pressure (`linsolve`): the affine operator on the owned unknowns with one global scale
+  `max|x|`; accept gate on the global residual.
+- Output / restart: gathered to rank 0, the serial file (h5py here is not built with MPI; with it,
+  `Partition.write_fields`, as JAX); restart files read per rank (`scatter`).
+- mpi4py / petsc4py are imported only by a distributed run: the serial backend and Pyodide run
+  without them (test with both blocked; the QR C1 check of optional imports).
+
+**Distributed linear solves** (`mpi_linear_solver = MpiLinearSolver.auto | petsc | krylov`; the
+env has PETSc 3.24.5 + petsc4py on MPICH 4.3.2 with MUMPS, SuperLU_dist, hypre, so `auto` = PETSc):
+
+| system | PETSc (petsc4py) | `krylov` (mpi4py only) |
+|---|---|---|
+| pressure, `gmres` | KSP GMRES on a shell matrix (matrix-free), no preconditioner: the serial scipy GMRES | FGMRES, CGS2, two gathers per iteration |
+| pressure, `pyamg` / `auto` | owned rows assembled by colouring, left-scaled by the inverse cell blocks (as `host_amg_solve`), FGMRES + BoomerAMG, hierarchy lagged (`amg_rebuild`, `amg_growth`) | FGMRES + the rank's SA V-cycle (block Jacobi) |
+| implicit diffusion | MUMPS LU of the assembled Jacobian (SuperLU_dist, else GMRES 1e-14) | FGMRES to 1e-14, block-Jacobi LU |
+
+PETSc's GMRES default (classical Gram-Schmidt, never refined) took 4251 iterations per VAM
+pressure solve against 910 refined (9k cells): the KSPs set `refine_always` (prefix
+`zoomy_numpy_`, overridable in `PETSC_OPTIONS`).
+
+**Matrix** (store = the main results, core 082acb3, plus numpy; all 228 numpy serial runs rerun:
+bitwise = before): numpy `mpi2` / `mpi4` added where JAX has them (C1, C5, C8, C13, C14, C21,
+C26; C35 mpi2), 0 FAIL, the other backends' rows unchanged.
+
+| case | mpi2 vs serial | mpi4 vs serial | numpy mpi2 / mpi4 vs JAX serial |
+|---|---|---|---|
+| C1 o2_n40 (adaptive dt, t 2.5) | 1.4e-13 | 1.4e-13 (JAX: 1.4e-13) | 1.4e-13 |
+| C5 dry dam break, MOOD | 5.4e-15 | 6.6e-15 | 3.4e-15 / 6.5e-15 |
+| C8 VAM Chorin (PETSc GMRES) | 2.8e-11 | 3.0e-11 (tol 1e-9) | 5.9e-11 |
+| C13 periodic O1 / O2 | 6.4e-16 | 5.8e-16 | 2.2e-15 |
+| C14 IMEX Manning | 4.2e-16 | 5.1e-16 | 1.1e-15 |
+| C21 Euler 3-D | <= 9.8e-16 | <= 6.7e-16 | 1.2e-15 |
+| C26 implicit diffusion (MUMPS) | 5.6e-16 | 6.2e-16 | 2.3e-14 |
+| C35 restart (mpi2) | restarted = continuous: 0 (bitwise) | | |
+
+`krylov` (MATRIX_NUMPY_MPI_SOLVER=krylov): C8 2.0e-11 / 6.1e-11, C26 6.1e-16 / 6.2e-16.  `pyamg`
+pressure on C8 vs serial pyamg: PETSc BoomerAMG 7.6e-11 / 6.6e-11, `krylov` per-rank SA
+3.0e-11 / 1.6e-11.  Tests (`tests/symsolver/test_numpy_mpi.py`, 3 ranks): O2 + MOOD walls and O2
+periodic = serial 4e-16 / 7e-16, mass integral, halo copies = owners, NaN min, `linsolve`
+PETSc / krylov = serial 5e-16, HDF5 output = the serial file.
+
+**Timings** (`gates/bench_numpy_parallel.py`, constant dt, cores 16-23 of a shared node, ms per
+step; setup 9-35 s, serial Python on every rank):
+
+| run | 1 rank | 2 | 4 | 8 |
+|---|---|---|---|---|
+| SWE O2 + MOOD, 200^2 | 716 | 434 | 213 | 109 (6.6x) |
+| SWE O2 + MOOD, 400^2 | 2382 | | 869 | 459 (5.2x) |
+| VAM(1) Chorin 300 x 30, `gmres` (PETSc / krylov) | 9668 | 6929 / 6004 | 3346 / 3639 | 2104 / 2573 |
+| VAM(1) Chorin 300 x 30, `pyamg` (PETSc BoomerAMG / per-rank SA) | 438 | 213 / 277 | 133 / 289 | 98 / 219 |
+| implicit diffusion 80^2 (MUMPS / krylov) | 418 | 233 / 276 | 128 / 148 | 88 / 95 |
+
+- The unpreconditioned GMRES pressure is ~900 iterations per solve at 9k cells, whatever the
+  ranks: use `pyamg` (BoomerAMG distributed: 17-20 iterations on 2-8 ranks).  The per-rank SA
+  block preconditioner stops scaling at 4 ranks (no coarse correction, unlike JAX's).
+- Open: setup is serial per rank (the global mesh, as JAX for a mesh object; a mesh file reads
+  only the rank's cells); h5py without MPI gathers output on rank 0.

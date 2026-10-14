@@ -4,7 +4,7 @@
     python matrix.py table                                 # store -> table.md
     python matrix.py run --tier large CASE [ARGS]          # large.py (never by default)
 
-BACKEND: jax foam amrex.  CASE: C1 ... C34 (cases.py).  CONFIG: serial
+BACKEND: jax foam amrex numpy.  CASE: C1 ... C36 (cases.py).  CONFIG: serial
 (default) mpi2 mpi4 gpu1 gpu2 (= gpu-mpi).  A run in the store is skipped
 (--force reruns).  A run that raises NotImplementedError is stored as
 "unsupported", any other exception as a failure.
@@ -594,34 +594,36 @@ NUMPY_TOL = {"C8": PRESS, "C10": PRESS,
 
 
 def numpy_checks(add, g, J):
-    """numpy = JAX per case: the max rel difference of the final states over the case's runs
-    (round-off, or the implicit-solve tolerance); custom runs with a `rel_vs_jax` metric."""
-    for case, (_, runs) in CASES.items():
-        worst, tol = None, NUMPY_TOL.get(case, RO)
-        for r in runs:
-            d = g(case, r.key)
-            if d is None or "numpy" not in r.backends:
-                continue
-            if r.custom is not None:            # C27, C34: the run compares with JAX itself
-                v = metrics(d).get("rel_vs_jax") if case in ("C27", "C34") else None
-                th = TH["C34 xb"] if case == "C34" else RO
-            else:
-                j = J(case, r.key)
-                v = None if j is None else relmax(d, j)
-                th = tol
-                if case == "C31":
-                    th = PRESS if r.key.startswith("vam") else NUMPY_TOL["C14"]
-                elif case == "C33":
-                    th = TH["C33 xb"]["imex" if r.key.startswith("imex") else "rk2"]
-                elif J(case, r.key + "_pert") is not None:      # round-off amplified by the run
-                    sens = relmax(J(case, r.key + "_pert"), j)
-                    if 10 * sens > th[1]:
-                        th = ("<=", 10 * sens, f"10 x JAX round-off sensitivity ({sens:.1e})")
-            if v is not None and (worst is None or v / th[1] > worst[0] / worst[1][1]):
-                worst = (v, th, r.key)
-        if worst is not None:
-            add(case, "numpy = JAX (max rel, worst run)", "numpy", "serial", worst[0], worst[1],
-                f"worst run {worst[2]}")
+    """numpy = JAX per case and config (serial, mpi2, mpi4: numpy's distributed runs against JAX
+    serial): the max rel difference of the final states over the case's runs (round-off, or the
+    implicit-solve tolerance); custom runs with a `rel_vs_jax` metric (serial)."""
+    for c in ("serial", "mpi2", "mpi4"):
+        for case, (_, runs) in CASES.items():
+            worst, tol = None, NUMPY_TOL.get(case, RO)
+            for r in runs:
+                d = g(case, r.key, c)
+                if d is None or "numpy" not in r.backends:
+                    continue
+                if r.custom is not None:        # C27, C34: the run compares with JAX itself
+                    v = metrics(d).get("rel_vs_jax") if case in ("C27", "C34") else None
+                    th = TH["C34 xb"] if case == "C34" else RO
+                else:
+                    j = J(case, r.key)
+                    v = None if j is None else relmax(d, j)
+                    th = tol
+                    if case == "C31":
+                        th = PRESS if r.key.startswith("vam") else NUMPY_TOL["C14"]
+                    elif case == "C33":
+                        th = TH["C33 xb"]["imex" if r.key.startswith("imex") else "rk2"]
+                    elif J(case, r.key + "_pert") is not None:  # round-off amplified by the run
+                        sens = relmax(J(case, r.key + "_pert"), j)
+                        if 10 * sens > th[1]:
+                            th = ("<=", 10 * sens, f"10 x JAX round-off sensitivity ({sens:.1e})")
+                if v is not None and (worst is None or v / th[1] > worst[0] / worst[1][1]):
+                    worst = (v, th, r.key)
+            if worst is not None:
+                add(case, "numpy = JAX (max rel, worst run)", "numpy", c, worst[0], worst[1],
+                    f"worst run {worst[2]}" + ("" if c == "serial" else " (vs JAX serial)"))
 
 
 def measure():
