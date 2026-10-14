@@ -26,6 +26,7 @@ from zoomy_core.solver.constants import elliptic_constants
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings, LinearSolver
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
 from zoomy_core.symsolver.strategies.hyperbolic import CoupledFace, HyperbolicTemplate
+from zoomy_core.symsolver.vocabulary import march_error
 from zoomy_core.systemmodel.padding import pad_to_square
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
 from zoomy_jax.mesh.mesh import convert_mesh_to_jax
@@ -55,8 +56,10 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
     ad_checkpoints = param.Integer(default=64, bounds=(1, None))
     couple = param.Dict(default=None, allow_None=True,
                         doc="preCICE: dict(adapter=, tag=, side=[, face=CoupledFace, "
-                            "frozen_mass_row=bool]) (`HyperbolicTemplate.precice_march`; "
-                            "a `ColumnPreciceAdapter` towards a VOF peer).")
+                            "frozen_mass_row=bool, interface=SystemModel | NSM]) "
+                            "(`HyperbolicTemplate.precice_march`; a `ColumnPreciceAdapter` "
+                            "towards a VOF peer or, with `interface`, towards another level "
+                            "of the model).")
     comm = param.Parameter(default=None, doc=(
         "mpi4py communicator: a distributed run, each rank on its piece of "
         "the mesh (owned cells + halo).  setup() takes the global mesh and "
@@ -139,11 +142,14 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         self.mood_active = bool(self.mood and order >= 2
                                 and nsm.call.admissible is not None)
         on_save, on_load = self._restart()
+        self.interface = self._interface(nsm)
+        couple = (self.couple if self.interface is None
+                  else dict(self.couple, interface=self.interface))
         self.module = R.runtime(nsm, self.rt, mesh, self.mesh_j, self.topo,
                                 ad_mode=self.ad_mode,
                                 checkpoints=self.ad_checkpoints,
                                 on_write=self._writer(), on_save=on_save,
-                                on_load=on_load, couple=self.couple,
+                                on_load=on_load, couple=couple,
                                 systems=systems, partition=self.partition,
                                 implicit=dict(tol=self.implicit_tol,
                                               maxiter=self.implicit_maxiter,
@@ -155,7 +161,14 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
                 "IMEX with derivative-dependent sources needs the global "
                 "(Newton-GMRES) source solve; only the cell-local one exists")
         name, self.source = self._print()
-        fn, topo = R.build(self.source, name, self.module), self.topo
+        program, topo = R.build(self.source, name, self.module), self.topo
+        checks = self.module["march_checks"]
+
+        def fn(*a):
+            """The printed program, plus `check.march`'s arguments as extra outputs."""
+            del checks[:]
+            out = program(*a)
+            return (*out, *(checks[0] if checks else ()))
         # the mesh enters as vertex coordinates; geometry is computed inside
         self._jit = R.hoisted_jit(lambda *a: fn(*a[:-2], R.geometry_of(topo, a[-2]),
                                                 a[-1]))
@@ -169,6 +182,23 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
             self._jit_fixed = lambda *a: jit_g(*a[:-1], geometry, a[-1])
         Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
         return Q, self.initial_aux(Q, Qaux)
+
+    def _interface(self, nsm):
+        """The interface model of a lifted shared face (`couple['interface']`), as an NSM of its
+        own named `interface` (the template prints its kernels as `interface.<slot>`); `None`
+        without one.
+        """
+        model = (self.couple or {}).get("interface")
+        if model is None:
+            return None
+        if model is nsm:
+            raise ValueError("couple['interface']: pass its own SystemModel or NSM, not the "
+                             "solver's NSM")
+        if not isinstance(model, NumericalSystemModel):
+            model = NumericalSystemModel.from_system_model(model)
+        model._symbolic_name = "interface"
+        model._call = None                                 # rebuild the table under the name
+        return default_wave_speed(model)
 
     def _config(self):
         """The configuration of the solver template."""
@@ -190,7 +220,8 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
                 lambda *a: template.precice_march(
                     *a, side=c.get("side", 0), subcycling=self.subcycling,
                     face=c.get("face", CoupledFace.shared),
-                    frozen_mass_row=c.get("frozen_mass_row", False)))
+                    frozen_mass_row=c.get("frozen_mass_row", False),
+                    interface=self.interface))
         return "hyperbolic", PyPrinter().procedure(
             "hyperbolic", (Q, Qaux, p, time, time_end, mesh), template.march)
 
@@ -302,11 +333,22 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         time0 = self.time_start if time0 is None else time0
         tok = jnp.int64(0)
         args = (Q, Qaux, p, time0) + (() if self.couple else (self.time_end,))
-        out = (self._jit_fixed(*args, tok) if X is None
-               else self._jit(*args, X, tok))
-        if not isinstance(out[1], jax.core.Tracer):     # traced (AD): the caller waits
-            jax.block_until_ready(out)                    # dispatch is asynchronous: return
-            jax.effects_barrier()                         # when the march and its writes are done
+        failures = self.module["march_failures"]          # check.march's host messages
+        del failures[:]
+        try:
+            out = (self._jit_fixed(*args, tok) if X is None
+                   else self._jit(*args, X, tok))
+            if not isinstance(out[1], jax.core.Tracer):     # traced (AD): the caller waits
+                jax.block_until_ready(out)                    # dispatch is asynchronous: return
+                jax.effects_barrier()                         # when the march and its writes are done
+        except Exception:
+            if failures:                                      # the march stopped: say why
+                raise FloatingPointError(failures[-1]) from None
+            raise
+        if len(out) > 4 and not isinstance(out[1], jax.core.Tracer):
+            msg = march_error(*out[4:9])          # (time, Q, Qaux, tok, *check.march's args)
+            if msg is not None:
+                raise FloatingPointError(msg)
         return out[0], out[1], out[2]
 
 
