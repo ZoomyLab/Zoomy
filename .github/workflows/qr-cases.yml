@@ -73,3 +73,38 @@ jobs:
         run: |
           python -m pip install "jax[cpu]"
           python -m pytest tests/qr_cases -m qr_jax -rA --tb=short -p no:cacheprovider
+
+  # The QR notebooks in a real browser, on a local build of this commit's GUI
+  # (docs/scripts/build_gui_site.sh: what render-webpage.yml deploys): headless Chromium
+  # opens every QR code that loads a GUI session in the notebook view, Run All twice, a final
+  # cell judges the run (tests/qr_cases/test_qr_browser.py).
+  qr-browser:
+    name: QR notebooks in the browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      QR_STRICT: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Submodules the GUI build uses
+        run: git submodule update --init library/zoomy_core library/zoomy_gui
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Build the GUI site
+        run: |
+          WHEEL_PYTHON=python docs/scripts/build_gui_site.sh "$RUNNER_TEMP/site"
+          echo "QR_GUI_SITE=$RUNNER_TEMP/site" >> "$GITHUB_ENV"
+
+      - name: QR notebooks in headless Chromium
+        run: |
+          python -m pip install pytest pytest-xdist pyyaml playwright
+          python -m playwright install --with-deps chromium
+          python -m pytest tests/qr_cases -m qr_browser -n 3 -rA --tb=short -p no:cacheprovider

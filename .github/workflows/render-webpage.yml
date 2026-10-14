@@ -156,63 +156,13 @@ jobs:
       - name: Build GUI (Theia) into docs site
         run: |
           sudo chown -R $(id -u):$(id -g) docs/book/_build/
-          cd library/zoomy_gui
-          npm ci --no-audit --no-fund || npm install --no-audit --no-fund
-          # Compile the Zoomy extension: Baukasten start page, code-editor
-          # route, and the native Theia notebook driven by an in-browser Pyodide
-          # kernel. @theia/* resolve from the app's node_modules (parent), so
-          # this only fetches typescript.
-          ( cd zoomy-theia-ext && npm install --no-audit --no-fund && npm run build )
-          npx theia build --mode production
-          cd ../..
-          mkdir -p docs/book/_build/html/gui
-          cp -r library/zoomy_gui/lib/frontend/. docs/book/_build/html/gui/
-
-          # The GUI "brain" (card catalog + Pyodide worker + engine) is served
-          # as static assets under gui/ RELATIVE TO THE PAGE — the model-config
-          # widget and the worker fetch it that way — hence /gui/gui/. Copied by
-          # name rather than with a glob so the build tree (node_modules, lib,
-          # package.json) does not leak into the deploy.
-          mkdir -p docs/book/_build/html/gui/gui
-          for a in assets cards demo previews projects snippets tutorials \
-                   core.js engine.py param_extract.py pyodide-worker.js; do
-            cp -r "library/zoomy_gui/$a" docs/book/_build/html/gui/gui/
-          done
-          # The zoomy_core / zoomy_plotting both Pyodide workers install: wheels built
-          # from this commit, named in gui/gui/wheels/index.json (PyPI only when that
-          # file is absent, i.e. local dev). The QR CI installs the same build.
+          # One recipe for the deploy and tests/qr_cases/test_qr_browser.py (the QR notebooks
+          # in a browser, against a local build of exactly this): the Theia app, the GUI
+          # "brain" under gui/gui/, this commit's zoomy_core / zoomy_plotting wheels, the
+          # mirrored release data, sw.js, the CLI package, version.json.
           /usr/bin/python3 -m venv .wheelvenv
-          .wheelvenv/bin/python docs/scripts/build_gui_wheels.py docs/book/_build/html/gui/gui/wheels
-          # Release assets a browser session fetches, served same-origin: GitHub sends no
-          # CORS headers for release downloads (tests/qr_cases/test_qr_live.py MIRRORED).
-          mkdir -p docs/book/_build/html/gui/gui/data
-          for f in sme_vof_snap_gui_l1.tar.gz; do
-            curl -fsSL --retry 3 -o "docs/book/_build/html/gui/gui/data/$f" \
-              "https://github.com/ZoomyLab/Zoomy/releases/download/case-data-v1/$f"
-          done
-          # #10 offline + cross-origin isolation service worker (COOP/COEP)
-          cp library/zoomy_gui/sw.js docs/book/_build/html/gui/sw.js
-          # The isomorphic CLI package, imported as ./zoomy_cli/browser.mjs.
-          # Node-only and dev detritus stripped to keep the deploy small.
-          mkdir -p docs/book/_build/html/gui/gui/zoomy_cli
-          cp library/zoomy_cli/browser.mjs docs/book/_build/html/gui/gui/zoomy_cli/
-          cp library/zoomy_cli/node.mjs docs/book/_build/html/gui/gui/zoomy_cli/
-          cp library/zoomy_cli/package.json docs/book/_build/html/gui/gui/zoomy_cli/
-          cp -r library/zoomy_cli/src docs/book/_build/html/gui/gui/zoomy_cli/
-
-          # Write the real build version so users can see it in the footer
-          GUI_COMMIT=$(git -C library/zoomy_gui rev-parse HEAD)
-          BUILT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          cat > docs/book/_build/html/gui/version.json <<EOF
-          {"version": "gha-${{ github.run_number }}", "commit": "${GUI_COMMIT}", "built": "${BUILT}"}
-          EOF
-          echo "Built GUI version: ${GUI_COMMIT:0:7} at ${BUILT}"
-
-          # Cleanup
-          rm -f docs/book/_build/html/gui/.git docs/book/_build/html/gui/.gitignore
-          rm -rf docs/book/_build/html/gui/gui/__pycache__
-          # source maps are large and dev-only — drop them from the deploy
-          rm -f docs/book/_build/html/gui/*.map
+          WHEEL_PYTHON=.wheelvenv/bin/python GUI_BUILD_VERSION="gha-${{ github.run_number }}" \
+            docs/scripts/build_gui_site.sh docs/book/_build/html
 
       - name: Copy SWE game into docs site
         run: |
@@ -376,3 +326,26 @@ jobs:
         run: |
           python -m pip install pytest pyyaml
           python -m pytest tests/qr_cases -m "qr_live or qr_deploy" -rA --tb=short -p no:cacheprovider
+
+  # The QR notebooks in a real browser on the site just deployed: headless Chromium opens every
+  # QR code that loads a GUI session in the notebook view, Run All twice, a final cell judges
+  # the run (tests/qr_cases/test_qr_browser.py). After qr-live, which waits until the Pages CDN
+  # serves this commit's wheels.
+  qr-browser-live:
+    name: QR notebooks in the browser (live)
+    needs: qr-live
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - name: GUI submodule (the sessions to compose)
+        run: git submodule update --init library/zoomy_gui
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: QR notebooks on the live site
+        run: |
+          python -m pip install pytest pytest-xdist pyyaml playwright
+          python -m playwright install --with-deps chromium
+          QR_GUI_BASE=https://zoomylab.github.io/Zoomy QR_STRICT=1 python -m pytest tests/qr_cases \
+            -m qr_browser -n 3 -rA --tb=short -p no:cacheprovider

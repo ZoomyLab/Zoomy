@@ -7,9 +7,10 @@ a standalone script (a mesh cell may use the model cell's names, a run cell the 
 Here they run in that order in one namespace, with the GUI runtime's helpers (engine.py):
 `display` (no output on a server), `typed_kwargs`, `run_h5_path`, where a solver card writes
 the run's store (the GUI: the tab's `/tmp/zoomy_sim/sim.h5`; here the job's own
-`simulation.h5`, so concurrent jobs share no file), and `open_hdf5`, which publishes the store
-in the GUI and here makes it the job's `simulation.h5`. As in the GUI, `__name__` is not
-`"__main__"`.
+`simulation.h5`, so concurrent jobs share no file), `open_hdf5`, which publishes the store in
+the GUI and here makes it the job's `simulation.h5`, and `close_store`; `run_h5_path` and
+`open_hdf5` close a store already open (its handle would stop the file being rewritten). As in
+the GUI, `__name__` is not `"__main__"`.
 
     python -m zoomy_server.case_run          # in the case folder
 """
@@ -47,14 +48,22 @@ def namespace():
     def display(*_a, **_k):
         pass
 
+    def close_store():
+        """Release the published store's h5py handle (it stops a rewrite of its file)."""
+        s, ns["store"] = ns.get("store"), None
+        if s is not None:
+            s.close()
+
     def run_h5_path():
         """Where a solver card writes the run's store: the job's simulation.h5 (the case
-        folder is the job's directory)."""
+        folder is the job's directory), written afresh: a store opened on it is closed first."""
+        close_store()
         return os.path.abspath(ARTIFACT)
 
     def open_hdf5(path):
         """The run's store: the job's simulation.h5 (published as `store` when zoomy_plotting is
         installed, as the GUI does)."""
+        close_store()
         if os.path.abspath(path) != os.path.abspath(ARTIFACT):
             shutil.copyfile(path, ARTIFACT)
         try:
@@ -65,7 +74,7 @@ def namespace():
         return ns["store"]
 
     ns.update(display=display, run_h5_path=run_h5_path, open_hdf5=open_hdf5,
-              typed_kwargs=typed_kwargs)
+              close_store=close_store, typed_kwargs=typed_kwargs)
     return ns
 
 

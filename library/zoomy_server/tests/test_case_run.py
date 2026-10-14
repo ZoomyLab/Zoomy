@@ -6,6 +6,8 @@ import os
 import subprocess
 import sys
 
+import pytest
+
 from zoomy_server.case_run import entry, is_case
 
 
@@ -53,3 +55,24 @@ def test_run_h5_path_is_the_jobs_own_store(tmp_path):
         assert _run(d).returncode == 0
         paths.append(json.loads((d / "path.json").read_text()))
     assert paths == [str(tmp_path / j / "simulation.h5") for j in ("a", "b")]
+
+
+def test_rerun_rewrites_an_open_store(tmp_path):
+    """A solver card run twice in one namespace (Run All twice) rewrites the store the first run
+    opened: run_h5_path() closes it (an open h5py handle stops the truncation)."""
+    pytest.importorskip("zoomy_plotting")
+    card = ("import numpy as np\n"
+            "from zoomy_core.misc.io import write_mesh_to_hdf5, _save_fields_to_hdf5\n"
+            "for _ in range(2):\n"
+            "    _p = run_h5_path()\n"
+            "    write_mesh_to_hdf5(_p, mesh)\n"
+            "    for k in range(2):\n"
+            "        _save_fields_to_hdf5(_p, k, float(k), np.zeros((1, mesh.n_cells)))\n"
+            "    open_hdf5(_p)\n"
+            "assert store.n_snapshots == 2\n"
+            "open('ok', 'w').write('x')\n")
+    d = _folder(tmp_path, {"mesh.py": "from zoomy_core.mesh import BaseMesh\n"
+                                      "mesh = BaseMesh.create_1d(domain=(0.0, 1.0), n_inner_cells=4)\n",
+                           "run.py": card})
+    p = _run(d)
+    assert p.returncode == 0 and (d / "ok").exists(), p.stderr[-2000:]

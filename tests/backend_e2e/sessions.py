@@ -27,11 +27,11 @@ TIME_LIMITS = {"malpasset-0": 2.0,     # JAX: 2000 s -> 2 s (as tests/qr_cases)
 CARD_MODELS = {"card-solver-split-numpy": "vam", "card-solver-split-amrex": "vam"}
 #: cases whose time_end knob is not the store's time unit (no t_last == time_end check)
 TIME_UNITS = {"bingham-0": "time_end is t' = t / tscale (the model cell's nu / (g s^2))"}
-#: where a store must end for the cases whose `time_end` knob is absent or not the store's time
-#: (the others end at their knob): Steffler has none (the run card's own 20 s); Bingham's is
-#: t' = t / tscale, tscale = nu / (g s^2) of the model cell (g, s, H0, beta = 9.81, 0.1, 1, 27)
+#: where a store must end for the cases whose `time_end` knob is not the store's time (the others
+#: end at their knob): Bingham's is t' = t / tscale, tscale = nu / (g s^2) of the model cell
+#: (g, s, H0, beta = 9.81, 0.1, 1, 27)
 _BINGHAM_TSCALE = (1.0 ** 3 / (27.0 * 9.81 * 0.1 ** 2)) ** 0.5
-END_TIME = {"steffler-0": 20.0, "bingham-0": 2.0 * _BINGHAM_TSCALE}
+END_TIME = {"bingham-0": 2.0 * _BINGHAM_TSCALE}
 #: cases whose simulation.h5 is not a march but a one-snapshot summary store (the Bingham
 #: analytics case writes the Liu & Mei threshold as a constant field for the viz prelude)
 SUMMARY_STORE = {"bingham-analytics-0"}
