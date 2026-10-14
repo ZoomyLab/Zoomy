@@ -336,7 +336,7 @@ def euler_checks(add, b, g, J):
                 add("C23", f"O1 n{n} max rel vs JAX", b, "serial",
                     relmax(g("C23", f"o1_n{n}"), J("C23", f"o1_n{n}")), RO, "same stencil")
         d = [(g("C23", f"o2_n{n}"), J("C23", f"o2_n{n}")) for n in (16, 24)]
-        if b == "amrex" and all(ok(*x) for x in d):
+        if b in ("amrex", "foam") and all(ok(*x) for x in d):   # foam: the template's O2
             add("C23", "O2 max rel vs JAX", b, "serial", max(relmax(*x) for x in d), RO, "")
         elif all(ok(*x) for x in d):
             dl = [float(np.abs(a["Q"] - j["Q"]).mean()) for a, j in d]
@@ -693,17 +693,18 @@ def measure():
             return e
 
         def cross(case, label, keys, ns, tri=False, tol=RO):
-            """AMReX = JAX (round-off); foam O1 on quads = JAX (the same
-            stencil); otherwise the foam - JAX difference shrinks."""
+            """AMReX = JAX (round-off); foam = JAX (the template's stencils,
+            ANALYSIS 49) where JAX's round-off sensitivity is measured, and on
+            quads at O1; otherwise the foam - JAX difference vanishes or shrinks."""
             d = [(g(case, k), J(case, k)) for k in keys]
             if b in ("jax", "numpy") or not all(ok(*x) for x in d):
                 return
-            if b == "amrex" or ("O1" in label and not tri):
-                # round-off amplified by the run (limiter switches, a
-                # transcritical flow): 10x JAX's own sensitivity, measured
-                # with Q0 perturbed at PERTURB (the ``*_pert`` runs)
-                sens = [relmax(J(case, k + "_pert"), J(case, k)) for k in keys
-                        if J(case, k + "_pert") is not None and J(case, k) is not None]
+            # round-off amplified by the run (limiter switches, a transcritical
+            # flow): 10x JAX's own sensitivity, measured with Q0 perturbed at
+            # PERTURB (the ``*_pert`` runs)
+            sens = [relmax(J(case, k + "_pert"), J(case, k)) for k in keys
+                    if J(case, k + "_pert") is not None and J(case, k) is not None]
+            if b == "amrex" or ("O1" in label and not tri) or (b == "foam" and sens):
                 if sens and 10 * max(sens) > tol[1]:
                     tol = ("<=", 10 * max(sens), f"10 x JAX round-off sensitivity "
                            f"(Q0 perturbed {PERTURB:.0e}: {max(sens):.1e})")
@@ -711,9 +712,8 @@ def measure():
                     max(relmax(*x) for x in d), tol, "same stencil" if b == "foam" else "")
             elif len(d) > 1:
                 dl = [l1rel(*x) for x in d]
-                if dl[-1] <= RO_L1[1]:           # foam = JAX at the finest mesh (the
-                    # limiters differ, OpenFOAM's cellLimited acts on coarse
-                    # meshes only): an order of round-off is noise
+                if dl[-1] <= RO_L1[1]:           # foam = JAX at the finest mesh: an
+                    # order of round-off is noise
                     add(case, f"{label} foam-JAX L1 diff n{ns[-1]}".strip(), b, "serial", dl[-1],
                         RO_L1, " / ".join(f"{x:.1e}" for x in dl))
                     return
@@ -773,6 +773,17 @@ def measure():
                                 ("<=", 1e-12, "theory (1-D flow, symmetric stencils)")
                                 if case == "C4" else None, "")
                     cross(case, f"{v} O{o}", keys, C4_N, tri=case == "C12")
+        keys = [f"subny2_o2_n{n}" for n in C4_N]       # C12: stretched wall triangles (ny 2)
+        conv("C12", "sub ny 2 O2", keys, lambda x: err_exact(x, "sub"), TH["C4 order"][("sub", 2)],
+             C4_N)
+        if b not in ("jax", "numpy"):
+            d = [(g("C12", k), J("C12", k), J("C12", k + "_pert")) for k in keys]
+            if all(ok(*x) for x in d):
+                sens = max(relmax(p, j) for _, j, p in d)
+                add("C12", "sub ny 2 O2 max rel vs JAX", b, "serial",
+                    max(relmax(x, j) for x, j, _ in d),
+                    ("<=", max(10 * sens, RO[1]), f"10 x JAX round-off sensitivity (Q0 perturbed "
+                     f"{PERTURB:.0e}: {sens:.1e})"), "the template's gradient and limiter")
         for c in CONFIGS:                       # C5
             d = g("C5", "n48", c)
             if d is not None:

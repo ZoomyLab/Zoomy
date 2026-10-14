@@ -755,12 +755,17 @@ CASES = {
     "C12": ("triangles: C1 bump and C4 channel",
             [Run(f"bump_o{o}_n{n}", on_triangles(partial(C.bump_2d, o, nx=4), n, n, (0, 10, 0, 10)),
                  2.5, backends=JF) for o in (1, 2) for n in (10, 20, 40)]
-            # refined in x AND y (ny = n / 25): at a fixed ny the triangles
-            # stretch with n, and OpenFOAM's leastSquares gradient at the
-            # walls loses its order on them (foam O2 n100 ny 2: 1.6e-3 > n50)
+            # refined in x AND y (ny = n / 25)
             + [Run(f"sub_o{o}_n{n}", on_triangles(partial(channel, "sub", o, 4), n,
                                                   max(1, n * NY // 50), (0, LENGTH, 0, WIDTH)),
-                   CHANNEL["sub"]["t_end"], backends=JF) for o in (1, 2) for n in C4_N]),
+                   CHANNEL["sub"]["t_end"], backends=JF) for o in (1, 2) for n in C4_N]
+            # at a fixed ny = 2 the wall triangles stretch with n: OpenFOAM's
+            # leastSquares gradient lost the order there (foam O2 n100 1.5e-3 >
+            # n50 7.8e-4); foam now takes the template's gradient (ANALYSIS 49)
+            + [Run(f"subny2_o2_n{n}{p}", on_triangles(partial(channel, "sub", 2, 4), n, NY,
+                                                      (0, LENGTH, 0, WIDTH)),
+                   CHANNEL["sub"]["t_end"], backends=JF if not p else ("jax",),
+                   perturb=PERTURB if p else 0.0) for n in C4_N for p in ("", "_pert")]),
     "C13": ("periodic in x: shifted bump in a uniform flow",
             [Run(f"o{o}_x{x0}", partial(periodic, o, x0), PERIODIC["t_end"],
                  configs=("serial", "mpi2", "mpi4")) for o in (1, 2) for x0 in (2.5, 7.5)]),
