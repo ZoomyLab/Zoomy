@@ -300,6 +300,39 @@ def test_vector_closure_tables_differentiable():
     assert np.isfinite(gX).all() and np.abs(gX).max() > 0
 
 
+def test_wall_ghost_informs_the_normal_axis():
+    """The decoupled degree-1 fit of a wall cell: the mirror ghost lies on the face normal, so
+    it informs the derivative along the normal's axis, also on triangles stretched along the
+    wall (there x_f - x_c points mostly along the wall).  A field of x alone, exact ghosts:
+    the spurious wall-normal derivative stays small (0.16 with the ghost on the tangential
+    axis, ANALYSIS 49)."""
+    nx, ny, L = 25, 2, (0.0, 25.0, 0.0, 1.0)
+    xs, ys = np.linspace(L[0], L[1], nx + 1), np.linspace(L[2], L[3], ny + 1)
+    X = np.array([[x, y] for x in xs for y in ys]).T
+    v = lambda i, k: i * (ny + 1) + k                                    # noqa: E731
+    tris = []
+    for i in range(nx):
+        for k in range(ny):
+            a, b, c, d = v(i, k), v(i + 1, k), v(i + 1, k + 1), v(i, k + 1)
+            tris += [(a, b, c), (a, c, d)] if (i + k) % 2 else [(a, b, d), (b, c, d)]
+    m = LSQMesh.from_fvm(FVMMesh.from_base(BaseMesh.from_arrays(X, np.array(tris).T,
+                                                                 "triangle")))
+    topo = build_topology(m, lsq_degree=1, closure={})
+    g = compute_geometry(topo, np.asarray(m.vertex_coordinates, float)[:2])
+    nc = int(m.n_inner_cells)
+    cc = np.asarray(g["cell_centers"])[:2, :nc]
+    f = lambda x: np.sin(0.4 * x) + 0.2 * x                              # noqa: E731
+    own = topo.boundary_owner
+    n = np.asarray(g["face_normals"])[:2, topo.boundary_faces]
+    n = n / np.linalg.norm(n, axis=0)
+    mirror = cc[:, own] + 2 * np.asarray(g["d_normal"]) * n
+    D = np.asarray(lsq_derivatives(topo, g, f(cc[0])[None], f(mirror[0])[None]))[0]
+    wall = np.zeros(nc, bool)
+    wall[own] = (np.abs(n[1]) > 0.5)                                   # the y = 0, 1 walls
+    dy = D[:, topo.lsq_grad_cols[1]]
+    assert np.abs(dy[wall]).max() < 5e-2, np.abs(dy[wall]).max()
+
+
 def test_vector_closure_reproduces_polynomials_3d():
     """A 3-component group on a rotated hexahedral box: n.q Dirichlet, the tangential plane
     Neumann (the rows of I - n n^T), one joint fit per cell, edges and corners included."""

@@ -689,14 +689,20 @@ def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
     required = get_required_monomials_count(degree, dim)
     bdy, n_axis = _boundary_slots(owner, n_cells, boundary_face_centers, centers)
     n = n_inner_cells
-    ghost_axis = np.argmax(np.abs(np.asarray(boundary_face_centers)
-                                  - np.asarray(centers)[np.maximum(owner, 0)]),
-                           axis=1) if owner.size else np.zeros(0, dtype=int)
+    # a ghost sits on its face's normal line (the mirror image of the cell centre), so it
+    # informs the pure monomials of the normal's axis -- not of the dominant axis of
+    # x_f - x_c, which on a wall triangle stretched along the wall is the tangential one
+    if normals is not None and owner.size:
+        ghost_axis = np.argmax(np.abs(np.asarray(normals, dtype=float)), axis=1)
+    else:
+        ghost_axis = np.argmax(np.abs(np.asarray(boundary_face_centers)
+                                      - np.asarray(centers)[np.maximum(owner, 0)]),
+                               axis=1) if owner.size else np.zeros(0, dtype=int)
     frame_face, turn, face_axis = _wall_frames(dim, bdy, normals)
     frames = None
+    ghost_axis = np.where(face_axis >= 0, face_axis, ghost_axis) if face_axis.size else ghost_axis
+    n_axis = np.where(bdy >= 0, ghost_axis[np.maximum(bdy, 0)], -1) if ghost_axis.size else n_axis
     if (frame_face >= 0).any():                 # oblique walls: the fits in the wall frames
-        ghost_axis = np.where(face_axis >= 0, face_axis, ghost_axis)
-        n_axis = np.where(bdy >= 0, ghost_axis[np.maximum(bdy, 0)], -1)
         fr = frame_face >= 0
         frames = np.repeat(np.eye(dim)[None], n_cells, axis=0)
         frames[fr] = _frame_rotations(np, np.asarray(normals, dtype=float)[frame_face[fr]],
