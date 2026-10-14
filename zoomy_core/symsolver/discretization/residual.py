@@ -8,7 +8,7 @@ from zoomy_core.symsolver.core import Cond, Root, unpack
 from zoomy_core.symsolver.discretization.reconstruction import reconstruct
 from zoomy_core.symsolver.discretization.time import SSP_RK, cell_wavespeed
 from zoomy_core.symsolver.vocabulary import (
-    boundary_ghosts, boundary_traces, cells, clean_round_off, derivative_aux,
+    boundary_ghosts, boundary_traces, cells, clean_round_off, coupled_ghosts, derivative_aux,
     diffusion, divergence, edge_source, face_aux, faces, halo,
     implicit_diffusion, inadmissible, minimum, reduce_any, select)
 
@@ -157,9 +157,10 @@ def mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled=None,
     return Q, minimum(dt_step, dt)          # a real-valued node (it enters `time`)
 
 
-def full_aux(nsm, Q, Qaux, p, time, dt, mesh):
+def full_aux(nsm, Q, Qaux, p, time, dt, mesh, coupled=None):
     """Pointwise aux, then the derivative (mesh-gradient) aux, whose boundary samples
-    are the BC ghosts at `time`.
+    are the BC ghosts at `time`; `coupled`: `(own, face)` per coupled face, whose ghost
+    samples are then the mirror images `2 face - own` of the coupling's face states.
     """
     Qaux = stage_aux(nsm, Q, Qaux, p, time, dt, mesh)
     spec = nsm.call.aux_derivatives
@@ -171,6 +172,8 @@ def full_aux(nsm, Q, Qaux, p, time, dt, mesh):
         Qaux = derivative_aux(spec, Q, Qaux, mesh)
     if rows and ghost is not None:
         Qg = boundary_ghosts(ghost, Q, Qaux, p, time, mesh)
+        if coupled is not None:
+            Qg = coupled_ghosts(Qg, *coupled, mesh)
         Qaux = derivative_aux(spec, Q, Qaux, mesh, Qg, rows)
     return halo(Qaux, mesh)
 

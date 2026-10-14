@@ -256,6 +256,33 @@ class interface_flux(Block):
     """
 
 
+class characteristic_ghost(Block):
+    """`(A, own, Aown, peer, p, mesh)` -> per coupled face the transmission state towards a
+    peer of another model: with `A_n = sum_d A(own, Aown)[:, :, d] n_d` (`A` the quasilinear
+    matrix kernel, `n` the outward normal) the characteristics `l_k . q` that enter
+    (`lambda_k < 0`) from `peer`, those that leave from `own`; `peer` where the eigenvectors
+    of `A_n` are singular, `own` where `peer` is all zero (no peer data yet). `own`, `Aown`,
+    `peer` and the result are `(rows, coupled faces)`.
+    """
+
+
+class ghost_flux(Block):
+    """`(sides, aux, own, Aown, ghost, p, mesh)` -> per face the own cell's row of the
+    Riemann problem `(own, ghost)` posed along the outward normal of the coupled faces, zero
+    elsewhere; `Aown` on the own side, `aux(ghost)` on the other (the pointwise aux formula on
+    a zero aux; `aux` False: `Aown`). `own`, `Aown`, `ghost` are `(rows, coupled faces)`.
+    """
+
+
+class replace_row(Block):
+    """`(A, i, B)` -> `A` with row `i` taken from `B`."""
+
+
+class coupled_ghosts(Block):
+    """`(Qg, own, face, mesh)` -> the boundary ghosts `Qg` with the coupled faces' replaced by
+    `2 face - own` (`own`, `face`: `(rows, coupled faces)`)."""
+
+
 # ── effects ─────────────────────────────────────────────────────────────────
 class io:
     """Output effects; `save_state` / `load_state`: the restart pair of the march state."""
@@ -270,11 +297,13 @@ class couple:                    # one preCICE participant
     References:
         Chourdakis et al. 2022, https://doi.org/10.12688/openreseurope.14445.2
     """
-    init = Effect(1)             # (q_interface) -> coupling ongoing
+    init = Effect(1)             # (q_interface[, qaux_interface]) -> coupling ongoing
     max_dt = Effect(1)           # () -> time left in the window
     read = Effect(1)             # () -> peer interface states
-    write = Effect()             # (q_interface)
+    write = Effect()             # (q_interface[, qaux_interface])
     advance = Effect(1)          # (dt) -> coupling ongoing
+    window_complete = Effect(1)  # () -> the last advance completed a time window
+    read_round_trip = Effect(1)  # () -> the own interface states as the peer reads them
 
 
 class check:

@@ -355,9 +355,9 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
                     else out[e["function_row"]]
                 grad = _lsq(field[None, :nc], None)[0, :, col]
             else:
-                s = e["state_index"]
-                if e["target_kind"] != "state" or s not in rows:
+                if e["target_kind"] != "state" or e["state_index"] not in rows:
                     continue
+                s = e["state_index"]
                 if s not in cache:
                     cache[s] = _lsq(Q[s][None], Qg[s][None], (e["closure"],))[0]
                 grad = cache[s][:, col]

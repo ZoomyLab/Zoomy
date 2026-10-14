@@ -51,6 +51,10 @@ class VAM(BaseModel):
     stress = OptionParam(Stress, default=Stress.shallow, doc=(
         "How much of the bulk closure's stress the model keeps (`moment_scaling`): "
         "`Stress.shallow` the vertical shear only, `Stress.full` the whole Newtonian tensor."))
+    scaling = param.Parameter(default=None, doc=(
+        "A `ShallowScaling` (derivation.nondim): derive the stress truncation by order from "
+        "the non-dimensional balance laws instead of `moment_scaling` / `apply_full_tensor`; "
+        "it then decides `stress`.  None (default): the hand rules."))
     closures = param.List(default=[], doc=(
         "Composable stress Closure pieces (closures.py).  Empty leaves tau_xz "
         "UNCLOSED (modal moments stay free)."))
@@ -117,9 +121,20 @@ class VAM(BaseModel):
         # to conservative diffusion by package_viscous after the ω̃/regroup/curvature machinery
         # (§6e).  The pressure unknown is -sigma_zz minus the hydrostatic part, zero at the
         # surface (MomentumNonHydrostatic).
-        moment_scaling(m, momblue, self.stress)
+        if self.scaling is not None:
+            # the truncation by order of the non-dimensional balance laws (scaling.py); the
+            # pressure p is already the non-hydrostatic part
+            from zoomy_core.model.models.scaling import ordered_truncation, Pressure
+            rec = ordered_truncation(m, momblue, self.closures or [], self.scaling,
+                                     heights=[h, b], free_surface=b + h,
+                                     pressure=Pressure.nonhydrostatic, mass="mass",
+                                     requested=self.stress)
+            vertical_stress = rec.vertical_stress
+        else:
+            moment_scaling(m, momblue, self.stress)
+            apply_full_tensor(self.closures or [], m, momblue)
+            vertical_stress = m.stress == Stress.full
         full_stress = m.stress == Stress.full
-        apply_full_tensor(self.closures or [], m, momblue)
 
         # 2 — σ-map:  z = b + h ζ
         m.apply(PDETransformation({z: (zeta, sp.Eq(z, b + h * zeta))}))
@@ -349,7 +364,7 @@ class VAM(BaseModel):
         # second-derivatives C·∂²(q_i/h) (+ topography-coupled ν·q·∂b) into
         # ∂(D·∂Q) − ∂(D)·∂Q; b is a STATE in `states` so those evaluate from the
         # same stage (no frozen-b).  No-op unless full_stress.
-        if full_stress:
+        if full_stress or vertical_stress:
             states = {h, b}
             for qn in QNAME:
                 qh = getattr(m.functions, qn).head
@@ -357,7 +372,7 @@ class VAM(BaseModel):
             # the w rows too: their d_e tau_ez (first derivatives; package_viscous evaluates the
             # mode-0 brackets of d_x d_zeta the projection leaves as integrals)
             states |= {m.functions.r.head(i, t, *horiz) for i in range(Nu + 1)}
-            for mn in MOM + ["momentum_z"]:
+            for mn in (MOM if full_stress else []) + (["momentum_z"] if vertical_stress else []):
                 for kk in range(Nu + 1):
                     getattr(m, mn)[kk].expr = package_viscous(
                         getattr(m, mn)[kk].expr, m.parameters.nu, states, list(horiz))
