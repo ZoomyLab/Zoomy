@@ -33,7 +33,8 @@ class Imex(Option):
 
 class CflWaveSpeed(Option):
     """Where the CFL step takes its wave speeds."""
-    #: from the first RK stage's Riemann problem
+    #: from the first RK stage's Riemann problems; at order 2 with an edge source (the NCP
+    #: inside each cell) also from the cell states, which that term moves
     faces = "faces"
     #: from the cell states on each face
     cells = "cells"
@@ -105,8 +106,8 @@ def step_size(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant, time,
 
 
 def face_rule(nsm, mesh, cfl, dimension, dt_constant, time, cap, check_every=10):
-    """`dt_rule` taking the step from the first stage's face wave speeds (no
-    eigensolve of its own), capped by `cap`.
+    """`dt_rule` taking the step from the first stage's face wave speeds, capped by `cap`
+    (`residual` applies it to the cells' speeds too where an edge source moves them).
     """
     if dt_constant is None:
         return lambda S: minimum(face_dt(nsm, S, mesh, cfl, dimension), cap)

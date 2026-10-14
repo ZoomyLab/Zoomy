@@ -23,7 +23,8 @@ def residual(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
         demote: MOOD demotion of the reconstruction (see `reconstruct`).
         coupled: `(mask, flux)`, faces carrying a shared answer.
         dt_rule: `dt` is not known yet; the face kernel also returns the wave speed
-            `S` and `dt = dt_rule(S)`.
+            `S` and `dt = dt_rule(S)`; with the order-2 edge source at most `dt_rule` of
+            the cells' own speeds too, as that term moves the cell states (ANALYSIS 48).
     Returns:
         `dQ`, or `(dQ, dt)` with `dt_rule`.
     References:
@@ -44,6 +45,11 @@ def residual(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
         Wm, Wp, S = unpack(faces(nsm.call.numerical_face_sides_speed, QL, QR,
                                  AL, AR, p, mesh), 3)
         dt = dt_rule(S)
+        if (order >= 2 and nsm.call.numerical_cell_edge_source is not None
+                and sp.S(demote) is not sp.S.true):
+            # the edge source (the NCP inside each cell) moves the cell states with their
+            # own speeds; no Riemann problem carries them where a cell's traces are dry
+            dt = minimum(dt, dt_rule(cell_wavespeed(nsm, Q, Qaux, p, mesh)))
     if coupled is not None:          # coupled faces carry the shared answer
         mask, Wc = coupled
         Wm = select(mask, Wc, Wm)
