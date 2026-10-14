@@ -183,7 +183,7 @@ class PiBasis:
             raise DimensionError(f"{G.rows} groups for {need} independent ones")
         # repeating quantities: a maximal dimensionally independent subset, `prefer` first
         order = [s for s in prefer if s in self.quantities] + [s for s in q if s not in prefer]
-        rep, cols = [], []
+        rep = []
         for s in order:
             trial = D[:, [q.index(r) for r in rep + [s]]]
             if trial.rank() > len(rep):
