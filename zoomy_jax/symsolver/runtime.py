@@ -1328,15 +1328,20 @@ class ColumnPreciceAdapter(PreciceAdapter):
         self.ids = self.p.set_mesh_vertices(self.mesh, np.asarray(verts)[:, :dim])
 
     def _column(self, q, qaux):
-        """The columns `(6, nz, faces)` of the states `q` with aux `qaux`."""
-        return self.columns.interpolate(np.asarray(q), np.asarray(qaux), self.parameters)
+        """The columns `(6, nz, faces)` of the states `q` with aux `qaux` (`None`: a zero aux,
+        as a `CoupledFace.shared` march sends the states alone; the rows the projection reads,
+        `b`, `h` and the horizontal velocities, need none)."""
+        q = np.asarray(q)
+        if qaux is None:
+            qaux = np.zeros((self.columns.n_aux, q.shape[1]))
+        return self.columns.interpolate(q, np.asarray(qaux), self.parameters)
 
     def _write(self, C):
         """Write the columns `C` `(6, nz, faces)`, face-major."""
         for i, n in enumerate(self.wn):
             self.p.write_data(self.mesh, n, self.ids, np.ascontiguousarray(C[i].T).ravel())
 
-    def init(self, q, qaux):
+    def init(self, q, qaux=None):
         """Write the initial column if required, initialise; returns whether coupling is
         ongoing."""
         C = self._column(q, qaux)
@@ -1347,7 +1352,7 @@ class ColumnPreciceAdapter(PreciceAdapter):
         self._checkpoints()
         return np.bool_(self.p.is_coupling_ongoing())
 
-    def write(self, q, qaux):
+    def write(self, q, qaux=None):
         """Write the column of `q`; keeps its round trip."""
         C = self._column(q, qaux)
         self.rt = self.columns.project(C)
