@@ -8,6 +8,7 @@
 /// device loop calls (AMReX: AMREX_GPU_HOST_DEVICE).
 #include <cmath>
 #include <functional>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <sstream>
@@ -85,6 +86,8 @@ inline Implicit& implicit() { static Implicit s; return s; }
 
 /// The runtime's warning (rank 0), defined by the runtime.
 inline void warn(const std::string& message);
+/// The runtime's fatal error (every rank calls it; does not return), defined by the runtime.
+[[noreturn]] inline void fail(const std::string& message);
 
 /// Concatenate the arguments into a string.
 template<class... A> std::string text(const A&... a)
@@ -149,6 +152,37 @@ inline std::tuple<long> check_cfl(long tok, double dt_cfl, double dt)
         warn(text("time step ", dt, " exceeds the CFL step ", dt_cfl, " (warned once)"));
     }
     return {tok + 1};
+}
+
+/// Effect `check.march`: fail if the march stopped before `time_end` (a step that did not
+/// advance the time) or ended with a non-finite state (`q_max` = max |Q|); the message is
+/// zoomy_core.symsolver.vocabulary.march_error's.
+inline std::tuple<long> check_march(long tok, double time, double time_end, double dt,
+                                    long n_step, double q_max)
+{
+    const bool finite = std::isfinite(q_max);
+    if (time >= time_end && finite) return {tok + 1};
+    std::ostringstream m;
+    m.precision(9);
+    if (!(time >= time_end))
+    {
+        m << "zoomy march stopped at t = " << time << " (t_end = " << time_end << "): step "
+          << n_step << " has dt = " << std::setprecision(6) << dt
+          << ", which does not advance the time; ";
+        if (finite)
+            m << "the state at t is finite (max |Q| = " << q_max << "): its CFL step is not "
+                 "a positive number (a NaN or infinite wave speed)";
+        else if (n_step > 1)
+            m << "the state at t is not finite (max |Q| = " << q_max << "): step "
+              << n_step - 1 << " produced it";
+        else
+            m << "the state at t is not finite (max |Q| = " << q_max << "): it is the "
+                 "initial state";
+    }
+    else
+        m << "zoomy march reached t = " << time << " after " << n_step
+          << " steps with a non-finite state (max |Q| = " << q_max << ")";
+    fail(m.str());
 }
 
 // ── Newton ──────────────────────────────────────────────────────────────────
