@@ -1461,6 +1461,13 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
         """`A` with row `i` from `B`."""
         return A.at[int(i)].set(B[int(i)])
 
+    bf_face = np.asarray(mesh_np.boundary_face_face_indices, dtype=int)
+    bf_c = jnp.asarray([int(np.flatnonzero(bf_face == f)[0]) for f in faces_c], dtype=int)
+
+    def coupled_ghosts(Qg, own, face, mesh):
+        """The boundary ghosts with the coupled faces' the mirror images `2 face - own`."""
+        return Qg.at[:, bf_c].set(2 * face - own)
+
     S = jax.ShapeDtypeStruct
     T, F, B = S((), jnp.int64), S((), jnp.float64), S((), jnp.bool_)
     Qe = S((getattr(a, "read_rows", len(a.rn)), len(faces_c)), jnp.float64)
@@ -1481,7 +1488,7 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
 
     out = dict(coupled_faces=coupled_faces, interface_states=interface_states,
                interface_flux=interface_flux, characteristic_ghost=characteristic_ghost,
-               ghost_flux=ghost_flux, replace_row=replace_row,
+               ghost_flux=ghost_flux, replace_row=replace_row, coupled_ghosts=coupled_ghosts,
                couple_init=eff(a.init, B), couple_max_dt=eff(a.max_dt, F),
                couple_read=eff(a.read, Qe), couple_write=eff(a.write),
                couple_advance=eff(a.advance, B),
