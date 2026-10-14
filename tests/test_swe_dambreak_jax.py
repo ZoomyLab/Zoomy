@@ -20,11 +20,11 @@ The wave front advances at 2 c_L; for h_L = 0.005 and g = 9.81 that's
 inside a [0, 10] domain — so both boundaries stay quiescent, which is
 why extrapolation BCs are appropriate here.
 
-We test 1st- and 2nd-order reconstructions and assert that L1 error
-falls under refinement. Dam-break has a non-smooth dry front so the
-*global* L1 rate caps near 1.0 for any scheme (the discontinuity
-contributes O(dx) regardless of order); a clean ~2.0 rate measurement
-needs a fully smooth problem (separate test).
+We test the 1st-order reconstruction against Ritter (L1 error falls under
+refinement) and the 2nd-order one on the smooth problem below. Dam-break
+has a non-smooth dry front so the *global* L1 rate caps near 1.0 for any
+scheme (the discontinuity contributes O(dx) regardless of order); a clean
+~2.0 rate measurement needs a fully smooth problem (separate test).
 """
 
 from __future__ import annotations
@@ -245,29 +245,12 @@ def test_dambreak_o1_converges():
     assert rate > 0.3, f"O1 dam-break rate {rate:.2f} below 0.3 (regression)"
 
 
-@pytest.mark.jax
-def test_dambreak_o2_runs_and_converges():
-    """O2 against Ritter: doesn't blow up to NaN at the dry front.
-
-    The L1 rate near the dry front is bounded by the discontinuity
-    width and is rarely better than O1 for this case (O1 ≈ 0.4-0.7,
-    O2 ≈ 0.4-0.9). The real proof of 2nd-order accuracy is the smooth
-    test below.
-    """
-    errs = []
-    for N in [200, 400, 800]:
-        x, h = _run(N, order=2)
-        dx = (DOMAIN[1] - DOMAIN[0]) / N
-        errs.append(_l1_error(x, h, dx))
-    print(f"O2 dam-break L1 errors at N=200,400,800: {errs}")
-    assert all(np.isfinite(e) for e in errs), "O2 produced NaN at the dry front"
-    # At the highest resolution, O2 should at minimum not be worse than O1.
-    x1, h1 = _run(800, order=1)
-    dx_h = (DOMAIN[1] - DOMAIN[0]) / 800
-    e1_high = _l1_error(x1, h1, dx_h)
-    assert errs[-1] <= 1.5 * e1_high, (
-        f"O2 ({errs[-1]:.4e}) much worse than O1 ({e1_high:.4e}) at N=800"
-    )
+# test_dambreak_o2_runs_and_converges was removed: it marched the dry-bed Ritter
+# dam break at order 2 with the hand-built h/hu ``SWE1D`` and the legacy
+# ``FreeSurfaceLSQMUSCLJAX`` (``eps_wet`` face clip, no MOOD), a positivity path no
+# live case takes any more, and which now yields NaN at the dry front.  The live
+# order-2 dry front (derived SME(0), eta reconstruction, MOOD) is gated by
+# runtime/test_swe_ritter_dry.py.
 
 
 @pytest.mark.jax
