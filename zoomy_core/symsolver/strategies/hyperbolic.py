@@ -9,7 +9,8 @@ from zoomy_core.symsolver.core import Cond, While
 from zoomy_core.symsolver.discretization.residual import (
     explicit_step, full_aux, imex_step, implicit_step, mood_step, post_step)
 from zoomy_core.symsolver.discretization.time import (
-    IMEX_RK, SSP_RK, CflWaveSpeed, Imex, cfl_dt, checked, face_dt, face_rule, step_size)
+    IMEX_RK, SSP_RK, CflWaveSpeed, Imex, cfl_dt, checked, face_dt, face_rule, landed,
+    step_size)
 from zoomy_core.symsolver.vocabulary import (
     characteristic_ghost, couple, coupled_faces, ghost_flux, interface_flux,
     interface_states, io, replace_row, select)
@@ -127,8 +128,8 @@ class HyperbolicTemplate:
                                  dt_rule=face_rule(
                                      nsm, mesh, cfl, dimension, dt_constant,
                                      time, cap, cfl_check_every))
-            dt = sp.Min(step_size(nsm, Q, Qaux, p, mesh, cfl, dimension,
-                                  dt_constant, time, cfl_check_every), cap)
+            dt = landed(sp.Min(step_size(nsm, Q, Qaux, p, mesh, cfl, dimension,
+                                         dt_constant, time, cfl_check_every), cap), cap)
             return self.step(Q, Qaux, p, time, dt, mesh)
 
         return _time_loop(Q, Qaux, time, time_end, self.dt_write, step,
@@ -204,9 +205,9 @@ class HyperbolicTemplate:
                     rule = face_rule(nsm, mesh, cfl, dimension, dt_constant,
                                      time, cap, cfl_check_every)
                 else:
-                    dt = sp.Min(step_size(nsm, Q, Qaux, p, mesh, cfl, dimension,
-                                          dt_constant, time, cfl_check_every),
-                                cap)
+                    dt = landed(sp.Min(step_size(nsm, Q, Qaux, p, mesh, cfl, dimension,
+                                                 dt_constant, time, cfl_check_every),
+                                       cap), cap)
             elif wave_speed == "faces":             # one step per window
                 rule = lambda S: checked(window, time, cfl_check_every,
                                          lambda: face_dt(nsm, S, mesh, cfl,

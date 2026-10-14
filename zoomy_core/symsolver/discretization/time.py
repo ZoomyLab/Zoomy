@@ -105,15 +105,36 @@ def step_size(nsm, Q, Qaux, p, mesh, cfl, dimension, dt_constant, time,
                    lambda: cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension))
 
 
+#: The landing tolerance of a step on the next instant (end time, write, checkpoint): a
+#: leftover distance below this fraction of the step is merged into the step.  The time
+#: is a floating-point sum (`time + dt` per step): after n steps it is off by up to
+#: ~n u |time| (u = 2^-53), i.e. n^2 u in units of a constant step dt = time / n, so
+#: n dt lands short of n dt by a sliver of ~1e-13 (dt 1e-3, t 2; 1e-17 at dt 5e-3, t 0.05)
+#: and a further step of that size is taken: a Chorin projection solves its pressure with
+#: 1 / dt^2 in the operator and fails there (ANALYSIS 50).  1e-6 merges every such residue
+#: up to n ~ 1e5 steps (worst case) and lengthens the merged step by at most 1e-6 of
+#: itself: far below any CFL margin.
+LANDING_TOL = 1e-6
+
+
+def landed(dt, cap):
+    """The step `dt` (`<= cap`, the distance to the next instant), or the whole `cap`
+    when the leftover `cap - dt` is at most `LANDING_TOL dt`: the last step absorbs a
+    floating-point sliver instead of a further step of that size.
+    """
+    return Cond(cap <= (1 + sp.Float(LANDING_TOL)) * dt, lambda: cap, lambda: dt)
+
+
 def face_rule(nsm, mesh, cfl, dimension, dt_constant, time, cap, check_every=10):
     """`dt_rule` taking the step from the first stage's face wave speeds, capped by `cap`
-    (`residual` applies it to the cells' speeds too where an edge source moves them).
+    and `landed` on it (`residual` applies it to the cells' speeds too where an edge
+    source moves them).
     """
     if dt_constant is None:
-        return lambda S: minimum(face_dt(nsm, S, mesh, cfl, dimension), cap)
-    return lambda S: minimum(checked(dt_constant, time, check_every,
-                                     lambda: face_dt(nsm, S, mesh, cfl,
-                                                     dimension)), cap)
+        return lambda S: landed(minimum(face_dt(nsm, S, mesh, cfl, dimension), cap), cap)
+    return lambda S: landed(minimum(checked(dt_constant, time, check_every,
+                                            lambda: face_dt(nsm, S, mesh, cfl,
+                                                            dimension)), cap), cap)
 
 
 def checked(dt, time, every, dt_cfl):
