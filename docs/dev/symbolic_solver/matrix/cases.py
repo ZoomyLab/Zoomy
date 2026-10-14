@@ -539,11 +539,17 @@ def _c16():
             for pair in ("jax_jax", "jax_foam", "foam_foam", "amrex_amrex", "amrex_jax")]
 
 
+C17_DIFF = tuple(f"diff_{bc}_{path}" for bc in ("neu", "per") for path in ("expl", "impl", "ssp2")
+                 ) + ("diff_shear_impl",)
+
+
 def _c17():
-    from custom import amr
+    from custom import amr, amr_diffusion
     return [Run(case, None, 0.0, custom=lambda b, c, w, case=case: amr(case, c, w),
                 configs=("serial", "mpi2", "gpu1"), backends=("amrex",), launch=False)
-            for case in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry")]
+            for case in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry")
+            ] + [Run(key, None, 0.0, custom=lambda b, c, w, key=key: amr_diffusion(
+                *key.split("_")[1:], w), backends=("amrex",), launch=False) for key in C17_DIFF]
 
 
 def _c27():
@@ -784,7 +790,8 @@ CASES = {
             + [Run("ref_n160", partial(imex_bump, 2, 160), 0.3, imex=Imex.lie, backends=("jax",))]),
     "C15": ("AD (JAX): jvp vs central FD, reverse vs forward, dJ/dg", _c15()),
     "C16": ("preCICE: coupled (2 x 100 cells, window 1e-3, O1) vs single domain", _c16()),
-    "C17": ("AMR (AMReX, gate 37): covering, static patch, reflux, lake, regrid", _c17()),
+    "C17": ("AMR (AMReX, gates 37, 51): covering, static patch, reflux, lake, regrid; diffusion",
+            _c17()),
     "C18": ("Euler 3-D Sod along x, y, z (n x 2 x 2), HLL, t = 0.2",
             [Run(f"o{o}_n{n}_ax{a}", partial(sod, 3, o, n, a), 0.2, cfl=0.45, mood=o == 2,
                  backends=EU) for o in (1, 2) for n in (50, 100) for a in (0, 1, 2)]),

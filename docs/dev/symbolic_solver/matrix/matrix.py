@@ -22,8 +22,8 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "gates"))
 import common  # noqa: E402,F401  (x64)
-from cases import (CASES, CHANNEL, C10_N, C10_VARIANTS, C31_K, C31_SWE, C31_VAM, C4_N,  # noqa: E402
-                   DIFF_ALL, DIFF_KINDS, DIFF_PATHS, NA, PERTURB, prepare)
+from cases import (CASES, CHANNEL, C10_N, C10_VARIANTS, C17_DIFF, C31_K, C31_SWE,  # noqa: E402
+                   C31_VAM, C4_N, DIFF_ALL, DIFF_KINDS, DIFF_PATHS, NA, PERTURB, prepare)
 from backends import BACKENDS  # noqa: E402
 
 STORE = Path(os.environ.get("MATRIX_STORE", HERE / "store"))
@@ -256,6 +256,8 @@ TH.update({
     "C33 scheme": {"imex": ("<=", 1e-10, "tolerance (Newton 1e-12; observed 3e-12 C++, 4e-15 JAX)"),
                    "rk2": RO},
     "C33 xb": {"imex": ("<=", 1e-10, "tolerance (Newton 1e-12; observed 1.3e-12)"), "rk2": RO},
+    "C17 diff": ("<=", 0.75, "observed 0.37 expl, 0.59 impl / ssp2 (the fine halo takes the coarse "
+                             "level's new state in every stage: an O(dt) interface lag)"),
     "C37 heat": (">=", 1.8, "theory 2 (stiff: nu dt / dx^2 = 12.8 at k = 0)"),
     "C37 adv": {"ssp2": (">=", 1.8, "theory 2"), "lie1": (">=", 0.8, "theory 1"),
                 "lie2": ("<=", 1.4, "theory 1: the Lie splitting caps SSP-RK2")},
@@ -910,6 +912,23 @@ def measure():
                     if key in m:
                         add("C17", f"{k} {lab}", b, c, m[key], th,
                             "no reflux: not conservative" if k == "boxnr" else "")
+            for k in C17_DIFF:                  # gate 51: diffusion refluxed
+                d = g("C17", k, c)
+                if d is None:
+                    continue
+                m = metrics(d)
+                expl = k.endswith("expl")
+                add("C17", f"{k} covering fine level vs fine single level (max rel)", b, c,
+                    m["fine_vs_single"], RO if expl else
+                    ("<=", 1e-9, "tolerance (Newton 1e-12, the level's own solve)"), "")
+                if "mass" not in m:             # diff_shear: the covering level only
+                    continue
+                add("C17", f"{k} patch mass change (rel), reflux", b, c, m["mass"], RO,
+                    f"{m['fine_cells']} fine cells")
+                add("C17", f"{k} patch mass change (rel), no reflux", b, c, m["mass_nr"], None,
+                    "the control: the diffusive fluxes at the interface differ")
+                add("C17", f"{k} L1(AMR - fine single) / L1(coarse single - fine single)", b, c,
+                    m["l1_ratio"], TH["C17 diff"], "")
             w = [g("C17", f"wave{n}") for n in (16, 32)]
             if c == "serial" and ok(*w):
                 add("C17", "wave order 16->32 (composite)", b, c,
