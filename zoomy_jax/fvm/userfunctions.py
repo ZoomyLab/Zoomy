@@ -98,23 +98,19 @@ def eigenvalues(*a_flat):
     The λ-only companion of `eigensystem`, for the wave-speed / CFL bound
     `max|λ_i(A_n)|` when the model has no closed-form spectrum (SME / VAM).
 
-    **This one does NOT go through `pure_callback`** — unlike `eigensystem`
-    it lowers to `jnp.linalg.eigvals` directly, so it stays inside the jit
+    **This one does NOT go through `pure_callback`**: it stays inside the jit
     (no host round-trip, no broken JVP) and skips the eigenvector solve + the
-    `R⁻¹` inverse entirely.  That matters because the wave speed is evaluated
-    EVERY step inside the fused `lax.while_loop`: a per-step host sync there
-    would collapse the fusion the jax backend's throughput depends on.
-
-    ⚠ Still CPU-only: jaxlib implements `eig`/`eigvals` on CPU only, so this
-    kernel does not run on GPU.  A genuinely device-portable spectral radius
-    (e.g. power iteration for `max|λ|` on a hyperbolic — hence real,
-    diagonalisable — system) is the next step if GPU + `eigenvalues=None` is
-    needed; it would also be AD-safe.  Batched: each arg may be a scalar or a
-    `(n_faces,)` array."""
+    `R⁻¹` inverse entirely, because the wave speed is evaluated EVERY step
+    inside the fused `lax.while_loop`.  CPU: `jnp.linalg.eigvals` (LAPACK);
+    GPU: `zoomy_jax.fvm.eigvals.eigvals_device`, LAPACK's algorithm batched on
+    the device (cuSOLVER `Xgeev`, what `jnp.linalg.eigvals` runs there, takes
+    one host-synchronised call per matrix: 7x slower for a 60-cell mesh).
+    Batched: each arg may be a scalar or a `(n_faces,)` array."""
+    from zoomy_jax.fvm.eigvals import eigvals
     n = int(round(len(a_flat) ** 0.5))
     cols = jnp.broadcast_arrays(*[jnp.asarray(a) for a in a_flat])
     A = jnp.stack(cols, axis=-1).reshape(cols[0].shape + (n, n))
-    return jnp.real(jnp.linalg.eigvals(A))
+    return jnp.real(eigvals(A))
 
 
 # ── eigensystem ──────────────────────────────────────────────────────────────

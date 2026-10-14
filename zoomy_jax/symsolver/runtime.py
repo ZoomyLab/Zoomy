@@ -169,15 +169,16 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         """Owner and neighbour aux per face (the inner cell twice at a boundary face)."""
         return Qaux[:, j(fc0)], Qaux[:, j(fc_other)]
 
+    sides = np.concatenate([fc0, fc_cfl])          # both cells of every face
+
     def face_wavespeed(k, Q, Qaux, p, mesh):
-        """Max |eigenvalue| per face over the two adjacent cells."""
+        """Max |eigenvalue| per face over the two adjacent cells; both sides in one batched
+        evaluation of `k` (a numerical spectrum is one eigensolve of the batch)."""
         n = mesh.face_normals
-        evA = jnp.abs(k(Q[:, j(fc0)], Qaux[:, j(fc0)], p, n))
-        evB = jnp.abs(k(Q[:, j(fc_cfl)], Qaux[:, j(fc_cfl)], p, n))
-        if evA.ndim > 1:
-            axes = tuple(range(evA.ndim - 1))
-            evA, evB = jnp.max(evA, axis=axes), jnp.max(evB, axis=axes)
-        return jnp.maximum(evA, evB)
+        ev = jnp.abs(k(Q[:, j(sides)], Qaux[:, j(sides)], p, jnp.concatenate([n, n], axis=-1)))
+        if ev.ndim > 1:
+            ev = jnp.max(ev, axis=tuple(range(ev.ndim - 1)))
+        return jnp.maximum(ev[:nf], ev[nf:])
 
     def face_inradius(mesh):
         """Per-face cell size: min inradius of the two adjacent cells."""
