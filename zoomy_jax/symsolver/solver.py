@@ -55,8 +55,10 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
     ad_checkpoints = param.Integer(default=64, bounds=(1, None))
     couple = param.Dict(default=None, allow_None=True,
                         doc="preCICE: dict(adapter=, tag=, side=[, face=CoupledFace, "
-                            "frozen_mass_row=bool]) (`HyperbolicTemplate.precice_march`; "
-                            "a `ColumnPreciceAdapter` towards a VOF peer).")
+                            "frozen_mass_row=bool, interface=SystemModel | NSM]) "
+                            "(`HyperbolicTemplate.precice_march`; a `ColumnPreciceAdapter` "
+                            "towards a VOF peer or, with `interface`, towards another level "
+                            "of the model).")
     comm = param.Parameter(default=None, doc=(
         "mpi4py communicator: a distributed run, each rank on its piece of "
         "the mesh (owned cells + halo).  setup() takes the global mesh and "
@@ -139,11 +141,14 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         self.mood_active = bool(self.mood and order >= 2
                                 and nsm.call.admissible is not None)
         on_save, on_load = self._restart()
+        self.interface = self._interface(nsm)
+        couple = (self.couple if self.interface is None
+                  else dict(self.couple, interface=self.interface))
         self.module = R.runtime(nsm, self.rt, mesh, self.mesh_j, self.topo,
                                 ad_mode=self.ad_mode,
                                 checkpoints=self.ad_checkpoints,
                                 on_write=self._writer(), on_save=on_save,
-                                on_load=on_load, couple=self.couple,
+                                on_load=on_load, couple=couple,
                                 systems=systems, partition=self.partition,
                                 implicit=dict(tol=self.implicit_tol,
                                               maxiter=self.implicit_maxiter,
@@ -170,6 +175,23 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
         return Q, self.initial_aux(Q, Qaux)
 
+    def _interface(self, nsm):
+        """The interface model of a lifted shared face (`couple['interface']`), as an NSM of its
+        own named `interface` (the template prints its kernels as `interface.<slot>`); `None`
+        without one.
+        """
+        model = (self.couple or {}).get("interface")
+        if model is None:
+            return None
+        if model is nsm:
+            raise ValueError("couple['interface']: pass its own SystemModel or NSM, not the "
+                             "solver's NSM")
+        if not isinstance(model, NumericalSystemModel):
+            model = NumericalSystemModel.from_system_model(model)
+        model._symbolic_name = "interface"
+        model._call = None                                 # rebuild the table under the name
+        return default_wave_speed(model)
+
     def _config(self):
         """The configuration of the solver template."""
         return dict(cfl=self.cfl, dimension=int(self.mesh_np.dimension),
@@ -190,7 +212,8 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
                 lambda *a: template.precice_march(
                     *a, side=c.get("side", 0), subcycling=self.subcycling,
                     face=c.get("face", CoupledFace.shared),
-                    frozen_mass_row=c.get("frozen_mass_row", False)))
+                    frozen_mass_row=c.get("frozen_mass_row", False),
+                    interface=self.interface))
         return "hyperbolic", PyPrinter().procedure(
             "hyperbolic", (Q, Qaux, p, time, time_end, mesh), template.march)
 

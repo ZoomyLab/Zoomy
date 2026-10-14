@@ -1294,9 +1294,10 @@ class PreciceAdapter:
 
 
 class ColumnPreciceAdapter(PreciceAdapter):
-    """A participant exchanging the model's vertical column with a resolved peer (VOF): it
-    writes `interpolate_to_3d` of the cells next to the coupled faces and reads the peer's
-    column back through `project_from_3d`, as the six canonical fields `[b, h, u, v, w, p]`
+    """A participant exchanging the model's vertical column with a resolved peer (VOF) or with
+    another level of the model: it writes `interpolate_to_3d` of the cells next to the coupled
+    faces and reads the peer's column back through `project_from_3d` (of the interface model,
+    when `bind` is given one), as the six canonical fields `[b, h, u, v, w, p]`
     (`write`, `read`: six data names each) at the `nz` cell-centre heights
     `sigma_k = (k + 1/2)/nz` of each coupled face, vertex `(x_face, y, sigma_k)`.
     `read_round_trip()` is the own state as the peer reads it, `P(I(q))`, of the last write.
@@ -1311,13 +1312,15 @@ class ColumnPreciceAdapter(PreciceAdapter):
         super().__init__(name, config, mesh_name, write, read, comm)
         self.nz, self.y, self.columns, self.rt = int(nz), float(y), None, None
 
-    def bind(self, model, parameters):
+    def bind(self, model, parameters, interface=None):
         """The model (its `interpolate_to_3d`, `project_from_3d` and aux order) and the
-        parameter vector."""
+        parameter vector; `interface` (a SystemModel): the columns, the peer's and the own
+        round trip, are projected to its state instead (a lifted shared face)."""
         from zoomy_core.systemmodel.column import ColumnMap
         self.columns = ColumnMap(model, self.nz)
+        self.lift = self.columns if interface is None else ColumnMap(interface, self.nz)
         self.parameters = np.asarray(parameters, dtype=float)
-        self.read_rows = self.columns.n_state
+        self.read_rows = self.lift.n_state
 
     def set_vertices(self, coords):
         """`nz` vertices `(x, y, sigma_k)` per coupled face centre in `coords`, face-major."""
@@ -1345,7 +1348,7 @@ class ColumnPreciceAdapter(PreciceAdapter):
         """Write the initial column if required, initialise; returns whether coupling is
         ongoing."""
         C = self._column(q, qaux)
-        self.rt = self.columns.project(C)
+        self.rt = self.lift.project(C)
         if self.p.requires_initial_data():
             self._write(C)
         self.p.initialize()
@@ -1355,16 +1358,16 @@ class ColumnPreciceAdapter(PreciceAdapter):
     def write(self, q, qaux=None):
         """Write the column of `q`; keeps its round trip."""
         C = self._column(q, qaux)
-        self.rt = self.columns.project(C)
+        self.rt = self.lift.project(C)
         self._write(C)
         return ()
 
     def read(self):
-        """The peer's states `(n_state, faces)`, projected from its columns (all zero before
-        the peer has written)."""
+        """The peer's states `(n_state, faces)` (`interface`: its rows), projected from its
+        columns (all zero before the peer has written)."""
         C = np.stack([self.p.read_data(self.mesh, n, self.ids, 0.0)
                       .reshape(self.n_faces, self.nz).T for n in self.rn])
-        return self.columns.project(C)
+        return self.lift.project(C)
 
     def read_round_trip(self):
         """The own states of the last write as the peer reads them, `P(I(q))`."""
@@ -1398,8 +1401,12 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
         order = lambda tok: mpi4jax.allreduce(tok, MPI.MAX, comm=comm)  # noqa: E731
     faces_c = coupled_face_indices(mesh_np, cfg["tag"])
     faces_c = faces_c[fc0[faces_c] < n_own]
+    interface = cfg.get("interface")           # the NSM of a lifted shared face
+    if interface is not None and not hasattr(a, "read_round_trip"):
+        raise ValueError("couple['interface'] needs a column exchange (ColumnPreciceAdapter)")
     if hasattr(a, "bind"):                     # a column participant: the model's maps
-        a.bind(rt.sm, np.asarray(rt.parameters))
+        a.bind(rt.sm, np.asarray(rt.parameters),
+               interface=None if interface is None else interface.sm)
     a.set_vertices(np.asarray(mesh_np.face_centers)[faces_c])
     cells_c = fc0[faces_c]
     mask = np.zeros(nf, dtype=bool)
@@ -1432,6 +1439,18 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
         c = k(low, high, aux(low), aux(high), p, n)[int(side)]
         out = jnp.zeros((n_state, nf), dtype=Q.dtype)
         return out.at[:, jnp.asarray(faces_c)].set(c)
+
+    def lifted_interface_flux(k, kaux, n_aux, side, own, peer, rows, p, mesh):
+        """The rows `rows` of this participant's side of one Riemann problem posed low -> high
+        in the interface model on the lifted pair (`own`, `peer`), zero off the coupled faces;
+        the aux rebuilt from each state alone, so both sides pose the same problem."""
+        zero = jnp.zeros((int(n_aux), own.shape[1]), dtype=own.dtype)
+        aux = (lambda q: zero) if kaux is False else (lambda q: kaux(q, zero, p))
+        n_out = mesh.face_normals[:, fcj]
+        low, high, n = (own, peer, n_out) if int(side) == 0 else (peer, own, -n_out)
+        c = k(low, high, aux(low), aux(high), p, n)[int(side)]
+        return jnp.zeros((n_state, nf), dtype=own.dtype).at[:, fcj].set(
+            c[jnp.asarray(rows)])
 
     def characteristic_ghost(kA, own, Aown, peer, p, mesh):
         """Per coupled face the entering characteristics of `A_n` from `peer`, the leaving ones
@@ -1471,7 +1490,7 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
     S = jax.ShapeDtypeStruct
     T, F, B = S((), jnp.int64), S((), jnp.float64), S((), jnp.bool_)
     Qe = S((getattr(a, "read_rows", len(a.rn)), len(faces_c)), jnp.float64)
-    Qs = S((n_state, len(faces_c)), jnp.float64)
+    Qs = S((getattr(a, "read_rows", n_state), len(faces_c)), jnp.float64)
 
     def eff(host, *outs):
         """Effect body: the host call takes the token and returns the next one plus its outputs."""
@@ -1487,7 +1506,8 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
         return body
 
     out = dict(coupled_faces=coupled_faces, interface_states=interface_states,
-               interface_flux=interface_flux, characteristic_ghost=characteristic_ghost,
+               interface_flux=interface_flux, lifted_interface_flux=lifted_interface_flux,
+               characteristic_ghost=characteristic_ghost,
                ghost_flux=ghost_flux, replace_row=replace_row, coupled_ghosts=coupled_ghosts,
                couple_init=eff(a.init, B), couple_max_dt=eff(a.max_dt, F),
                couple_read=eff(a.read, Qe), couple_write=eff(a.write),
@@ -1495,6 +1515,10 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
                couple_window_complete=eff(a.window_complete, B))
     if hasattr(a, "read_round_trip"):
         out["couple_read_round_trip"] = eff(a.read_round_trip, Qs)
+    if interface is not None:                  # its kernels, printed as `interface.<slot>`
+        from zoomy_jax.transformation.jax_runtime import JaxRuntime
+        out["interface"] = JaxRuntime.from_nsm(interface)
+        _face_kernel(out["interface"], "numerical_face_sides")
     return out
 
 
