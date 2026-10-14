@@ -440,7 +440,7 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
     if ls.get("backend") == "pyamg":
         import pyamg
     patterns, amg_cache = {}, {}
-    lsq_nbrs = operator_neighbors(mesh_np)        # the stencil and the periodic partners
+    lsq_nbrs = operator_neighbors(topo, mesh_np)        # the stencil and the periodic partners
 
     def _gmres(mv, b):
         """Restarted GMRES of the flat system `mv(x) = b`.

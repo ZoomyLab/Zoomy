@@ -38,29 +38,24 @@ def cell_pattern(n, nc, nbrs, n_rows=None):
                         + unknown % k).astype(np.int32)
 
 
-def operator_neighbors(mesh_np):
+def operator_neighbors(topo, mesh_np):
     """Per cell the cells an operator of the derivative aux couples it to, the sparsity
-    `cell_pattern` assembles: its LSQ stencil (`lsq_neighbors`) and, across a periodic seam,
-    the partner cell, whose value the seam face's ghost sample is (the stencil ends at the
-    seam).  Without the partner the assembled matrix lacks the cross-seam entries: the AMG
-    solve of a periodic pressure system then converged to the wrong matrix (relative
-    residual 0.78 of the true operator).  Rows padded with -1.
+    `cell_pattern` assembles: the samples of its LSQ fit, i.e. the topology's stencil
+    (`topo.lsq_neighbors`, which wraps a periodic seam; the mesh's `lsq_neighbors` ends there)
+    and the cell behind each boundary-face sample's ghost (`boundary_face_cells`: the inner
+    cell, or the partner across a periodic seam).  With the mesh's stencil alone the assembled
+    matrix lacked the cross-seam entries: the AMG solve of a periodic pressure system converged
+    to the wrong matrix (true relative residual 0.78 on a periodic VAM(3) channel).  Rows padded
+    with -1.
     """
-    nb = np.asarray(mesh_np.lsq_neighbors)
-    n_bf = int(mesh_np.n_boundary_faces)
-    bf_face = np.asarray(mesh_np.boundary_face_face_indices, dtype=int)[:n_bf]
-    inner = np.asarray(mesh_np.face_cells)[0][bf_face]
-    partner = np.asarray(mesh_np.boundary_face_cells, dtype=int)[:n_bf]
-    seam = (partner != inner) & (inner < nb.shape[0])
-    if not seam.any():
+    nb = np.asarray(topo.lsq_neighbors)
+    bdy = np.asarray(topo.lsq_boundary_face_neighbors)
+    if not bdy.size:
         return nb
-    cells, partners = inner[seam], partner[seam]
-    count = np.bincount(cells, minlength=nb.shape[0])
-    extra = -np.ones((nb.shape[0], int(count.max())), dtype=nb.dtype)
-    o = np.argsort(cells, kind="stable")
-    slot = np.arange(len(o)) - np.repeat(np.cumsum(count) - count, count)
-    extra[cells[o], slot] = partners[o]
-    return np.concatenate([nb, extra], axis=1)
+    n_bf = int(mesh_np.n_boundary_faces)
+    behind = np.asarray(mesh_np.boundary_face_cells, dtype=int)[:n_bf]
+    ghost_cells = np.where(bdy >= 0, behind[np.clip(bdy, 0, max(n_bf - 1, 0))], -1)
+    return np.concatenate([nb, ghost_cells.astype(nb.dtype)], axis=1)
 
 
 def cell_colors(c, d, nc, seed=0):
