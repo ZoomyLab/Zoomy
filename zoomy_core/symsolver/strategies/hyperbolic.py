@@ -9,7 +9,8 @@ from zoomy_core.symsolver.core import Cond, While
 from zoomy_core.symsolver.discretization.residual import (
     explicit_step, full_aux, imex_step, implicit_step, mood_step, post_step)
 from zoomy_core.symsolver.discretization.time import (
-    IMEX_RK, SSP_RK, CflWaveSpeed, Imex, cfl_dt, checked, face_dt, face_rule, step_size)
+    IMEX_RK, SSP_RK, CflWaveSpeed, Imex, cfl_dt, checked, face_dt, face_rule, landed,
+    step_size)
 from zoomy_core.symsolver.vocabulary import (
     characteristic_ghost, check, couple, coupled_faces, ghost_flux, interface_flux,
     interface_states, io, lifted_interface_flux, reduce_max, replace_row, select)
@@ -60,6 +61,7 @@ class HyperbolicTemplate:
         imex = typed(Imex, imex, "imex") or None
         if imex is Imex.ssp2 and time_order not in (None, 2):
             raise ValueError(f"imex 'ssp2' is of time order 2, not {time_order}")
+        check_numerics(nsm)
         self.nsm = nsm
         self.cfl = cfl
         self.dimension = dimension
@@ -127,8 +129,8 @@ class HyperbolicTemplate:
                                  dt_rule=face_rule(
                                      nsm, mesh, cfl, dimension, dt_constant,
                                      time, cap, cfl_check_every))
-            dt = sp.Min(step_size(nsm, Q, Qaux, p, mesh, cfl, dimension,
-                                  dt_constant, time, cfl_check_every), cap)
+            dt = landed(sp.Min(step_size(nsm, Q, Qaux, p, mesh, cfl, dimension,
+                                         dt_constant, time, cfl_check_every), cap), cap)
             return self.step(Q, Qaux, p, time, dt, mesh)
 
         return _time_loop(Q, Qaux, time, time_end, self.dt_write, step,
@@ -234,9 +236,9 @@ class HyperbolicTemplate:
                     rule = face_rule(nsm, mesh, cfl, dimension, dt_constant,
                                      time, cap, cfl_check_every)
                 else:
-                    dt = sp.Min(step_size(nsm, Q, Qaux, p, mesh, cfl, dimension,
-                                          dt_constant, time, cfl_check_every),
-                                cap)
+                    dt = landed(sp.Min(step_size(nsm, Q, Qaux, p, mesh, cfl, dimension,
+                                                 dt_constant, time, cfl_check_every),
+                                       cap), cap)
             elif wave_speed == "faces":             # one step per window
                 rule = lambda S: checked(window, time, cfl_check_every,
                                          lambda: face_dt(nsm, S, mesh, cfl,
@@ -284,6 +286,46 @@ class HyperbolicTemplate:
             lambda time, Q, Qaux, going, n_write: going, body_live,
             (time, Q, Qaux, going, 1))
         return time, Q, Qaux
+
+
+def check_numerics(nsm):
+    """Raise at setup on a (model, Riemann class) pair whose scheme would run silently
+    wrong: face terms that do not discretize a live entry of the nonconservative matrix
+    drop that term of the PDE (a conservative Rusanov / HLL / HLLC on a model with a bed
+    slope or a moment coupling; `PositiveRusanov` / `PositiveHLL` discretize the bed column
+    only, through the hydrostatic reconstruction); and on a model's
+    `equilibrium_reconstruction` the symbolic solvers do not honour (`bernoulli`,
+    `projected_bernoulli`: NotImplementedError; `audusse` without a hydrostatic
+    reconstruction in the Riemann class).
+    """
+    from zoomy_core.fvm.riemann_solvers import dropped_nonconservative_entries
+    riemann = getattr(nsm, "riemann", None)
+    reconstruction = getattr(nsm, "equilibrium_reconstruction", "none") or "none"
+    if reconstruction in ("bernoulli", "projected_bernoulli"):
+        raise NotImplementedError(
+            f"equilibrium_reconstruction={reconstruction!r} (moving-equilibrium well-balancing) "
+            "is not implemented on the symbolic solvers; they keep the lake at rest only "
+            "(the hydrostatic reconstruction of the Positive* fluxes).  Use 'none' / "
+            "'audusse', or the legacy zoomy_core.fvm solver (ANALYSIS 58).")
+    if (reconstruction == "audusse" and riemann is not None
+            and not hasattr(riemann, "hydrostatic_reconstruction")):
+        raise ValueError(
+            f"equilibrium_reconstruction='audusse' with riemann={riemann.__name__}: the "
+            "symbolic solvers take the hydrostatic reconstruction from the Riemann class "
+            "(a Positive* flux, e.g. PositiveNonconservativeRusanov), which this one has not.")
+    if riemann is None:
+        return
+    dropped = dropped_nonconservative_entries(riemann, nsm)
+    if dropped:
+        names = [str(s) for s in nsm.state]
+        columns = sorted({names[j] for _, j, _ in dropped})
+        rows = sorted({names[i] if i < len(names) else str(i) for i, _, _ in dropped})
+        raise ValueError(
+            f"riemann={riemann.__name__} on the model with state {names}: its face terms do "
+            f"not discretize the nonconservative product B(Q) grad Q in the columns {columns} "
+            f"(rows {rows}), so the run would drop that term of the PDE (a bed slope: the lake "
+            "at rest moves).  Use a path-conservative flux, e.g. "
+            "PositiveNonconservativeRusanov or PositiveNonconservativeHLL.")
 
 
 def _time_loop(Q, Qaux, time, time_end, dt_write, step, dt_checkpoint=None):

@@ -5,7 +5,7 @@
 == Sigma3D() — zeta as flux direction, zeta-zeta diffusion ==
 class: SystemModel
 state: [Symbol('b'), Symbol('h'), Symbol('mom')]
-aux_state: [Symbol('U'), Symbol('\\tilde{tau_xx}'), Symbol('omega'), Symbol('\\tilde{tau_xx}_x'), Symbol('\\tilde{tau_xx}_zeta'), Symbol('b_x'), Symbol('h*zeta_x')]
+aux_state: [Symbol('U'), Symbol('\\tilde{tau_xx}'), Symbol('omega'), Symbol('\\tilde{tau_xx}_x'), Symbol('\\tilde{tau_xx}_zeta'), Symbol('b_x'), Symbol('h_x')]
 parameters: [g, rho, nu, lambda_s, e_x]
 symbol_assumptions:
   b : {complex, extended_real, finite, hermitian, real}
@@ -17,7 +17,7 @@ symbol_assumptions:
   \tilde{tau_xx}_x : {complex, extended_real, finite, hermitian, real}
   \tilde{tau_xx}_zeta : {complex, extended_real, finite, hermitian, real}
   b_x : {complex, extended_real, finite, hermitian, real}
-  h*zeta_x : {complex, extended_real, finite, hermitian, real}
+  h_x : {complex, extended_real, finite, hermitian, real}
   g : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
   rho : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
   nu : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
@@ -42,7 +42,7 @@ diffusion_matrix[2,2,1,1] = Mul(Pow(Symbol('h'), Integer(-2)), Symbol('nu'))
 nonconservative_matrix: shape=(3, 3, 2)
 nonconservative_matrix[2,0,0] = Mul(Symbol('g'), Symbol('h'))
 source: shape=(3, 1)
-source[2,0] = Add(Mul(Symbol('\\tilde{tau_xx}_x'), Symbol('h'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Symbol('\\tilde{tau_xx}_zeta'), Symbol('b_x'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Symbol('\\tilde{tau_xx}_zeta'), Symbol('h*zeta_x'), Pow(Symbol('rho'), Integer(-1))), Mul(Symbol('e_x'), Symbol('g'), Symbol('h')))
+source[2,0] = Add(Mul(Symbol('\\tilde{tau_xx}_x'), Symbol('h'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Symbol('\\tilde{tau_xx}_zeta'), Symbol('b_x'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Symbol('\\tilde{tau_xx}_zeta'), Symbol('h_x'), Pow(Symbol('rho'), Integer(-1)), Symbol('zeta')), Mul(Symbol('e_x'), Symbol('g'), Symbol('h')))
 source_explicit: None
 eigenvalues: None
 eigenvalues_cfl: None
@@ -59,4 +59,4 @@ aux_registry:
   {atom=Derivative(Symbol('\\tilde{tau_xx}'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('\\tilde{tau_xx}_x'), function_row=1, kind='derivative', multi_index=(1, 0), name='\\tilde{tau_xx}_x', row=3, target_kind='function', target_name='\\tilde{tau_xx}'}
   {atom=Derivative(Symbol('\\tilde{tau_xx}'), Tuple(Symbol('zeta'), Integer(1))), aux_symbol=Symbol('\\tilde{tau_xx}_zeta'), function_row=1, kind='derivative', multi_index=(0, 1), name='\\tilde{tau_xx}_zeta', row=4, target_kind='function', target_name='\\tilde{tau_xx}'}
   {atom=Derivative(Symbol('b'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('b_x'), kind='derivative', multi_index=(1, 0), name='b_x', row=5, state_index=0, target_kind='state', target_name='b'}
-  {atom=Derivative(Mul(Symbol('h'), Symbol('zeta')), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('h*zeta_x'), kind='derivative', multi_index=(1, 0), name='h*zeta_x', row=6, target_kind='unknown', target_name='h*zeta'}
+  {atom=Derivative(Symbol('h'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('h_x'), kind='derivative', multi_index=(1, 0), name='h_x', row=6, state_index=1, target_kind='state', target_name='h'}

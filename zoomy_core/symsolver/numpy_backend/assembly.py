@@ -38,6 +38,26 @@ def cell_pattern(n, nc, nbrs, n_rows=None):
                         + unknown % k).astype(np.int32)
 
 
+def operator_neighbors(topo, mesh_np):
+    """Per cell the cells an operator of the derivative aux couples it to, the sparsity
+    `cell_pattern` assembles: the samples of its LSQ fit, i.e. the topology's stencil
+    (`topo.lsq_neighbors`, which wraps a periodic seam; the mesh's `lsq_neighbors` ends there)
+    and the cell behind each boundary-face sample's ghost (`boundary_face_cells`: the inner
+    cell, or the partner across a periodic seam).  With the mesh's stencil alone the assembled
+    matrix lacked the cross-seam entries: the AMG solve of a periodic pressure system converged
+    to the wrong matrix (true relative residual 0.78 on a periodic VAM(3) channel).  Rows padded
+    with -1.
+    """
+    nb = np.asarray(topo.lsq_neighbors)
+    bdy = np.asarray(topo.lsq_boundary_face_neighbors)
+    if not bdy.size:
+        return nb
+    n_bf = int(mesh_np.n_boundary_faces)
+    behind = np.asarray(mesh_np.boundary_face_cells, dtype=int)[:n_bf]
+    ghost_cells = np.where(bdy >= 0, behind[np.clip(bdy, 0, max(n_bf - 1, 0))], -1)
+    return np.concatenate([nb, ghost_cells.astype(nb.dtype)], axis=1)
+
+
 def cell_colors(c, d, nc, seed=0):
     """Distance-2 colouring of the stencil pairs `(c, d)` by speculative parallel greedy (a clash
     with a heavier random-weight neighbour retries).

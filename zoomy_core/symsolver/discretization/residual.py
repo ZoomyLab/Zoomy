@@ -199,6 +199,38 @@ def derivative_rows(nsm):
     return rows, any(e["target_kind"] != "state" for e in spec)
 
 
+def check_derivative_aux(systems, targets, backend):
+    """Raise at setup on a derivative aux the backend would read as 0: an entry of a
+    system's `aux_registry` / `aux_input_registry` that is not a plain `derivative` (a
+    `limited_derivative` no symbolic solver computes), or whose target this backend does
+    not differentiate (`targets`, e.g. `("state", "function")`; `unknown`: a compound such
+    as `h*zeta` that no backend computes, which the model must write by the chain rule
+    over its state rows).
+
+    Args:
+        systems: the NSMs the backend runs (a Chorin split: predictor, pressure, corrector).
+        targets: the `target_kind`s of `derivative` entries this backend computes.
+        backend: its name, for the message.
+    """
+    for nsm in systems:
+        entries = (list(getattr(nsm, "aux_registry", None) or [])
+                   + list(getattr(nsm, "aux_input_registry", None) or []))
+        for e in entries:
+            kind, target = e.get("kind"), e.get("target_kind")
+            if kind not in ("derivative", "limited_derivative"):
+                continue                     # a pointwise aux: update_aux_variables
+            if kind == "derivative" and target in targets:
+                continue
+            raise ValueError(
+                f"{backend}: the aux {e.get('name')!r} is the {kind} "
+                f"{tuple(e.get('multi_index') or ())} of {e.get('target_name')!r} "
+                f"(target_kind {target!r}), which this backend does not compute "
+                f"(it computes derivatives of {list(targets)}): it would read 0.  "
+                + ("Write the model's derivative by the chain rule over its state rows "
+                   "(a compound target no backend computes)." if target == "unknown"
+                   else "Use a backend that computes it."))
+
+
 def post_step(nsm, Q, Qaux, p, time, dt, mesh):
     """Model hygiene on the new state, then its aux; returns `(Q, Qaux)`."""
     if nsm.call.update_variables is not None:

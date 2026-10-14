@@ -20,8 +20,10 @@ from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_derivatives
 from zoomy_core.misc.logger_config import logger
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
+from zoomy_core.symsolver.discretization.residual import check_derivative_aux
 from zoomy_core.symsolver.vocabulary import march_error
-from zoomy_core.symsolver.numpy_backend.assembly import cell_pattern, host_amg_solve
+from zoomy_core.symsolver.numpy_backend.assembly import (cell_pattern, host_amg_solve,
+                                                          operator_neighbors)
 
 
 class Geometry(NamedTuple):
@@ -63,6 +65,8 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
     Returns:
         dict name -> callable
     """
+    check_derivative_aux([nsm, *(sub for sub, _ in (systems or {}).values())],
+                         ("state", "function"), "numpy")
     nc = int(mesh_np.n_inner_cells)
     nf = int(mesh_np.n_faces)
     n_bf = int(mesh_np.n_boundary_faces)
@@ -75,8 +79,13 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
     is_bnd[bf_face] = True
     interior = np.flatnonzero(~is_bnd)
     iA, iB, inner = fc0[interior], fc1[interior], fc0[bf_face]
-    fc_other = np.where(is_bnd, fc0, fc1)            # inner cell at boundary
+    # the other cell of a face: at a boundary face the inner cell, at a periodic seam the
+    # partner cell across it (``boundary_face_cells``; the inner cell elsewhere), whose aux
+    # and wave speed the seam face's Riemann problem and CFL step read (an interior face's)
+    fc_other = np.where(is_bnd, fc0, fc1)
+    fc_other[bf_face] = bf_cells
     fc_cfl = np.where(fc1 < nc, fc1, fc0)
+    fc_cfl[bf_face] = np.where(bf_cells < nc, bf_cells, fc0[bf_face])
     branch = np.asarray(boundary_face_branches(mesh_np, getattr(rt.sm, "_bc_source", None)),
                         dtype=int)[:n_bf]
     # faces a partition cut: the inner state, no BC (nothing owned reads them)
@@ -122,7 +131,8 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         return k(QL, QR, AL, AR, p, mesh.face_normals)
 
     def face_aux(Qaux, mesh):
-        """Owner and neighbour aux per face (the inner cell twice at a boundary face)."""
+        """Owner and neighbour aux per face (the inner cell twice at a boundary face, the
+        partner cell across a periodic seam)."""
         return Qaux[:, fc0], Qaux[:, fc_other]
 
     def face_wavespeed(k, Q, Qaux, p, mesh):
@@ -165,10 +175,11 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         return _bc_at(ghost, Q[:, bf_cells], Qaux, p, time, mesh, bf_cells)
 
     def boundary_states(ghost, Q, Qaux, p, time, mesh):
-        """The GHOST per boundary face and the inner cell's aux."""
+        """The GHOST per boundary face and its cell's aux (the inner cell's; across a
+        periodic seam the partner cell's, the ghost being that cell)."""
         if n_bf == 0:
             return np.zeros((Q.shape[0], 1)), np.zeros((Qaux.shape[0], 1))
-        return _bc_at(ghost, Q[:, bf_cells], Qaux, p, time, mesh, bf_cells), Qaux[:, inner]
+        return _bc_at(ghost, Q[:, bf_cells], Qaux, p, time, mesh, bf_cells), Qaux[:, bf_cells]
 
     def boundary_traces(bc, Q, QL, QR, Qaux, p, time, mesh):
         """`QR` with the outer FACE state `bc(QL)` on the boundary faces (periodic seam: the
@@ -470,7 +481,7 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
     if ls.get("backend") == "pyamg":
         import pyamg
     patterns, amg_cache = {}, {}
-    lsq_nbrs = np.asarray(mesh_np.lsq_neighbors)
+    lsq_nbrs = operator_neighbors(topo, mesh_np)        # the stencil and the periodic partners
 
     def _gmres(mv, b):
         """Restarted GMRES of the flat system `mv(x) = b`.

@@ -14,7 +14,7 @@ shape-only gate therefore built a dense TPFA diffusion operator for it —
 
 import sympy as sp
 
-from zoomy_core.fvm.riemann_solvers import PositiveRusanov, Rusanov
+from zoomy_core.fvm.riemann_solvers import Rusanov
 from zoomy_core.model.models.malpasset import MalpassetSWE
 from zoomy_core.model.models.swe import SWE
 from zoomy_core.numerics.numerical_system_model import (
@@ -92,9 +92,10 @@ def test_swe_transport_operators_are_live():
 
 def test_ncp_boolean_is_not_the_fluctuation_flag():
     """Same model, opposite answers — the NCP slot is live while the EMITTED
-    fluctuation under PositiveRusanov is zero (Audusse).  Two different
-    questions; conflating them is how the predecessor detector broke."""
-    nsm = _nsm(_swe(), PositiveRusanov)
+    fluctuation under Rusanov is zero (it never builds one; the symbolic solvers
+    refuse that pair at setup).  Two different questions; conflating them is how
+    the predecessor detector broke."""
+    nsm = _nsm(_swe(), Rusanov)
     assert nsm.nonconservative_matrix_is_zero is False
     assert nsm.fluctuations_are_zero is True
 
