@@ -276,11 +276,12 @@ def _time_loop(Q, Qaux, time, time_end, dt_write, step, dt_checkpoint=None):
         if dt_write is not None:
             n_write = Cond(_due(time, n_write, dt_write),
                            lambda: _write(time, Q, Qaux, n_write), lambda: n_write)
-        if dt_checkpoint is not None:
-            n_checkpoint = Cond(sp.And(_due(time, n_checkpoint, dt_checkpoint),
-                                       time < time_end),
-                                lambda: _save(time, Q, Qaux, n_checkpoint),
-                                lambda: n_checkpoint)
+        if dt_checkpoint is not None:               # nested, not sp.And: And orders its
+            n_checkpoint = Cond(                    # arguments by node count, i.e. walks the
+                _due(time, n_checkpoint, dt_checkpoint),   # step's DAG under `time` as a tree
+                lambda: Cond(time < time_end, lambda: _save(time, Q, Qaux, n_checkpoint),
+                             lambda: n_checkpoint),
+                lambda: n_checkpoint)
         return time, Q, Qaux, n_write, n_checkpoint, n_step + 1, dt, going
 
     time, Q, Qaux = io.load_state(time, Q, Qaux)
