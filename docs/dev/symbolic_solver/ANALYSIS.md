@@ -1954,3 +1954,64 @@ refused by `InsertClosure` (their shallow-only closure needs a scaled form first
 wired; `small_slope_scaling` (frame slopes O(eps)) is still a separate step; SME's surface
 normal-stress condition `p(eta) = tau_zz(eta)` is used when the vertical row keeps a stress (same
 group, eps^2/De), not scaled as its own boundary row.
+
+## 50. Free surface at the shore: a dry neighbour in the eta stencil (2026-10-14, dev/malpasset-pits)
+
+**Root cause.**  The order-2 free-surface reconstruction (W = (h, eta = b + h), bed derived) took
+a DRY cell's `eta = b` into the LSQ stencil and the limiter bounds of its wet neighbours.  A lake
+at rest against a bank above its level then gets a free-surface slope in the shore cells.
+Barth-Jespersen / minmod return phi = 0 there (the shore cell is a local minimum of eta);
+Venkatakrishnan with `eps^2 = (cell size)^2` (NumPy, JAX, AMReX) does not (on Malpasset eps ~ 70 m
+against metre-scale eta jumps: effectively unlimited), so `eta_f != eta_i`, the hydrostatic
+reconstruction and the edge source no longer balance and the water accelerates, on Malpasset to
+the mode-0 cap.  The front detector exposes it (without it MOOD redoes the inadmissible shore at
+order 1).  Reproduction: `cases/pit_lake_at_rest.py` (SME(0), Gaussian pit, thesis numerics):
+max |u| 0.40 m/s (quads) / 0.54 m/s (triangles) after 1 s from exact rest.
+
+**Rule** (`reconstruction.shore_extension`, from the hydrostatic reconstruction, Audusse et al.
+2004).  In the row eta a neighbour k with `h_k <= wet_dry_eps` enters cell i's stencil as
+`min(eta_k, eta_i)`: the gradient difference `min(eta_k - eta_i, 0)`, the bound
+`min(eta_k, eta_i)`.  The hydrostatic face state continues the wet cell's water level towards a
+higher bed (`h* = max(0, eta_i - max(b_i, b_k))`); the same continuation in the stencil maps a lake
+at rest to a flat eta in every wet cell for any limiter, and leaves a lower dry neighbour (the
+flooding front) unchanged.  Boundary ghosts are not changed.  Printed as the 5-argument
+`gradient(W, Wg, (eta, h), eps, mesh)` and the 7-argument limiter blocks.
+
+**Backends.**  NumPy / JAX: `lsq_derivatives(..., shore)`, `ghost_bounds(..., dry)`; AMReX: `lsq`
+/ `limiter_factors` with the depth row and eps.  foam (`rt.H`, new): the order-2 path is
+OpenFOAM's own `leastSquares` gradient and `cellLimited` limiters, so `shore_lsq` /
+`shore_limiter` are those schemes' loops (`fv::leastSquaresGrad`, `fv::cellLimitedGrad`: the
+`leastSquaresVectors`, patch order, `small`, the minmod / Venkatakrishnan functions of r, k = 1)
+with the one change in the eta row; every other row stays `fvc::grad`.  A coupled neighbour's eta
+and depth come over its processor / cyclic patch (the halo exchange of both rows), so a rank sees
+the neighbour's wet/dry state.  `zoomy_foam/tests/shore_unit` (skewed 13 x 11 mesh, a cyclic pair,
+walls, 26 dry cells, 3 of them across the seam): per cell against OpenFOAM's schemes on the field
+with that cell's dry neighbours continued, gradient bitwise, minmod 1.1e-16, Venkatakrishnan
+2.2e-16; without dry cells bitwise OpenFOAM's gradient; the h row and the halo columns unchanged.
+
+**Measurements** (merged branch: main dadf2efd + the rule; "main" = the same cases on main's
+zoomy_core 9308483 / zoomy_jax 751eb3f / zoomy_foam c93b53a / zoomy_amrex a177451).
+- Pit lake (front detector on): JAX 0.40 -> 2.7e-15 (quads), 0.54 -> 1.1e-14 (triangles);
+  AMReX 0.40 -> 2.4e-15, tilted on 2 ranks 5.1e-15; NumPy round-off (tests
+  `zoomy_core/tests/symsolver/test_shore_lake_at_rest.py`, `zoomy_jax/tests/runtime/
+  test_shore_lake_at_rest.py`).  foam (no front detector on foam yet: front_tol None) 3.0e-15 /
+  1.4e-14, tilted 6.0e-15, minmod 2.8e-15, 2 and 4 ranks the same; foam was at rest before too
+  (6.4e-15 / 4.9e-14): OpenFOAM's Venkatakrishnan has no eps and returns 0 at the shore minimum.
+- Matrix (C3, C5, C6, C7, C9 on numpy / jax / foam / amrex, serial, mpi2, mpi4, JAX gpu1):
+  0 FAIL, no row moved beyond round-off.  Against main: C3 bitwise on all four; C5 max rel
+  3.6e-12 (NumPy, JAX, AMReX) / 1.2e-13 (foam): the dam-break front has its dry neighbours below
+  the water, which the rule leaves alone; foam's eta-row factor is now the limiter value itself,
+  not `(G.L)/(G.G)` of OpenFOAM's limited gradient (round-off).  C7 C5 parallel = serial
+  <= 5.4e-15.
+- Malpasset thesis configuration (JAX GPU, SME(1), 26000 triangles, t = 2000 s; vs the thesis
+  run zp_l1): clamp-saturated cells 561 (main) -> 201 (pit 16, spill 125, other 60; main: pit 14,
+  spill 289, other 258); transit A->B / A->C 1250 / 1300 s -> 1300 / 1300 s (observed 1140 /
+  1320; snapshots every 50 s); gauge mean |err| vs observed 4.32 -> 4.23 m; shear median
+  |q_1|/|q_0| at T 0.235 -> 0.218; h(T) rel L2 vs zp_l1 1.8e-2 -> 5.8e-2, inundated area
+  -0.02 % -> -2.0 %, IoU 0.997 -> 0.961; mass drift <= 6e-16 both.
+
+**Open.**  The thesis numbers move (above): the user decides before chapters change.  The
+remaining 201 clamp cells are spill / flowing cells where Venkatakrishnan's `eps^2 = (cell size)^2`
+leaves eta unlimited across a wet/dry front: a limiter-scale choice, not a derivation defect.
+foam has no front detector (`front_cells`, dev/foam-front-diffusion), so the Malpasset numerics
+do not build on foam yet.
