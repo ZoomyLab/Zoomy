@@ -218,22 +218,32 @@ class MalpassetSWE(SWE):
         return ZArray.zeros(n, n)
 
     def eigenvalues(self):
-        """Eigenvalues `[0, un, un -/+ c]` from the bounded `hinv`, with an optional wet/dry
-        gate (`ev_gate`).
+        """Eigenvalues `[0, un, un -/+ c]`, the velocity `q / max(1e-14, h)` of the spectrum
+        (`wave_speed_inverse_depth`, REQ-82), not the KP `hinv` of the physical operators, with
+        an optional wet/dry gate (`ev_gate`).
+
+        The Riemann solvers evaluate this spectrum at the Audusse states `(h*, q h*/h)`, whose
+        velocity is the cell's `q/h`; their positivity needs the face speed to bound it.  The KP
+        `hinv(h*)` is far below `1/h*` once `h* < wet_dry_eps`: the speed then misses the
+        transport velocity of the mass flux `q*` and a dry neighbour is drained negative
+        (Malpasset, order 1: h_min -8.9e-3 m).
+
+        References:
+            Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090
         """
-        _, h, hu, hv, hinv = self._primitives()
+        from zoomy_core.systemmodel.operations import wave_speed_inverse_depth
+        _, h, hu, hv, _ = self._primitives()
         p = self._parameter_symbols
         n = self.normal
-        # Velocity from the bounded aux ``hinv`` (= KP-desingularised 1/h);
-        # this regularises the velocity expression, it does NOT modify h.
-        u = hu * hinv
-        w = hv * hinv
+        inv = wave_speed_inverse_depth(h)
+        u = hu * inv
+        w = hv * inv
         un = u * n.n0 + w * n.n1
         c = sqrt(p.g * sp.Max(h, p.wet_dry_eps))
         raw_ev = [sp.S.Zero, un, un - c, un + c]
-        # Optional wet/dry wave-speed gate.  With the KP-desingularised
-        # hinv the dry-cell speeds stay bounded at √(g·eps) WITHOUT the
-        # gate, and the gate can undersize the Rusanov face dissipation at
+        # Optional wet/dry wave-speed gate.  Without it a thin cell's speed is
+        # its transport speed (finite: update_variables zeroes q where
+        # h <= eps), and the gate can undersize the Rusanov face dissipation at
         # wet/dry faces (breaking the Xing-Zhang cell-mean-positivity
         # decomposition), so it defaults OFF here (ev_gate from the
         # constructor).
