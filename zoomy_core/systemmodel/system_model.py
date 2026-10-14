@@ -1356,7 +1356,7 @@ class SystemModel:
     # The symbolic solvers default to `gelfand` on every backend
     # (zoomy_core.symsolver.WAVE_SPEED); this default serves the old solvers.
     spectral_radius_method = SpectralRadius.eig
-    spectral_squarings = 6
+    spectral_squarings = 7
 
     @property
     def spectral_radius_bound(self):
