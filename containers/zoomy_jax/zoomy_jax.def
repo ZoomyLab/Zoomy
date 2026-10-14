@@ -27,30 +27,29 @@ From: ghcr.io/zoomylab/zoomy_jax_dev:latest
     export ZOOMY_ADAPTER=jax
     export ZOOMY_PORT=8080
     export ZOOMY_ROOT=/workspace
+    export MPLBACKEND=Agg
     export OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
 
 %post
     set -e
     export PATH=/opt/conda/envs/zoomy/bin:$PATH
-    # preCICE for coupling — makes this container a viable preCICE participant,
-    # WIRE-COMPATIBLE with the OpenFOAM participant (preCICE 3.4.x / pyprecice
-    # 3.4.0). conda-forge bundles libprecice + the Python bindings into the conda
-    # env (cleaner than the openfoam image's system apt-deb + pip source build).
-    ( /opt/conda/bin/mamba install -n zoomy -y -c conda-forge "pyprecice=3.4.0" \
-      || /opt/conda/bin/conda install -n zoomy -y -c conda-forge "pyprecice=3.4.0" )
-    /opt/conda/envs/zoomy/bin/python -c "import precice; print('pyprecice', precice.get_version_information())"
-    # MPI on the CPU for distributed runs (`comm=`; the matrix's mpiN configs), as in the
-    # Dockerfile (the stack pinned to the installed builds); GPU-aware MPI, AmgX: zoomy_jax_mpi
+    # The same steps, in the same order, as the Dockerfile: CI builds the Dockerfile and
+    # converts it to the published SIF; this recipe is the local build of that image.
+    /opt/conda/envs/zoomy/bin/python -m pip install --no-cache-dir \
+        /opt/src/zoomy_core /opt/src/zoomy_jax /opt/src/zoomy_server /opt/src/zoomy_prepost \
+        /opt/src/zoomy_plotting \
+        pytest-html jupytext nbformat nbclient jupyterlab jupyter-server ipykernel
+    rm -rf /opt/src
+    # MPI on the CPU for distributed runs (`comm=`; the matrix's mpiN configs) and preCICE
+    # (pyprecice 3.4.0, the other participants' version; petsc4py, imported before it by the
+    # JAX participant), as in the Dockerfile (the stack pinned to the installed builds);
+    # GPU-aware MPI, AmgX: zoomy_jax_mpi
     pins=$(/opt/conda/bin/conda list -n zoomy --export '^(python|numpy|scipy|jax|jaxlib)$' \
            | grep -v '^#')
     /opt/conda/bin/mamba install -n zoomy -y -c conda-forge $pins \
-        "openmpi>=5,<6" mpi4py "mpi4jax=0.9.1.post2"
+        "openmpi>=5,<6" mpi4py "mpi4jax=0.9.1.post2" "pyprecice=3.4.0" petsc4py
     /opt/conda/bin/conda clean -afy
-    /opt/conda/envs/zoomy/bin/python -m pip install --no-cache-dir \
-        h5py meshio jupyterlab jupyter-server ipykernel \
-        /opt/src/zoomy_core /opt/src/zoomy_jax /opt/src/zoomy_server /opt/src/zoomy_prepost \
-        /opt/src/zoomy_plotting
-    rm -rf /opt/src
+    /opt/conda/envs/zoomy/bin/python -c "import petsc4py, precice; v = precice.get_version_information().split(b';')[0]; assert v == b'3.4.0', v; print('preCICE', v.decode())"
     mkdir -p /workspace
 
 %runscript
@@ -73,4 +72,5 @@ From: ghcr.io/zoomylab/zoomy_jax_dev:latest
     zoomy-server  --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
     zoomy-jupyter --help >/dev/null 2>&1 && echo "zoomy-jupyter CLI OK"
     /opt/conda/envs/zoomy/bin/python -c "import jupyterlab" && echo "jupyterlab OK"
+    /opt/conda/envs/zoomy/bin/python -c "import petsc4py, precice" && echo "pyprecice OK"
     mpiexec -n 2 /opt/conda/envs/zoomy/bin/python -c "from mpi4py import MPI; import mpi4jax, jax.numpy as jnp; c = MPI.COMM_WORLD; s = mpi4jax.allreduce(jnp.ones(1), op=MPI.SUM, comm=c); assert float(s[0]) == c.Get_size() == 2; print('mpi4jax allreduce OK, rank', c.Get_rank())"

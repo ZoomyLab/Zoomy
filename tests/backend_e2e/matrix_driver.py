@@ -2,6 +2,7 @@
 own `run` (same store format), here: inside a backend container or on the host.
 
     python matrix_driver.py ROOT STORE WORK BACKEND CASE KEY[,KEY...] [CONFIG] [--in-container]
+    python matrix_driver.py ROOT STORE --checks BACKEND CASE
 
 ROOT holds docs/dev/symbolic_solver/{matrix,gates} of the tested checkout; CONFIG serial
 (default) or mpiN (matrix.py launches the ranks with the image's mpiexec). The case builders
@@ -9,6 +10,11 @@ import no backend, so every image builds every case. In a container the foam / A
 build natively (`ZOOMY_{FOAM,AMREX}_IN_IMAGE=1`); for older drivers that always call
 `apptainer exec <image>`, the apptainer shim (shim/) stands in for it.
 Last line: `E2E_RESULT {key: ok | n/a | unsupported | err: ...}`.
+
+`--checks`: the matrix's own checks (`matrix.measure`, the thresholds of the table) of CASE on
+BACKEND over the runs in STORE, and the checks naming the case (C6 mass, C7 parallel = serial);
+a check whose inputs are not in STORE is not made (e.g. the cross-backend ones need JAX's run).
+Last line: `E2E_CHECKS [{check, config, value, op, bound, ok, note}, ...]`.
 """
 import json
 import os
@@ -57,8 +63,31 @@ def main(root, store, work, backend, case, keys, config="serial", in_container=F
     print("E2E_RESULT " + json.dumps(out), flush=True)
 
 
+def checks(root, store, backend, case):
+    os.environ["MATRIX_STORE"] = store
+    m = Path(root) / "docs/dev/symbolic_solver/matrix"
+    sys.path[:0] = [str(m), str(m.parent / "gates")]
+    import matrix
+
+    rows = []
+    for c, check, b, cfg, v, th, note in matrix.measure():
+        if b != backend or th is None or isinstance(v, str):
+            continue
+        if c != case and not check.startswith(case + " "):
+            continue
+        v = float(v)
+        ok = bool(v >= th[1] if th[0] == ">=" else v <= th[1])
+        rows.append(dict(check=f"{c} {check}" if c != case else check, config=cfg, value=v,
+                         op=th[0], bound=th[1], ok=ok, note=note))
+    print("E2E_CHECKS " + json.dumps(rows), flush=True)
+
+
 if __name__ == "__main__":
-    a = [x for x in sys.argv[1:] if x != "--in-container"]
-    main(*a, in_container="--in-container" in sys.argv)
+    if "--checks" in sys.argv:
+        a = [x for x in sys.argv[1:] if x != "--checks"]
+        checks(*a)
+    else:
+        a = [x for x in sys.argv[1:] if x != "--in-container"]
+        main(*a, in_container="--in-container" in sys.argv)
     sys.stdout.flush()
     os._exit(0)          # JAX worker threads can stall a normal exit

@@ -5,7 +5,7 @@ From: ubuntu:24.04
     Author ZoomyLab
     Description OpenFOAM 13 (Foundation/openfoam.org) + preCICE 3.x for the zoomyFoam backend
     OpenFOAM_Version 13
-    preCICE_Version 3.4.1
+    preCICE_Version 3.4.0
     pyprecice_Version 3.4.0
 
 %help
@@ -101,11 +101,15 @@ From: ubuntu:24.04
     apt-get install -y --no-install-recommends openfoam13
     test -f /opt/openfoam13/etc/bashrc
 
-    echo "##### STEP 4/6: preCICE 3.4.1 library (prebuilt deb)"
+    echo "##### STEP 4/6: preCICE 3.4.0 library (prebuilt deb)"
+    # 3.4.0 = the other participants' version (the JAX image's conda-forge pyprecice 3.4.0, the
+    # AMReX image's libprecice 3.4.0): preCICE refuses to couple different versions ("Mixing
+    # preCICE versions ... is forbidden", m2n checkRemoteInfo), so a 3.4.1 here cannot couple
+    # with a JAX or AMReX participant.
     # `apt install ./file.deb` (not dpkg -i) so apt resolves the hard deps
     # (libboost, libxml2, petsc-dev, mpi-default-dev). Stage in /root, NOT /tmp
     # (apptainer build can expose the host /tmp).
-    PRECICE_VER=3.4.1
+    PRECICE_VER=3.4.0
     wget -q "https://github.com/precice/precice/releases/download/v${PRECICE_VER}/libprecice3_${PRECICE_VER}_noble.deb" \
         -O /root/libprecice3.deb
     apt-get install -y /root/libprecice3.deb
@@ -113,10 +117,10 @@ From: ubuntu:24.04
     pkg-config --modversion libprecice
 
     echo "##### STEP 5/6: pyprecice (Python bindings; source build against libprecice)"
-    # 3.4.1 is not on PyPI; bindings track maj.min. PEP 668 -> --break-system-packages.
+    # The bindings of the same version. PEP 668 -> --break-system-packages.
     # Cython/mpi4py/numpy provided via apt so the build is deterministic.
     pip3 install --no-cache-dir --break-system-packages pyprecice==3.4.0
-    python3 -c "import precice"
+    python3 -c "import precice; v = precice.get_version_information().split(b';')[0]; assert v == b'3.4.0', v; print('preCICE', v.decode())"
 
     echo "##### STEP 6/7: python solver stack (zoomy_core/server/prepost/plotting/foam)"
     # PEP 668 -> --break-system-packages (same as pyprecice above). numpy >= 2 (zoomy_core
