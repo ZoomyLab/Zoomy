@@ -176,7 +176,7 @@ def pick(packed, idx):
 
 
 # ── gelfand_bound (the wave speed of models without a closed-form spectrum) ──
-def gelfand_bound(j, *a_flat):
+def gelfand_bound(j, delta, *a_flat):
     """`kernel_functions.gelfand_bound` (the NumPy kernel's arithmetic): matrix products
     only, so any device; batched over the leading axes; AD-safe at a zero matrix."""
     n = int(round(len(a_flat) ** 0.5))
@@ -193,7 +193,7 @@ def gelfand_bound(j, *a_flat):
         C = C @ C
     M = jnp.abs(C)
     r = M.sum(-1)
-    x = r + 2.0 ** -30 * r.max(-1)[..., None]       # > 0: w continuous in A
+    x = r + (delta * r.max(-1))[..., None]          # > 0: w continuous in A
     y = jnp.einsum("...ik,...k->...i", M, x)
     w = jnp.where(x > 0, y / jnp.where(x > 0, x, 1.0), 0.0).max(-1)
     pos = w > 0
