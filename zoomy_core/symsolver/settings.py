@@ -31,6 +31,8 @@ class LinearSolver(Option):
     amgx = "amgx"
     #: hypre FlexGMRES + BoomerAMG on the colour-assembled operator
     hypre = "hypre"
+    #: LU of the colour-assembled operator, dense, on the device (small serial systems)
+    dense = "dense"
     #: FGMRES with the Schur-complement GAMG preconditioner (foam)
     schur_gamg = "schur-gamg"
 
