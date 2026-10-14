@@ -29,7 +29,8 @@ class eigensystem(sp.Function):
 class gelfand_bound(sp.Function):
     """Opaque upper bound on `rho(A)`, the symbolic solvers' wave speed: `||A^m||^(1/m)`,
     `m = 2^j`, sharpened by a Collatz-Wielandt step on `|A^m|`; `+inf` for a non-finite entry.
-    Called as `gelfand_bound(j, *A_flat)`, `A_flat` row-major.
+    Called as `gelfand_bound(j, delta, *A_flat)`, `A_flat` row-major, `delta` the offset of the
+    Collatz-Wielandt vector (`SystemModel.spectral_cw_offset`).
 
     References:
         Horn, Johnson 2012 (sections 5.6, 8.1), https://doi.org/10.1017/CBO9781139020411

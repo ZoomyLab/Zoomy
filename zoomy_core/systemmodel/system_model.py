@@ -1357,6 +1357,10 @@ class SystemModel:
     # (zoomy_core.symsolver.WAVE_SPEED); this default serves the old solvers.
     spectral_radius_method = SpectralRadius.eig
     spectral_squarings = 7
+    # The Collatz-Wielandt vector of `gelfand_bound` is the row sums of |A^m| plus this times
+    # their max: positive, so the bound is continuous in A and a row of round-off (q_y ~ 1e-20
+    # in a quasi-1-D run) does not switch it between backends (ANALYSIS 48).
+    spectral_cw_offset = 2.0 ** -30
 
     @property
     def spectral_radius_bound(self):

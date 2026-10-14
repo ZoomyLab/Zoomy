@@ -472,6 +472,8 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
                 return gelfand_bound(
                     sp.Integer(getattr(self.model, "spectral_squarings",
                                        SystemModel.spectral_squarings)),
+                    sp.Float(getattr(self.model, "spectral_cw_offset",
+                                     SystemModel.spectral_cw_offset)),
                     *[M[i][j] for i in keep for j in keep])
             src = list(sp.flatten(
                 self._model_eval("numerical_eigenvalues", Q, Qaux, p, n)))

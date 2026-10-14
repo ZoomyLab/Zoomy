@@ -29,7 +29,7 @@ def test_gelfand_bound_is_an_upper_bound():
     """bound >= max|eig| on Gaussian, non-normal triangular, defective, nilpotent matrices over
     12 decades; tight on rotations; 0 for the zero matrix, inf for a non-finite entry."""
     rng = np.random.default_rng(48)
-    m, j = 2000, SystemModel.spectral_squarings
+    m, j, off = 2000, SystemModel.spectral_squarings, SystemModel.spectral_cw_offset
     for n in (2, 3, 5, 8):
         d = rng.uniform(-1, 1, (m, n))
         sets = [rng.normal(size=(m, n, n)),
@@ -39,15 +39,15 @@ def test_gelfand_bound_is_an_upper_bound():
         for A in sets:
             A = A * 10.0 ** rng.uniform(-6, 6, (m, 1, 1))
             rho = np.abs(np.linalg.eigvals(A)).max(-1)
-            assert np.all(gelfand_bound(j, *_flat(A)) >= rho * (1 - 1e-12))
+            assert np.all(gelfand_bound(j, off, *_flat(A)) >= rho * (1 - 1e-12))
     th = rng.uniform(0, 2 * np.pi, m)
     R = np.stack([np.stack([np.cos(th), -np.sin(th)], -1),
                   np.stack([np.sin(th), np.cos(th)], -1)], -2)
-    assert np.allclose(gelfand_bound(j, *_flat(R)), 1.0, rtol=2e-2)
+    assert np.allclose(gelfand_bound(j, off, *_flat(R)), 1.0, rtol=2e-2)
     Z = np.zeros((1, 3, 3))
-    assert gelfand_bound(j, *_flat(Z))[0] == 0.0
+    assert gelfand_bound(j, off, *_flat(Z))[0] == 0.0
     Z[0, 1, 2] = np.nan
-    assert gelfand_bound(j, *_flat(Z))[0] == np.inf
+    assert gelfand_bound(j, off, *_flat(Z))[0] == np.inf
 
 
 # Found by a random search over 8-cell states (bed steps; dry, thin and deep cells): under the
