@@ -56,6 +56,10 @@ class MLSME(BaseModel):
     stress = OptionParam(Stress, default=Stress.shallow, doc=(
         "How much of the bulk closure's stress the model keeps (`moment_scaling`): "
         "`Stress.shallow` the vertical shear only, `Stress.full` the whole Newtonian tensor."))
+    scaling = param.Parameter(default=None, doc=(
+        "A `ShallowScaling` (derivation.nondim): derive each layer's stress truncation by order "
+        "from the non-dimensional balance laws instead of `moment_scaling` / "
+        "`apply_full_tensor`; it then decides `stress`.  None (default): the hand rules."))
     closures = param.List(default=[], doc=(
         "Composable Closure pieces (closures.py): stress (Newtonian/RoughWall/…) "
         "AND the interface transfer scheme (MeanInterface/UpwindInterface).  "
@@ -137,6 +141,10 @@ class MLSME(BaseModel):
         # vertical shear only; Stress.full keeps the whole tensor of the bulk closure
         # (Newtonian), routed to conservative diffusion by package_viscous.
         full_stress = Stress(self.stress) == Stress.full
+        vertical_stress = full_stress
+        pipeline = self.scaling is not None
+        with_pi = full_stress or pipeline       # the viscous pressure Pi and its vertical row
+        outcome = {}                            # the pipeline's decision (same in every layer)
         Pi_top = {ell: sp.Function(f"Pitop_{ell}", real=True)(t, *horiz) for ell in range(1, N + 1)}
 
         def derive_layer(ell):
@@ -183,10 +191,10 @@ class MLSME(BaseModel):
                     f"momentum_{CN[xd]}",
                     d.t(uvel[i]) + adv + d.z(uvel[i] * w)
                     + gl * DERIV[xd](b + H) - d.z(tau[xd]) / rl - g_h[xd] + hterm
-                    + (DERIV[xd](Pi) / rl if full_stress else 0))
+                    + (DERIV[xd](Pi) / rl if with_pi else 0))
                 blue.rows.append(getattr(ml, f"momentum_{CN[xd]}"))
                 blue.shallow_terms.append((blue.rows[-1], hterm))
-            if full_stress:
+            if with_pi:
                 # vertical balance at the stress order (Marche 2007, (3.5)): d_z Pi = sum_e d_e
                 # tau_ez, integrated from z to the layer top, where Pi = Pi_top (the integral
                 # over the layers above, resolved at the assembly)
@@ -195,15 +203,35 @@ class MLSME(BaseModel):
                 blue.vertical = ml.momentum_z
                 for c in (self.closures or []):
                     c.register(ml)
-            moment_scaling(ml, blue, self.stress)
-            apply_full_tensor(self.closures or [], ml, blue)
-            if full_stress:
+            if pipeline:
+                # the truncation by order of the non-dimensional layer balance (scaling.py);
+                # Pi is the non-hydrostatic part of -sigma_zz
+                from zoomy_core.model.models.scaling import ordered_truncation, Pressure
+                blue.p = Pi
+                rec = ordered_truncation(ml, blue, self.closures or [], self.scaling,
+                                         heights=[*hl, b], pressure=Pressure.nonhydrostatic,
+                                         mass="mass", requested=self.stress)
+                outcome.update(full=ml.stress == Stress.full, vertical=rec.vertical_stress)
+                layer_full, layer_vert = outcome["full"], outcome["vertical"]
+            else:
+                moment_scaling(ml, blue, self.stress)
+                apply_full_tensor(self.closures or [], ml, blue)
+                layer_full = layer_vert = full_stress
+            if with_pi and layer_vert:
                 mz = ml.momentum_z
                 mz.apply(IntegrateZ(z, z, z_top, method="analytical"))
                 mz.apply({Pi.subs(z, z_top): Pi_top[ell]})
                 psol = mz.solve_for(Pi)
                 for mn in MOM:
                     getattr(ml, mn).apply(psol)
+                mz.remove()
+            elif with_pi:
+                # no stress in any vertical row: d_z Pi = 0 with Pi = 0 at the surface, Pi = 0
+                mz = ml.momentum_z
+                if sp.simplify(mz.expr - d.z(Pi) / rl) != 0:
+                    raise ValueError(f"layer {ell}: vertical row {mz.expr} is not d_z Pi = 0")
+                for mn in MOM:
+                    getattr(ml, mn).apply({Pi: sp.S.Zero})
                 mz.remove()
 
             def _kbc(iface, G):
@@ -330,7 +358,7 @@ class MLSME(BaseModel):
             cov = {coeff_heads[i](j, t, *horiz): sp.Function(qname(xd, ell), real=True)(
                 j, t, *horiz) / h_l for i, xd in enumerate(horiz) for j in range(Nu + 1)}
             w_prof = (sum(sp.expand(w_closure[j].rhs.subs(cov)) * legendre.eval(j, zeta)
-                          for j in range(Nu + 2)) if full_stress else None)
+                          for j in range(Nu + 2)) if layer_full else None)
             return cont, mom, w_prof
 
         layer_eqs = {ell: derive_layer(ell) for ell in range(1, N + 1)}
@@ -415,14 +443,18 @@ class MLSME(BaseModel):
             prof["w"] = ProfileField(_assembled(layer_eqs[ell][2]), zeta)
             return ClosureState(prof, params=m.parameters, h=h_ell, x=x, zeta=zeta, at=side,
                                 horiz=list(horiz), base=b + sum(l_all[:ell - 1]) * ht)
+        if pipeline:
+            full_stress, vertical_stress = outcome["full"], outcome["vertical"]
+        stress = Stress.full if full_stress else Stress.shallow
         iface_tr, Pi_sub, dt_grad = {}, {}, {}
         if full_stress:
             dt_grad = {sp.Derivative(ht, t, xe): sp.diff(dth_glob, xe).subs(par) for xe in horiz}
             for a in range(1, N):
-                tr = interface_traction(self.closures, self.stress, _layer_state(a, 1),
+                tr = interface_traction(self.closures, stress, _layer_state(a, 1),
                                         _layer_state(a + 1, 0), G_sol[Gf[a]])
                 iface_tr[a] = [sp.expand(e.doit()) for e in tr]
-            full = full_tensor_closures(self.closures, self.stress)
+        if vertical_stress:
+            full = full_tensor_closures(self.closures, Stress.full)
             Pi_sub[Pi_top[N]] = sp.S.Zero
             for ell in range(N - 1, 0, -1):                 # Pi_top_l = Pi_bottom_(l+1)
                 s_ = _layer_state(ell + 1, None)
@@ -476,7 +508,7 @@ class MLSME(BaseModel):
         # KEEP-ALL: route the retained per-layer in-plane deviatoric-stress
         # divergence into conservative diffusion (mirrors ml_fullsme.py); b is a
         # STATE in `states` so topography couplings evaluate from the same stage.
-        if full_stress:
+        if full_stress or vertical_stress:
             states = {ht, b}
             for ell in range(1, N + 1):
                 for xd in horiz:

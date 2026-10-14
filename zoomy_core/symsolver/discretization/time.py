@@ -20,14 +20,14 @@ SSP_RK = {1: ((0, 0),),
 
 class Imex(Option):
     """How a step treats the SystemModel's implicit slots: `lie` splits them off after
-    the SSP-RK step (first order), `ssp2` solves the implicit source in every stage
-    of IMEX-SSP2(2,2,2).
+    the SSP-RK step (first order), `ssp2` solves them in every stage of
+    IMEX-SSP2(2,2,2).
     """
     #: Lie splitting: the explicit SSP-RK step, then implicit diffusion and
     #: implicit Euler on the source (first order)
     lie = "lie"
-    #: IMEX-SSP2(2,2,2) (:data:`IMEX_RK`): the implicit source in every stage
-    #: (second order; no implicit diffusion)
+    #: IMEX-SSP2(2,2,2) (:data:`IMEX_RK`): the implicit source and the two-point part
+    #: of the implicit diffusion in every stage (second order)
     ssp2 = "ssp2"
 
 

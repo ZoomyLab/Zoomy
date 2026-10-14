@@ -3,6 +3,8 @@ operation, implemented under the same name by every backend. Arrays are
 `(rows, cells)` or `(rows, faces)`, `faces` meaning all faces in mesh order,
 and `mesh` is always an argument.
 """
+import math
+
 from zoomy_core.symsolver.core import Block, Effect
 
 
@@ -80,7 +82,10 @@ class cell_traces(Block):
 
 class gradient(Block):
     """`(W, Wg, mesh)` -> LSQ gradient of every row of `W` per cell, boundary faces
-    closed from the ghost values `Wg`.
+    closed from the ghost values `Wg`.  `(W, Wg, (eta, h), eps, mesh)`: in row `eta` a
+    neighbour `k` with `W[h, k] <= eps` enters cell `i`'s stencil as `min(W[eta, k],
+    W[eta, i])` (the hydrostatic extension of the free surface, `reconstruction.
+    shore_extension`).
 
     References:
         Mavriplis 2003, https://doi.org/10.2514/6.2003-3986
@@ -90,7 +95,8 @@ class gradient(Block):
 class minmod(Block):
     """`(rows, W, Wg, G, mesh)` -> limiter factors in [0, 1] per row and cell (1 off
     `rows`): the largest keeping every face extrapolation within the bounds of the
-    face neighbours and boundary ghosts `Wg`.
+    face neighbours and boundary ghosts `Wg`.  `(rows, W, Wg, G, (eta, h), eps, mesh)`:
+    the bounds of row `eta` from the neighbour values of `gradient`'s shore form.
 
     References:
         Sweby 1984, https://doi.org/10.1137/0721062
@@ -183,6 +189,27 @@ class diffusion(Block):
     """
 
 
+class diffusion_tpfa(Block):
+    """`(kernel, bc, Q, Qaux, p, time, mesh)` -> per cell the two-point part of
+    `diffusion`: per face `n.A.n (Q_out - Q_in) / d`, `A` the mean of the two cells'
+    tensors, `Q_out` the BC ghost across a boundary face, the partner cell across a
+    periodic seam.
+
+    References:
+        Eymard, Gallouet, Herbin 2000, https://doi.org/10.1016/s1570-8659(00)07005-8
+    """
+
+
+class diffusion_correction(Block):
+    """`(kernel, bc, Q, Qaux, p, time, mesh)` -> per cell the rest of `diffusion`
+    beyond `diffusion_tpfa` (the tangential and non-orthogonal part of the face flux;
+    zero in 1-D), so that `diffusion = diffusion_tpfa + diffusion_correction`.
+
+    References:
+        Eymard, Gallouet, Herbin 2000, https://doi.org/10.1016/s1570-8659(00)07005-8
+    """
+
+
 class implicit_diffusion(Block):
     """`(kernel, bc, Q, Qaux, p, time, dt, mesh)` -> one Crank-Nicolson step of
     the two-point part of `diffusion` from `time` to `time + dt`, its
@@ -252,6 +279,42 @@ class interface_flux(Block):
     """
 
 
+class lifted_interface_flux(Block):
+    """`(sides, aux, n_aux, side, own, peer, rows, p, mesh)` -> per face the rows `rows` of
+    this participant's side of one Riemann problem posed low -> high in the model of `sides`
+    (the interface model) on the interface states `own`, `peer` (`(rows of that model, coupled
+    faces)`), the aux rebuilt from each state alone (`aux` on a zero aux of `n_aux` rows; `aux`
+    False: the zero aux); zero off the coupled faces. Both sides pose the same problem.
+    """
+
+
+class characteristic_ghost(Block):
+    """`(A, own, Aown, peer, p, mesh)` -> per coupled face the transmission state towards a
+    peer of another model: with `A_n = sum_d A(own, Aown)[:, :, d] n_d` (`A` the quasilinear
+    matrix kernel, `n` the outward normal) the characteristics `l_k . q` that enter
+    (`lambda_k < 0`) from `peer`, those that leave from `own`; `peer` where the eigenvectors
+    of `A_n` are singular, `own` where `peer` is all zero (no peer data yet). `own`, `Aown`,
+    `peer` and the result are `(rows, coupled faces)`.
+    """
+
+
+class ghost_flux(Block):
+    """`(sides, aux, own, Aown, ghost, p, mesh)` -> per face the own cell's row of the
+    Riemann problem `(own, ghost)` posed along the outward normal of the coupled faces, zero
+    elsewhere; `Aown` on the own side, `aux(ghost)` on the other (the pointwise aux formula on
+    a zero aux; `aux` False: `Aown`). `own`, `Aown`, `ghost` are `(rows, coupled faces)`.
+    """
+
+
+class replace_row(Block):
+    """`(A, i, B)` -> `A` with row `i` taken from `B`."""
+
+
+class coupled_ghosts(Block):
+    """`(Qg, own, face, mesh)` -> the boundary ghosts `Qg` with the coupled faces' replaced by
+    `2 face - own` (`own`, `face`: `(rows, coupled faces)`)."""
+
+
 # ── effects ─────────────────────────────────────────────────────────────────
 class io:
     """Output effects; `save_state` / `load_state`: the restart pair of the march state."""
@@ -266,13 +329,39 @@ class couple:                    # one preCICE participant
     References:
         Chourdakis et al. 2022, https://doi.org/10.12688/openreseurope.14445.2
     """
-    init = Effect(1)             # (q_interface) -> coupling ongoing
+    init = Effect(1)             # (q_interface[, qaux_interface]) -> coupling ongoing
     max_dt = Effect(1)           # () -> time left in the window
     read = Effect(1)             # () -> peer interface states
-    write = Effect()             # (q_interface)
+    write = Effect()             # (q_interface[, qaux_interface])
     advance = Effect(1)          # (dt) -> coupling ongoing
+    window_complete = Effect(1)  # () -> the last advance completed a time window
+    read_round_trip = Effect(1)  # () -> the own interface states as the peer reads them
+                                 #    (in the interface model of a lifted shared face)
 
 
 class check:
     """Run-time checks."""
     cfl = Effect()               # (dt_cfl, dt): warn once if dt > dt_cfl
+    # (time, time_end, dt, n_step, max |Q|) after the march: raise unless time >= time_end
+    # with a finite state (the loop stops at a step that does not advance the time)
+    march = Effect()
+
+
+def march_error(time, time_end, dt, n_step, q_max):
+    """The message of a failed `check.march`, or None: the march stopped before `time_end` (a
+    step that does not advance the time) or ended with a non-finite state (`q_max = max |Q|`).
+    The C++ runtimes print the same text (`rt_common.H`).
+    """
+    time, time_end, dt, q_max = map(float, (time, time_end, dt, q_max))
+    if time >= time_end and math.isfinite(q_max):
+        return None
+    if not time >= time_end:
+        state = (f"the state at t is finite (max |Q| = {q_max:.6g}): its CFL step is not a "
+                 "positive number (a NaN or infinite wave speed)" if math.isfinite(q_max) else
+                 f"the state at t is not finite (max |Q| = {q_max}): "
+                 + (f"step {int(n_step) - 1} produced it" if n_step > 1 else
+                    "it is the initial state"))
+        return (f"zoomy march stopped at t = {time:.9g} (t_end = {time_end:.9g}): step "
+                f"{int(n_step)} has dt = {dt:.6g}, which does not advance the time; {state}")
+    return (f"zoomy march reached t = {time:.9g} after {int(n_step)} steps with a non-finite "
+            f"state (max |Q| = {q_max})")

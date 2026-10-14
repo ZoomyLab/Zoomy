@@ -14,7 +14,7 @@ from zoomy_core.solver.constants import TPFA_COS_FLOOR, elliptic_constants
 from zoomy_core.symsolver import default_wave_speed
 from zoomy_core.symsolver.core import CxxPrinter
 from zoomy_core.symsolver.discretization import reconstruction as R
-from zoomy_core.symsolver.discretization.time import SSP_RK
+from zoomy_core.symsolver.discretization.time import IMEX_RK, SSP_RK, Imex
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
@@ -201,9 +201,14 @@ def _conservative_rows(nsm):
 
 
 def _amr_procedures(template):
-    """Print the template pieces an AMR level loop calls: `step`, `dt_of`, the
+    """Print the template pieces an AMR level loop calls: `step`, `dt_of` (the constant
+    `dt` when set, else the CFL step), the
     reconstruction maps `amr_w` / `amr_q`, `amr_clean`, the stage weights
     `rk_weights` and the refluxed rows `reflux_rows`.
+
+    The stage weights integrate each stage's face terms over the step: SSP-RK's
+    Shu-Osher weights, IMEX-RK's `wt`; the diffusive fluxes of a stage join its
+    face terms, also IMEX-RK's implicit ones, so `w` must equal `wt`.
     """
     Q, Qaux, p, time, dt, mesh, W = sp.symbols("Q Qaux p time dt mesh W")
     nsm, order = template.nsm, template.order
@@ -232,14 +237,27 @@ def _amr_procedures(template):
         """A stage's round-off hygiene."""
         return (Q if depth is None or tol is None else clean_round_off(Q, (depth,), tol),)
 
-    beta = []
-    for a, _c in SSP_RK[template.time_order]:
-        beta = [(1 - a) * b for b in beta] + [1 - a]
+    def dt_of(Q, Qaux, p, mesh):
+        """The level's step: the constant `dt` when set, else the CFL step of its cells."""
+        if template.dt_constant is not None:
+            return (template.dt_constant,)
+        return (template.dt(Q, Qaux, p, mesh),)
+
+    if template.imex is Imex.ssp2:
+        tab = IMEX_RK[template.imex]
+        if tuple(tab.w) != tuple(tab.wt):
+            raise NotImplementedError("AMR: IMEX-RK refluxing needs the implicit weights w "
+                                      "equal to the explicit wt")
+        beta = list(tab.wt)
+    else:
+        beta = []
+        for a, _c in SSP_RK[template.time_order]:
+            beta = [(1 - a) * b for b in beta] + [1 - a]
     procs = [
         "#define ZS_AMR_PROCEDURES 1",
         CxxPrinter().procedure("step", (Q, Qaux, p, time, dt, mesh),
                                template.step),
-        CxxPrinter().procedure("dt_of", (Q, Qaux, p, mesh), template.dt),
+        CxxPrinter().procedure("dt_of", (Q, Qaux, p, mesh), dt_of),
         CxxPrinter().procedure("amr_w", (Q, Qaux, p, mesh), w_of),
         CxxPrinter().procedure("amr_q", (W, Qaux, p, mesh), q_of),
         CxxPrinter().procedure("amr_clean", (Q, mesh), clean),

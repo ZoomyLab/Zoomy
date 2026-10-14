@@ -1826,13 +1826,16 @@ def lsq_closure_derivatives(topo: MeshTopology, table, U, U_ghost, classes):
     return rows, xp.asarray(topo.lsq_scale_factors, dtype=coeffs.dtype) * coeffs
 
 
-def lsq_derivatives(topo: MeshTopology, geom, U, U_ghost, classes=None):
+def lsq_derivatives(topo: MeshTopology, geom, U, U_ghost, classes=None, shore=None):
     """Batched LSQ derivatives of the fields `U` `(n_v, n_cells)` using ghost values at the
     boundary-face virtual points, rows with a closure class taking the constrained fit.
 
     Args:
         U_ghost: `(n_v, n_bf)` ghost values; `None`: the cell value (extrapolation).
         classes: closure class per row of `U` (-1: none).
+        shore: `(row, dry)`: in `row` a neighbour with `dry` set enters as `min(U_k, U_i)`
+            (the hydrostatic extension of the free surface,
+            `zoomy_core.symsolver.discretization.reconstruction.shore_extension`).
     Returns:
         `(n_v, n_cells, n_mon)` derivatives scaled by `lsq_scale_factors`.
     References:
@@ -1845,6 +1848,11 @@ def lsq_derivatives(topo: MeshTopology, geom, U, U_ghost, classes=None):
     bdy = topo.lsq_boundary_face_neighbors[:n]
     U_self = U
     delta_c = U[:, nbr] - U_self[:, :, None]
+    if shore is not None:
+        row, dry = shore
+        dry = xp.asarray(dry)[nbr]
+        ext = xp.where(dry, xp.minimum(delta_c[row], 0.0), delta_c[row])
+        delta_c = (xp.concatenate([delta_c[:row], ext[None], delta_c[row + 1:]], axis=0))
     parts = [delta_c]
     if bdy.shape[1] and U_ghost is None:     # no samples: the cell value, a zero difference
         parts.append(xp.zeros(tuple(delta_c.shape[:2]) + (bdy.shape[1],), dtype=delta_c.dtype))

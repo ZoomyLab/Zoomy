@@ -150,7 +150,7 @@ def _vanishes(f, normals, n_others, rng):
 
 def face_kinds(nsm, space, branch, normals):
     """Kinds (`GHOST` / `DIRICHLET` / `NEUMANN`) of the rows of `space` on the boundary
-    faces.
+    faces; a `Coupled` face's rows are `GHOST` (its ghost is the coupling's data).
 
     Args:
         branch: BC branch per face (-1: no BC, e.g. a partition cut, gives ghost).
@@ -160,12 +160,16 @@ def face_kinds(nsm, space, branch, normals):
         `(n_rows, n_faces)` int8 array.
     """
     tests, n_dim, n_others, n_rows = _tests(nsm, space)
+    # a coupled face's ghost is the coupling's data, no closed-form condition: a ghost row
+    from zoomy_core.model.boundary_conditions import Coupled
+    bcs = getattr(getattr(nsm, "_bc_source", None), "boundary_conditions_list", None) or []
+    coupled = {k for k, bc in enumerate(bcs) if isinstance(bc, Coupled)}
     branch = np.asarray(branch, dtype=int)
     normals = np.asarray(normals, dtype=float)
     kinds = np.full((n_rows, branch.size), GHOST, dtype=np.int8)
     rng = np.random.default_rng(_SEED)
     for k in np.unique(branch):
-        if k < 0 or k >= len(tests):
+        if k < 0 or k >= len(tests) or k in coupled:
             continue
         faces = np.flatnonzero(branch == k)
         nk = np.zeros((n_dim, faces.size))
