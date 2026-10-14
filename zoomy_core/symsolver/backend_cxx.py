@@ -31,7 +31,10 @@ class CxxBackend(HyperbolicSettings):
     couple = param.Dict(default=None, allow_None=True,
                         doc="preCICE: dict(participant=, config=, mesh=, "
                             "write=[..], read=[..], tag=, side=); side 0: this "
-                            "domain is the low side of the interface.")
+                            "domain is the low side of the interface.  Chorin: side= -> "
+                            "overlap=layers (the mesh reaches `layers` cell rings across the "
+                            "interface, its outer boundary tagged `tag`; "
+                            "`ChorinTemplate.precice_march`).")
     subcycling = param.Boolean(default=False,
                                doc="preCICE: adaptive steps inside a window.")
     gmres_restart = param.Integer(default=20, bounds=(1, None))
@@ -105,9 +108,8 @@ class CxxBackend(HyperbolicSettings):
         if self.couple:
             run = CxxPrinter().procedure(
                 "run", (Q, Qaux, p, time, time_end, mesh),
-                lambda Q, Qaux, p, time, time_end, mesh: template.precice_march(
-                    Q, Qaux, p, time, mesh, side=self.couple["side"],
-                    subcycling=self.subcycling))
+                lambda Q, Qaux, p, time, time_end, mesh: self._precice_march(
+                    template, Q, Qaux, p, time, mesh))
         else:
             run = CxxPrinter().procedure("run", (Q, Qaux, p, time, time_end, mesh),
                                          template.march)
@@ -118,6 +120,11 @@ class CxxBackend(HyperbolicSettings):
         aux = CxxPrinter().procedure("initial_aux", (Q, Qaux, p, mesh),
                                      template.initial_aux)
         return run + "\n\n" + aux + "\n\n" + self._configure(nsm) + "\n"
+
+    def _precice_march(self, template, Q, Qaux, p, time, mesh):
+        """The template's preCICE march with the coupling settings."""
+        return template.precice_march(Q, Qaux, p, time, mesh, side=self.couple["side"],
+                                      subcycling=self.subcycling)
 
     def _configure(self, nsm):
         """`configure()`: LSQ degree, the two-point flux floor and the implicit-solve
@@ -190,6 +197,16 @@ class CxxChorinBackend(CxxBackend, ChorinSettings):
         if self._amr_loop():
             raise NotImplementedError("AMR: the hyperbolic template only")
         return super()._print(nsm, dimension)
+
+    def _precice_march(self, template, Q, Qaux, p, time, mesh):
+        """The Chorin march coupled by overlapping Schwarz: `couple['overlap']` cell rings."""
+        if self.couple.get("overlap") is None:
+            raise ValueError("Chorin with preCICE coupling: couple=dict(participant=, config=, "
+                             "mesh=, write=, read=, tag=, overlap=layers) "
+                             "(`ChorinTemplate.precice_march`)")
+        if self.subcycling:
+            raise ValueError("the coupled Chorin march takes one step per window")
+        return template.precice_march(Q, Qaux, p, time, mesh)
 
 
 def _conservative_rows(nsm):

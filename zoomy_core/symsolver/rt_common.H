@@ -299,6 +299,10 @@ struct Coupling
     std::string mesh;
     std::vector<std::string> write, read;
     std::vector<precice::VertexID> ids;
+    /// An overlap participant (`ChorinTemplate.precice_march`): the vertices written (its
+    /// mirror cells) and read (its overlap cells), subsets of `ids`; empty: all of `ids`.
+    std::vector<precice::VertexID> wids, rids;
+    bool repeat = false;                    // the last advance repeats its window
 };
 /// The run's Coupling.
 inline Coupling& coupling() { static Coupling c; return c; }
@@ -307,9 +311,21 @@ inline Coupling& coupling() { static Coupling c; return c; }
 inline void couple_write_data(const Vertices& s)
 {
     auto& c = coupling();
+    const auto& ids = c.wids.empty() ? c.ids : c.wids;
     for (size_t i = 0; i < c.write.size(); ++i)
-        c.participant->writeData(c.mesh, c.write[i], c.ids,
+        c.participant->writeData(c.mesh, c.write[i], ids,
             std::vector<double>(s.v.begin() + long(i)*s.n, s.v.begin() + long(i + 1)*s.n));
+}
+/// Answer preCICE's checkpoint queries (an implicit scheme asks at every window start and after
+/// every iteration): the template keeps the window start; `repeat`: the window is repeated.
+inline void couple_checkpoints()
+{
+    auto& c = coupling();
+    c.repeat = c.participant->requiresReadingCheckpoint();
+    if (c.repeat && c.rids.empty())
+        fail("preCICE asks to repeat a window (implicit coupling iterations): this participant "
+              "keeps no checkpoint; use an explicit scheme or max-iterations 1");
+    c.participant->requiresWritingCheckpoint();
 }
 /// Effect `couple.init`: write initial data if required, initialize; returns whether
 /// coupling is ongoing.
@@ -318,6 +334,7 @@ inline std::tuple<long, bool> couple_init(long tok, const Vertices& s)
     auto& c = coupling();
     if (c.participant->requiresInitialData()) couple_write_data(s);
     c.participant->initialize();
+    couple_checkpoints();
     return {tok + 1, c.participant->isCouplingOngoing()};
 }
 /// Effect `couple.max_dt`: the time left in the coupling window.
@@ -325,19 +342,36 @@ inline std::tuple<long, double> couple_max_dt(long tok)
 {
     return {tok + 1, coupling().participant->getMaxTimeStepSize()};
 }
-/// Effect `couple.read`: the peer's interface values.
-inline std::tuple<long, Vertices> couple_read(long tok)
+/// The peer's values at the time `t` in the window.
+inline Vertices couple_read_data(double t)
 {
     auto& c = coupling();
-    const int n = int(c.ids.size());
+    const auto& ids = c.rids.empty() ? c.ids : c.rids;
+    const int n = int(ids.size());
     Vertices peer{int(c.read.size()), n, std::vector<double>(c.read.size()*n)};
     std::vector<double> v(n);
     for (size_t i = 0; i < c.read.size(); ++i)
     {
-        c.participant->readData(c.mesh, c.read[i], c.ids, 0.0, v);
+        c.participant->readData(c.mesh, c.read[i], ids, t, v);
         std::copy(v.begin(), v.end(), peer.v.begin() + long(i)*n);
     }
-    return {tok + 1, peer};
+    return peer;
+}
+/// Effect `couple.read`: the peer's interface values (at the window start).
+inline std::tuple<long, Vertices> couple_read(long tok)
+{
+    return {tok + 1, couple_read_data(0.0)};
+}
+/// Effect `couple.read_iterate`: the peer's values of its last coupling iteration (the window
+/// end).
+inline std::tuple<long, Vertices> couple_read_iterate(long tok)
+{
+    return {tok + 1, couple_read_data(coupling().participant->getMaxTimeStepSize())};
+}
+/// Effect `couple.repeat`: whether the last advance repeats its window.
+inline std::tuple<long, bool> couple_repeat(long tok)
+{
+    return {tok + 1, coupling().repeat};
 }
 /// Effect `couple.write`: send the interface values.
 inline std::tuple<long> couple_write(long tok, const Vertices& s)
@@ -350,6 +384,7 @@ inline std::tuple<long, bool> couple_advance(long tok, double dt)
 {
     auto& c = coupling();
     c.participant->advance(dt);
+    couple_checkpoints();
     return {tok + 1, c.participant->isCouplingOngoing()};
 }
 #endif
