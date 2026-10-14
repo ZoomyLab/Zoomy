@@ -158,15 +158,8 @@ def blocks(part, mesh_np):
         got = jnp.moveaxis(got, 0, 1).reshape(X.shape[0], -1)
         return X.at[:, recv].set(got, mode="drop")
 
-    # each face and cell counted on exactly one rank: a cell where it is
-    # owned, a face where the lower-numbered of its inner cells is owned
-    cells_g = np.append(part.gids, np.iinfo(np.int64).max)
-    fc = np.asarray(mesh_np.face_cells)[:2]
-    side = np.where(fc < nc, fc, nc)
-    g = cells_g[side]
-    first = np.where(g[0] <= g[1], side[0], side[1])
-    own_face = jnp.asarray(first < part.n_own)
-    own_cell = jnp.asarray(np.arange(nc) < part.n_own)
+    # each face and cell counted on exactly one rank (core's rule, the numpy backend's too)
+    own_cell, own_face = map(jnp.asarray, part.owned(mesh_np))
 
     def owned(x, empty):
         """Entries of `x` this rank owns (faces or cells); the others are replaced by `empty`."""
