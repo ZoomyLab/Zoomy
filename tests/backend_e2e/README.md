@@ -36,7 +36,6 @@ JAX comparison), `node` (the GUI's own composition), `apptainer` or `docker`, `r
 | `E2E_JOB_TIMEOUT`, `E2E_MATRIX_TIMEOUT` | per job / per container matrix run, s (840) |
 | `E2E_SAME_TOL`, `E2E_MATRIX_TOL` | host run = container run: GUI cases, matrix (1e-9) |
 | `E2E_MATRIX_HOST_STORE` | compare the container runs with this matrix store instead of fresh host runs |
-| `E2E_LIVE_COUPLING=1` | also run the live coupling sessions (they write into the host checkout) |
 
 Images (apptainer): `E2E_IMAGE_<NAME>`, `E2E_IMAGES/<container>.sif`, the checkout's
 `containers/<c>/<c>.sif`, `~/git/Zoomy/containers/<c>/<c>.sif`; docker: `ghcr.io/zoomylab/<c>:latest`.
@@ -59,6 +58,14 @@ packages), `PYTHONNOUSERSITE=1`, a scratch HOME / TMPDIR under `$E2E_WORK`.
   code and the route of Run come from the card rules the GUI loads (`zoomy_cli/src/cards.mjs`).
   `time_end` is set where a quick look needs it (`sessions.TIME_LIMITS`: Malpasset 2 s), as a
   reader would in the Parameters panel.
+- Coupled sessions across images (`sessions.PEERS`: the live SME | VOF couplings): the case runs
+  on its solver card's backend (OpenFOAM: the VOF tank) and its job submits the other
+  participants (the SME arms) to the backends they need (JAX), as the GUI submits a case
+  (`zoomy_server.peers`). Every server binds one directory at `/e2e/couple`
+  (`ZOOMY_COUPLE_DIR`, preCICE's exchange directory) and finds the others in its
+  `peers.json` (`ZOOMY_PEERS`, `{adapter tag: url}`, rewritten as servers come up); the test
+  starts the peers first. No host run (`sessions.NO_HOST_RUN`): the comparison with the old
+  solver is `library/zoomy_gui/projects/tools/symsolver/figures/coupling_live_old_vs_new.py`.
 - Protocol (`harness.GuiClient` = `HttpAdapter.submitCase`): `POST /api/v1/cases`, poll
   `GET /api/v1/jobs/<id>` every 2 s, `GET /api/v1/jobs/<id>/results/hdf5`.
 - Checks: every float finite; at least 2 snapshots and the last at `time_end` (the QR suite's
@@ -186,7 +193,7 @@ foam_foam 16, amrex_amrex 12.
 | numpy | steffler-0, bingham-0, coupling-0, zoomy-codeprinter-0, bingham-analytics-0, bingham-threshold-0, card-solver-{numpy,imex-numpy,split-numpy} | |
 | jax | malpasset-0 (mass 0, host run identical), card-solver-{jax,imex-jax} | |
 | amrex | malpasset-1 (mass 2.3e-16), card-solver-{amrex,split-amrex} | |
-| openfoam | card-solver-foam | coupling-live-0, coupling-triple-live-0: the SME-VOF live coupling and the server's `/couple` path are not ported |
+| openfoam | card-solver-foam | (the server's legacy `/couple` template path: not ported; no session uses it) |
 
 Fixed against main 7ce6f03b, where the numpy sessions / cards failed on the server, the
 Malpasset sessions were not submitted and the JAX / AMReX cards ran a `class` construct:
@@ -249,3 +256,21 @@ backends, mode, QR-only and a `-k` selection. The images fit a hosted runner (0.
 0.75 / 1.12 GB compressed); the foam / AMReX matrix reference needs apptainer on the host and
 is skipped there. Not run yet: the workflow and the docker path of `harness.Container` were
 written without docker on the development machine.
+
+## Results (2026-10-14, dev/smevof-live, dev mode)
+
+The live SME | VOF sessions on the symbolic solvers (OpenFOAM backend: the VOF tank and the
+`swePreciceCoupling` function object built in the job; JAX backend: the SME arm(s),
+`SymbolicHyperbolicSolverJax` with the column exchange and the characteristic coupled face),
+the GHCR images of 2026-10-14, `taskset -c 16-31`:
+
+| backend | pass | time |
+|---|---|---|
+| openfoam (+ jax peer) | coupling-live-0 | 120 s (46 s of it the function object's first build) |
+| openfoam (+ jax peer) | coupling-triple-live-0 | 76 s (the build cached) |
+
+Against the zoomyFoam participant on the same configuration (Fr* = 0.752, t_end 2.5 s),
+rel. L2 / Linf of the depth at the coupled face over the snapshots: pair 8.6e-5 / 1.3e-4;
+triple, arm with the dam 3.9e-4 / 6.7e-4, the arm downstream of the tank 5.4e-3 / 1.9e-2,
+where the zoomyFoam run itself moves by 3.5e-3 / 8.4e-3 when the reservoir is 1e-9 m deeper
+(`coupling_live_{pair,triple}_old_vs_new.json`).
