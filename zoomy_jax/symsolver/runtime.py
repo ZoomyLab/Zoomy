@@ -330,6 +330,23 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
                                (W.shape[0], nc))
         return _inner_outside(*R._reconstruct(W, G, phi, None))
 
+    def front_cells(Q, G, phi, rows, tol, mesh):
+        """Cells whose depth `Q[depth] + phi[depth] G[w] . r_f` falls below
+        `-(1/tol - 1) Q[depth]` at a face, `(depth, w) = rows`: the a-priori front detector
+        (`ReconstructionSpec.front_tol`).
+
+        References:
+            Gallardo, Pares, Castro 2007, https://doi.org/10.1016/j.jcp.2007.08.007
+        """
+        depth, w = (int(r) for r in rows)
+        h = Q[depth:depth + 1]
+        phi = jnp.broadcast_to(jnp.asarray(phi, dtype=h.dtype), (G.shape[0], nc))
+        slope = G[w:w + 1] * phi[depth:depth + 1, None, :]
+        hL, hR = extrapolate(h, slope, 1.0, mesh)
+        low = jnp.full((nc,), jnp.inf, dtype=h.dtype).at[j(fc0)].min(hL[0])
+        low = low.at[j(iB)].min(hR[0, j(interior)])
+        return low < h[0] * (1.0 - 1.0 / tol)
+
     # owner of every face; neighbour, or nc (dropped) on a boundary face
     nbr = np.where(is_bnd, nc, fc1)
 
@@ -1027,7 +1044,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         minmod=limiter("_limit_minmod"),
         venkatakrishnan=limiter("_limit_vk"),
         barth_jespersen=limiter("_limit_bj"),
-        extrapolate=extrapolate, divergence=divergence,
+        extrapolate=extrapolate, front_cells=front_cells, divergence=divergence,
         edge_source=edge_source, derivative_aux=derivative_aux,
         inadmissible=inadmissible, reduce_min=jnp.min, reduce_any=jnp.any,
         halo=halo,

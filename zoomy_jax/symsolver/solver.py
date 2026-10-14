@@ -297,6 +297,9 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         args = (Q, Qaux, p, time0) + (() if self.couple else (self.time_end,))
         out = (self._jit_fixed(*args, tok) if X is None
                else self._jit(*args, X, tok))
+        if not isinstance(out[1], jax.core.Tracer):     # traced (AD): the caller waits
+            jax.block_until_ready(out)                    # dispatch is asynchronous: return
+            jax.effects_barrier()                         # when the march and its writes are done
         return out[0], out[1], out[2]
 
 
