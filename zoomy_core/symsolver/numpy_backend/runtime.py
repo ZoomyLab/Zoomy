@@ -18,6 +18,7 @@ from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_derivatives
 from zoomy_core.misc.logger_config import logger
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
+from zoomy_core.symsolver.vocabulary import march_error
 from zoomy_core.symsolver.numpy_backend.assembly import cell_pattern, host_amg_solve
 
 
@@ -652,6 +653,14 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
                            f"{float(dt_cfl):.3e} (warned once)")
         return (tok + 1,)
 
+    def check_march(tok, time, time_end, dt, n_step, q_max):
+        """Raise `FloatingPointError` if the march stopped before `time_end` or ended with a
+        non-finite state (`vocabulary.march_error`); returns the next order token."""
+        msg = march_error(time, time_end, dt, n_step, q_max)
+        if msg is not None:
+            raise FloatingPointError(msg)
+        return (tok + 1,)
+
     def io_write(tok, time, Q, Qaux):
         """Write a snapshot through `on_write`; returns the next order token."""
         if on_write is not None:
@@ -702,7 +711,7 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         logical_and=np.logical_and, select=select, while_loop=while_loop, cond=cond,
         io_write=io_write, io_save_state=io_save_state, io_load_state=io_load_state,
         root=root, linsolve=linsolve,
-        implicit_diffusion=implicit_diffusion, diffusion=diffusion, check_cfl=check_cfl,
+        implicit_diffusion=implicit_diffusion, diffusion=diffusion, check_cfl=check_cfl, check_march=check_march,
         minimum=np.minimum, maximum=np.maximum, abs=np.abs, floor=np.floor)
     return m
 

@@ -11,8 +11,8 @@ from zoomy_core.symsolver.discretization.residual import (
 from zoomy_core.symsolver.discretization.time import (
     IMEX_RK, SSP_RK, CflWaveSpeed, Imex, cfl_dt, checked, face_dt, face_rule, step_size)
 from zoomy_core.symsolver.vocabulary import (
-    characteristic_ghost, couple, coupled_faces, ghost_flux, interface_flux,
-    interface_states, io, replace_row, select)
+    characteristic_ghost, check, couple, coupled_faces, ghost_flux, interface_flux,
+    interface_states, io, reduce_max, replace_row, select)
 
 
 class CoupledFace(Option):
@@ -258,17 +258,21 @@ class HyperbolicTemplate:
 def _time_loop(Q, Qaux, time, time_end, dt_write, step, dt_checkpoint=None):
     """The time loop: `step(Q, Qaux, time, cap) -> (Q, Qaux, dt)` takes a step `dt <= cap`,
     `cap` the distance to `time_end` and to the next write / checkpoint instant; the march state
-    `(time, Q, Qaux)` comes from `io.load_state` and goes to `io.save_state`.
+    `(time, Q, Qaux)` comes from `io.load_state` and goes to `io.save_state`.  A step that does
+    not advance the time (`dt` NaN, <= 0 or below the resolution of `time`) is not taken: the
+    loop ends at the last state and `check.march` raises, as for a non-finite final state.
     """
-    def body(time, Q, Qaux, n_write, n_checkpoint):
+    def body(time, Q, Qaux, n_write, n_checkpoint, n_step, dt, going):
         """One step landing on write / checkpoint instants, then the write / save."""
         cap = time_end - time
         if dt_write is not None:                    # land on write instants
             cap = sp.Min(cap, n_write * dt_write - time)
         if dt_checkpoint is not None:               # and on checkpoint instants
             cap = sp.Min(cap, n_checkpoint * dt_checkpoint - time)
-        Q, Qaux, dt = step(Q, Qaux, time, cap)
-        time = time + dt
+        Q_new, Qaux_new, dt = step(Q, Qaux, time, cap)
+        time_new = time + dt
+        time, Q, Qaux, going = Cond(time_new > time, lambda: (time_new, Q_new, Qaux_new, 1),
+                                    lambda: (time, Q, Qaux, 0))
         if dt_write is not None:
             n_write = Cond(_due(time, n_write, dt_write),
                            lambda: _write(time, Q, Qaux, n_write), lambda: n_write)
@@ -277,14 +281,16 @@ def _time_loop(Q, Qaux, time, time_end, dt_write, step, dt_checkpoint=None):
                                        time < time_end),
                                 lambda: _save(time, Q, Qaux, n_checkpoint),
                                 lambda: n_checkpoint)
-        return time, Q, Qaux, n_write, n_checkpoint
+        return time, Q, Qaux, n_write, n_checkpoint, n_step + 1, dt, going
 
     time, Q, Qaux = io.load_state(time, Q, Qaux)
     if dt_write is not None:
         io.write(time, Q, Qaux)
-    time, Q, Qaux, _, _ = While(
-        lambda time, Q, Qaux, n_write, n_checkpoint: time < time_end, body,
-        (time, Q, Qaux, _next(time, dt_write), _next(time, dt_checkpoint)))
+    time, Q, Qaux, _, _, n_step, dt, _ = While(
+        lambda time, Q, Qaux, n_write, n_checkpoint, n_step, dt, going:
+            sp.And(time < time_end, going > 0), body,
+        (time, Q, Qaux, _next(time, dt_write), _next(time, dt_checkpoint), 0, sp.Float(0), 1))
+    check.march(time, time_end, dt, n_step, reduce_max(sp.Abs(Q, evaluate=False)))
     io.save_state(time, Q, Qaux)
     return time, Q, Qaux
 

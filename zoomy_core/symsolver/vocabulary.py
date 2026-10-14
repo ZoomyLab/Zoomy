@@ -3,6 +3,8 @@ operation, implemented under the same name by every backend. Arrays are
 `(rows, cells)` or `(rows, faces)`, `faces` meaning all faces in mesh order,
 and `mesh` is always an argument.
 """
+import math
+
 from zoomy_core.symsolver.core import Block, Effect
 
 
@@ -309,3 +311,26 @@ class couple:                    # one preCICE participant
 class check:
     """Run-time checks."""
     cfl = Effect()               # (dt_cfl, dt): warn once if dt > dt_cfl
+    # (time, time_end, dt, n_step, max |Q|) after the march: raise unless time >= time_end
+    # with a finite state (the loop stops at a step that does not advance the time)
+    march = Effect()
+
+
+def march_error(time, time_end, dt, n_step, q_max):
+    """The message of a failed `check.march`, or None: the march stopped before `time_end` (a
+    step that does not advance the time) or ended with a non-finite state (`q_max = max |Q|`).
+    The C++ runtimes print the same text (`rt_common.H`).
+    """
+    time, time_end, dt, q_max = map(float, (time, time_end, dt, q_max))
+    if time >= time_end and math.isfinite(q_max):
+        return None
+    if not time >= time_end:
+        state = (f"the state at t is finite (max |Q| = {q_max:.6g}): its CFL step is not a "
+                 "positive number (a NaN or infinite wave speed)" if math.isfinite(q_max) else
+                 f"the state at t is not finite (max |Q| = {q_max}): "
+                 + (f"step {int(n_step) - 1} produced it" if n_step > 1 else
+                    "it is the initial state"))
+        return (f"zoomy march stopped at t = {time:.9g} (t_end = {time_end:.9g}): step "
+                f"{int(n_step)} has dt = {dt:.6g}, which does not advance the time; {state}")
+    return (f"zoomy march reached t = {time:.9g} after {int(n_step)} steps with a non-finite "
+            f"state (max |Q| = {q_max})")

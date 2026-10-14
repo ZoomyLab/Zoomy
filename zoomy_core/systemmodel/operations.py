@@ -27,6 +27,7 @@ __all__ = [
     "guard_eigenvalue_powers",
     "gate_eigenvalues_dry",
     "regularize_fractional_powers",
+    "norm_derivative_at_zero",
 ]
 
 
@@ -1036,24 +1037,47 @@ def guard_eigenvalue_powers():
 
 
 def _is_dry_gated(e, h, eps) -> bool:
-    """True when `e` is already `conditional(h > eps, ., 0)`, so re-gating is a no-op."""
+    """True when `e` is already `conditional(h <= eps, 0, .)`, so re-gating is a no-op."""
     return (isinstance(e, sp.Function) and e.func.__name__ == "conditional"
-            and len(e.args) == 3 and e.args[0] == (h > eps)
-            and e.args[2] == sp.S.Zero)
+            and len(e.args) == 3 and e.args[0] == (h <= eps)
+            and e.args[1] == sp.S.Zero)
+
+
+def _dry_gate(h, eps, e):
+    """`e` where `h > eps`, 0 where `h <= eps`; a NaN depth keeps `e` (NaN), so the step of a
+    non-finite state is NaN and the march stops there (`check.march`)."""
+    return sp.Function("conditional")(h <= eps, sp.S.Zero, e)
+
+
+def _cfl_inverse_depth(sm, h) -> dict:
+    """`{hinv: 1/max(1e-14, h)}` (`wave_speed_inverse_depth`) for the CFL spectrum; the legacy
+    KP `hinv` equals `1/h` above its `eps` and is kept there (the same rounding as before).
+    """
+    out = {}
+    for a in sm.aux_state:
+        if str(a) == "hinv":
+            out[a] = wave_speed_inverse_depth(h)
+            if getattr(sm, "depth_regularization", None) is None:        # desingularize_hinv
+                out[a] = sp.Function("conditional")(h > _wet_dry_eps(sm), a, out[a])
+    return out
 
 
 def gate_eigenvalues_dry(eps=None):
-    """Operation: publish a timestep-only spectrum `conditional(h > eps, e, 0)` into
+    """Operation: publish a timestep-only spectrum `conditional(h <= eps, 0, e)` into
     `sm.eigenvalues_cfl`, leaving `sm.eigenvalues` physical (with its power guard) for the
-    Riemann dissipation.
+    Riemann dissipation.  `eps` defaults to 0: a cell without water (h <= 0) has no wave speed,
+    but every cell with h > 0 moves mass with its own velocity (the Audusse states keep it), so
+    its speed bounds the step however thin it is (ANALYSIS 49).
     The dry gate carries the power guard because a branchless backend evaluates both arms; without
-    a closed form it gates `numerical_eigenvalues` (or the model's published
-    `eigenvalues_cfl`) and is idempotent.
+    a closed form it gates `numerical_eigenvalues` of `A_n` with `hinv` -> `1/max(1e-14, h)` (the
+    Riemann speeds' matrix, `wave_speed_inverse_depth`), or the model's published
+    `eigenvalues_cfl`, and is idempotent.
     """
     def _op(sm):
         """Apply the operation to `sm` in place."""
         ev, flat = _flat_eigenvalues(sm, "gate_eigenvalues_dry")
         h = _depth_state(sm, "gate_eigenvalues_dry")
+        e_eps = sp.S.Zero if eps is None else sp.Float(eps)
         if ev is None:
             # NO CLOSED FORM (SME / VAM): the model computes its wave speeds by
             # a runtime eigensolve.  EMBED that computation inside the gate
@@ -1067,8 +1091,6 @@ def gate_eigenvalues_dry(eps=None):
             # Before this, the op returned early for these models, which is why
             # the numerical-spectrum path was the one place a backend still had
             # to carry its own dry threshold.
-            e_eps = _wet_dry_eps(sm, eps)
-            cond = sp.Function("conditional")
             # The MODEL may already have published a dt spectrum of its own —
             # SME(level>=2) puts its closed-form ``spectral_radius_bound`` cone
             # here precisely because it has no valid closed-form ``eigenvalues``
@@ -1078,7 +1100,11 @@ def gate_eigenvalues_dry(eps=None):
             # numerical eigen-decomposition back on the dt path of exactly the
             # models that had gone to the trouble of avoiding one.
             published = getattr(sm, "eigenvalues_cfl", None)
-            num = published if published is not None else sm.numerical_eigenvalues
+            if published is not None:
+                num = published
+            else:                        # A_n of the Riemann speeds: 1/h floored, not the KP hinv
+                num = [sp.sympify(e).xreplace(_cfl_inverse_depth(sm, h))
+                       for e in sp.flatten(sm.numerical_eigenvalues)]
             # IDEMPOTENT.  The closed-form branch below rebuilds the gated copy
             # from ``sm.eigenvalues`` (which this op never zeroes), so applying
             # it twice is harmless there.  This branch reads the slot it also
@@ -1088,7 +1114,7 @@ def gate_eigenvalues_dry(eps=None):
             # cone comes out wrapped in ``conditional(h>eps, conditional(h>eps,
             # …), 0)`` — same value, twice the tree.
             gated = [e if _is_dry_gated(e, h, e_eps)
-                     else cond(h > e_eps, e, sp.S.Zero)
+                     else _dry_gate(h, e_eps, e)
                      for e in sp.flatten(num)]
             # ``numerical_eigenvalues`` is RANK-1 (length n), but the
             # eigenvalue slot contract is ``(n_eq, 1)`` — the same column shape
@@ -1097,10 +1123,8 @@ def gate_eigenvalues_dry(eps=None):
             # "Dimension of index greater than rank of array".
             sm.eigenvalues_cfl = ZArray(gated).reshape(len(gated), 1)
             return
-        e_eps = _wet_dry_eps(sm, eps)
-        cond = sp.Function("conditional")
         guarded = [_guard_eigenvalue_expr(e, h) for e in flat]
-        gated = [cond(h > e_eps, e, sp.S.Zero) for e in guarded]
+        gated = [_dry_gate(h, e_eps, e) for e in guarded]
         # cid=209: only the GATED copy goes to the dt-only slot.  The ZEROING is
         # what must not reach ``sm.eigenvalues`` (it is the Rusanov dissipation).
         # The power guard is a different thing and DOES belong there: it is
@@ -1112,8 +1136,8 @@ def gate_eigenvalues_dry(eps=None):
         sm.eigenvalues_cfl = ZArray(gated).reshape(*ev.shape)
 
     _op.name = "gate_eigenvalues_dry"
-    _op.description = ("publish dt-only eigenvalues_cfl gated to 0 for dry "
-                       "cells (h < eps); guard sqrt(h) args")
+    _op.description = ("publish dt-only eigenvalues_cfl gated to 0 where h <= eps "
+                       "(default 0); guard sqrt(h) args")
     return _op
 
 
@@ -1149,5 +1173,90 @@ def regularize_fractional_powers(eps, *, exclude=()):
 
     _op.name = "regularize_fractional_powers"
     _op.description = f"b**r -> (b + eps**2)**r for fractional r (eps={eps})"
+    _op.coverage = {}
+    return _op
+
+
+# ── the derivative of a norm at its zero ───────────────────────────────────────
+
+def _psd_quadratic(P) -> bool:
+    """Whether `P` is a positive semidefinite quadratic form (homogeneous of degree 2, numeric
+    coefficients) in its free symbols.
+    """
+    gens = sorted(P.free_symbols, key=str)
+    try:
+        poly = sp.Poly(P, *gens)
+    except sp.PolynomialError:
+        return False
+    if not gens or not poly.is_homogeneous or poly.total_degree() != 2:
+        return False
+    G = [[0.0] * len(gens) for _ in gens]
+    for monom, c in poly.terms():
+        if not c.is_number:
+            return False
+        i, j = [k for k, e in enumerate(monom) for _ in range(e)]
+        G[i][j] += float(c) / (1 if i == j else 2)
+        G[j][i] += 0.0 if i == j else float(c) / 2
+    import numpy as np
+    eig = np.linalg.eigvalsh(np.array(G))
+    return bool(eig.min() >= -1e-12 * max(1.0, float(np.abs(eig).max())))
+
+
+def _nonnegative(S) -> bool:
+    """Whether `S` is >= 0 wherever it is defined, as a product of positive numbers, even
+    powers and positive semidefinite quadratic forms (a squared Euclidean norm, scaled).
+    """
+    for f in sp.Mul.make_args(sp.factor_terms(S)):
+        if f.is_number:
+            if not f.is_extended_nonnegative:
+                return False
+            continue
+        b, e = f.as_base_exp()
+        if e.is_Integer and e % 2 == 0:
+            continue
+        if not (e.is_Integer and e > 0 and _psd_quadratic(b)):
+            return False
+    return True
+
+
+def norm_derivative_at_zero():
+    """Operation (default, before the source linearization): every `S**r` in the source slots
+    with `S >= 0` a scaled squared Euclidean norm (`_nonnegative`) and rational `r >= 1/2` not an
+    integer (`|u| = (u.u)**(1/2)` of a friction law) becomes `conditional(S > 0,
+    conditional(S > 0, S, 1)**r, S)`: the same value, and the derivative 0 at `S = 0` (S has its
+    minimum there, `dS = 0`) instead of `dS / (2 sqrt(S)) = 0/0` = NaN.  That is the derivative
+    of `S**r` for `r > 1/2` and the least-norm subgradient for `r = 1/2`; the Newton Jacobian of
+    an implicit friction source (JAX: AD) and the point-implicit `source_jacobian_*` stay finite
+    at rest.  No regularization: values are unchanged.
+    """
+    from zoomy_core.model.kernel_functions import conditional as cond   # differentiable
+    half = sp.Rational(1, 2)
+
+    def _norm_power(x):
+        """Whether `x` is such a power."""
+        return (isinstance(x, sp.Pow) and x.exp.is_Rational and not x.exp.is_integer
+                and x.exp >= half and not x.base.is_number and _nonnegative(x.base))
+
+    def _rewrite(expr):
+        """Guard the norm powers of one expression."""
+        return sp.sympify(expr).replace(
+            _norm_power, lambda x: cond(x.base > 0, cond(x.base > 0, x.base, 1) ** x.exp,
+                                        x.base))
+
+    def _op(sm):
+        """Apply the operation to `sm` in place."""
+        keep = ("source", "source_explicit")
+        _op.coverage = map_operator_slots(
+            sm, _rewrite, exclude=[s for s in OPERATOR_SLOTS if s not in keep])
+        if _op.coverage.get("source") == "rewritten":
+            if getattr(sm, "source_jacobian_wrt_variables", None) is not None:
+                sm.source_jacobian_wrt_variables = ZArray(
+                    sm._compute_source_jacobian_wrt_variables())
+            if getattr(sm, "source_jacobian_wrt_aux_variables", None) is not None:
+                sm.source_jacobian_wrt_aux_variables = ZArray(
+                    sm._compute_source_jacobian_wrt_aux_variables())
+
+    _op.name = "norm_derivative_at_zero"
+    _op.description = "S**r, S a squared norm: conditional(S > 0, ., S), derivative 0 at S = 0"
     _op.coverage = {}
     return _op

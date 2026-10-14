@@ -202,6 +202,15 @@ class conditional(sp.Function):
         # 3. Scalar Case: Create the actual Symbolic Node
         return super().__new__(cls, condition, true_val, false_val, **kwargs)
 
+    @classmethod
+    def eval(cls, condition, true_val, false_val):
+        """The branch itself once the condition is a boolean constant (e.g. after `subs`)."""
+        if condition is sp.true:
+            return true_val
+        if condition is sp.false:
+            return false_val
+        return None
+
     def _eval_derivative(self, s):
         """Differentiate both branches, ignoring the jump at the condition."""
         condition, true_expr, false_expr = self.args
