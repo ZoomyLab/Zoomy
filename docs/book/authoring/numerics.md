@@ -32,7 +32,7 @@ default:
 | `riemann` | `NonconservativeRusanov` | the numerical flux |
 | `reconstruction` | order 1 (constant) | `ReconstructionSpec` |
 | `diffusion` | auto | `DiffusionSpec`; enabled iff `diffusion_matrix` is non-zero and `nu > 0` |
-| `source_treatment` | `"explicit"` | `"explicit"` / `"local_source"` / `"coupled"` |
+| `source_treatment` | `SourceTreatment.explicit` | `SourceTreatment.explicit` (raw `S`) / `.linearized` (point-implicit `(I - dt J)^-1 S`) |
 | `depth_regularization` | `None` | e.g. Kurganov–Petrova `hinv` |
 | `regularization_eps` | `1e-2` | its scale |
 | `eigenvalue_treatment` | `"regularize"` | how the spectrum is guarded |
