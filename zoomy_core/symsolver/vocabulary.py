@@ -183,6 +183,27 @@ class diffusion(Block):
     """
 
 
+class diffusion_tpfa(Block):
+    """`(kernel, bc, Q, Qaux, p, time, mesh)` -> per cell the two-point part of
+    `diffusion`: per face `n.A.n (Q_out - Q_in) / d`, `A` the mean of the two cells'
+    tensors, `Q_out` the BC ghost across a boundary face, the partner cell across a
+    periodic seam.
+
+    References:
+        Eymard, Gallouet, Herbin 2000, https://doi.org/10.1016/s1570-8659(00)07005-8
+    """
+
+
+class diffusion_correction(Block):
+    """`(kernel, bc, Q, Qaux, p, time, mesh)` -> per cell the rest of `diffusion`
+    beyond `diffusion_tpfa` (the tangential and non-orthogonal part of the face flux;
+    zero in 1-D), so that `diffusion = diffusion_tpfa + diffusion_correction`.
+
+    References:
+        Eymard, Gallouet, Herbin 2000, https://doi.org/10.1016/s1570-8659(00)07005-8
+    """
+
+
 class implicit_diffusion(Block):
     """`(kernel, bc, Q, Qaux, p, time, dt, mesh)` -> one Crank-Nicolson step of
     the two-point part of `diffusion` from `time` to `time + dt`, its

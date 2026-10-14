@@ -67,7 +67,8 @@ class HyperbolicSettings(Configurable):
                             doc="Output interval; None = no intermediate snapshots.")
     imex = OptionParam(Imex, default=False, extra=[False],
                        doc="IMEX: lie = explicit flux step, then implicit diffusion and an "
-                           "implicit-Euler source; ssp2 = IMEX-SSP2(2,2,2); False = explicit.")
+                           "implicit-Euler source; ssp2 = IMEX-SSP2(2,2,2) (implicit source and "
+                           "diffusion in every stage); False = explicit.")
     implicit_tol = param.Number(default=1e-8, bounds=(0, None),
                                 doc="Newton tolerance ||R||_2 (implicit solves).")
     implicit_maxiter = param.Integer(default=6, bounds=(1, None))

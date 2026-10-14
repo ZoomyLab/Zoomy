@@ -575,6 +575,47 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         D, C = _div(k, bc, Q, Qaux, p, time, mesh)
         return D + C
 
+    def diffusion_tpfa(k, bc, Q, Qaux, p, time, mesh):
+        """The two-point part of `diffusion`."""
+        return _div(k, bc, Q, Qaux, p, time, mesh, correction=False)[0]
+
+    def diffusion_correction(k, bc, Q, Qaux, p, time, mesh):
+        """`diffusion` beyond its two-point part (zero in 1-D)."""
+        return _div(k, bc, Q, Qaux, p, time, mesh)[1]
+
+    def _jacobian(R, x):
+        """The sparse Jacobian of `R` at `x` (cell-major unknowns) by central differences,
+        one pair of evaluations per colour of the face-neighbour pattern."""
+        import scipy.sparse as sps
+        k_, n = x.shape[0], x.size
+        if n not in two_point:
+            two_point[n] = cell_pattern(n, nc, face_nbrs)
+        rows, cols, colors = two_point[n]
+        xc = x.T.reshape(-1)
+        hx = 6e-6 * np.maximum(1.0, np.abs(xc))
+        vals = np.empty(len(rows))
+        for c in range(int(colors.max()) + 1):
+            e = np.where(colors == c, hx, 0.0)
+            dR = (R((xc + e).reshape(-1, k_).T) - R((xc - e).reshape(-1, k_).T)).T.reshape(-1)
+            pick = colors[cols] == c
+            vals[pick] = dR[rows[pick]] / (2.0 * hx[cols[pick]])
+        return sps.csc_matrix((vals, (rows, cols)), shape=(n, n))
+
+    def implicit_solve(R, x0):
+        """Newton on `R(x) = 0`, `R` coupling face neighbours: each update a sparse LU of the
+        coloured finite-difference Jacobian (the face-neighbour pattern, periodic partners
+        included).
+
+        References:
+            Knoll, Keyes 2004, https://doi.org/10.1016/j.jcp.2003.08.010
+        """
+        from scipy.sparse.linalg import splu
+
+        def update(x, r):
+            """The Newton update at `x`."""
+            return splu(_jacobian(R, x)).solve(-r.T.reshape(-1)).reshape(-1, x.shape[0]).T
+        return _newton(R, np.asarray(x0, dtype=float), update)
+
     def implicit_diffusion(k, bc, Q, Qaux, p, time, dt, mesh):
         """One Crank-Nicolson step of the two-point part of `div(A(X) : grad X)` from `time` to
         `time + dt`, A at the new state, by Newton on a coloured finite-difference Jacobian
@@ -592,24 +633,6 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
             return X - b - 0.5 * dt * _div(k, bc, X, Qaux, p, time + dt, mesh,
                                            correction=False)[0]
 
-        def jacobian(x):
-            """The sparse Jacobian of `R` at `x` (cell-major unknowns) by central differences,
-            one pair of evaluations per colour of the face-neighbour pattern."""
-            import scipy.sparse as sps
-            k_, n = x.shape[0], x.size
-            if n not in two_point:
-                two_point[n] = cell_pattern(n, nc, face_nbrs)
-            rows, cols, colors = two_point[n]
-            xc = x.T.reshape(-1)
-            hx = 6e-6 * np.maximum(1.0, np.abs(xc))
-            vals = np.empty(len(rows))
-            for c in range(int(colors.max()) + 1):
-                e = np.where(colors == c, hx, 0.0)
-                dR = (R((xc + e).reshape(-1, k_).T) - R((xc - e).reshape(-1, k_).T)).T.reshape(-1)
-                pick = colors[cols] == c
-                vals[pick] = dR[rows[pick]] / (2.0 * hx[cols[pick]])
-            return sps.csc_matrix((vals, (rows, cols)), shape=(n, n))
-
         last = [None]
         lu = jacobians.setdefault((Q.size, k), {})
 
@@ -620,7 +643,7 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
             nr = np.linalg.norm(r)
             if (lu.get("dt") != dt or "lu" not in lu
                     or (last[0] is not None and nr > 0.1 * last[0])):
-                lu.update(lu=splu(jacobian(x)), dt=dt)
+                lu.update(lu=splu(_jacobian(R, x)), dt=dt)
             last[0] = nr
             return lu["lu"].solve(-r.T.reshape(-1)).reshape(-1, x.shape[0]).T
         return _newton(R, np.asarray(Q, dtype=float), update)
@@ -685,8 +708,10 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         take=lambda Q, rows: np.asarray(Q)[list(rows)], reduce_max=np.max,
         logical_and=np.logical_and, select=select, while_loop=while_loop, cond=cond,
         io_write=io_write, io_save_state=io_save_state, io_load_state=io_load_state,
-        root=root, linsolve=linsolve,
-        implicit_diffusion=implicit_diffusion, diffusion=diffusion, check_cfl=check_cfl,
+        root=root, linsolve=linsolve, implicit_solve=implicit_solve,
+        implicit_diffusion=implicit_diffusion, diffusion=diffusion,
+        diffusion_tpfa=diffusion_tpfa, diffusion_correction=diffusion_correction,
+        check_cfl=check_cfl,
         minimum=np.minimum, maximum=np.maximum, abs=np.abs, floor=np.floor)
     return m
 
