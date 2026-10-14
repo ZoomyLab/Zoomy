@@ -49,6 +49,7 @@ diffusion a finite-difference Newton-GMRES (JAX: exact AD).
 | diffusion blocks at boundaries: orders (gate 41, JAX); foam / AMReX = JAX (gate 43) | C28 | C28 | C28 (1-D, quads; triangles n/a: Cartesian) |
 | LSQ derivatives with the boundary closure (gate 44) | C29 | n/a (JAX-runtime kernels) | n/a (JAX-runtime kernels) |
 | LSQ polynomial reproduction (gate 39) | C30 | n/a (JAX-runtime kernels) | n/a (JAX-runtime kernels) |
+| oblique walls: a rotated walled box = the axis-aligned one; closure orders on rotated quads / triangles and a curved wall (gate 50) | C37 | C37 (rotation, = JAX) | n/a (Cartesian) |
 | in-plane viscosity with viscous walls vs an exact solution (no-slip / free-slip shear decay) | C32 | C32 | C32 |
 | BC channels: `face=` / `ghost=` set apart (`Wall` face, `Dirichlet` ghost: a viscous no-slip wall) | C32 | C32 | C32 |
 | vertical viscosity of the moment model (SME(2)) vs the exact `expm`; time order of the IMEX / SSP-RK source | C33 | C33 | C33 |
@@ -66,7 +67,7 @@ python matrix.py run --tier large L1 jax mpi2   # the large tier (never part of 
 python deliverable.py                           # store -> matrix.png
 ```
 
-BACKEND `jax foam amrex numpy`; CASE `C1`..`C36`; CONFIG `serial` (default)
+BACKEND `jax foam amrex numpy`; CASE `C1`..`C37`; CONFIG `serial` (default)
 `mpi2 mpi4 gpu1 gpu2` (`gpu2` = gpu-mpi: 2 ranks, a GPU each).  A run in the
 store is skipped (`--force` reruns), so a command that times out resumes.
 A run that raises `NotImplementedError` is stored as **unsupported**, any
@@ -126,6 +127,7 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C34 in-plane viscous operator | gate 45: SME(0) + `Newtonian`, `stress=Stress.full`, smooth periodic h, q_x, q_y on [0,1]^2 varying in x and y, O2 without limiter, one implicit-Lie step dt 1e-7 with nu 1 and nu 0, L = (Q_1 - Q_0) / dt on the momentum rows (the discrete viscous operator); nx 16 / 32 / 64 (JAX), nx 16 (foam, AMReX, against JAX's L) | max rel vs the exact div(h tau'), tau' = nu (grad u + grad u^T) + 2 nu (div u) I (the in-plane stress minus the viscous normal stress tau_zz = -2 nu div u, Marche 2007 eq. (5.19); = the SystemModel operator, `diffusion_matrix` with its mixed-index entries A[i, j, x, y] plus the nu-part of the source, symbolically, ANALYSIS 45e / 45f): order 32->64 >= 1.8 (theory 2; observed 1.99 / 1.98 for q_x / q_y), nx 64 <= 6e-3 (observed 2.3e-3 / 3.9e-3); foam / AMReX max rel vs JAX <= 2e-7 (observed 7e-8 foam: its own O2 stencils in the explicit stage, an O(dt) effect in L; 6e-10 AMReX: round-off / dt). The two-point fluxes alone (before 2026-10-13) converged to the diagonal-index part and stayed 16 % / 38 % off the full operator; before ANALYSIS 45e the SystemModel operator was h div(tau), before 45f div(h tau) |
 | C35 restart | C1 `o2_n40` (adaptive dt) and C8 `vam` with `projection=Projection.increment` (the lagged pressure in Q's pressure rows): `full` 0 -> T with `dt_checkpoint` T/2 (the march lands there), `half` 0 -> T/2, `restart` from `half`'s restart state -> T; `typo`: `restart_from` misspelt; c1 serial and mpi2, c8 serial | max abs(restart - full) = 0 (spec: bitwise); `typo` raises FileNotFoundError naming `restart_from` before anything is built (spec) |
 | C36 full stress, level 1 | SME(1) + `Newtonian`, `stress=Stress.full` (ANALYSIS 45h), periodic [0,1]^2, 16^2, smooth h, q_x_0, q_x_1, q_y_0, q_y_1, flat bed, lambda_s 0, nu 1e-2, O2 minmod, IMEX (Crank-Nicolson diffusion, Newton 1e-12), dt 1e-3, t 0.02 (JAX; NumPy) | the run completes; mass (C6) <= 1e-12; numpy = JAX <= 1e-8 (Newton / GMRES tolerances) |
+| C37 oblique walls | gate 50.  `box_r0`, `box_r30`: SME(0), `Wall` on every side of a box 10 x 4 (16 x 8 quads) rotated by 0 and 30 deg about the origin, a hump h = 1 + 0.2 exp(-r^2 / 0.8) at (3, 1.5) of the box frame in a flow (0.15, 0.05) of the box frame, O2 without limiter, LSQ degree 2 (the reconstruction gradient takes the boundary closure: the momentum in the walls' normal frames), numerical eigenvalues as the wave speed (the default bound on abs(A_n) depends on the momentum's basis: not rotation invariant), dt 2e-3 x 40 (JAX, foam, numpy). `orders_*` (JAX, numpy): gate 50's derivatives of q_x, q_y with a `Wall` field (n.q = 0, d(t.q)/dn = 0, generic at the walls) on the box rotated by 30 deg (quads, triangles; nx 24 / 48 / 96) and on polar quads of 1 <= r <= 2, 0 <= phi <= pi/2 (curved walls; nx 48 / 96 / 192), p = 2, 3, k = 1..p | rotated = axis-aligned, max rel of h and the rotated q <= 1e-11 (round-off; observed 1.5e-15); foam = JAX <= 1e-12; orders as C29 (>= p + 1 - k - 0.2), the annulus at p = 2 (its p = 3 interior degree-3 fits on polar quads do not converge, walls or not: information) |
 
 Sources: *theory* (order, positivity, symmetry), *tolerance* (round-off
 1e-12, the pressure solve), *spec* (the task's number), *observed* (about 2x

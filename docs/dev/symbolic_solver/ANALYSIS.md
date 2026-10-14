@@ -1749,3 +1749,55 @@ Open:
 - A NaN `dt` ends the march loop silently (`time < time_end` is false); the loop should raise.
 - The first moment of the mixing-length SME(1) reaches alpha_1 ~ 260 m/s under the cells rule too
   (the mode-0 velocity is capped at 30 m/s, mode 1 is not).
+
+## 49. Oblique walls in the walls' normal frames (2026-10-14, dev/oblique-walls)
+
+**Oblique walls.**  A `Wall` reflects the normal momentum.  On a face not aligned with an axis its
+ghost couples q_x and q_y, so section 41 classed both rows as ghost rows (no constraint), and the
+decoupled ghost fit of the base table (section 28: a ghost informs only the pure monomials of its
+axis) took the axis of x_f - x_c, not the line the mirror ghost lies on.
+- Rows (`boundary_closure.face_closure` -> `RowClosure(kinds, groups, rotated)`): a vector group
+  (the BCs' `momentum_field_indices`) is classified in each face's normal frame wherever that fixes
+  more rows than the Cartesian frame: n.q Dirichlet, t.q Neumann (2-D t = (-n_y, n_x); 3-D the rows
+  of I - n n^T, whose squares sum to those of any orthonormal tangent basis).  Axis-aligned faces
+  keep their per-row kinds: on every matrix mesh but C37's the tables are unchanged.
+- Fit (`geometry_xp._vector_tables`): such a group is one vector class, one joint constrained fit
+  of its d components (block-diagonal samples; per face the frame rows F q as ghost samples,
+  Dirichlet values or Neumann normal derivatives; the null-space form of section 41).  Its d x d
+  block tables follow the row classes in `lsq_closure`; a vector row's `lsq_closure_class` entry
+  is its terms ((src_row, class), ...) (`closure_terms`, `closure_rows`), read by core
+  `lsq_closure_derivatives` (NumPy), the JAX `derivative_aux` / `gradient`, foam's `Kernels.H`
+  aux entries (two partner pairs) and `Fit`.  AMReX is Cartesian: no vector class.
+- Base fit (`_wall_frames`): the mirror ghost lies on the face normal, so it informs the
+  pure-normal monomials of the face frame.  A cell whose sampled boundary faces are oblique fits in
+  the frame Q = R(k 90 deg) R(-phi_0) (|Q - I| <= 45 deg) if one Q puts all its face normals on
+  axes (else Cartesian) and maps the coefficients back with the monomial rotation T (c = T^T a,
+  `_monomial_rotation`, differentiable in the nodes).  2-D; axis-aligned cells unchanged.
+- Checks (gate 50, `gates/gate50_oblique_walls.py`; matrix C37): a `Wall` field (n.q = 0,
+  d(t.q)/dn = 0, generic at the walls: an even part in q_n, an odd cubic part in q_t, which a ghost
+  sample cannot reproduce); orders of the derivatives of q_x, q_y over the boundary cells, last
+  pair (the interior as gate 44):
+
+| mesh (nx) | p | closure, k = 1 / 2 / 3 | ghost sample, k = 1 / 2 / 3 |
+|---|---|---|---|
+| box 10 x 4 rotated by 30 deg, quads (48 -> 96) | 2 | 2.01 / 0.86 | 1.0 / 0.0 |
+| | 3 | 2.93 / 1.92 / 0.91 | 1.0 / 0.0 / -1.0 |
+| same box, triangles (48 -> 96) | 2 | 1.93 / 0.89 | 0.9 / 0.1 |
+| | 3 | 3.01 / 1.95 / 0.96 | 1.0 / 0.0 / -1.0 |
+| annulus 1 <= r <= 2, polar quads, curved walls (96 -> 192) | 2 | 1.90 / 0.96 | 0.8 / 0.0 |
+| | 3 | 3.02 / 1.92 / 1.07 | 1.0 / 0.0 / -0.5 |
+
+  Polynomial vector fields are reproduced to 1e-11 on rotated quads, jittered quads and triangles
+  (p 2, 3; corners with two frames) and on rotated hexahedra (p 2; edges, corners)
+  (`test_gate_1a_core_lsq_closure.py`).  The rotated mesh: the same stencils (the axis rule
+  extended all 68 wall stencils of the rotated box, nx 24, by 1 to 5 cells), every derivative
+  tensor the rotated one to 7e-13; an O2 run (SME(0), LSQ degree 2, no limiter, 40 steps) of the walled box at 30 deg =
+  at 0 deg: max rel h / q 2.8e-3 / 3.2e-2 before, 3.9e-16 / 1.5e-15 after (JAX, NumPy; foam C37).
+- Limits.  The run takes `SpectralRadius.eig`: the default bound of section 48 works on |A_n| and
+  depends on the momentum's basis (4.4e-7 / 4.1e-6 with it).  A curved wall is its polygon: on polar
+  quads a wall cell's foot is its face's midpoint (normal e_r there) and the gate's field carries the
+  BC there to O(h^4); on triangles the foot is off the midpoint, the polygon's normal O(h) off the
+  wall's, and free slip is first order whatever the closure (geometry).  The base fit's frames are
+  2-D (3-D oblique cells stay Cartesian; the vector closure is 3-D).  Annulus p = 3: the interior
+  degree-3 fits two cells off the walls (10 samples, 9 monomials) do not converge (d3 ~1e2), on
+  main and without walls (the selection of section 37; information in C37).

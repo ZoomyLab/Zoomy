@@ -589,6 +589,46 @@ def _c28():
                    for k in DIFF_KINDS for p in DIFF_PATHS for case in DIFF_ALL]
 
 
+# ── C37: oblique walls (gate 50) ────────────────────────────────────────────
+OBLIQUE = dict(theta=30.0, nx=16, dt=2e-3, steps=40)
+
+
+def oblique_box(theta):
+    """Gate 50's walled box (10 x 4, nx 16 x 8 quads) rotated by ``theta`` degrees about the
+    origin: SME(0), ``Wall`` on every side, O2 without limiter, LSQ degree 2 (the
+    reconstruction gradient takes the boundary closure: the momentum in the walls' normal
+    frames), numerical eigenvalues as the wave speed (the default bound on |A_n| depends on
+    the momentum's basis, so it is not rotation invariant)."""
+    import gate50_oblique_walls as G50
+    from zoomy_core.systemmodel.system_model import SpectralRadius
+    nsm = G50.nsm_for(2, order=2)
+    nsm.spectral_radius_method = SpectralRadius.eig
+    mesh = G50.box_mesh(OBLIQUE["nx"], theta=np.radians(theta), origin=(0.0, 0.0))
+    return ensure_lsq_mesh(mesh, nsm), nsm
+
+
+def oblique_q0(theta, names, xc):
+    """A hump at (3, 1.5) of the box frame in a uniform flow (0.15, 0.05) of the box frame."""
+    import gate50_oblique_walls as G50
+    R = G50.rotation(np.radians(theta))
+    xi = R.T @ xc[:2]
+    h = 1.0 + 0.2 * np.exp(-((xi[0] - 3.0) ** 2 + (xi[1] - 1.5) ** 2) / 0.8)
+    q = R @ (h * np.array([[0.15], [0.05]]))
+    Q = np.zeros((len(names), xc.shape[1]))
+    Q[names.index("h")] = h
+    Q[names.index("q_x_0")], Q[names.index("q_y_0")] = q
+    return Q
+
+
+def _c37():
+    from custom import oblique_orders
+    O = OBLIQUE
+    return ([Run(f"box_r{t:g}", partial(oblique_box, t), O["steps"] * O["dt"], dt=O["dt"],
+                 q0=partial(oblique_q0, t), backends=JF) for t in (0.0, O["theta"])]
+            + [Run(f"orders_{k}", None, 0.0, custom=lambda b, c, w, k=k: oblique_orders(k, b),
+                   backends=("jax",)) for k in ("rbox-quad", "rbox-tri", "annulus")])
+
+
 def _c29():
     from custom import lsq_closure
     return [Run(f"p{p}_{bc}", None, 0.0, custom=lambda b, c, w, p=p, bc=bc: lsq_closure(p, bc, b),
@@ -667,6 +707,7 @@ def _c33():
 
 #: why a backend has no run of a case (measure(): the label of its n/a row)
 NA = {("C29", b): "gate 44 calls the JAX runtime (derivative_aux)" for b in ("foam", "amrex")}
+NA[("C37", "amrex")] = "Cartesian grids only: no oblique walls"
 NA.update({("C30", b): "gate 39 calls the JAX runtime (lsq_gradient_per_field)"
            for b in ("foam", "amrex")})
 
@@ -777,6 +818,9 @@ CASES = {
     "C36": ("full Newtonian stress at level 1 (SME(1), Stress.full): periodic smooth state, IMEX",
             [Run("sme1", full_stress_level1, FULL1["t_end"], dt=FULL1["dt"], imex=Imex.lie,
                  solver=IMPLICIT, backends=("jax",))]),
+    "C37": ("oblique walls (gate 50): a walled box rotated by 30 deg = the axis-aligned one; "
+            "boundary orders of the closure on rotated quads / triangles and a curved wall",
+            _c37()),
 }
 
 

@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "gates"))
 import common  # noqa: E402,F401  (x64)
 from cases import (CASES, CHANNEL, C10_N, C10_VARIANTS, C31_K, C31_SWE, C31_VAM, C4_N,  # noqa: E402
-                   DIFF_ALL, DIFF_KINDS, DIFF_PATHS, NA, PERTURB, prepare)
+                   DIFF_ALL, DIFF_KINDS, DIFF_PATHS, NA, OBLIQUE, PERTURB, prepare)
 from backends import BACKENDS  # noqa: E402
 
 STORE = Path(os.environ.get("MATRIX_STORE", HERE / "store"))
@@ -435,6 +435,43 @@ def gate_checks(add, b, g, J):
         m = metrics(d)
         add("C34", "nx 16 max rel |L - L_JAX|", b, "serial", m["rel_vs_jax"], TH["C34 xb"],
             "vs the exact div(h tau') " + " / ".join(f"{m[f'{k} exact']:.2e}" for k in ("q_x_0", "q_y_0")))
+    for kind in ("rbox-quad", "rbox-tri", "annulus"):          # C37 (gate 50)
+        d = g("C37", f"orders_{kind}")
+        if d is None:
+            continue
+        m = metrics(d)
+        nx = m["nx"]
+        for p in (2, 3):
+            for where in ("boundary", "interior"):
+                for k in range(1, p + 1):
+                    e = m[f"p{p}_closure_{where}_d{k}"]
+                    gated = p in m["gated"]
+                    add("C37", f"{kind} p{p} d{k} {where} order {nx[-2]}->{nx[-1]}", b, "serial",
+                        order(*e[-2:]),
+                        (">=", p + 1 - k - SLACK, f"theory p+1-k = {p + 1 - k}, slack {SLACK}, "
+                         "gate 50") if gated else None,
+                        "max err " + " / ".join(f"{x:.2e}" for x in e) + "; ghost as sample: "
+                        + " / ".join(f"{x:.2e}" for x in m[f"p{p}_ghost_{where}_d{k}"])
+                        + ("" if gated else "; information: degree-3 interior fits on polar "
+                           "quads (10 samples) do not converge, walls or not"))
+    d0, d1 = g("C37", "box_r0"), g("C37", f"box_r{OBLIQUE['theta']:g}")
+    if d0 is not None and d1 is not None:                 # C37: rotated = axis-aligned
+        th = np.radians(OBLIQUE["theta"])
+        R = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+        n0, n1 = names(d0), names(d1)
+        h0, h1 = d0["Q"][n0.index("h")], d1["Q"][n1.index("h")]
+        q0 = np.stack([d0["Q"][n0.index("q_x_0")], d0["Q"][n0.index("q_y_0")]])
+        q1 = R.T @ np.stack([d1["Q"][n1.index("q_x_0")], d1["Q"][n1.index("q_y_0")]])
+        v = max(float(np.abs(h1 - h0).max() / np.abs(h0).max()),
+                float(np.abs(q1 - q0).max() / np.abs(q0).max()))
+        add("C37", f"box rotated {OBLIQUE['theta']:g} deg = axis-aligned (max rel, h and the "
+            "rotated q)", b, "serial", v, ("<=", 1e-11, "tolerance (round-off over 40 steps)"), "")
+    if b not in ("jax", "numpy"):
+        for k in ("box_r0", f"box_r{OBLIQUE['theta']:g}"):
+            d, j = g("C37", k), J("C37", k)
+            if d is not None and j is not None:
+                add("C37", f"{k} max rel vs JAX", b, "serial", relmax(d, j), RO,
+                    "the template's gradient and limiter (zoomy_core's tables)")
     d = g("C30", "polynomials")                     # C30
     if d is not None:
         m = metrics(d)
