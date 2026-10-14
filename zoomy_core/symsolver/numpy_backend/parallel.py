@@ -66,6 +66,23 @@ def _petsc():
     return PETSc
 
 
+#: options prefix of this backend's KSPs (`-zoomy_numpy_ksp_...` in PETSC_OPTIONS)
+PREFIX = "zoomy_numpy_"
+
+
+def _ksp_options(PETSc, ksp):
+    """Prefix `ksp`'s options; GMRES orthogonalization: classical Gram-Schmidt refined always
+    (PETSc's default, never refined, needed 4.7x the iterations of the serial GMRES on the VAM
+    pressure); then the options database.
+    """
+    ksp.setOptionsPrefix(PREFIX)
+    opts = PETSc.Options()
+    key = PREFIX + "ksp_gmres_cgs_refinement_type"
+    if not opts.hasName(key):
+        opts[key] = "refine_always"
+    ksp.setFromOptions()
+
+
 class Distributed:
     """One rank's piece of a distributed NumPy run: halo exchange, global reductions and sums
     (each cell and face counted on one rank), the global numbering of the owned unknowns and the
@@ -342,7 +359,7 @@ class _PetscSystem:
                 pc.setHYPREType("boomeramg")
             dist.log_once("amg", f"numpy MPI: pressure by PETSc FGMRES + "
                                  f"{'BoomerAMG' if amg == 'hypre' else 'GAMG'}")
-        self.ksp.setFromOptions()
+        _ksp_options(PETSc, self.ksp)
         self.x, self.b = self.A.createVecs()
 
     def _matrix(self, rows, cols, vals):
@@ -406,7 +423,7 @@ def shell_gmres(dist, mv, b, tol, restart, maxiter):
     ksp.getPC().setType("none")
     ksp.setTolerances(rtol=float(tol), atol=0.0, divtol=1e300,
                       max_it=int(restart) * int(maxiter))
-    ksp.setFromOptions()
+    _ksp_options(PETSc, ksp)
     x, rhs = A.createVecs()
     rhs.setArray(np.asarray(b, dtype=float))
     ksp.solve(rhs, x)
