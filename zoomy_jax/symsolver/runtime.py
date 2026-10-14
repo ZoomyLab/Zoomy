@@ -25,6 +25,8 @@ from zoomy_core.solver.constants import TPFA_COS_FLOOR
 from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_closure_derivatives
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
+from zoomy_core.symsolver.precice_adapter import (  # noqa: F401  (PreciceAdapter re-exported)
+    PreciceAdapter, overlap_participant)
 from zoomy_core.symsolver.vocabulary import march_error
 from zoomy_core.symsolver.numpy_backend.assembly import cell_pattern, host_amg_solve
 from zoomy_jax.fvm.implicit_ad import cellwise_solve, newton_root
@@ -1273,86 +1275,6 @@ def _face_kernel(rt, name):
 
 
 # ── preCICE ─────────────────────────────────────────────────────────────────
-class PreciceAdapter:
-    """Host side of the `couple_*` effects: the preCICE API calls only.  `comm` (mpi4py) makes a
-    distributed participant, one preCICE process per rank, so it must span the world (one
-    `mpiexec` per participant).
-
-    References:
-        Chourdakis et al. 2022, https://doi.org/10.12688/openreseurope.14445.2
-    """
-
-    def __init__(self, name, config, mesh_name, write, read, comm=None):
-        """Open participant `name` from `config` on mesh `mesh_name`, writing the data
-        `write` and reading `read`.
-        """
-        import petsc4py  # noqa: F401  (must precede precice)
-        import precice
-        self.mesh, self.wn, self.rn = mesh_name, list(write), list(read)
-        rank, size = (0, 1) if comm is None else (comm.Get_rank(), comm.Get_size())
-        if size > 1:
-            from mpi4py import MPI
-            if MPI.Comm.Compare(comm, MPI.COMM_WORLD) not in (MPI.IDENT, MPI.CONGRUENT):
-                raise NotImplementedError("preCICE participant on a sub-communicator "
-                                          "(run it as its own mpiexec)")
-        self.p = precice.Participant(name, config, rank, size)
-
-    def set_vertices(self, coords):
-        """The coupling vertices `(n, >= dim)`, in the order of the data."""
-        dim = self.p.get_mesh_dimensions(self.mesh)
-        self.ids = self.p.set_mesh_vertices(self.mesh, np.asarray(coords)[:, :dim])
-
-    def _write(self, q):
-        """Write the rows of `q` as the write data."""
-        for i, n in enumerate(self.wn):
-            self.p.write_data(self.mesh, n, self.ids, np.asarray(q[i]))
-
-    def init(self, q):
-        """Write the initial data if required, initialise; returns whether coupling is ongoing."""
-        if self.p.requires_initial_data():
-            self._write(q)
-        self.p.initialize()
-        self._checkpoints()
-        return np.bool_(self.p.is_coupling_ongoing())
-
-    def max_dt(self):
-        """Largest time step left in the window."""
-        return np.float64(self.p.get_max_time_step_size())
-
-    def read(self):
-        """The read data of the peer, one row per name."""
-        return np.stack([self.p.read_data(self.mesh, n, self.ids, 0.0)
-                         for n in self.rn])
-
-    def write(self, q):
-        """Write `q`; returns an empty tuple."""
-        self._write(q)
-        return ()
-
-    def advance(self, dt):
-        """Advance by `dt`; returns whether coupling is ongoing."""
-        self.p.advance(float(dt))
-        self._checkpoints()
-        return np.bool_(self.p.is_coupling_ongoing())
-
-    def window_complete(self):
-        """Whether the last `advance` completed a time window."""
-        return np.bool_(self.p.is_time_window_complete())
-
-    def _checkpoints(self):
-        """Answer preCICE's checkpoint queries (an implicit-class scheme, e.g. `multi`, asks at
-        every window start): writing one is a no-op, one window is never repeated."""
-        if self.p.requires_reading_checkpoint():
-            raise NotImplementedError(
-                "preCICE asks to repeat a window (implicit coupling iterations): this "
-                "participant keeps no checkpoint; use an explicit scheme or max-iterations 1")
-        self.p.requires_writing_checkpoint()
-
-    def finalize(self):
-        """Finalize the participant."""
-        self.p.finalize()
-
-
 class ColumnPreciceAdapter(PreciceAdapter):
     """A participant exchanging the model's vertical column with a resolved peer (VOF) or with
     another level of the model: it writes `interpolate_to_3d` of the cells next to the coupled
@@ -1450,8 +1372,9 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
     MPI reduction), so XLA cannot reorder the calls and all ranks meet their collectives in the same
     order.
     """
-    from jax.experimental import io_callback
     a = cfg["adapter"]
+    if cfg.get("overlap") is not None:
+        return _overlap_coupling(cfg, rt, mesh_np, partition)
     if partition is None:
         n_own, order = int(mesh_np.n_inner_cells), (lambda tok: tok)
     else:
@@ -1548,23 +1471,10 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
         return Qg.at[:, bf_c].set(2 * face - own)
 
     S = jax.ShapeDtypeStruct
-    T, F, B = S((), jnp.int64), S((), jnp.float64), S((), jnp.bool_)
+    F, B = S((), jnp.float64), S((), jnp.bool_)
     Qe = S((getattr(a, "read_rows", len(a.rn)), len(faces_c)), jnp.float64)
     Qs = S((getattr(a, "read_rows", n_state), len(faces_c)), jnp.float64)
-
-    def eff(host, *outs):
-        """Effect body: the host call takes the token and returns the next one plus its outputs."""
-        def body(tok, *args):
-            """The ordered `io_callback` of the host call."""
-            def call(k, *x):
-                """Host call; returns the incremented token and the outputs."""
-                r = host(*x)
-                r = r if isinstance(r, tuple) else (r,)
-                return (np.int64(k + 1), *r)
-            out = io_callback(call, (T, *outs), order(tok), *args)
-            return (order(out[0]), *out[1:])
-        return body
-
+    eff = _host_effect(order)
     out = dict(coupled_faces=coupled_faces, interface_states=interface_states,
                interface_flux=interface_flux, lifted_interface_flux=lifted_interface_flux,
                characteristic_ghost=characteristic_ghost,
@@ -1580,6 +1490,53 @@ def _coupling(cfg, rt, mesh_np, fc0, nf, partition=None):
         out["interface"] = JaxRuntime.from_nsm(interface)
         _face_kernel(out["interface"], "numerical_face_sides")
     return out
+
+
+def _host_effect(order):
+    """`eff(host, *outs)`: an effect body whose host call takes the order token and returns the
+    next one plus its outputs (`outs`: their shapes), ordered by `order(tok)` (distributed: an MPI
+    reduction)."""
+    from jax.experimental import io_callback
+    T = jax.ShapeDtypeStruct((), jnp.int64)
+
+    def eff(host, *outs):
+        """Effect body: the host call takes the token and returns the next one plus its outputs."""
+        def body(tok, *args):
+            """The ordered `io_callback` of the host call."""
+            def call(k, *x):
+                """Host call; returns the incremented token and the outputs."""
+                r = host(*x)
+                r = r if isinstance(r, tuple) else (r,)
+                return (np.int64(k + 1), *r)
+            out = io_callback(call, (T, *outs), order(tok), *args)
+            return (order(out[0]), *out[1:])
+        return body
+    return eff
+
+
+def _overlap_coupling(cfg, rt, mesh_np, partition=None):
+    """Blocks and `couple_*` effects of a participant coupled by overlapping Schwarz
+    (`ChorinTemplate.precice_march`): the cells of `cfg['overlap']` rings from the boundary
+    `cfg['tag']` hold the peer's values (read at their centres), the next as many rings of own
+    cells are written (`zoomy_core.mesh.overlap`); an implicit scheme repeats the window."""
+    if partition is not None:
+        raise NotImplementedError("an overlap (Schwarz-coupled) participant on several ranks")
+    a, n_state = cfg["adapter"], int(rt.n_state)
+    over, mirror = overlap_participant(cfg, mesh_np, n_state)
+    mask = np.zeros(int(mesh_np.n_inner_cells), dtype=bool)
+    mask[over] = True
+    oj, mj = jnp.asarray(over), jnp.asarray(mirror)
+    S = jax.ShapeDtypeStruct
+    F, B = S((), jnp.float64), S((), jnp.bool_)
+    Qo = S((n_state, len(over)), jnp.float64)
+    eff = _host_effect(lambda tok: tok)
+    return dict(overlap_cells=lambda mesh: jnp.asarray(mask),
+                overlap_states=lambda Q, mesh: Q[:, mj],
+                overlap_fill=lambda Q, peer, mesh: Q.at[:, oj].set(peer),
+                couple_init=eff(a.init, B), couple_max_dt=eff(a.max_dt, F),
+                couple_read=eff(a.read, Qo), couple_read_iterate=eff(a.read_iterate, Qo),
+                couple_write=eff(a.write), couple_advance=eff(a.advance, B),
+                couple_repeat=eff(a.repeat, B))
 
 
 def hoisted_jit(fn):
