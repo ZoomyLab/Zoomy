@@ -498,7 +498,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
     hyp = _hypre() if ls.get("backend") == "hypre" else None
     patterns = {}
     # the assembled sparsity: the LSQ stencil and the periodic partners (operator_neighbors)
-    lsq_nbrs = (operator_neighbors(mesh_np)
+    lsq_nbrs = (operator_neighbors(topo, mesh_np)
                 if amgx is not None or pyamg is not None or hyp is not None else None)
 
     def assembled(op, n, ncells=nc, n_rows=None):
