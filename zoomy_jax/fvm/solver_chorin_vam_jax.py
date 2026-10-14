@@ -58,6 +58,7 @@ from zoomy_core.solver.constants import ELLIPTIC_RTOL, elliptic_constants
 
 import zoomy_jax.fvm.ode as ode
 from zoomy_jax.fvm.solver_jax import HyperbolicSolver as HyperbolicSolverJax
+from zoomy_jax.fvm.solver_jax import _raise_march_error
 from zoomy_jax.mesh.mesh import lsq_gradient_per_field
 from zoomy_jax.transformation.jax_runtime import JaxRuntime
 
@@ -871,11 +872,14 @@ class ChorinSplitVAMSolverJax(HyperbolicSolverJax):
 
             run = self._run_step_cache[key] = jax.jit(_run)
         dtype = Q.dtype
-        return run(jnp.asarray(dt, dtype=dtype),
-                   jnp.asarray(0.0 if cfl is None else cfl, dtype=dtype),
-                   jnp.asarray(dt if dt_max is None else dt_max, dtype=dtype),
-                   Q, Qaux_pred, Qaux_press, Qaux_corr,
-                   jnp.asarray(t_start, dtype=dtype), parameters)
+        out = run(jnp.asarray(dt, dtype=dtype),
+                  jnp.asarray(0.0 if cfl is None else cfl, dtype=dtype),
+                  jnp.asarray(dt if dt_max is None else dt_max, dtype=dtype),
+                  Q, Qaux_pred, Qaux_press, Qaux_corr,
+                  jnp.asarray(t_start, dtype=dtype), parameters)
+        if not isinstance(out[0], jax.core.Tracer):   # never return a NaN state or time
+            _raise_march_error(out[4], out[4], np.nan, n_steps, jnp.max(jnp.abs(out[0])))
+        return out
 
     def _step_pressure_pure(self, Q, Qaux_press, dt, time, parameters):
         """Pure-functional pressure step: matrix-free GMRES on the
