@@ -164,14 +164,17 @@ def test_sme1_sme2_pair_conserves_mass(tmp_path):
     write_config(tmp_path)
     env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path))
     procs = [subprocess.Popen([sys.executable, __file__, n, str(tmp_path)], env=env,
-                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                              cwd=tmp_path, stdout=subprocess.DEVNULL,
+                              stderr=open(tmp_path / f"{n}.err", "w"))
              for n in ("Left", "Right")]
     try:
-        errs = [p.communicate(timeout=600)[1] for p in procs]
+        for p in procs:
+            p.wait(timeout=600)
     finally:
         for p in procs:
             p.kill()
-    assert all(p.returncode == 0 for p in procs), [e[-2000:] for e in errs]
+    assert all(p.returncode == 0 for p in procs), [
+        (tmp_path / f"{n}.err").read_text()[-2000:] for n in ("Left", "Right")]
     QL, QR = (np.load(tmp_path / f"{n}.npy") for n in ("Left", "Right"))
     assert len(QL) == len(QR) == round(T / DT) + 1
     mass = (QL[:, 1].sum(1) + QR[:, 1].sum(1)) * (0.1 / N)
