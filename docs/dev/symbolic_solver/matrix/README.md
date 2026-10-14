@@ -191,6 +191,30 @@ s01) fail on the base checkout too (pre-existing).  The diffusion_matrix
 sign fix (cfc19a85) changes no matrix case except C26: every other model
 here has nu = 0.
 
+## Results (2026-10-14, dev/numerics-robust: march check, thin cells, HLL Davis bounds, Manning at rest)
+
+ANALYSIS 49.  Every serial run of every case rerun on NumPy, JAX, foam and AMReX (830 runs; the
+mpiN / GPU runs of the 2026-10-14 store kept; per-worktree store `MATRIX_STORE`) on core e9cdd52
+(603 runs) / 069be24 / fb8cb40, jax f4b23ba / 19745f4, foam 30dbe82, amrex 0abaab7 (the later
+commits change no matrix value: the HLL normal frame and the NaN-keeping gate act on no matrix
+state, 19745f4 on the legacy solver only).  **872 rows, 801 PASS, 1 FAIL** (the base store:
+871 rows, 801 PASS, 0 FAIL); 754 of the 830 runs bitwise equal to the base store, the rest at
+round-off: JAX 62 runs (C1, C4, C10, C12-C14, C26-C28, C31 order 2 / IMEX; <= 3.4e-15, C10
+`s2_t2_n120` 2.1e-13 through the pressure GMRES): XLA compiles the loop body with the step in a
+`cond` branch, and the Manning Jacobian by AD through the `conditional` (C14, C31 SWE); NumPy and
+foam C12 `bump_o2` (<= 2.0e-15: the cells' speed bound of the faces rule at order 2, re-expressed
+A_n, checked by rerunning NumPy without that commit: bitwise equal); foam / AMReX C31 `vam_ssp2_k0`
+(7.1e-15 / 4.0e-17).  Table rows whose values moved: C1 numpy = JAX 6.30e-15 -> 5.86e-15; C6 C12
+mass (numpy) 2.82e-16 -> 1.41e-16; C7 C1 o2_n40 JAX parallel vs serial 1.39e-13 -> 1.38e-13; C9
+C1 o2_n40 JAX GPU vs CPU 4.07e-14 -> 4.03e-14, C26 visc 9.17e-16 -> 8.66e-16; C12 numpy = JAX
+2.37e-13 -> 2.38e-13; the C4 thresholds (10 x the JAX `_pert` sensitivity) in the fourth digit.  No matrix case has a thin cell (0 < h <= 1e-8), HLL without a closed form,
+or a cell at rest under Manning, so 49b-49d move nothing else.  **The FAIL is new and is not a
+regression:** C17 `dry` (AMReX AMR, regrid on the dry front) did not return in the matrix process
+before (no row; its gate metric was NaN on main); it now returns and raises: the march stops at
+step 85, t = 0.0466 s, the level-0 step 84 having produced NaN next to cells with h = -7.8e-12
+(below the round-off tolerance 1e-12) and h ~ 1e-54 .. 1e-154 left by the AMR coarse-fine
+transfer (reflux / interpolation), not by the regrid or the sync of that step.
+
 ## Results (2026-10-13, dev/restart: restart files)
 
 `time_start`, `restart_from`, `dt_checkpoint`, `checkpoint` on every backend (solvers guide,

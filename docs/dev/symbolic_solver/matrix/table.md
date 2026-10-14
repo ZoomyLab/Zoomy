@@ -12,7 +12,7 @@
 | C1 | O2 order 40->80 | jax | 2.00e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
 | C1 | O1 order 40->80 | numpy | 7.15e-01 PASS | n/a | n/a | n/a | n/a | >= 0.6 (observed 0.71 (pre-asymptotic, theory 1)) |
 | C1 | O2 order 40->80 | numpy | 2.00e+00 PASS | n/a | n/a | n/a | n/a | >= 1.8 (theory 2) |
-| C1 | numpy = JAX (max rel, worst run) | numpy | 6.30e-15 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C1 | numpy = JAX (max rel, worst run) | numpy | 5.86e-15 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C2 | L1 order 40->80 | amrex | 8.96e-01 PASS | - | - | - | - | >= 0.6 (spec) |
 | C2 | max rel vs JAX | amrex | 1.29e-15 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C2 | L1 order 40->80 | foam | 8.94e-01 PASS | - | - | n/a | n/a | >= 0.6 (spec) |
@@ -34,7 +34,7 @@
 | C4 | sub O1 max|q/q_in - 1| n100 | amrex | 1.37e-02 | - | - | - | - | information |
 | C4 | sub O1 max|q_y| n100 | amrex | 5.64e-16 PASS | - | - | - | - | <= 1e-12 (theory (1-D flow, symmetric stencils)) |
 | C4 | sub O1 order 50->100 | amrex | 5.82e-01 PASS | - | - | - | - | >= 0.45 (observed 0.58, pre-asymptotic (theory 1)) |
-| C4 | sub O2 max rel vs JAX | amrex | 3.61e-14 PASS | - | - | - | - | <= 3.26775e-12 (10 x JAX round-off sensitivity (Q0 perturbed 1e-14: 3.3e-13)) |
+| C4 | sub O2 max rel vs JAX | amrex | 3.61e-14 PASS | - | - | - | - | <= 3.27173e-12 (10 x JAX round-off sensitivity (Q0 perturbed 1e-14: 3.3e-13)) |
 | C4 | sub O2 max|q/q_in - 1| n100 | amrex | 2.96e-03 | - | - | - | - | information |
 | C4 | sub O2 max|q_y| n100 | amrex | 7.41e-16 PASS | - | - | - | - | <= 1e-12 (theory (1-D flow, symmetric stencils)) |
 | C4 | sub O2 order 50->100 | amrex | 2.22e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
@@ -42,7 +42,7 @@
 | C4 | trans O1 max|q/q_in - 1| n100 | amrex | 5.13e-02 | - | - | - | - | information |
 | C4 | trans O1 max|q_y| n100 | amrex | 7.04e-17 PASS | - | - | - | - | <= 1e-12 (theory (1-D flow, symmetric stencils)) |
 | C4 | trans O1 order 50->100 | amrex | 7.05e-01 PASS | - | - | - | - | >= 0.55 (observed 0.71, pre-asymptotic (theory 1)) |
-| C4 | trans O2 max rel vs JAX | amrex | 3.57e-13 PASS | - | - | - | - | <= 3.41992e-11 (10 x JAX round-off sensitivity (Q0 perturbed 1e-14: 3.4e-12)) |
+| C4 | trans O2 max rel vs JAX | amrex | 3.57e-13 PASS | - | - | - | - | <= 3.42079e-11 (10 x JAX round-off sensitivity (Q0 perturbed 1e-14: 3.4e-12)) |
 | C4 | trans O2 max|q/q_in - 1| n100 | amrex | 1.91e-03 | - | - | - | - | information |
 | C4 | trans O2 max|q_y| n100 | amrex | 4.20e-16 PASS | - | - | - | - | <= 1e-12 (theory (1-D flow, symmetric stencils)) |
 | C4 | trans O2 order 50->100 | amrex | 2.85e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
@@ -74,7 +74,7 @@
 | C4 | trans O2 max|q/q_in - 1| n100 | jax | 1.91e-03 | - | - | - | - | information |
 | C4 | trans O2 max|q_y| n100 | jax | 3.55e-16 PASS | - | - | - | - | <= 1e-12 (theory (1-D flow, symmetric stencils)) |
 | C4 | trans O2 order 50->100 | jax | 2.85e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
-| C4 | numpy = JAX (max rel, worst run) | numpy | 2.54e-12 PASS | n/a | n/a | n/a | n/a | <= 3.41992e-11 (10 x JAX round-off sensitivity (3.4e-12)) |
+| C4 | numpy = JAX (max rel, worst run) | numpy | 2.54e-12 PASS | n/a | n/a | n/a | n/a | <= 3.42079e-11 (10 x JAX round-off sensitivity (3.4e-12)) |
 | C4 | sub O1 max|q/q_in - 1| n100 | numpy | 1.37e-02 | n/a | n/a | n/a | n/a | information |
 | C4 | sub O1 max|q_y| n100 | numpy | 5.98e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (theory (1-D flow, symmetric stencils)) |
 | C4 | sub O1 order 50->100 | numpy | 5.82e-01 PASS | n/a | n/a | n/a | n/a | >= 0.45 (observed 0.58, pre-asymptotic (theory 1)) |
@@ -132,7 +132,7 @@
 | C6 | C5 mass change (rel) | jax | 1.95e-16 PASS | 1.95e-16 PASS | 0.00e+00 PASS | 0.00e+00 PASS | 1.95e-16 PASS | <= 1e-12 (tolerance (round-off)) |
 | C6 | C1 mass change (rel) | numpy | 1.41e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C11 mass change (rel) | numpy | 3.47e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
-| C6 | C12 mass change (rel) | numpy | 2.82e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C6 | C12 mass change (rel) | numpy | 1.41e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C13 mass change (rel) | numpy | 0.00e+00 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C14 mass change (rel) | numpy | 1.41e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C6 | C2 mass change (rel) | numpy | 1.41e-16 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
@@ -161,7 +161,7 @@
 | C7 | C26 visc parallel vs serial CPU (max rel) | foam | - | 6.61e-16 PASS | 8.26e-16 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C5 n48 parallel vs serial CPU (max rel) | foam | - | 9.73e-15 PASS | 4.18e-15 PASS | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C7 | C8 vam parallel vs serial CPU (max rel) | foam | - | 7.98e-12 PASS | 8.56e-12 PASS | n/a | n/a | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
-| C7 | C1 o2_n40 parallel vs serial CPU (max rel) | jax | - | 1.39e-13 PASS | 1.39e-13 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
+| C7 | C1 o2_n40 parallel vs serial CPU (max rel) | jax | - | 1.38e-13 PASS | 1.38e-13 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C13 o2_x2.5 parallel vs serial CPU (max rel) | jax | - | 1.88e-15 PASS | 1.88e-15 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C14 o2_n40 parallel vs serial CPU (max rel) | jax | - | 4.15e-16 PASS | 4.15e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
 | C7 | C21 pulse_o1 parallel vs serial CPU (max rel) | jax | - | 3.18e-16 PASS | 3.18e-16 PASS | - | - | <= 1e-12 (tolerance (round-off)) |
@@ -187,9 +187,9 @@
 | C9 | C26 visc GPU vs serial CPU (max rel) | amrex | - | - | - | 0.00e+00 PASS | 0.00e+00 PASS | <= 1e-12 (tolerance (round-off)) |
 | C9 | C5 n48 GPU vs serial CPU (max rel) | amrex | - | - | - | 0.00e+00 PASS | 0.00e+00 PASS | <= 1e-12 (tolerance (round-off)) |
 | C9 | C8 vam GPU vs serial CPU (max rel) | amrex | - | - | - | 7.18e-12 PASS | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
-| C9 | C1 o2_n40 GPU vs serial CPU (max rel) | jax | - | - | - | 4.07e-14 PASS | - | <= 1e-12 (tolerance (round-off)) |
+| C9 | C1 o2_n40 GPU vs serial CPU (max rel) | jax | - | - | - | 4.03e-14 PASS | - | <= 1e-12 (tolerance (round-off)) |
 | C9 | C14 o2_n40 GPU vs serial CPU (max rel) | jax | - | - | - | 4.15e-16 PASS | 5.32e-16 PASS | <= 1e-12 (tolerance (round-off)) |
-| C9 | C26 visc GPU vs serial CPU (max rel) | jax | - | - | - | 9.17e-16 PASS | 9.17e-16 PASS | <= 1e-12 (tolerance (round-off)) |
+| C9 | C26 visc GPU vs serial CPU (max rel) | jax | - | - | - | 8.66e-16 PASS | 9.17e-16 PASS | <= 1e-12 (tolerance (round-off)) |
 | C9 | C5 n48 GPU vs serial CPU (max rel) | jax | - | - | - | 3.18e-15 PASS | 5.18e-15 PASS | <= 1e-12 (tolerance (round-off)) |
 | C9 | C8 vam GPU vs serial CPU (max rel) | jax | - | - | - | 6.73e-12 PASS | - | <= 1e-09 (tolerance (10 x pressure rtol 1e-10, over the steps)) |
 | C10 | space O1 time O1 order (Richardson) | amrex | 1.92e+00 PASS | - | - | - | - | >= 0.8 (theory 1) |
@@ -261,7 +261,7 @@
 | C12 | sub O2 order 50->100 | jax | 2.42e+00 PASS | - | - | - | - | >= 1.8 (theory 2) |
 | C12 | bump O1 order 20->40 | numpy | 6.52e-01 PASS | n/a | n/a | n/a | n/a | >= 0.5 (observed 0.65 (coarse triangles, theory 1)) |
 | C12 | bump O2 order 20->40 | numpy | 1.69e+00 PASS | n/a | n/a | n/a | n/a | >= 1.4 (observed 1.69 (coarse triangles, theory 2)) |
-| C12 | numpy = JAX (max rel, worst run) | numpy | 2.37e-13 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
+| C12 | numpy = JAX (max rel, worst run) | numpy | 2.38e-13 PASS | n/a | n/a | n/a | n/a | <= 1e-12 (tolerance (round-off)) |
 | C12 | sub O1 max|q/q_in - 1| n100 | numpy | 9.43e-03 | n/a | n/a | n/a | n/a | information |
 | C12 | sub O1 max|q_y| n100 | numpy | 6.70e-03 | n/a | n/a | n/a | n/a | information |
 | C12 | sub O1 order 50->100 | numpy | 6.94e-01 PASS | n/a | n/a | n/a | n/a | >= 0.45 (observed 0.58, pre-asymptotic (theory 1)) |
@@ -326,6 +326,7 @@
 | C17 | cover_dry vs CPU 1 rank (max rel) | amrex | - | 0.00e+00 PASS | - | 0.00e+00 PASS | - | <= 1e-12 (tolerance (round-off)) |
 | C17 | cover_o2 fine level vs fine single level (max rel) | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C17 | cover_o2 vs CPU 1 rank (max rel) | amrex | - | 0.00e+00 PASS | - | 0.00e+00 PASS | - | <= 1e-12 (tolerance (round-off)) |
+| C17 | dry runs | amrex | nan **FAIL** | - | - | - | - | <= 0 (the run completes) |
 | C17 | lake max|u| | amrex | 1.29e-15 PASS | - | - | - | - | <= 1e-12 (theory (well-balanced)) |
 | C17 | lake vs CPU 1 rank (max rel) | amrex | - | 0.00e+00 PASS | - | 0.00e+00 PASS | - | <= 1e-12 (tolerance (round-off)) |
 | C17 | wave order 16->32 (composite) | amrex | 2.53e+00 PASS | - | - | - | - | >= 1.5 (observed (O2, static patch; theory 2)) |
@@ -878,9 +879,10 @@
 |---|---|---|
 
 Failures:
-- none
+- C17 dry runs, amrex serial: nan (need <= 0) amrex/serial/C17/dry.err: ...
 
 Notes:
+- C17 dry runs, amrex serial: amrex/serial/C17/dry.err: ...
 - C16 jax_foam runs, jax mpi2: jax/mpi2/C16/jax_foam.unsupported: ...
 - C1 O1 order 40->80, jax serial: L1(h) 1.78e-03 / 1.18e-03 / 7.20e-04
 - C12 bump O1 order 20->40, jax serial: L1(h) 2.27e-03 / 1.54e-03 / 9.80e-04
@@ -993,9 +995,9 @@ Notes:
 - C31 VAM t2 order (Richardson), jax serial: L1(h) of dt/2^k - dt/2^(k+1) 4.41e-07 / 1.71e-07 / 7.85e-08
 - C31 VAM ssp2 order (Richardson), jax serial: L1(h) of dt/2^k - dt/2^(k+1) 3.76e-07 / 9.59e-08 / 2.47e-08
 - C31 VAM predictor alone ssp2 order (Richardson), jax serial: L1(h) of dt/2^k - dt/2^(k+1) 5.77e-07 / 1.42e-07 / 3.53e-08
-- C35 c1: misspelt restart_from fails at once, jax serial: after 0.8 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/jax/serial/C35/c1_half/stat.h5': no such file; did you mean 'state.h5'?
+- C35 c1: misspelt restart_from fails at once, jax serial: after 0.5 s: restart_from '/Users/adam-obbpb5az1dhsjzf/git/wt-numfix-matrix/work_jax_serial/jax/serial/C35/c1_half/stat.h5': no such file; did you mean 'state.h5'?
 - C35 c1: misspelt restart_from fails at once, jax mpi2: after 0.8 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/jax/mpi2/C35/c1_half/stat.h5': no such file; did you mean 'state.h5'?
-- C35 c8: misspelt restart_from fails at once, jax serial: after 4.2 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/jax/serial/C35/c8_half/stat.h5': no such file; did you mean 'state.h5'?
+- C35 c8: misspelt restart_from fails at once, jax serial: after 4.3 s: restart_from '/Users/adam-obbpb5az1dhsjzf/git/wt-numfix-matrix/work_jax_serial/jax/serial/C35/c8_half/stat.h5': no such file; did you mean 'state.h5'?
 - C32 noslip L_inf order 40->80, jax serial: L_inf 3.36e-04 / 9.16e-05 / 2.38e-05; order 20->40 1.88
 - C32 noslip n20 max|h - 1|, jax serial: theory: h stays 1
 - C32 noslip n20 max|q_y|, jax serial: theory: v stays 0
@@ -1153,9 +1155,9 @@ Notes:
 - C28 tri impl steady max rel vs JAX, foam serial: L_inf vs exact 0.00e+00
 - C28 tri impl steady max|u - L|, foam serial: on the backend itself
 - C34 nx 16 max rel |L - L_JAX|, foam serial: vs the exact div(h tau') 3.55e-02 / 5.83e-02
-- C35 c1: misspelt restart_from fails at once, foam serial: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/foam/serial/C35/c1_hlf': no such file; did you mean 'c1_half'?
+- C35 c1: misspelt restart_from fails at once, foam serial: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-numfix-matrix/work_foam_serial/foam/serial/C35/c1_hlf': no such file; did you mean 'c1_half'?
 - C35 c1: misspelt restart_from fails at once, foam mpi2: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/foam/mpi2/C35/c1_hlf': no such file; did you mean 'c1_half'?
-- C35 c8: misspelt restart_from fails at once, foam serial: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/foam/serial/C35/c8_hlf': no such file; did you mean 'c8_half'?
+- C35 c8: misspelt restart_from fails at once, foam serial: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-numfix-matrix/work_foam_serial/foam/serial/C35/c8_hlf': no such file; did you mean 'c8_half'?
 - C32 noslip n20 max|h - 1|, foam serial: theory: h stays 1
 - C32 noslip n20 max|q_y|, foam serial: theory: v stays 0
 - C32 noslip n20 x-variation of q_x (max rel), foam serial: theory: u = u(y)
@@ -1266,9 +1268,9 @@ Notes:
 - C28 quad impl steady max rel vs JAX, amrex serial: L_inf vs exact 0.00e+00
 - C28 quad impl steady max|u - L|, amrex serial: on the backend itself
 - C34 nx 16 max rel |L - L_JAX|, amrex serial: vs the exact div(h tau') 3.55e-02 / 5.83e-02
-- C35 c1: misspelt restart_from fails at once, amrex serial: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/amrex/serial/C35/c1_hlf': no such file; did you mean 'c1_half'?
+- C35 c1: misspelt restart_from fails at once, amrex serial: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-numfix-matrix/work_amrex_serial/amrex/serial/C35/c1_hlf': no such file; did you mean 'c1_half'?
 - C35 c1: misspelt restart_from fails at once, amrex mpi2: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/amrex/mpi2/C35/c1_hlf': no such file; did you mean 'c1_half'?
-- C35 c8: misspelt restart_from fails at once, amrex serial: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/amrex/serial/C35/c8_hlf': no such file; did you mean 'c8_half'?
+- C35 c8: misspelt restart_from fails at once, amrex serial: after 0.0 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-numfix-matrix/work_amrex_serial/amrex/serial/C35/c8_hlf': no such file; did you mean 'c8_half'?
 - C32 noslip n20 max|h - 1|, amrex serial: theory: h stays 1
 - C32 noslip n20 max|q_y|, amrex serial: theory: v stays 0
 - C32 noslip n20 x-variation of q_x (max rel), amrex serial: theory: u = u(y)
@@ -1483,8 +1485,8 @@ Notes:
 - C31 VAM t2 order (Richardson), numpy serial: L1(h) of dt/2^k - dt/2^(k+1) 4.41e-07 / 1.71e-07 / 7.85e-08
 - C31 VAM ssp2 order (Richardson), numpy serial: L1(h) of dt/2^k - dt/2^(k+1) 3.76e-07 / 9.59e-08 / 2.47e-08
 - C31 VAM predictor alone ssp2 order (Richardson), numpy serial: L1(h) of dt/2^k - dt/2^(k+1) 5.77e-07 / 1.42e-07 / 3.53e-08
-- C35 c1: misspelt restart_from fails at once, numpy serial: after 1.9 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/numpy/serial/C35/c1_half/stat.h5': no such file; did you mean 'state.h5'?
-- C35 c8: misspelt restart_from fails at once, numpy serial: after 4.3 s: restart_from '/mnt/userdrive/Users/home/adam-obbpb5az1dhsjzf/git/wt-wspeed/docs/dev/symbolic_solver/matrix/work/numpy/serial/C35/c8_half/stat.h5': no such file; did you mean 'state.h5'?
+- C35 c1: misspelt restart_from fails at once, numpy serial: after 0.6 s: restart_from '/Users/adam-obbpb5az1dhsjzf/git/wt-numfix-matrix/work_numpy_serial/numpy/serial/C35/c1_half/stat.h5': no such file; did you mean 'state.h5'?
+- C35 c8: misspelt restart_from fails at once, numpy serial: after 4.9 s: restart_from '/Users/adam-obbpb5az1dhsjzf/git/wt-numfix-matrix/work_numpy_serial/numpy/serial/C35/c8_half/stat.h5': no such file; did you mean 'state.h5'?
 - C32 noslip L_inf order 40->80, numpy serial: L_inf 3.36e-04 / 9.16e-05 / 2.38e-05; order 20->40 1.88
 - C32 noslip n20 max|h - 1|, numpy serial: theory: h stays 1
 - C32 noslip n20 max|q_y|, numpy serial: theory: v stays 0
@@ -1522,4 +1524,4 @@ Notes:
 - C6 C33 mass change (rel), numpy serial: max over 6 runs
 - C6 C36 mass change (rel), numpy serial: max over 1 runs
 
-Summed run wall time (s, without process start-up): amrex 5233, foam 5111, jax 9280, numpy 3532
+Summed run wall time (s, without process start-up): amrex 5391, foam 4796, jax 8716, numpy 2913

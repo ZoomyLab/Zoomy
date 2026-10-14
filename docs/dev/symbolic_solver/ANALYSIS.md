@@ -1749,3 +1749,155 @@ Open:
 - A NaN `dt` ends the march loop silently (`time < time_end` is false); the loop should raise.
 - The first moment of the mixing-length SME(1) reaches alpha_1 ~ 260 m/s under the cells rule too
   (the mode-0 velocity is capped at 30 m/s, mode 1 is not).
+
+
+## 49. The march raises; thin cells in the CFL step; HLL's Davis speeds without a closed form; Manning at rest (2026-10-14, dev/numerics-robust)
+
+The four open items of section 48.
+
+### 49a. A step that does not advance the time ends the march with an error
+
+- **Defect.** `_time_loop` ran `While(time < time_end)`.  A NaN `dt` made `time` NaN and the loop
+  ended as if done, returning the NaN state (section 48: Malpasset at t = 687 s, 939 s).  A `dt` of 0
+  (the Gelfand bound and the `eigenvalues` kernel return `+inf` for a non-finite entry) never ended
+  it: the Manning reproduction of 49d did not return within 300 s on main.
+- **Fix** (`strategies/hyperbolic.py`, `vocabulary.check.march`).  The body takes a step only if
+  `time + dt > time` (a `Cond`; else the state is kept and `going = 0`); the loop runs while `time <
+  time_end` and `going`; after it `check.march(time, time_end, dt, n_step, max|Q|)` raises unless
+  `time >= time_end` with a finite state (one reduction per run).  The message names the time, the
+  step and its `dt`, and whether the state before it is finite ("its CFL step is not a positive
+  number (a NaN or infinite wave speed)") or not ("step n - 1 produced it" / "the initial state").
+  A constant-`dt` march that ends non-finite raises as well.
+- **Backends.**  NumPy: `FloatingPointError`.  JAX: the check's arguments are extra outputs of the
+  jitted program and `run` raises from them (also with `JAX_PLATFORMS=cuda`, which has no CPU
+  device for host callbacks); where a CPU device exists a `lax.cond`-guarded debug callback raises
+  during the execution (also under AD).  foam: `zs::fail` (FatalError); AMReX: `zs::fail`
+  (`amrex::Abort`), and the AMR level loop checks `t + dt > t` itself; both drivers raise
+  `FloatingPointError` with the runtime's line.  The AMReX `cond` unifies tuple branches entry by
+  entry (expression / Field).  Legacy JAX `run_simulation` and `run_jit_steps` raise on a NaN end.
+- **A NaN depth keeps its speed.**  The dt spectrum is `conditional(h <= 0, 0, e)` (49b): a NaN depth
+  gives a NaN (closed form) or infinite (numerical) speed, so the march stops at the step after the
+  one that produced it; `conditional(h > eps, e, 0)` gave it speed 0 and the march ran on.
+- Tests: `tests/symsolver/test_march_check.py` (NaN cell: stops at t = 0, step 1; constant dt:
+  non-finite end; q = 1e300; a step rule with dt = 0 or < 0 after t = 0.25: "stopped at t = 0.3 ...
+  step 4"), its JAX twin (CPU; by hand also `JAX_PLATFORMS=cuda`, GPU), foam / AMReX
+  `test_march_check.py` (marked large: they build).  `sp.Abs(Q, evaluate=False)`: sympy's
+  `Abs.eval` walked the whole loop graph and the IMEX-SSP2 print did not return.
+
+### 49b. The cells rule bounds every speed that moves mass
+
+- **Derivation** (order 1, Rusanov / HLL on the Audusse states, `h*_K <= h_K`, the velocity kept):
+  `F_h(U*_K, U*_N) = 1/2 h*_K (u_K.n + a_f) + 1/2 h*_N (u_N.n - a_f) <= 1/2 h*_K (|u_K| + a_f)` as
+  `a_f >= |u_N.n|`, so `h_K' >= h_K (1 - dt sum_f |e_f| a_f / |K|)`: the step must bound the Riemann
+  speed `a_f` of every face whose states carry mass.  A face state of a cell with `h > 0` keeps the
+  cell's velocity and has `h* <= h`, so its speed is at most the cell state's; a cell with `h <= 0`
+  has `h* = 0`, `q* = 0`, speed 0 in the flux.  Hence `conditional(h <= 0, 0, |lambda(U_K)|)` bounds
+  every `a_f`.  A thin cell is not exempt: its velocity enters `a_f` of its faces and drains the
+  neighbour through the dissipation `1/2 a_f h*_K`.
+- **Before:** the gate was `h > wet_dry_eps` (default 1e-8; Malpasset 1e-3), and without a closed form
+  the spectrum was taken of A_n with the KP `hinv` (`(h/eps)^2` of the speed below eps).
+- **Now** (`gate_eigenvalues_dry`; `eps` default 0, an explicit `eps` keeps the old gate): 0 where
+  `h <= 0`; without a closed form A_n with `hinv` -> `conditional(h > eps_KP, hinv, 1/max(1e-14, h))`
+  (= 1/h: the KP value where it is 1/h, so wet cells keep their rounding).  The cells' speeds of the
+  faces rule (order 2 with the edge source) and IMEX-SSP2's step read the same slot.
+- **Reproduction** (`tests/symsolver/test_thin_cell_cfl.py`): SME(0) 1-D, 200 cells, order 2 without
+  limiter + MOOD, forward Euler, cells rule, a 1 mm film at 300 m/s onto a dry bed.  Before: h =
+  -8.0e-4 m at t = 1.0e-4 s in cell 106 (h = 2.1e-4 m), next to cell 107 with h = 7.2e-9 m < 1e-8 at
+  u = 3.0e4 m/s (speed gated to 0; the Rusanov speed of their face 3e4 m/s).  After: h >= 0 at every
+  write.  Order 1: positive either way (max |u| 2.1e4 m/s).  The unlimited reconstruction then grows
+  thin-cell velocities to 1.7e5 m/s and the step collapses (dt 2e-19 at t = 3.6e-3 s: check.march
+  raises; before: the same at t = 2.7e-3 s, after h < 0, with max |Q| 9e11).
+- **Malpasset** (thesis configuration, cells rule, JAX on GPU 2, to 2000 s, `results/wavespeed_bound/
+  run.py numfix_cells`): h_min 0 at all 2001 writes, volume drift 2.4e-15.  Against section 48's
+  cells run: wet area max rel 1.2e-3, max-depth envelope L1 rel 9.8e-4, inundated area 17.023 /
+  17.030 km^2 (section 48 faces vs cells 1.3e-3 / 9.9e-4, main vs section 48 1.1e-3 / 8.6e-4); max
+  alpha_1 (h > 1e-3 m) 982 m/s (section 48: cells 265, faces 786).  Steps to 300 s
+  (`results/numerics_robust/malpasset_steps.py`): 32,090 against
+  27,252 with the former gate (+18 %: cells below 1e-3 m now bound the step); 2000 s wall 671 s
+  against 478 s (the GPU shared with another job).
+
+### 49c. HLL's Davis speeds without a closed-form spectrum
+
+- **Bound.**  For any real c, `rho(A + c I) >= max_i |lambda_i + c| >= max Re lambda + c`, so
+  `s_R = min(G(A + a I) - a, a) >= max Re lambda` and `s_L = max(a - G(a I - A), -a) <= min Re
+  lambda`, G the Gelfand bound (section 48), `a` the face's Rusanov speed, the max over both face
+  states (`Numerics._gelfand_extremes`; branch-free, every backend).  The shifted matrices are taken
+  in the face's normal frame, `T A_n T^T`, each horizontal vector `(q_x, q_y)` rotated to `(q.n, q.t)`
+  (a similarity): there a wall's reflected state gives a signed permutation of the inner state's
+  matrix, the pair is symmetric and no mass crosses the wall.  In the lab frame it was not (G is not
+  rotation invariant): mass drift 4.6e-9 on a disc (oblique walls), up to 1.6e-8 on Malpasset; now
+  1.3e-16 / 3e-16 (`test_wall_pair_is_symmetric_at_an_oblique_wall`).
+- **Rigour** (`gates/gate50_davis_bounds.py`): 128,000 random matrices (gate 49's sets; NumPy and JAX
+  kernels) and 440,000 model matrices (the production `HLL.wave_speed_bounds`: SME(0..3) 1-D / 2-D,
+  VAM(1), ML-SME; wet, thin and dry cells, Audusse faces): `s_L <= min Re lambda`, `s_R >= max Re
+  lambda` everywhere, no 40-digit recheck needed.  Overestimate / a, median / max: model matrices
+  0.2 - 0.7 % / 8.9 %; random up to 67 % (non-normal triangular, complex spectra).  HLL fan
+  `(s_R - s_L) / 2a` on the model states, median 0.03 (thinned faces) .. 0.66 (Rusanov: 1).
+- **The face speed** `max(|s_L|, |s_R|)` is wrapped in `Abs`: at a dry face the new pair gave -0 and
+  the faces rule a step of -inf.
+- **Positivity at order 1** (`results/numerics_robust/malpasset_order1.py`: Malpasset SME(1) mixing
+  length, `hr`, point-implicit source, faces rule, CFL 0.4, to 120 s, JAX GPU; released water = water in the initially dry cells): closed form
+  4,553,098 m^3; numerical spectrum with the Davis bounds 4,553,170 (+1.6e-5); with the former
+  Rusanov pair 4,683,207 (+2.9 %, the +2.5 % of section 48).  h_min 0 at every write (1 s) in all
+  three, mass to 3e-16.  Cost: 298 s against 68 s (six Gelfand calls per face instead of two).  Unit
+  test: SME(0) 1-D dam break onto a bed step, order 1: h >= 0, mass to 1e-12.
+
+### 49d. Manning friction at rest
+
+- **Expression.**  The friction rows `-g n^2 hinv^(4/3) q_x sqrt(hinv^2 q_x^2 + hinv^2 q_y^2)`; their
+  derivative contains `hinv^2 q_x^2 / sqrt(...)`, 0/0 at q = 0.  JAX's implicit source (Lie,
+  IMEX-SSP2) takes the Newton Jacobian by AD: `sqrt'(0) * 0 = inf * 0 = NaN` in every cell exactly at
+  rest once the Newton iterates (another cell moving).  NumPy (central differences) and foam /
+  AMReX (one-sided differences) are finite there.  The point-implicit source
+  (`SourceTreatment.linearized`, the Malpasset GUI session's) prints `sp.diff` of the source: NaN at
+  rest on every backend.
+- **Fix** (NSM operation `norm_derivative_at_zero`, applied by default before the linearization):
+  every `S**r` in the source slots with `S >= 0` an even-power factor times a positive semidefinite
+  quadratic form (a squared norm) and rational `r >= 1/2` not an integer becomes `conditional(S > 0,
+  conditional(S > 0, S, 1)**r, S)`: the same value (bitwise), and the derivative 0 at `S = 0` (S has
+  its minimum there, `dS = 0`): the derivative of `S**r` for `r > 1/2`, the least-norm subgradient
+  for `r = 1/2`.  No eps, the model is untouched.  `conditional` now collapses on a boolean
+  condition (after `subs`).
+- **Reproduction** (C14's bump, Manning n 0.5, h = 1, a patch q_x = 2 at x < 3 next to cells at rest,
+  to 0.05 s): before, JAX Lie: NaN after step 1 (check.march: "step 2 ... step 1 produced it"); JAX
+  IMEX-SSP2 on main: every cell NaN at t_end, no error; point-implicit: NaN on NumPy, foam and AMReX.
+  After: finite on every backend, cells still exactly at rest.  Tests:
+  `tests/symsolver/test_norm_derivative.py` (the value bitwise equal on random states and at rest,
+  the symbolic Jacobian finite at rest and NaN without the operation, the point-implicit run),
+  `zoomy_jax/tests/symsolver/test_manning_at_rest.py` (Lie, IMEX-SSP2).  Golden
+  `n01_swe2d_order2` re-blessed (the source rows).
+
+### 49e. Matrix and tests
+
+- **Matrix** (`matrix/README.md`, results 2026-10-14 dev/numerics-robust): every serial run rerun on
+  NumPy, JAX, foam and AMReX (830 runs): 754 bitwise equal to the base store, 75 at round-off (JAX
+  62: XLA compiles the step inside the loop's `cond` branch, and the Manning Jacobian by AD through
+  the `conditional`; NumPy / foam C12 `bump_o2`: the re-expressed A_n of the cells' speed bound,
+  bitwise equal without that commit; <= 7.1e-15, C10 `s2_t2_n120` JAX 2.1e-13 through the pressure
+  GMRES).  Table: 872 rows, 801 PASS, 1 FAIL (base: 871, 801, 0); 6 rows moved in the third digit
+  (C1 / C12 numpy = JAX, C6 C12 numpy mass, C7 / C9 JAX C1 o2_n40, C9 C26; the C4 thresholds, 10 x
+  the JAX `_pert` sensitivity, in the fourth digit).  No matrix case has a
+  thin cell (0 < h <= 1e-8), HLL without a closed form or a cell at rest under Manning.  The FAIL
+  is C17 `dry` (AMReX AMR, regrid on the dry front), a new row: it did not return in the matrix
+  process before and its gate metric was NaN on main; it now raises at step 85 (t = 0.0466 s), the
+  level-0 step 84 having produced NaN next to cells with h = -7.8e-12 (below the round-off
+  tolerance) and h ~ 1e-54 .. 1e-154 left by the AMR coarse-fine transfer.
+- **Tests.**  zoomy_core: 376 small tests pass (new: `test_march_check`, `test_thin_cell_cfl`,
+  `test_davis_bounds`, `test_norm_derivative`); goldens n01-n03, s02, s03 re-blessed (the
+  `eigenvalues_cfl` rows; n01 also the source rows), rederive tier 40 pass + 1 known failure
+  (`test_rederive_cross_process_disk_hit_and_prebuilt`).  zoomy_jax: `tests/symsolver` (march check,
+  Manning at rest), legacy AD tests (`test_ad`, `test_ad_chorin`) pass.  foam / AMReX:
+  `test_march_check` (large).  QR suite (`tests/qr_cases -m qr`): 27 pass, 3 skipped (no thesis
+  checkout: the manifest snapshot; the jax / AMReX sessions in Pyodide).
+
+Open:
+- C17 `dry` (above): the AMR coarse-fine transfer is not positivity preserving (h < -tol); the
+  march now stops where it produced the NaN.
+- The cells rule takes `eig` (a host callback on a GPU) for models without a closed form: the
+  Malpasset numerical-spectrum session under the cells rule did not reach 120 s in 25 min on the GPU
+  (faces rule: 5 min).  The Gelfand bound would unify it with the Riemann speeds (wet-cell steps up
+  to 6 % smaller).
+- Unlimited order 2 grows thin-cell velocities without bound (the film of 49b): h stays >= 0, the
+  step collapses and the march raises.
+- HLL's normal frame needs the model's vector groups (`derive_momentum_field_indices`) and 2
+  horizontal directions; otherwise the lab frame (symmetric only for walls along the axes).
