@@ -169,15 +169,18 @@ class HyperbolicTemplate:
 
         def exchanged(Q, Qaux):
             """What this participant writes: the cell states next to the coupled faces, with
-            their aux towards a peer of another model."""
+            their aux towards a peer of another model (the step's aux, whose derivatives see
+            the coupled faces' ghost: the column's vertical velocity)."""
             q = interface_states(Q, mesh)
             return (q, interface_states(Qaux, mesh)) if characteristic else (q,)
 
-        def coupled_face(Q, Qaux, Wf, fresh):
-            """`(Wc, Wf)`: the coupled faces' contribution, the window's frozen depth row."""
+        def coupled_face(Q, Qaux, Wf, fresh, time):
+            """`(Wc, Wf, Aw)`: the coupled faces' contribution, the window's frozen depth row,
+            the aux the column is written with (`characteristic`: the step's, its derivatives
+            with the ghost on the coupled faces; else `Qaux`)."""
             peer = couple.read()
             if not characteristic:
-                return interface_flux(sides, aux, side, Q, Qaux, peer, p, mesh), Wf
+                return interface_flux(sides, aux, side, Q, Qaux, peer, p, mesh), Wf, Qaux
             own, Aown = interface_states(Q, mesh), interface_states(Qaux, mesh)
             ghost = characteristic_ghost(nsm.call.quasilinear_matrix, own, Aown, peer,
                                          p, mesh)
@@ -186,7 +189,8 @@ class HyperbolicTemplate:
                 Wf = select(fresh, ghost_flux(sides, sp.S.false, couple.read_round_trip(),
                                               Aown, ghost, p, mesh), Wf)
                 Wc = replace_row(Wc, depth, Wf)
-            return Wc, Wf
+            return Wc, Wf, full_aux(nsm, Q, Qaux, p, time, sp.S.Zero, mesh,
+                                    coupled=(own, ghost))
 
         def body(time, Q, Qaux, going, n_write, fresh, Wf):
             """One coupling step inside the window, with its output; `(fresh, Wf)`: the
@@ -210,7 +214,7 @@ class HyperbolicTemplate:
                 dt = checked(window, time, cfl_check_every,
                              lambda: cfl_dt(nsm, Q, Qaux, p, mesh, cfl,
                                             dimension))
-            Wc, Wf = coupled_face(Q, Qaux, Wf, fresh)
+            Wc, Wf, Aw = coupled_face(Q, Qaux, Wf, fresh, time)
             if wave_speed == "faces":
                 Q, Qaux, dt = self.step(Q, Qaux, p, time, None, mesh,
                                         coupled=(coupled_faces(mesh), Wc),
@@ -218,7 +222,7 @@ class HyperbolicTemplate:
             else:
                 Q, Qaux, dt = self.step(Q, Qaux, p, time, dt, mesh,
                                         coupled=(coupled_faces(mesh), Wc))
-            couple.write(*exchanged(Q, Qaux))
+            couple.write(*exchanged(Q, Aw))
             going = couple.advance(dt)
             if frozen_mass_row:
                 fresh = couple.window_complete()

@@ -274,6 +274,11 @@ class replace_row(Block):
     """`(A, i, B)` -> `A` with row `i` taken from `B`."""
 
 
+class coupled_ghosts(Block):
+    """`(Qg, own, face, mesh)` -> the boundary ghosts `Qg` with the coupled faces' replaced by
+    `2 face - own` (`own`, `face`: `(rows, coupled faces)`)."""
+
+
 # ── effects ─────────────────────────────────────────────────────────────────
 class io:
     """Output effects; `save_state` / `load_state`: the restart pair of the march state."""
