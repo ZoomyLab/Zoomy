@@ -75,8 +75,9 @@ def eigensystem(*a_flat):
 
 def gelfand_bound(j, *a_flat):
     """`kernel_functions.gelfand_bound`, batched: `j` squarings of `A`, each after dividing
-    by its max row sum `s_i`, then `w = max_i (|C| x)_i / x_i` with `x` the row sums of `|C|`;
-    returns `s_0 sqrt(s_1 sqrt(... sqrt(s_(j-1) sqrt(w))))`, `+inf` for a non-finite entry."""
+    by its max row sum `s_i`, then `w = max_i (|C| x)_i / x_i` with `x` the row sums of `|C|`
+    plus 2^-30 their max; returns `s_0 sqrt(s_1 sqrt(... sqrt(s_(j-1) sqrt(w))))`, `+inf` for
+    a non-finite entry."""
     n = int(round(len(a_flat) ** 0.5))
     C = _stack_square(a_flat, n)
     finite = np.isfinite(C).all(axis=(-2, -1))
@@ -89,7 +90,8 @@ def gelfand_bound(j, *a_flat):
         scales.append(s)
         C = C @ C
     M = np.abs(C)
-    x = M.sum(-1)
+    r = M.sum(-1)
+    x = r + 2.0 ** -30 * r.max(-1)[..., None]       # > 0: w continuous in A
     y = np.einsum("...ik,...k->...i", M, x)
     w = np.where(x > 0, y / np.where(x > 0, x, 1.0), 0.0).max(-1)
     t = w

@@ -10,7 +10,7 @@ from zoomy_core.symsolver.discretization.time import SSP_RK, cell_wavespeed
 from zoomy_core.symsolver.vocabulary import (
     boundary_ghosts, boundary_traces, cells, clean_round_off, derivative_aux,
     diffusion, divergence, edge_source, face_aux, faces, halo,
-    implicit_diffusion, inadmissible, reduce_any, select)
+    implicit_diffusion, inadmissible, minimum, reduce_any, select)
 
 
 def residual(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
@@ -107,8 +107,10 @@ def explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order, demote=False,
 def mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled=None,
               implicit_terms=True, rk=None, dt_rule=None):
     """A-posteriori MOOD: an order-2 candidate step, inadmissible cells redone at first
-    order, and the whole step at first order if that still fails; the repairs keep
-    the candidate's `dt`.
+    order, and the whole step at first order if that still fails.  The repairs keep the
+    candidate's `dt`; with `dt_rule` (the step from the face wave speeds) at most that,
+    from their own face speeds, as the candidate's are those of the order-2 states and
+    do not bound the first-order Riemann problems (ANALYSIS 48).
 
     References:
         Clain et al. 2011, https://doi.org/10.1016/j.jcp.2011.02.026
@@ -118,22 +120,35 @@ def mood_step(nsm, Q, Qaux, p, time, dt, mesh, order, coupled=None,
         return explicit_step(nsm, Q, Qaux, p, time, dt, mesh, order, demote,
                              coupled, implicit_terms, rk)
 
-    def repair():
-        """Redo the bad cells at first order, then all cells if some still fail."""
-        Q_cells = step(bad, dt)
-        still = inadmissible(nsm.call.admissible, Q_cells, Qaux, p)
-        return Cond(reduce_any(still), lambda: step(sp.S.true, dt),
-                    lambda: Q_cells)
-
     if dt_rule is None:
+        def repair():
+            """Redo the bad cells at first order, then all cells if some still fail."""
+            Q_cells = step(bad, dt)
+            still = inadmissible(nsm.call.admissible, Q_cells, Qaux, p)
+            return Cond(reduce_any(still), lambda: step(sp.S.true, dt),
+                        lambda: Q_cells)
+
         Q_cand = step(sp.S.false, dt)
-    else:
-        Q_cand, dt = explicit_step(nsm, Q, Qaux, p, time, None, mesh, order,
-                                   sp.S.false, coupled, implicit_terms, rk,
-                                   dt_rule)
+        bad = inadmissible(nsm.call.admissible, Q_cand, Qaux, p)
+        return Cond(reduce_any(bad), repair, lambda: Q_cand)
+
+    def ruled(demote, cap):
+        """`(Q, dt)` of the step with cells `demote` demoted, `dt` at most `cap`."""
+        return explicit_step(nsm, Q, Qaux, p, time, None, mesh, order, demote, coupled,
+                             implicit_terms, rk, lambda S: minimum(cap, dt_rule(S)))
+
+    def repair_ruled():
+        """`repair` with each repair's own face speeds bounding its `dt`."""
+        Q_cells, dt_cells = ruled(bad, dt)
+        still = inadmissible(nsm.call.admissible, Q_cells, Qaux, p)
+        return Cond(reduce_any(still), lambda: ruled(sp.S.true, dt_cells),
+                    lambda: (Q_cells, dt_cells))
+
+    Q_cand, dt = explicit_step(nsm, Q, Qaux, p, time, None, mesh, order, sp.S.false,
+                               coupled, implicit_terms, rk, dt_rule)
     bad = inadmissible(nsm.call.admissible, Q_cand, Qaux, p)
-    Q = Cond(reduce_any(bad), repair, lambda: Q_cand)
-    return Q if dt_rule is None else (Q, dt)
+    Q, dt_step = Cond(reduce_any(bad), repair_ruled, lambda: (Q_cand, dt))
+    return Q, minimum(dt_step, dt)          # a real-valued node (it enters `time`)
 
 
 def full_aux(nsm, Q, Qaux, p, time, dt, mesh):
