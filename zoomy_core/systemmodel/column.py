@@ -38,6 +38,7 @@ class ColumnMap:
         self.nodes = (np.arange(self.nz) + 0.5) / self.nz
         state = [sp.Symbol(str(s)) for s in sm.state]
         aux_names = [str(s) for s in (aux if aux is not None else sm.aux_state)]
+        self.n_aux = len(aux_names)
         params = [sp.Symbol(str(s)) for s in sm.parameters.get_list()]
         self.n_state = len(state)
 
