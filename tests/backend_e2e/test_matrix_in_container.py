@@ -3,9 +3,11 @@
 matrix_driver.py runs each case's SUBSET runs with matrix.py's own `run` inside the image (its
 Python; foam / AMReX: its OpenFOAM / AMReX toolchain) into a container store, and on the host
 into a host store (`E2E_MATRIX_HOST_STORE`: an existing store instead, e.g. the checkout's
-docs/dev/symbolic_solver/matrix/store). Every stored array (t, Q, Q0, xc, vol; custom runs:
-the metrics) must agree to the matrix's tolerance for two runs of the case (`tol`); the
-timing / provenance keys are ignored.
+docs/dev/symbolic_solver/matrix/store). Every stored array (t, Q, Q0, xc, vol) must agree to
+the matrix's tolerance for two runs of the case (`tol`); of a custom run's metrics the values
+(`VALUES`: J, the derivatives, an error), not the round-off measures; the timing / provenance
+keys are ignored. Then the matrix's own checks of the case (`matrix_driver.py --checks`: the
+table's thresholds, C6 mass, C7 parallel = serial) must pass on the container's runs.
 """
 import json
 import math
@@ -31,10 +33,34 @@ SUBSET = {"C1": ("o1_n20", "o2_n20"),                          # SWE bump, walls
                   "orders_quad_expl"),                         # orders (JAX, numpy)
           "C31": ("swe_ssp2_k0", "vam_ssp2_k0"),               # IMEX-SSP2: SWE, VAM(1) + Manning
           "C32": ("noslip_n20",),                              # implicit diffusion, no-slip walls
-          "C33": ("imex_k0",)}                                 # implicit source, SME(2)
-#: distributed runs: backend -> (config, case, runs), launched by matrix.py with the image's
-#: mpiexec; checked as matrix C7 (= the serial run, both in the image)
-DISTRIBUTED = {"jax": [("mpi2", "C1", ("o2_n40",))]}
+          "C33": ("imex_k0",),                                 # implicit source, SME(2)
+          # the image-dependent paths, once each (the backends cases.py lists them for)
+          "C5": ("n48",),                                      # wet/dry, O2 eta + MOOD
+          "C14": ("o1_n20", "o2_n20"),                         # IMEX, implicit Manning source
+          "C15": ("hyperbolic_fwd", "hyperbolic_rev",          # AD (JAX): jvp vs FD, reverse
+                  "imex_fwd", "imex_rev"),
+          "C17": ("cover_o2", "box", "lake", "wave16", "wave32"),   # AMR (AMReX, gate 37)
+          "C22": ("o1_dt_fwd", "o1_dt_rev", "o2_dt_fwd", "o2_dt_rev"),   # AD, Euler 3-D (JAX)
+          "C23": ("o1_n8", "o2_n8"),                           # Euler 3-D
+          "C35": ("c1_full", "c1_half", "c1_restart", "c1_typo")}   # restart (h5 / foam / AMReX)
+C35_C1 = SUBSET["C35"]
+#: cases that list runs for some backends only (cases.py `backends`): the others are not
+#: parametrized (a case that runs nothing on a backend fails, so a change there shows here)
+ONLY = {"C15": ("jax",), "C22": ("jax",), "C17": ("amrex",)}
+#: distributed runs: backend -> (config, case, runs), launched with the image's mpiexec (JAX:
+#: matrix.py; foam / AMReX: their drivers). A marching run is checked as matrix C7 (= the
+#: serial run, both in the image); every run by the matrix's checks of its case (C35: the
+#: restart bitwise on the ranks; C17: AMR on 2 ranks = 1 rank)
+DISTRIBUTED = {"jax": [("mpi2", "C1", ("o2_n40",)), ("mpi2", "C35", C35_C1)],
+               "openfoam": [("mpi2", "C1", ("o2_n40",)), ("mpi2", "C35", C35_C1)],
+               "amrex": [("mpi2", "C1", ("o2_n40",)), ("mpi2", "C35", C35_C1),
+                         ("mpi2", "C17", ("box",))]}
+#: custom runs: the metrics that are values (= host to `tol`); the others are measures at
+#: round-off (a mass drift, coupled - single) or noise (|FD - jvp|, seconds, messages naming
+#: paths), judged by the matrix's checks
+VALUES = {"C15": ("J", "fwd", "rev"), "C22": ("J", "fwd", "rev"), "C17": ("L1",), "C35": ("t",)}
+#: custom cases whose distributed checks read the serial run (C17: vs the 1-rank run)
+SERIAL_REF = ("C17",)
 RO = 1e-12                                                     # matrix.py RO
 TIMEOUT = float(os.environ.get("E2E_MATRIX_TIMEOUT", "840"))
 IGNORE = {"wall", "lib"}
@@ -50,7 +76,7 @@ def tol(case: str, key: str) -> float:
         return RO if "_expl" in key else 1e-9                  # gate 43: Newton 1e-10
     if case == "C31":
         return 1e-9 if key.startswith("vam") else 1e-8         # PRESS; C14's Newton
-    return {"C8": 1e-9, "C26": 1e-8, "C32": 1e-8, "C33": 1e-10}.get(case, RO)
+    return {"C8": 1e-9, "C14": 1e-8, "C26": 1e-8, "C32": 1e-8, "C33": 1e-10}.get(case, RO)
 
 
 def _params():
@@ -59,7 +85,7 @@ def _params():
     out = []
     for b in H.selected_backends():
         out += [pytest.param(b, "serial", c, SUBSET[c], marks=pytest.mark.backend_e2e,
-                             id=f"{b}-{c}") for c in SUBSET]
+                             id=f"{b}-{c}-serial") for c in SUBSET if b in ONLY.get(c, (b,))]
         out += [pytest.param(b, cfg, c, keys, marks=pytest.mark.backend_e2e, id=f"{b}-{c}-{cfg}")
                 for cfg, c, keys in DISTRIBUTED.get(b, ())]
     return out
@@ -95,15 +121,20 @@ def _rel(a, b) -> float:
     return float(np.max(np.abs(a - b)) / max(float(np.max(np.abs(b))), 1e-300))   # matrix relmax
 
 
-def compare(pa: Path, pb: Path) -> dict:
-    """`{stored key: rel diff}` of two matrix.py npz runs, IGNORE dropped."""
+def compare(pa: Path, pb: Path, values=None) -> dict:
+    """`{stored key: rel diff}` of two matrix.py npz runs, IGNORE dropped; of the metrics the
+    keys `values` (None: every one)."""
     a, b = dict(np.load(pa, allow_pickle=True)), dict(np.load(pb, allow_pickle=True))
     out = {}
     for k in sorted((set(a) | set(b)) - IGNORE):
         if k not in a or k not in b:
             out[k] = math.inf
         elif k == "metrics":
-            out[k] = _rel(json.loads(str(a[k])), json.loads(str(b[k])))
+            ma, mb = json.loads(str(a[k])), json.loads(str(b[k]))
+            for m in (sorted(set(ma) | set(mb)) if values is None else values):
+                if m in ma or m in mb:
+                    out[f"metrics.{m}"] = (_rel(ma[m], mb[m]) if m in ma and m in mb
+                                           else math.inf)
         elif a[k].dtype.kind in "US":
             out[k] = 0.0 if np.array_equal(a[k], b[k]) else math.inf
         else:
@@ -141,6 +172,20 @@ def _host(backend, image, snap, case, keys, base, config) -> tuple[Path, dict, f
     return store, _result(log), time.monotonic() - t0
 
 
+def matrix_checks(snap, store, backend, case) -> list[dict]:
+    """The matrix's checks of `case` on `backend` over the runs in `store` (on the host)."""
+    env = dict(os.environ, PYTHONNOUSERSITE="1", JAX_PLATFORMS="cpu", OMP_NUM_THREADS="1",
+               PYTHONPATH=os.pathsep.join(str(snap / "library" / p) for p in
+                                          ("zoomy_core", "zoomy_jax", "zoomy_foam", "zoomy_amrex")))
+    r = subprocess.run([sys.executable, str(H.HERE / "matrix_driver.py"), str(snap), str(store),
+                        "--checks", backend.matrix, case], env=env, capture_output=True,
+                       text=True, timeout=600)
+    lines = [ln for ln in r.stdout.splitlines() if ln.startswith("E2E_CHECKS ")]
+    if not lines:
+        raise RuntimeError(f"matrix checks failed:\n{(r.stdout + r.stderr)[-3000:]}")
+    return json.loads(lines[-1].split(" ", 1)[1])
+
+
 @pytest.mark.parametrize("backend,config,case,runs", _params())
 def test_matrix_in_container(backend, config, case, runs, snap, report, request):
     b = H.BACKENDS[backend]
@@ -166,7 +211,10 @@ def test_matrix_in_container(backend, config, case, runs, snap, report, request)
         return log, _result(log)
 
     t0 = time.monotonic()
-    serial = in_image("serial")[1] if config != "serial" else None   # the ranks' reference
+    custom = case in VALUES
+    serial = None                                     # the ranks' reference
+    if config != "serial" and (not custom or case in SERIAL_REF):
+        serial = in_image("serial")[1]
     log, got = in_image(config)
     row["container_seconds"] = round(time.monotonic() - t0, 1)
     row["container"] = got
@@ -178,7 +226,9 @@ def test_matrix_in_container(backend, config, case, runs, snap, report, request)
 
     cstore = base / "container" / "store"
     ref, what = "serial", "container vs host"
-    if config != "serial":                            # matrix C7: the ranks = serial, in the image
+    if config != "serial" and custom:                 # the matrix's checks alone
+        hstore, hres = None, None
+    elif config != "serial":                          # matrix C7: the ranks = serial, in the image
         hstore, hres, what = cstore, serial, f"{config} vs serial (container)"
     elif os.environ.get("E2E_MATRIX_HOST_STORE"):
         hstore, hres = Path(os.environ["E2E_MATRIX_HOST_STORE"]), None
@@ -194,11 +244,14 @@ def test_matrix_in_container(backend, config, case, runs, snap, report, request)
         if status != "ok":
             problems.append(f"container {k}: {status[:400]}")
             continue
+        if hstore is None:
+            diffs[k] = None
+            continue
         hp = hstore / b.matrix / ref / case / f"{k}.npz"
         if not hp.exists():
             problems.append(f"reference {k}: {(hres or {}).get(k, 'not in ' + str(hstore))}")
             continue
-        d = compare(cstore / b.matrix / config / case / f"{k}.npz", hp)
+        d = compare(cstore / b.matrix / config / case / f"{k}.npz", hp, VALUES.get(case))
         diffs[k] = max(d.values()) if d else 0.0
         bad = {kk: v for kk, v in d.items() if v > tol(case, k)}
         if bad:
@@ -206,6 +259,13 @@ def test_matrix_in_container(backend, config, case, runs, snap, report, request)
     row["max_rel_diff"] = diffs
     if not diffs and not problems:
         problems.append("no run of this case for this backend")
+    if diffs:
+        checks = [x for x in matrix_checks(snap, cstore, b, case) if x["config"] == config]
+        row["checks"] = {f"{x['check']}": x["value"] for x in checks}
+        problems += [f"matrix check {x['check']} ({x['config']}): {x['value']:.3e}, need "
+                     f"{x['op']} {x['bound']:g}" for x in checks if not x["ok"]]
+        if custom and not checks:
+            problems.append("no matrix check of the custom runs")
     row["result"] = "FAIL" if problems else "PASS"
     report.append(row)
     print(json.dumps(row, default=str))

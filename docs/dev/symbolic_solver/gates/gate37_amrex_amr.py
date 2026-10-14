@@ -12,7 +12,7 @@ for every level), scratch.
     dry        radial dry dam break, regrid every 2 steps on the h difference:
                mass, min h
 
-    python gate37_amrex_amr.py ref   OUT CASE        # single-level fine (AMReX + JAX)
+    python gate37_amrex_amr.py ref   OUT CASE        # single-level fine (AMReX + NumPy)
     python gate37_amrex_amr.py run   OUT CASE CONFIG # CONFIG: cpu1, cpu2, gpu1
     python gate37_amrex_amr.py build OUT CASE CONFIG
     python gate37_amrex_amr.py table OUT
@@ -84,8 +84,9 @@ def base_n(case):
 
 
 def initial(mesh, nsm):
-    from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
-    s = SymbolicHyperbolicSolverJax(time_end=1.0)
+    """The LSQ mesh and Q0 (zoomy_core's NumPy setup, as JAX's: the AMReX image has no JAX)."""
+    from zoomy_core.symsolver.numpy_backend import SymbolicHyperbolicSolverNumpy
+    s = SymbolicHyperbolicSolverNumpy(time_end=1.0)
     Q, _ = s.setup(mesh, nsm)
     return s.mesh_np, np.asarray(Q)
 
@@ -95,19 +96,20 @@ def fine_mesh(case, n):
 
 
 def ref(out, case):
-    """Single level on the fine grid: AMReX and JAX (CFL from the cells)."""
+    """Single level on the fine grid: AMReX and zoomy_core's NumPy backend (= JAX to round-off,
+    matrix numpy checks; runs in the AMReX image), CFL from the cells."""
     from zoomy_amrex.symsolver import SymbolicHyperbolicSolverAmrex
-    from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+    from zoomy_core.symsolver.numpy_backend import SymbolicHyperbolicSolverNumpy
     n = base_n(case)
     mesh, nsm, t_end, cfl, _ = system(case, 2 * n)
-    s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=cfl, cfl_wave_speed=CflWaveSpeed.cells)
+    s = SymbolicHyperbolicSolverNumpy(time_end=t_end, cfl=cfl, cfl_wave_speed=CflWaveSpeed.cells)
     Q0, A0 = s.setup(mesh, nsm)
-    t, Qj, _ = s.run(Q0, A0)
+    t, Qn, _ = s.run(Q0, A0)
     a = SymbolicHyperbolicSolverAmrex(time_end=t_end, cfl=cfl, cfl_wave_speed=CflWaveSpeed.cells)
     ta, Qa = a.run(s.mesh_np, s.nsm, np.asarray(Q0), out / f"work_ref_{case}")
-    np.savez(out / f"ref_{case}.npz", t=float(t), Q=np.asarray(Qj), Qa=Qa, ta=ta)
-    print(f"ref {case}: JAX t={float(t):.4g} AMReX t={ta:.4g} "
-          f"AMReX vs JAX {rel(Qa, np.asarray(Qj)):.1e}", flush=True)
+    np.savez(out / f"ref_{case}.npz", t=float(t), Q=np.asarray(Qn), Qa=Qa, ta=ta)
+    print(f"ref {case}: NumPy t={float(t):.4g} AMReX t={ta:.4g} "
+          f"AMReX vs NumPy {rel(Qa, np.asarray(Qn)):.1e}", flush=True)
 
 
 def rel(a, b):
@@ -173,7 +175,7 @@ def table(out):
         if case.startswith("cover"):
             f = g(out / f"ref_{case}.npz")
             m = (f"fine level vs fine single AMReX {rel(c1['L1'], f['Qa']):.1e}, "
-                 f"vs JAX {rel(c1['L1'], f['Q']):.1e}") if f is not None else "-"
+                 f"vs NumPy {rel(c1['L1'], f['Q']):.1e}") if f is not None else "-"
         elif case.startswith("wave"):
             t = float(c1["t"])
             err = composite(case, n, c1["Q"], c1["L1"],
