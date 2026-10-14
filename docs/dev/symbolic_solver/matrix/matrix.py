@@ -221,6 +221,8 @@ TH = {
     "fd": ("<=", 1e-5, "tolerance (central FD, eps 1e-3..1e-5)"),
     "rev": ("<=", 1e-10, "tolerance (checkpointed reverse vs forward)"),
     "couple": ("<=", 1e-14, "tolerance (gate 26: coupled = single domain at O1)"),
+    "couple_schwarz": ("<=", 1e-12, "the coupling tolerance (gate 54: preCICE rel 1e-12 on the "
+                       "exchanged rows, pressure GMRES 1e-13)"),
 }
 CLOSED = ("C1", "C2", "C3", "C5", "C11", "C12", "C13", "C14", "C20", "C23", "C32", "C33", "C36")
 TH.update({
@@ -927,6 +929,17 @@ def measure():
                     add("C16", f"{pair} coupled vs single (max)", b, c, m["coupled_vs_single"],
                         TH["couple"], "")
                     add("C16", f"{pair} mass drift", b, c, m["mass"], TH["couple"], "")
+        from cases import C16_VAM                # the Chorin march, overlapping Schwarz (gate 54)
+        for pair in C16_VAM:
+            d = g("C16", pair)
+            if d is not None:
+                m = metrics(d)
+                add("C16", f"{pair} coupled vs single (max)", b, "serial", m["coupled_vs_single"],
+                    TH["couple_schwarz"], "")
+                add("C16", f"{pair} |mass coupled - single|", b, "serial", m["mass"],
+                    TH["couple"], "")
+                add("C16", f"{pair} coupling iterations per window (mean / max)", b, "serial",
+                    f"{m['iterations_mean']:.1f} / {m['iterations_max']:.0f}", None, "")
         if b == "numpy":
             numpy_checks(add, g, J)
         euler_checks(add, b, g, J)
