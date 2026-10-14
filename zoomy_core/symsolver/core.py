@@ -49,6 +49,16 @@ class linsolve(Block):
     """
 
 
+class implicit_solve(Block):
+    """`(residual, x0) -> x` with `residual(x) = 0` for a residual coupling face
+    neighbours (two-point fluxes, per-cell terms): Newton, each update one linear solve
+    over the mesh (`root`: per-cell updates only).
+
+    References:
+        Knoll, Keyes 2004, https://doi.org/10.1016/j.jcp.2003.08.010
+    """
+
+
 class EffectNode(Block):
     """Base of the graph nodes created by `Effect`."""
     pass
@@ -163,6 +173,12 @@ def Root(residual, x0):
 def LinSolve(matvec, b):
     """Solve `matvec(x) = b` at run time (see `linsolve`)."""
     return linsolve(_pure(matvec), b)
+
+
+def ImplicitSolve(residual, x0):
+    """Solve `residual(x) = 0` from `x0` at run time, the residual coupling face
+    neighbours (see `implicit_solve`)."""
+    return implicit_solve(_pure(residual), x0)
 
 
 # ── scoped common-subexpression elimination ─────────────────────────────────

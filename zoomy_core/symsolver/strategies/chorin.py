@@ -65,9 +65,10 @@ class ChorinTemplate(HyperbolicTemplate):
         Returns:
             `(Q, Qaux, dt)`.
         """
-        # Imex.ssp2: the pressure joins the implicit source S in the tableau as the
-        # stage correction B_i = A_ii dt G P_i (off the pressure rows); f, S act on
-        # the projected stages Y_i = P(R_i):
+        # Imex.ssp2: the pressure joins the implicit part S (the source and the two-point
+        # part of the implicit diffusion, `implicit_stage`) in the tableau as the stage
+        # correction B_i = A_ii dt G P_i (off the pressure rows); f, S act on the
+        # projected stages Y_i = P(R_i):
         #   R_i = Q + sum_{j<i} (At_ij F_j + A_ij (S_j + B_j / A_jj)) + A_ii dt S(R_i)
         #   B_i = Y_i - R_i,  F_i = dt f(Y_i),  S_i = dt S(Y_i)
         #   Q'  = P(Q + sum_i (wt_i F_i + w_i (S_i + B_i / A_ii)))
