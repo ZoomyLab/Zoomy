@@ -2,8 +2,8 @@
 # Build hypre (static libHYPRE.a) inside the AMReX apptainer, for the AMReX symbolic solvers'
 # pressure solve (USE_HYPRE=TRUE; zoomy_amrex.symsolver links it).
 #
-#   build_hypre_cuda.sh          # CUDA build in zoomy_amrex_gpu.sif -> ~/.cache/zoomy/hypre-cuda-3.2.0
-#   build_hypre_cuda.sh cpu      # CPU build in zoomy_amrex.sif      -> ~/.cache/zoomy/hypre-cpu-3.2.0
+#   build_hypre_cuda.sh          # CUDA build in zoomy_amrex.sif (--nv) -> ~/.cache/zoomy/hypre-cuda-3.2.0
+#   build_hypre_cuda.sh cpu      # CPU build in zoomy_amrex.sif        -> ~/.cache/zoomy/hypre-cpu-3.2.0
 #   build_hypre_cuda.sh cpu-env  # CPU shared library against the micromamba env's MPI (no
 #                                # container)                         -> ~/.cache/zoomy/hypre-cpu-env-3.2.0
 # Run inside the image (APPTAINER_CONTAINER set, or no apptainer on PATH) it builds natively.
@@ -28,7 +28,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 if [ -n "${ZOOMY_AMREX_CONTAINERS:-}" ]; then SIFDIR=$ZOOMY_AMREX_CONTAINERS
 elif [ -f "$HERE/zoomy_amrex.sif" ]; then SIFDIR=$HERE
 else SIFDIR=$HOME/git/Zoomy/containers/zoomy_amrex; fi
-if [ "$VARIANT" = cuda ]; then SIF=$SIFDIR/zoomy_amrex_gpu.sif; else SIF=$SIFDIR/zoomy_amrex.sif; fi
+SIF=$SIFDIR/zoomy_amrex.sif          # one image: the CPU and the CUDA toolchain
 CPUS=${ZOOMY_AMREX_BUILD_CPUS:-16-47}
 JOBS=${JOBS:-16}
 

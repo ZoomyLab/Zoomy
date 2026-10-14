@@ -12,6 +12,26 @@ roles, selected by the first argument to `apptainer run`:
 Apptainer shares the host network namespace, so `:8080`/`:8888` are reachable at
 `localhost` with no port publishing. GPU backends: add `--nv`.
 
+## One image for CPU and GPU machines (`zoomy_jax`, `zoomy_amrex`)
+
+The JAX and AMReX images run on a machine without a GPU exactly as before and use the GPU
+when the host's NVIDIA driver is brought in (`apptainer --nv`, `docker run --gpus all`);
+nothing else changes on the command line. NumPy and OpenFOAM have no GPU path.
+
+- `zoomy_jax`: conda-forge's jaxlib 0.9.2 (CPU) plus JAX's CUDA 12 plugin and NVIDIA's CUDA
+  wheels (`jax-cuda12-plugin[with-cuda]==0.9.2`); mpi4jax built in the image with its CUDA
+  bridge. Without a GPU, or with `JAX_PLATFORMS=cpu`, JAX runs on the CPU (the same jaxlib);
+  with `--nv` it picks the GPU. Ranks on GPUs:
+  `apptainer exec --nv IMG mpiexec -n 2 python -m zoomy_jax.gpurank run.py` (halos through
+  host memory, `MPI4JAX_USE_CUDA_MPI=0`; GPU -> GPU and AmgX: `zoomy_jax_mpi`).
+- `zoomy_amrex`: the CUDA 12.6 compiler and the libraries the CUDA build links (cudart,
+  curand, cusparse; cublas, cusolver for hypre-CUDA; shared libraries only). The generated
+  solver is compiled for the CPU or with CUDA as the run asks (`zoomy_amrex.symsolver`
+  `gpu=True`, `run_case`: `ZOOMY_AMREX_CUDA=1`); from the host, `symsolver` runs the same
+  `zoomy_amrex.sif` with `--nv` for the CUDA build. Multi-GPU: `ranks=N` with `gpu=True`, one
+  GPU per rank through the image's OpenMPI 4.1.6 (not CUDA-aware: AMReX stages the halos
+  through the host, as the earlier GPU image did).
+
 The dispatch is baked into every image's `%runscript` (mode keyword → `zoomy-server`
 / `zoomy-jupyter` / `bash`); the adapter is baked per image (`$ZOOMY_ADAPTER`), so a
 bare port still starts the server (back-compat).
@@ -82,8 +102,8 @@ cell-block-scaled pressure operator (`Source/symsolver/rt_amrex.H`, `hypre_solve
 images do not ship hypre yet; `zoomy_amrex/build_hypre_cuda.sh` builds hypre 3.2.0 inside them:
 
 ```bash
-containers/zoomy_amrex/build_hypre_cuda.sh        # zoomy_amrex_gpu.sif -> ~/.cache/zoomy/hypre-cuda-3.2.0
-containers/zoomy_amrex/build_hypre_cuda.sh cpu    # zoomy_amrex.sif     -> ~/.cache/zoomy/hypre-cpu-3.2.0
+containers/zoomy_amrex/build_hypre_cuda.sh        # zoomy_amrex.sif --nv -> ~/.cache/zoomy/hypre-cuda-3.2.0
+containers/zoomy_amrex/build_hypre_cuda.sh cpu    # zoomy_amrex.sif      -> ~/.cache/zoomy/hypre-cpu-3.2.0
 ```
 
 (~2 min CPU, ~6 min CUDA; `CUDA_ARCH`, default 89 = the AMReX build's; the driver runs the
@@ -91,8 +111,9 @@ script itself the first time it needs a variant).  The prefix is bound into the 
 build time only: the library is static.  `ZOOMY_HYPRE_DIR` overrides the prefix, also with a
 path inside the image.
 
-To make it permanent, add to the `%post` of `zoomy_amrex_gpu.def` (CPU image: drop the
-CUDA flags) and rebuild the image; then run with `ZOOMY_HYPRE_DIR=/opt/hypre`:
+To make it permanent, add to `zoomy_amrex.def` and its `Dockerfile` (once with the CUDA
+flags into one prefix, once without into another) and rebuild the image; then run with
+`ZOOMY_HYPRE_DIR=<prefix>`:
 
 ```bash
     HYPRE_VER=3.2.0     # hypre 3.x enables Umpire for GPU builds by default: off
@@ -119,7 +140,10 @@ each image whose
 
 A dev branch publishes nothing: the images follow `main`. Rebuild by hand:
 `gh workflow run build-containers.yml -f container=<c>` (no `-f`: every image). The JAX image
-also ships OpenMPI 5 + mpi4py + mpi4jax (CPU), so it runs distributed (`comm=`, `mpiexec -n N`).
+also ships OpenMPI 5 + mpi4py + mpi4jax (with its CUDA bridge), so it runs distributed
+(`comm=`, `mpiexec -n N`), on CPUs or one GPU per rank. The JAX and AMReX images need more
+disk than a hosted runner leaves free: the workflow drops the runner's preinstalled
+toolchains first and puts apptainer's temporaries on the larger disk.
 
 Which recipe CI builds: a folder with a `Dockerfile` is built from it (the SIF is converted
 from that Docker image); a `.def` there is the local `apptainer build` of the same image and

@@ -1955,7 +1955,413 @@ wired; `small_slope_scaling` (frame slopes O(eps)) is still a separate step; SME
 normal-stress condition `p(eta) = tau_zz(eta)` is used when the vertical row keeps a stress (same
 group, eps^2/De), not scaled as its own boundary row.
 
-## 50. Library defects from the thesis-case migrations (2026-10-14, dev/migration-defects)
+## 50. Free surface at the shore: a dry neighbour in the eta stencil (2026-10-14, dev/malpasset-pits)
+
+**Root cause.**  The order-2 free-surface reconstruction (W = (h, eta = b + h), bed derived) took
+a DRY cell's `eta = b` into the LSQ stencil and the limiter bounds of its wet neighbours.  A lake
+at rest against a bank above its level then gets a free-surface slope in the shore cells.
+Barth-Jespersen / minmod return phi = 0 there (the shore cell is a local minimum of eta);
+Venkatakrishnan with `eps^2 = (cell size)^2` (NumPy, JAX, AMReX) does not (on Malpasset eps ~ 70 m
+against metre-scale eta jumps: effectively unlimited), so `eta_f != eta_i`, the hydrostatic
+reconstruction and the edge source no longer balance and the water accelerates, on Malpasset to
+the mode-0 cap.  The front detector exposes it (without it MOOD redoes the inadmissible shore at
+order 1).  Reproduction: `cases/pit_lake_at_rest.py` (SME(0), Gaussian pit, thesis numerics):
+max |u| 0.40 m/s (quads) / 0.54 m/s (triangles) after 1 s from exact rest.
+
+**Rule** (`reconstruction.shore_extension`, from the hydrostatic reconstruction, Audusse et al.
+2004).  In the row eta a neighbour k with `h_k <= wet_dry_eps` enters cell i's stencil as
+`min(eta_k, eta_i)`: the gradient difference `min(eta_k - eta_i, 0)`, the bound
+`min(eta_k, eta_i)`.  The hydrostatic face state continues the wet cell's water level towards a
+higher bed (`h* = max(0, eta_i - max(b_i, b_k))`); the same continuation in the stencil maps a lake
+at rest to a flat eta in every wet cell for any limiter, and leaves a lower dry neighbour (the
+flooding front) unchanged.  Boundary ghosts are not changed.  Printed as the 5-argument
+`gradient(W, Wg, (eta, h), eps, mesh)` and the 7-argument limiter blocks.
+
+**Backends.**  NumPy / JAX: `lsq_derivatives(..., shore)`, `ghost_bounds(..., dry)`; AMReX: `lsq`
+/ `limiter_factors` with the depth row and eps.  foam (`rt.H`, new): the order-2 path is
+OpenFOAM's own `leastSquares` gradient and `cellLimited` limiters, so `shore_lsq` /
+`shore_limiter` are those schemes' loops (`fv::leastSquaresGrad`, `fv::cellLimitedGrad`: the
+`leastSquaresVectors`, patch order, `small`, the minmod / Venkatakrishnan functions of r, k = 1)
+with the one change in the eta row; every other row stays `fvc::grad`.  A coupled neighbour's eta
+and depth come over its processor / cyclic patch (the halo exchange of both rows), so a rank sees
+the neighbour's wet/dry state.  `zoomy_foam/tests/shore_unit` (skewed 13 x 11 mesh, a cyclic pair,
+walls, 26 dry cells, 3 of them across the seam): per cell against OpenFOAM's schemes on the field
+with that cell's dry neighbours continued, gradient bitwise, minmod 1.1e-16, Venkatakrishnan
+2.2e-16; without dry cells bitwise OpenFOAM's gradient; the h row and the halo columns unchanged.
+
+**Measurements** (merged branch: main dadf2efd + the rule; "main" = the same cases on main's
+zoomy_core 9308483 / zoomy_jax 751eb3f / zoomy_foam c93b53a / zoomy_amrex a177451).
+- Pit lake (front detector on): JAX 0.40 -> 2.7e-15 (quads), 0.54 -> 1.1e-14 (triangles);
+  AMReX 0.40 -> 2.4e-15, tilted on 2 ranks 5.1e-15; NumPy round-off (tests
+  `zoomy_core/tests/symsolver/test_shore_lake_at_rest.py`, `zoomy_jax/tests/runtime/
+  test_shore_lake_at_rest.py`).  foam (no front detector on foam yet: front_tol None) 3.0e-15 /
+  1.4e-14, tilted 6.0e-15, minmod 2.8e-15, 2 and 4 ranks the same; foam was at rest before too
+  (6.4e-15 / 4.9e-14): OpenFOAM's Venkatakrishnan has no eps and returns 0 at the shore minimum.
+- Matrix (C3, C5, C6, C7, C9 on numpy / jax / foam / amrex, serial, mpi2, mpi4, JAX gpu1):
+  0 FAIL, no row moved beyond round-off.  Against main: C3 bitwise on all four; C5 max rel
+  3.6e-12 (NumPy, JAX, AMReX) / 1.2e-13 (foam): the dam-break front has its dry neighbours below
+  the water, which the rule leaves alone; foam's eta-row factor is now the limiter value itself,
+  not `(G.L)/(G.G)` of OpenFOAM's limited gradient (round-off).  C7 C5 parallel = serial
+  <= 5.4e-15.
+- Malpasset thesis configuration (JAX GPU, SME(1), 26000 triangles, t = 2000 s; vs the thesis
+  run zp_l1): clamp-saturated cells 561 (main) -> 201 (pit 16, spill 125, other 60; main: pit 14,
+  spill 289, other 258); transit A->B / A->C 1250 / 1300 s -> 1300 / 1300 s (observed 1140 /
+  1320; snapshots every 50 s); gauge mean |err| vs observed 4.32 -> 4.23 m; shear median
+  |q_1|/|q_0| at T 0.235 -> 0.218; h(T) rel L2 vs zp_l1 1.8e-2 -> 5.8e-2, inundated area
+  -0.02 % -> -2.0 %, IoU 0.997 -> 0.961; mass drift <= 6e-16 both.
+
+**Open.**  The thesis numbers move (above): the user decides before chapters change.  The
+remaining 201 clamp cells are spill / flowing cells where Venkatakrishnan's `eps^2 = (cell size)^2`
+leaves eta unlimited across a wet/dry front: a limiter-scale choice, not a derivation defect.
+foam has no front detector (`front_cells`, dev/foam-front-diffusion), so the Malpasset numerics
+do not build on foam yet.
+
+## 51. foam: the a-priori wet/dry front detector; implicit diffusion at the FD operator's floor (2026-10-14, dev/foam-front-diffusion)
+
+**The front detector (`front_cells`).**  `ReconstructionSpec.front_tol` (core e90f067) drives the
+reconstruction only: in every stage, before the step and in every MOOD redo, a cell whose depth
+extrapolated with the gradient of h and the limiter factor of eta falls below
+-(1/front_tol - 1) h at a face is demoted to first order (phi = 0; Gallardo, Pares, Castro 2007,
+https://doi.org/10.1016/j.jcp.2007.08.007).  It never sets a value and does not enter the CFL step.
+NumPy, JAX and AMReX had the block, foam's runtime did not: every `front_tol` model failed to
+build (`Solver.H: 'front_cells' was not declared in this scope`), i.e. each such matrix row would
+be a FAIL.  foam `rt.H` `front_cells`: each own cell over all its faces (internal, boundary,
+coupled) with foam's own G and phi, then the halo exchange: a halo column sees only the faces it
+shares with this rank, so its flag comes from its owner.
+
+The matrix had no run where the detector acts: C5 (minmod, flat bed) demotes nothing on any backend
+(a bounded limiter keeps h_f >= 0 over a flat dry bed).  New C5 runs at `front_tol` 0.5 with
+Venkatakrishnan (the Malpasset thesis configuration), each with (`*_front`: serial, mpi2, mpi4) and
+without (`*_off`) the detector: the dam break, and Thacker's axisymmetric paraboloid bowl (SWASHES
+2-D: a 1, r0 0.8, h0 0.1, [0, 4]^2, nx 48, t 0.5).  The bowl sits off the domain centre: centred,
+the 2-rank cut x = 2 is a symmetry line, and foam mpi2 without the flag's exchange equalled the run
+with it bitwise (the halo was never exercised).
+
+| run | foam vs JAX, L1 rel: off -> front | detector acts (front vs off, L1 rel): JAX / foam | foam ranks vs serial (mpi2 / mpi4) | the same without the flag's exchange |
+|---|---|---|---|---|
+| dam | 9.3e-2 -> 1.5e-2 | 8.6e-2 / 0 | 2.5e-15 / 2.4e-15 | - |
+| bowl | 4.7e-2 -> 6.3e-3 | 4.8e-2 / 2.9e-3 | 1.1e-16 / 1.1e-16 | 6.1e-6 / 7.9e-4 |
+
+- AMReX and NumPy = JAX to round-off on all four runs (<= 4.3e-15), ranks = serial on all three
+  backends; h_min = 0 everywhere.  Bowl L1(h - exact): JAX 1.4e-4 front, 2.0e-4 off; foam 1.2e-4 /
+  1.1e-4.
+- foam's detector does not act on the dam break: OpenFOAM's `cellLimited<Venkatakrishnan>` keeps the
+  face value within the neighbour extremes (limited/allowed = (r + 2)/(r^2 + r + 2) <= 1), so over a
+  flat dry bed h_f >= 0.  JAX's Venkatakrishnan (eps^2 = dx^2) overshoots where the neighbour
+  differences are below dx; that overshoot was the 9.3e-2 foam-JAX difference without the detector,
+  and the detector removes it.  On the bowl's sloping shore h_f = h + phi_eta G_h . r_f is bounded by
+  neither limiter: both backends demote.  With the detector the foam-JAX difference is the O2 stencil
+  difference of every foam O2 row (C5 n48: 1.7e-2).
+- The dam break without the detector changes its mass by 1.7e-13 on JAX / NumPy / AMReX (C6,
+  <= 1e-12): `clean_round_off` of the overshoot's round-off below zero; foam 1.9e-16.
+
+**Implicit diffusion: ~15x slower than JAX.**  Serial, one core each (`taskset -c 24`), the matrix
+runs unchanged, ms per step; foam's own split from `symFoam`'s summaries: right-hand side (the
+explicit D + 2C with the LSQ correction; foam assembles no matrix: Jacobian-free Newton-Krylov),
+linear solve (GMRES with its residual evaluations), rest (explicit step, source, aux).  JAX: the
+march only (second call, no compile; C26 adaptive: over foam's 9 steps, the same CFL rule); XLA fuses
+the step, no split.
+
+| run (cells, steps) | JAX | foam before: all = rhs + linear solve + rest | foam after: all = rhs + linear solve + rest | GMRES iterations / solve | residual evaluations / step |
+|---|---|---|---|---|---|
+| C26 visc (20^2, 9) | 4.1 | 37.7 = 0.24 + 33.6 + 3.8 | 5.6 = 0.23 + 1.85 + 3.6 | 64 -> 6 | 369 -> 23 |
+| C32 noslip n20 (8 x 20, 160) | 1.19 | 31.8 = 0.10 + 31.0 + 0.7 | 2.28 = 0.10 + 1.51 + 0.67 | 245 -> 13.2 | 727 -> 37 |
+| C32 free n20 | 1.18 | 33.3 = 0.10 + 32.4 + 0.7 | 2.48 = 0.10 + 1.67 + 0.71 | 245 -> 13.6 | 727 -> 38 |
+| C32 noslip_split n20 | 1.17 | 32.7 = 0.10 + 31.9 + 0.7 | 2.48 = 0.10 + 1.65 + 0.73 | 245 -> 13.4 | 727 -> 38 |
+| C33 imex k2 (8, 80) | 0.12 | 0.141 (no implicit diffusion: the point-implicit source) | 0.135 | - | - |
+| C34 n16, nu 1 (16^2, 1 step) | - | 12.3 = 0.22 + 8.1 + 4.0 | 5.1 = 0.24 + 0.55 + 4.3 | (123 -> 8 evaluations) | 123 -> 8 |
+| C36 sme1 (16^2, 20; foam is not a matrix backend of C36) | 6.9 | 72.0 = 0.44 + 68.6 + 2.9 | 6.6 = 0.40 + 3.5 + 2.7 | 64 -> 6.4 | 324 -> 20 |
+
+foam / JAX: before 9x (C26), 27-28x (C32), 10x (C36); after 1.4x, 1.9-2.1x, 1.0x.
+
+- Cause: the linear solve, not assembly (nothing is assembled), the operator or the preconditioner.
+  foam's Newton-Krylov takes the Jacobian action by a directional difference,
+  J v = (R(x + h v) - R(x)) / h, h = sqrt(eps)(1 + |x|)/|v| (rt_common.H `newton_krylov`), whose
+  round-off floor is ~sqrt(eps) relative.  The matrix cases ask `gmres_tol` 1e-13 (JAX meets it with
+  the exact JVP).  C32 (diagnostic print of the first solve): GMRES's own estimate reached 1.5e-12 at
+  iteration 5, every restart's true residual stayed at 1.6e-9 .. 3.0e-9, and all 60 restart cycles
+  (`gmres_maxiter`) ran: 245 iterations / solve for nothing.  Same pattern C26 (true floor 1.4e-9),
+  C34, C36.
+- Fix (zoomy_foam `linsolve`, the plain GMRES path): after a cycle whose estimate met `ls_tol`, a true
+  residual above `ls_tol` that did not halve since the previous restart ends the solve (the stall rule
+  `hypre_solve` already had), with a once-warning naming the floor.  A slowly converging cycle (its
+  estimate above `ls_tol`) is not affected.  Newton (`implicit_tol`) takes the same updates (2 / step;
+  C36 35 -> 33 solves); the solution: after - before max rel 1e-16 (C26, C32), 2.6e-13 (C36, Newton
+  1e-12), C34's L 7e-10 (= Q's round-off / dt 1e-7).
+- The remaining 2x on C32: 37 residual evaluations / step at 0.037 ms (160 cells), of which the
+  stall needs one more cycle (13 vs ~5 iterations / solve); the exact JVP needs printed derivatives of
+  `diffusion_matrix` and the ghost kernels.
+
+Cross-backend matrix (this worktree's store: the 2026-10-14 store of section 48 for JAX / NumPy /
+AMReX; foam rerun from empty, serial / mpi2 / mpi4, on foam f37481c, jax 751eb3f, amrex a177451 and
+core 31e7b85 / 9308483 (main's checkout advanced during the rerun: the nondim and ML-VAM merges); the
+new C5 runs on all four backends): 917 rows (871 before), **0 FAIL**.  Changed foam rows: C28 implicit foam vs JAX (1-D
+dir0 / dirL / neu / per 5.1e-11 / 8.1e-12 / 5.4e-11 / 2.7e-10 -> 6.0e-11 / 1.6e-11 / 6.0e-11 /
+1.3e-10, quad per 1.5e-10 -> 3.0e-10, <= 1e-9: Newton 1e-10 at the FD floor; main's foam on the same
+libraries reproduces the old values, so the stall stop moved them); C7 C26 parallel 6.6e-16 -> 5.6e-16
+(round-off).  New: 46 C5 / C7 rows.  QR suite: 28 passed, 2 skipped.
+
+Open:
+- foam has no exact Jacobian action (above); AMReX's implicit diffusion (amrex::GMRES) was not
+  measured here.
+- No Malpasset-type run (a real DEM) in the matrix: the thesis configuration
+  (`results/wavespeed_bound/run.py`) runs on JAX / GPU only.
+
+## 52. The march raises; thin cells in the CFL step; HLL's Davis speeds without a closed form; Manning at rest (2026-10-14, dev/numerics-robust)
+
+The four open items of section 48.
+
+### 52a. A step that does not advance the time ends the march with an error
+
+- **Defect.** `_time_loop` ran `While(time < time_end)`.  A NaN `dt` made `time` NaN and the loop
+  ended as if done, returning the NaN state (section 48: Malpasset at t = 687 s, 939 s).  A `dt` of 0
+  (the Gelfand bound and the `eigenvalues` kernel return `+inf` for a non-finite entry) never ended
+  it: the Manning reproduction of 52d did not return within 300 s on main.
+- **Fix** (`strategies/hyperbolic.py`, `vocabulary.check.march`).  The body takes a step only if
+  `time + dt > time` (a `Cond`; else the state is kept and `going = 0`); the loop runs while `time <
+  time_end` and `going`; after it `check.march(time, time_end, dt, n_step, max|Q|)` raises unless
+  `time >= time_end` with a finite state (one reduction per run).  The message names the time, the
+  step and its `dt`, and whether the state before it is finite ("its CFL step is not a positive
+  number (a NaN or infinite wave speed)") or not ("step n - 1 produced it" / "the initial state").
+  A constant-`dt` march that ends non-finite raises as well.
+- **Backends.**  NumPy: `FloatingPointError`.  JAX: the check's arguments are extra outputs of the
+  jitted program and `run` raises from them (also with `JAX_PLATFORMS=cuda`, which has no CPU
+  device for host callbacks); where a CPU device exists a `lax.cond`-guarded debug callback raises
+  during the execution (also under AD).  foam: `zs::fail` (FatalError); AMReX: `zs::fail`
+  (`amrex::Abort`), and the AMR level loop checks `t + dt > t` itself; both drivers raise
+  `FloatingPointError` with the runtime's line.  The AMReX `cond` unifies tuple branches entry by
+  entry (expression / Field).  Legacy JAX `run_simulation` and `run_jit_steps` raise on a NaN end.
+- **A NaN depth keeps its speed.**  The dt spectrum is `conditional(h <= 0, 0, e)` (52b): a NaN depth
+  gives a NaN (closed form) or infinite (numerical) speed, so the march stops at the step after the
+  one that produced it; `conditional(h > eps, e, 0)` gave it speed 0 and the march ran on.
+- Tests: `tests/symsolver/test_march_check.py` (NaN cell: stops at t = 0, step 1; constant dt:
+  non-finite end; q = 1e300; a step rule with dt = 0 or < 0 after t = 0.25: "stopped at t = 0.3 ...
+  step 4"), its JAX twin (CPU; by hand also `JAX_PLATFORMS=cuda`, GPU), foam / AMReX
+  `test_march_check.py` (marked large: they build).  `sp.Abs(Q, evaluate=False)`: sympy's
+  `Abs.eval` walked the whole loop graph and the IMEX-SSP2 print did not return.
+
+### 52b. The cells rule bounds every speed that moves mass
+
+- **Derivation** (order 1, Rusanov / HLL on the Audusse states, `h*_K <= h_K`, the velocity kept):
+  `F_h(U*_K, U*_N) = 1/2 h*_K (u_K.n + a_f) + 1/2 h*_N (u_N.n - a_f) <= 1/2 h*_K (|u_K| + a_f)` as
+  `a_f >= |u_N.n|`, so `h_K' >= h_K (1 - dt sum_f |e_f| a_f / |K|)`: the step must bound the Riemann
+  speed `a_f` of every face whose states carry mass.  A face state of a cell with `h > 0` keeps the
+  cell's velocity and has `h* <= h`, so its speed is at most the cell state's; a cell with `h <= 0`
+  has `h* = 0`, `q* = 0`, speed 0 in the flux.  Hence `conditional(h <= 0, 0, |lambda(U_K)|)` bounds
+  every `a_f`.  A thin cell is not exempt: its velocity enters `a_f` of its faces and drains the
+  neighbour through the dissipation `1/2 a_f h*_K`.
+- **Before:** the gate was `h > wet_dry_eps` (default 1e-8; Malpasset 1e-3), and without a closed form
+  the spectrum was taken of A_n with the KP `hinv` (`(h/eps)^2` of the speed below eps).
+- **Now** (`gate_eigenvalues_dry`; `eps` default 0, an explicit `eps` keeps the old gate): 0 where
+  `h <= 0`; without a closed form A_n with `hinv` -> `conditional(h > eps_KP, hinv, 1/max(1e-14, h))`
+  (= 1/h: the KP value where it is 1/h, so wet cells keep their rounding).  The cells' speeds of the
+  faces rule (order 2 with the edge source) and IMEX-SSP2's step read the same slot.
+- **Reproduction** (`tests/symsolver/test_thin_cell_cfl.py`): SME(0) 1-D, 200 cells, order 2 without
+  limiter + MOOD, forward Euler, cells rule, a 1 mm film at 300 m/s onto a dry bed.  Before: h =
+  -8.0e-4 m at t = 1.0e-4 s in cell 106 (h = 2.1e-4 m), next to cell 107 with h = 7.2e-9 m < 1e-8 at
+  u = 3.0e4 m/s (speed gated to 0; the Rusanov speed of their face 3e4 m/s).  After: h >= 0 at every
+  write.  Order 1: positive either way (max |u| 2.1e4 m/s).  The unlimited reconstruction then grows
+  thin-cell velocities to 1.7e5 m/s and the step collapses (dt 2e-19 at t = 3.6e-3 s: check.march
+  raises; before: the same at t = 2.7e-3 s, after h < 0, with max |Q| 9e11).
+- **Malpasset** (thesis configuration, cells rule, JAX on GPU 2, to 2000 s, `results/wavespeed_bound/
+  run.py numfix_cells`): h_min 0 at all 2001 writes, volume drift 2.4e-15.  Against section 48's
+  cells run: wet area max rel 1.2e-3, max-depth envelope L1 rel 9.8e-4, inundated area 17.023 /
+  17.030 km^2 (section 48 faces vs cells 1.3e-3 / 9.9e-4, main vs section 48 1.1e-3 / 8.6e-4); max
+  alpha_1 (h > 1e-3 m) 982 m/s (section 48: cells 265, faces 786).  Steps to 300 s
+  (`results/numerics_robust/malpasset_steps.py`): 32,090 against
+  27,252 with the former gate (+18 %: cells below 1e-3 m now bound the step); 2000 s wall 671 s
+  against 478 s (the GPU shared with another job).
+
+### 52c. HLL's Davis speeds without a closed-form spectrum
+
+- **Bound.**  For any real c, `rho(A + c I) >= max_i |lambda_i + c| >= max Re lambda + c`, so
+  `s_R = min(G(A + a I) - a, a) >= max Re lambda` and `s_L = max(a - G(a I - A), -a) <= min Re
+  lambda`, G the Gelfand bound (section 48), `a` the face's Rusanov speed, the max over both face
+  states (`Numerics._gelfand_extremes`; branch-free, every backend).  The shifted matrices are taken
+  in the face's normal frame, `T A_n T^T`, each horizontal vector `(q_x, q_y)` rotated to `(q.n, q.t)`
+  (a similarity): there a wall's reflected state gives a signed permutation of the inner state's
+  matrix, the pair is symmetric and no mass crosses the wall.  In the lab frame it was not (G is not
+  rotation invariant): mass drift 4.6e-9 on a disc (oblique walls), up to 1.6e-8 on Malpasset; now
+  1.3e-16 / 3e-16 (`test_wall_pair_is_symmetric_at_an_oblique_wall`).
+- **Rigour** (`gates/gate50_davis_bounds.py`): 128,000 random matrices (gate 49's sets; NumPy and JAX
+  kernels) and 440,000 model matrices (the production `HLL.wave_speed_bounds`: SME(0..3) 1-D / 2-D,
+  VAM(1), ML-SME; wet, thin and dry cells, Audusse faces): `s_L <= min Re lambda`, `s_R >= max Re
+  lambda` everywhere, no 40-digit recheck needed.  Overestimate / a, median / max: model matrices
+  0.2 - 0.7 % / 8.9 %; random up to 67 % (non-normal triangular, complex spectra).  HLL fan
+  `(s_R - s_L) / 2a` on the model states, median 0.03 (thinned faces) .. 0.66 (Rusanov: 1).
+- **The face speed** `max(|s_L|, |s_R|)` is wrapped in `Abs`: at a dry face the new pair gave -0 and
+  the faces rule a step of -inf.
+- **Positivity at order 1** (`results/numerics_robust/malpasset_order1.py`: Malpasset SME(1) mixing
+  length, `hr`, point-implicit source, faces rule, CFL 0.4, to 120 s, JAX GPU; released water = water in the initially dry cells): closed form
+  4,553,098 m^3; numerical spectrum with the Davis bounds 4,553,170 (+1.6e-5); with the former
+  Rusanov pair 4,683,207 (+2.9 %, the +2.5 % of section 48).  h_min 0 at every write (1 s) in all
+  three, mass to 3e-16.  Cost: 298 s against 68 s (six Gelfand calls per face instead of two).  Unit
+  test: SME(0) 1-D dam break onto a bed step, order 1: h >= 0, mass to 1e-12.
+
+### 52d. Manning friction at rest
+
+- **Expression.**  The friction rows `-g n^2 hinv^(4/3) q_x sqrt(hinv^2 q_x^2 + hinv^2 q_y^2)`; their
+  derivative contains `hinv^2 q_x^2 / sqrt(...)`, 0/0 at q = 0.  JAX's implicit source (Lie,
+  IMEX-SSP2) takes the Newton Jacobian by AD: `sqrt'(0) * 0 = inf * 0 = NaN` in every cell exactly at
+  rest once the Newton iterates (another cell moving).  NumPy (central differences) and foam /
+  AMReX (one-sided differences) are finite there.  The point-implicit source
+  (`SourceTreatment.linearized`, the Malpasset GUI session's) prints `sp.diff` of the source: NaN at
+  rest on every backend.
+- **Fix** (NSM operation `norm_derivative_at_zero`, applied by default before the linearization):
+  every `S**r` in the source slots with `S >= 0` an even-power factor times a positive semidefinite
+  quadratic form (a squared norm) and rational `r >= 1/2` not an integer becomes `conditional(S > 0,
+  conditional(S > 0, S, 1)**r, S)`: the same value (bitwise), and the derivative 0 at `S = 0` (S has
+  its minimum there, `dS = 0`): the derivative of `S**r` for `r > 1/2`, the least-norm subgradient
+  for `r = 1/2`.  No eps, the model is untouched.  `conditional` now collapses on a boolean
+  condition (after `subs`).
+- **Reproduction** (C14's bump, Manning n 0.5, h = 1, a patch q_x = 2 at x < 3 next to cells at rest,
+  to 0.05 s): before, JAX Lie: NaN after step 1 (check.march: "step 2 ... step 1 produced it"); JAX
+  IMEX-SSP2 on main: every cell NaN at t_end, no error; point-implicit: NaN on NumPy, foam and AMReX.
+  After: finite on every backend, cells still exactly at rest.  Tests:
+  `tests/symsolver/test_norm_derivative.py` (the value bitwise equal on random states and at rest,
+  the symbolic Jacobian finite at rest and NaN without the operation, the point-implicit run),
+  `zoomy_jax/tests/symsolver/test_manning_at_rest.py` (Lie, IMEX-SSP2).  Golden
+  `n01_swe2d_order2` re-blessed (the source rows).
+
+### 52e. Matrix and tests
+
+- **Matrix** (`matrix/README.md`, results 2026-10-14 dev/numerics-robust): every serial run rerun on
+  NumPy, JAX, foam and AMReX (830 runs): 754 bitwise equal to the base store, 75 at round-off (JAX
+  62: XLA compiles the step inside the loop's `cond` branch, and the Manning Jacobian by AD through
+  the `conditional`; NumPy / foam C12 `bump_o2`: the re-expressed A_n of the cells' speed bound,
+  bitwise equal without that commit; <= 7.1e-15, C10 `s2_t2_n120` JAX 2.1e-13 through the pressure
+  GMRES).  Table: 872 rows, 801 PASS, 1 FAIL (base: 871, 801, 0); 6 rows moved in the third digit
+  (C1 / C12 numpy = JAX, C6 C12 numpy mass, C7 / C9 JAX C1 o2_n40, C9 C26; the C4 thresholds, 10 x
+  the JAX `_pert` sensitivity, in the fourth digit).  No matrix case has a
+  thin cell (0 < h <= 1e-8), HLL without a closed form or a cell at rest under Manning.  The FAIL
+  is C17 `dry` (AMReX AMR, regrid on the dry front), a new row: it did not return in the matrix
+  process before and its gate metric was NaN on main; it now raises at step 85 (t = 0.0466 s), the
+  level-0 step 84 having produced NaN next to cells with h = -7.8e-12 (below the round-off
+  tolerance) and h ~ 1e-54 .. 1e-154 left by the AMR coarse-fine transfer.
+- **Tests.**  zoomy_core: 376 small tests pass (new: `test_march_check`, `test_thin_cell_cfl`,
+  `test_davis_bounds`, `test_norm_derivative`); goldens n01-n03, s02, s03 re-blessed (the
+  `eigenvalues_cfl` rows; n01 also the source rows), rederive tier 40 pass + 1 known failure
+  (`test_rederive_cross_process_disk_hit_and_prebuilt`).  zoomy_jax: `tests/symsolver` (march check,
+  Manning at rest), legacy AD tests (`test_ad`, `test_ad_chorin`) pass.  foam / AMReX:
+  `test_march_check` (large).  QR suite (`tests/qr_cases -m qr`): 27 pass, 3 skipped (no thesis
+  checkout: the manifest snapshot; the jax / AMReX sessions in Pyodide).
+
+Open:
+- C17 `dry` (above): the AMR coarse-fine transfer is not positivity preserving (h < -tol); the
+  march now stops where it produced the NaN.
+- The cells rule takes `eig` (a host callback on a GPU) for models without a closed form: the
+  Malpasset numerical-spectrum session under the cells rule did not reach 120 s in 25 min on the GPU
+  (faces rule: 5 min).  The Gelfand bound would unify it with the Riemann speeds (wet-cell steps up
+  to 6 % smaller).
+- Unlimited order 2 grows thin-cell velocities without bound (the film of 52b): h stays >= 0, the
+  step collapses and the march raises.
+- HLL's normal frame needs the model's vector groups (`derive_momentum_field_indices`) and 2
+  horizontal directions; otherwise the lab frame (symmetric only for walls along the axes).
+
+## 53. IMEX-SSP2 with the implicit diffusion; diffusion on AMReX AMR levels (2026-10-14, dev/solver-combos)
+
+**IMEX-SSP2 + implicit diffusion** (was `NotImplementedError` in `imex_step`).  The implicit part
+g of the tableau (Pareschi, Russo 2005, Table II) is the implicit source plus the two-point part
+D of `diffusion_matrix`; the rest of that diffusion's face flux (`diffusion_correction`: the
+tangential / non-orthogonal part, zero in 1-D and on Cartesian faces without mixed entries) is in
+the explicit part f.  Stage i: R_i = Q + sum_{j<i} (At_ij F_j + A_ij G_j), then one Newton solve
+over the mesh of X - R_i - A_ii dt (D(X) + S(X)) = 0 (`implicit_stage`; the pointwise aux follows
+the iterate, the derivative aux is frozen at R_i), F_i = dt f(Y_i) (the explicit residual with
+`split_diffusion`), G_i = dt (S(Y_i) + D(Y_i)).  Without diffusion the stage is the per-cell root
+as before (printed graph unchanged).  New vocabulary: `diffusion_tpfa`, `diffusion_correction`
+(their sum is `diffusion`) and `implicit_solve` (a Newton whose residual couples face neighbours:
+NumPy sparse LU of the coloured FD Jacobian, JAX `newton_root` + `linsolve` (exact jvp), foam /
+AMReX Jacobian-free Newton-Krylov).  The Chorin template's projected IMEX-SSP2 stages take the same
+implicit stage.  JAX: the TPFA operator is built under `ensure_compile_time_eval` (first used
+inside a traced solve it leaked a tracer).
+
+- Gate 52 (`gates/gate52_imex_diffusion.py`; JAX and NumPy identical to the digits shown), errors
+  against the exact solution of the semi-discrete system at dt = 0.0125 / 2^k, k = 0..3:
+
+| problem | errors k = 0..3 | order 2 -> 3 |
+|---|---|---|
+| heat 1-D periodic, nu dt / dx^2 = 12.8 at k = 0 | 2.03e-2 / 4.93e-3 / 1.22e-3 / 3.03e-4 | 2.01 |
+| heat 1-D Dirichlet | 3.07e-4 / 7.62e-5 / 1.90e-5 / 4.74e-6 | 2.00 |
+| heat quads periodic / Dirichlet | 1.68e-1 ... 2.43e-3 / 2.53e-3 ... 3.80e-5 | 2.02 / 2.00 |
+| advection-diffusion (walls), nu 0.02: ssp2 / lie1 / lie2 | 3.10e-2 ... 6.24e-4 / 9.68e-2 ... 9.62e-3 / 1.03e-1 ... 1.28e-2 | 1.96 / 1.04 / 1.01 |
+| the same, nu 0.2 (stiff): ssp2 / lie1 / lie2 | 2.59e-2 ... 1.28e-3 / 4.38e-2 ... 5.12e-3 / 4.29e-2 ... 5.31e-3 | 1.65 / 1.01 / 1.00 |
+
+  Every advection-diffusion run equals the scheme written in matrix form (L_a, L_d probed on the
+  NumPy backend; the stage solves (I - A_ii dt L_d) Y_i = R_i, Lie's Crank-Nicolson): JAX
+  <= 3.6e-14, NumPy <= 4.2e-12.  The stiff ssp2 order (1.23 / 1.46 / 1.65) is IMEX-SSP2's own:
+  the matrix form gives the same numbers and reaches 1.80 / 1.89 / 1.94 at dt / 16 .. / 64 (the
+  implicit DIRK is not stiffly accurate: its last row (1 - 2g, g) is not w = (1/2, 1/2), so the
+  stiff modes of the stages are damped but not exact; order reduction in the stiff regime, a
+  property of the tableau, not of the stage solve); periodic, the two operators are
+  circulant and commute, so the walls are needed to see Lie's order 1.
+- C32's viscous shear decay with IMEX-SSP2 (JAX, ny 20): L_inf vs exact 3.37e-4 (= the Lie run's
+  spatial error); time order (Richardson, dt / 2^k) 2.0001 / 2.0001.
+- Chorin, VAM(1) + Newtonian Stress.full (the predictor's diffusion_matrix, 34 nonzeros), C10's
+  wave, nu 0.01, increment projection, dt 8e-3 / 2^k, NumPy: projected IMEX-SSP2 stages L1(h)
+  Richardson 1.96 / 1.96 (q_x_0: 1.93 / 1.95), Lie per stage (time_order 2) 1.14 / 0.99 (0.69 /
+  0.71).  At nu 0.1 the Lie run (unchanged code) also fails (NumPy: singular cell Jacobian of the
+  implicit source after a few steps; JAX: NaN): not this change.
+- C++ = JAX (gate 41's heat equation, IMEX-SSP2, nx 16): AMReX 1-D 3.6e-10 (Newton 1e-10), quads
+  1.1e-15; foam quads 9.0e-16.
+
+**AMR + diffusion (AMReX).**  `diffusion_tpfa` refused AMR (`M.log`: diffusive fluxes not
+refluxed).  Now every diffusion block logs its face fluxes on an AMR level: the explicit ones (the
+`diffusion` block in an SSP-RK stage, the IMEX stage's `diffusion_correction` and its G_i
+`diffusion_tpfa`) are added to the current stage's (Wm, Wp) entry, so they carry the stage's RK
+weight (IMEX-SSP2: wt = w = 1/2, asserted in `_amr_procedures`); Crank-Nicolson's go to `M.dlog`
+with their share of dt (1/2 two-point at the start, 1 the deferred correction, 1/2 two-point at
+the end); residual evaluations inside implicit solves log nothing (`NoLog`).  `sync` integrates
+both into the flux register (Berger, Colella 1989).  New kernels `tpfa_faces` /
+`correction_faces` (the cell kernels unchanged; the correction's gradients are computed in the
+ghost layer instead of halo-filled: an AMR halo fills only state / aux rows).  Two defects of the
+AMR loop on the way: the levels' linear solves had no mesh (`the_mesh()` was null: every implicit
+solve on AMR crashed), and `dt_of` ignored a constant `dt` (a heat equation, wave speed 0, took
+one step of t_end).
+
+- Gate 53 (`gates/gate53_amrex_amr_diffusion.py`; heat equation nu 0.05, base 16^2 + one level,
+  a bump across the interface of the static patch [0.25, 0.75]^2, t 0.1; Neumann and periodic):
+
+| path | covering level vs fine single | mass, reflux / no reflux | L1(AMR - fine) / L1(coarse - fine) |
+|---|---|---|---|
+| explicit slot, SSP-RK, dt 3.2e-3 | 0 / 0 | 2.1e-16 / 2.7e-4 | 0.37 / 0.38 |
+| Lie (Crank-Nicolson), dt 1e-2 | 0 / 0 | 2.1e-16, 0 / 3.7e-4 | 0.59 / 0.59 |
+| IMEX-SSP2, dt 1e-2 | 4.4e-16 / 5.9e-16 | 0 / 3.7e-4 | 0.59 / 0.59 |
+
+  (Neumann / periodic.)  The implicit paths' larger ratio is a time lag at the interface, not the
+  refluxing: the fine halo takes the coarse level's state after its step in every stage (the
+  AMR loop's one dt, coarse first); Lie at dt / 2, / 4, / 8: 0.45 / 0.40 / 0.38, toward the explicit
+  0.37 (spatial).  C32's viscous SME (Stress.full: state-dependent, mixed A; x-varying u0), Lie,
+  covering level vs fine single: 0 (the momentum rows carry the bed's nonconservative product and
+  are not refluxed, as without diffusion).
+
+**Matrix** (serial, mpi2 / mpi4 where configured; no GPU; scratch store: main's store with C17, C26,
+C28, C31-C34, C36 rerun and C37 new; 478 rows of the touched cases): **0 FAIL** apart from C17
+`dry` (below).  C26, C28, C31, C32, C33, C34, C36: every row equals main's table to the printed
+digits (the source-only IMEX-SSP2 path and the Lie paths are unchanged; C31 VAM ssp2 1.96, SWE ssp2
+2.07).  C37: heat 2.00-2.02, advection-diffusion ssp2 1.96 / lie1 1.04 / lie2 1.01, every run =
+the matrix-form scheme (JAX <= 3.6e-14, NumPy <= 4.2e-12), shear decay ny 20 / 40 / 80 orders 1.94
+(the C32 numbers), time order 2.000, VAM(1) Stress.full Chorin ssp2 1.96 vs Lie per stage 0.99
+(JAX = NumPy); foam / AMReX vs JAX <= 1.0e-14 (heat, advection-diffusion, VAM 1.9e-14; AMReX shear
+4.4e-16, foam shear ratio 0.014 - 0.20 as C32); mpi2 = serial: JAX 1.3e-13, foam 8.0e-15, AMReX
+7.1e-15.  C17 `diff_*`: as gate 53.  zoomy_core: 362 passed (2 new: `tests/symsolver/
+test_imex_diffusion.py`); QR suite 27 passed, 3 skipped (the backend-only sessions).
+
+**C17 `dry` (pre-existing, not changed here).**  The regrid case had no run in main's store; run
+now, its final state has NaN in 796 coarse cells (mass drift NaN; `h_min` passes because it takes
+`nanmin`), identical with main's libraries (core 082acb3, amrex a177451).  No NaN to t 0.044 (the
+fine level covers the domain), NaN from a step after the regrid that shrinks the fine level
+(t 0.046 -> 0.048 with the matrix's steps; with `dt_write` 5e-4 only in the last step): erratic in
+the step sequence.  Dry coarse cells carry q != 0 at h = 0 (|q| / h up to 1e292).  Not diagnosed
+further (outside these items).
+
+**Open.**  (1) The AMR fine halo takes the coarse level after its step in every stage (time lag
+O(dt) at the interface, above); time interpolation of the coarse state needs the stage time in
+the halo fill.  (2) VAM(1) Stress.full at nu 0.1 on C10's wave fails with the unchanged Lie path
+too (NumPy singular cell Jacobian, JAX NaN).  (3) GPU configs not rerun (C9: C26 `visc`, C17 gpu1).
+(4) preCICE + Chorin: not implemented, plan in `STATUS.md` (the pressure solve couples both
+domains: overlapping Schwarz inside a preCICE implicit-coupling window).
+
+## 58. Library defects from the thesis-case migrations (2026-10-14, dev/migration-defects)
 
 Seven defects the migrations found, each a silent wrong answer or a run that failed where the
 scheme is fine.  Numbers: NumPy unless stated; the matrix rows are in the results section of
@@ -2062,7 +2468,7 @@ SWE, C13 seam aux, C8 periodic pressure); three rows moved at round-off (C14 1.5
 large / rederive only the known m05 golden and cache-correctness failures; QR (`-m qr`): 20 pass,
 10 skip (Pyodide not installed here).
 
-### 50a. Moving-equilibrium well-balancing on the symbolic solvers: a plan
+### 58a. Moving-equilibrium well-balancing on the symbolic solvers: a plan
 
 *What the old solver does* (`zoomy_core/fvm/bernoulli_wb.py`, NumPy only, 1-D only): per face,
 each side's state is reconstructed to the common bed `b* = max(b_L, b_R)` preserving the

@@ -233,6 +233,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The GPU-capable images (zoomy_jax: JAX's CUDA plugin + NVIDIA's CUDA wheels, ~9.5 GB
+      # unpacked; zoomy_amrex: the CUDA 12.6 toolchain, ~3.5 GB) do not fit a hosted runner's
+      # free disk through the docker build and the SIF conversion (docker store + its export +
+      # the unpacked rootfs + the SIF: ~32 GB for JAX). Drop the runner's preinstalled
+      # toolchains (~30 GB) and put apptainer's temporaries on the disk with the most room.
+      - name: Free disk space (GPU-capable images)
+        if: ${{ contains(fromJson('["zoomy_jax", "zoomy_amrex"]'), matrix.container) }}
+        run: |
+          df -h / /mnt || true
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift \
+            /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules || true
+          docker system prune -af || true
+          d=$(df --output=avail -B1 /mnt 2>/dev/null | tail -1)
+          r=$(df --output=avail -B1 / | tail -1)
+          if [ -n "$d" ] && [ "$d" -gt "$r" ]; then t=/mnt/apptainer; else t=$HOME/apptainer; fi
+          sudo mkdir -p "$t/tmp" "$t/cache" && sudo chmod -R 1777 "$t"
+          echo "APPTAINER_TMPDIR=$t/tmp" >> "$GITHUB_ENV"
+          echo "APPTAINER_CACHEDIR=$t/cache" >> "$GITHUB_ENV"
+          df -h / /mnt || true
+
       - name: Install Apptainer (if needed)
         if: ${{ hashFiles(format('containers/{0}/*.def', matrix.container)) != '' }}
         run: |
@@ -255,10 +276,9 @@ jobs:
           has_def=false
           [ -f "containers/$c/Dockerfile" ] && has_dockerfile=true
           # The canonical recipe is containers/<c>/<c>.def. Do NOT glob-and-take-
-          # first: zoomy_amrex ships both zoomy_amrex.def and zoomy_amrex_gpu.def,
-          # and `find ... | head -1` returns them in filesystem order — so a plain
-          # CPU build could publish the 4.5 GB CUDA image under the CPU tag.
-          # Variants (…_gpu.def) are built explicitly, never picked up implicitly.
+          # first: a folder with a variant .def next to it (a local recipe) would
+          # be picked in filesystem order and published under the image's tag.
+          # Variants are built explicitly, never picked up implicitly.
           def_file=""
           if [ -f "containers/$c/$c.def" ]; then
             def_file="containers/$c/$c.def"
@@ -372,7 +392,8 @@ jobs:
             echo "==> Reusing SIF built from .def (preserves %runscript/%environment)"
           else
             echo "==> Building SIF from Docker image"
-            sudo apptainer build "$sif" "docker-daemon:${image}:${full_ver}"
+            sudo --preserve-env=APPTAINER_TMPDIR,APPTAINER_CACHEDIR \
+              apptainer build "$sif" "docker-daemon:${image}:${full_ver}"
           fi
           sudo chown "$(id -u):$(id -g)" "$sif"
 
@@ -410,6 +431,27 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The GPU-capable images (zoomy_jax: JAX's CUDA plugin + NVIDIA's CUDA wheels, ~9.5 GB
+      # unpacked; zoomy_amrex: the CUDA 12.6 toolchain, ~3.5 GB) do not fit a hosted runner's
+      # free disk through the docker build and the SIF conversion (docker store + its export +
+      # the unpacked rootfs + the SIF: ~32 GB for JAX). Drop the runner's preinstalled
+      # toolchains (~30 GB) and put apptainer's temporaries on the disk with the most room.
+      - name: Free disk space (GPU-capable images)
+        if: ${{ contains(fromJson('["zoomy_jax", "zoomy_amrex"]'), matrix.container) }}
+        run: |
+          df -h / /mnt || true
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift \
+            /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules || true
+          docker system prune -af || true
+          d=$(df --output=avail -B1 /mnt 2>/dev/null | tail -1)
+          r=$(df --output=avail -B1 / | tail -1)
+          if [ -n "$d" ] && [ "$d" -gt "$r" ]; then t=/mnt/apptainer; else t=$HOME/apptainer; fi
+          sudo mkdir -p "$t/tmp" "$t/cache" && sudo chmod -R 1777 "$t"
+          echo "APPTAINER_TMPDIR=$t/tmp" >> "$GITHUB_ENV"
+          echo "APPTAINER_CACHEDIR=$t/cache" >> "$GITHUB_ENV"
+          df -h / /mnt || true
 
       - id: build_image
         run: |
@@ -499,7 +541,8 @@ jobs:
             echo "==> Reusing SIF built from .def (preserves %runscript/%environment)"
           else
             echo "==> Building SIF from Docker image"
-            sudo apptainer build "$sif" "docker-daemon:${image}:${full_ver}"
+            sudo --preserve-env=APPTAINER_TMPDIR,APPTAINER_CACHEDIR \
+              apptainer build "$sif" "docker-daemon:${image}:${full_ver}"
           fi
           sudo chown "$(id -u):$(id -g)" "$sif"
 

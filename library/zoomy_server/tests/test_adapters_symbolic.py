@@ -75,7 +75,7 @@ def _cxx_available(module):
     except ImportError:
         return False
     if module == "zoomy_amrex.symsolver":
-        return mod.in_image() or (shutil.which("apptainer") and mod.SIF[False].exists())
+        return mod.in_image() or (shutil.which("apptainer") and mod.SIF.exists())
     from zoomy_foam import _pipeline
     return _pipeline.in_image() or (shutil.which("apptainer") and _pipeline.SIF.exists())
 
