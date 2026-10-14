@@ -724,6 +724,12 @@ NUMPY_TOL = {"C8": PRESS, "C10": PRESS,
              "C37": ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)")}
 
 
+#: numpy C37 ranks vs serial: the FD-Jacobian Newton stops at ||R||_2 <= 1e-12 with max|Q| 0.016
+#: (heat), 6e-11 relative (implicit_tol 1e-14: ranks = serial 8e-15); JAX's exact Jacobian lands
+#: closer to the root in the same updates
+NUMPY_NEWTON_C37 = ("<=", 1e-10, "tolerance (Newton ||R|| 1e-12 at max|Q| 0.016, FD Jacobian)")
+
+
 def numpy_checks(add, g, J):
     """numpy = JAX per case and config (serial, mpi2, mpi4: numpy's distributed runs against JAX
     serial): the max rel difference of the final states over the case's runs (round-off, or the
@@ -993,9 +999,12 @@ def measure():
                 d, ser = g(case, key, c), g(case, key)
                 if ok(ser, d):
                     gpu = c.startswith("gpu")
+                    th = PRESS if case == "C8" else RO
+                    if b == "numpy" and case == "C37":
+                        th = NUMPY_NEWTON_C37
                     add("C9" if gpu else "C7",
                         f"{case} {key} {'GPU' if gpu else 'parallel'} vs serial CPU (max rel)",
-                        b, c, relmax(d, ser), PRESS if case == "C8" else RO, "")
+                        b, c, relmax(d, ser), th, "")
     return out
 
 

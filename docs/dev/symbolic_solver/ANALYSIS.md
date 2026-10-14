@@ -2448,3 +2448,16 @@ step; setup 9-35 s, serial Python on every rank):
   block preconditioner stops scaling at 4 ranks (no coarse correction, unlike JAX's).
 - Open: setup is serial per rank (the global mesh, as JAX for a mesh object; a mesh file reads
   only the rank's cells); h5py without MPI gathers output on rank 0.
+
+**With section 53 (integ/20261014).**  `implicit_solve` (one Newton over the mesh for an IMEX-SSP2
+stage: the implicit source + the two-point diffusion) is distributed as the implicit diffusion:
+the stage residual halos its iterate, the coloured FD Jacobian's owned rows are probed with the
+halo off, each update a parallel LU (`_Factor`: scipy `splu` serially, `Distributed.lu`
+distributed), the norm global.  NumPy serial: all 288 runs bitwise = integ's own libraries.
+Ranks vs serial: C37 `shear_noslip_n20` 7.1e-15, `heat_quad_per_k0` 2.5e-12 (JAX 1.3e-13): the
+Newton stops at `||R||_2 <= 1e-12` with max|Q| = 0.016, and the FD Jacobian (central
+differences, round-off / h ~ 1e-11) leaves a different sub-tolerance residual on each
+partition; at `implicit_tol` 1e-14 ranks = serial 8.0e-15.  The C7 threshold of numpy C37 is
+therefore the Newton tolerance, 1e-10 (`NUMPY_NEWTON_C37`).  numpy = JAX: C37 4.3e-12 serial,
+1.9e-12 mpi2; C32 1.6e-12; C26 2.3e-14 on every config.  Test: IMEX-SSP2 stiff
+advection-diffusion on 3 ranks = serial 2e-13 (PETSc) / 7e-13 (krylov).

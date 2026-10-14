@@ -1,3 +1,21 @@
+# dev/numpy-mpi (wt-npmpi) -- status
+
+MPI for the NumPy backend (mpi4py; PETSc linear solves): ANALYSIS 54.  Merged integ/20261014
+(superrepo d127e36c, core f1708af, jax 2815437): the solver-combos `implicit_solve` (IMEX-SSP2 +
+implicit diffusion) is distributed too (owned rows, halo off for the FD Jacobian, parallel LU).
+
+Stores: ~/git/wt-npmpi-matrix/store_integ_base (numpy serial on integ's own libraries, the
+baseline), store_integ (the merged branch: numpy serial + mpi2 / mpi4, JAX for the compared
+cases).  Previous store (pre-merge): ~/git/wt-npmpi-matrix/store.
+
+Verified after the merge: numpy serial 288 runs bitwise = integ baseline; numpy mpi2 / mpi4
+(C1 C5 C8 C13 C14 C21 C26, C35 / C37 mpi2) + JAX serial (those cases, C32, C37) + JAX C37 mpi2:
+partial table 342 PASS / 0 FAIL (~/git/wt-npmpi-matrix/table_integ_partial.md; table.md kept
+as integ's: the store holds only these backends / cases).  core 457 passed + the 2 known
+failures (all tiers); QR 27 passed, 3 skipped.  ANALYSIS 54 (renumbered).
+
+---
+
 # dev/solver-combos (wt-features) — status
 
 Worktrees: superrepo + zoomy_core, zoomy_jax, zoomy_foam, zoomy_amrex on `dev/solver-combos`
