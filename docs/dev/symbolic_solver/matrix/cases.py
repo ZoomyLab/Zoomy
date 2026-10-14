@@ -14,7 +14,7 @@ from zoomy_core.model.models.closures import ManningFriction, NavierSlip, Newton
 from zoomy_core.model.models.equations import Stress
 from zoomy_core.numerics import (Limiter, NumericalSystemModel, ReconstructedVariables,
                                  ReconstructionSpec)
-from zoomy_core.symsolver.settings import Imex, PressureSolve, Projection
+from zoomy_core.symsolver.settings import Imex, LinearSolver, PressureSolve, Projection
 from zoomy_core.symsolver.strategies.chorin import predictor_nsm
 from zoomy_core.systemmodel.system_model import SystemModel
 
@@ -117,6 +117,33 @@ def lake(order, nx=40):
     return LSQMesh.create_2d(domain=(0, 10, 0, 10), nx=nx, ny=nx), nsm
 
 
+#: C3 on plain SWE (the hydrostatic pressure in its conservative flux, P = 0): every
+#: hydrostatic-reconstruction flux (ANALYSIS 50)
+LAKE_SWE = ("PositiveHLL", "PositiveRusanov", "PositiveNonconservativeRusanov",
+            "PositiveQuasilinearRusanov")
+
+
+def lake_swe(order, riemann, nx=24):
+    """C3's lake at rest on the hand-written ``SWE`` (pressure in the flux), ``riemann`` by name."""
+    import zoomy_core.numerics as N
+    from zoomy_core.model.models.swe import SWE
+    tags = ("left", "right", "bottom", "top")
+    sm = SystemModel.from_model(SWE(dimension=2, boundary_conditions=BC.BoundaryConditions(
+        [BC.FromModel(tag=t, definition="wall") for t in tags])))
+    names = [str(s) for s in sm.state]
+
+    def ic(x):
+        q = np.zeros(len(names))
+        b = 0.2 * np.exp(-((x[0] - 5.0) ** 2 + (x[1] - 5.0) ** 2) / 2.0)
+        q[names.index("b")], q[names.index("h")] = b, 0.5 - b
+        return q
+    sm.initial_conditions = IC.UserFunction(function=ic)
+    nsm = NumericalSystemModel.from_system_model(
+        sm, riemann=getattr(N, riemann),
+        reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
+    return LSQMesh.create_2d(domain=(0, 10, 0, 10), nx=nx, ny=nx), nsm
+
+
 # ── C4: quasi-1-D channel over a bump, steady Bernoulli flow ───────────────
 G = 9.81
 CHANNEL = dict(sub=dict(q=4.42, h_out=2.0, t_end=3.0),      # subcritical
@@ -176,8 +203,10 @@ def smooth_1d(order, nx):
 PERIODIC = dict(L=10.0, u=0.3, nx=40, ny=2, t_end=1.0)
 
 
-def periodic(order, x0):
-    """A Gaussian surface bump (periodic distance) at x0 in a uniform flow u."""
+def periodic(order, x0, riemann=None):
+    """A Gaussian surface bump (periodic distance) at x0 in a uniform flow u; ``riemann``:
+    the NSM's Riemann class (default: the free-surface default, which rebuilds ``hinv`` from
+    the reconstructed depth; ``NonconservativeRusanov`` reads both cells' aux at a face)."""
     P = PERIODIC
     bcs = [BC.Periodic(tag="left", periodic_to_physical_tag="right"),
            BC.Periodic(tag="right", periodic_to_physical_tag="left"),
@@ -192,12 +221,17 @@ def periodic(order, x0):
         return np.array([0.0, h, h * P["u"], 0.0])
     sm.initial_conditions = IC.UserFunction(function=ic)
     nsm = NumericalSystemModel.from_system_model(
-        sm, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
+        sm, riemann=riemann, reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
     return LSQMesh.create_2d(domain=(0, P["L"], 0, 1.0), nx=P["nx"], ny=P["ny"]), nsm
 
 
 # ── C14: IMEX, SWE + Manning friction (implicit source) ─────────────────────
 MANNING = 0.5          # g n^2 |u| / h^(4/3) ~ 0.3 /s at the bump; dt ~ 0.05
+
+
+def _ncr():
+    from zoomy_core.fvm.riemann_solvers import NonconservativeRusanov
+    return NonconservativeRusanov
 
 
 def imex_bump(order, nx):
@@ -279,6 +313,33 @@ def vam_split(friction=False):
     sm.aux_initial_conditions = Constant(constants=lambda n: np.zeros(n))
     r = model.chorin_split(_DT_SYMBOL, system_model=sm)
     return r.SM_pred, r.SM_press, r.SM_corr
+
+
+def vam_periodic(nx=32):
+    """VAM(1) Chorin on a channel periodic in x (sides Extrapolation): the pressure couples
+    across the seam (the assembled AMG solves need the periodic partners in their sparsity,
+    ANALYSIS 50).  Fresh split per call (see `vam_split`)."""
+    from zoomy_core.model.initial_conditions import Constant
+    from zoomy_core.model.models.vam import VAM
+    from zoomy_core.systemmodel.system_model import _DT_SYMBOL
+    bcs = [BC.Periodic(tag="left", periodic_to_physical_tag="right"),
+           BC.Periodic(tag="right", periodic_to_physical_tag="left"),
+           *(BC.Extrapolation(tag=t) for t in ("bottom", "top"))]
+    model = VAM(level=1, dimension=3, boundary_conditions=bcs,
+                closures=[Newtonian(), StressFree()])
+    sm = SystemModel.from_model(model)
+    sm.initial_conditions = Constant(constants=lambda n: np.zeros(n))
+    sm.aux_initial_conditions = Constant(constants=lambda n: np.zeros(n))
+    r = model.chorin_split(_DT_SYMBOL, system_model=sm)
+    mesh = LSQMesh.create_2d(domain=(0.0, 2.0, 0.0, 0.1), nx=nx, ny=2)
+    return mesh, (predictor_nsm(r.SM_pred, r.SM_press, r.SM_corr), r.SM_press, r.SM_corr)
+
+
+def periodic_q0(names, xc):
+    q = np.zeros((len(names), xc.shape[1]))
+    q[names.index("h")] = 0.5 + 0.05 * np.sin(np.pi * xc[0])
+    q[names.index("q_x_0")] = 0.1 * q[names.index("h")]
+    return q
 
 
 def vam_wave(order, nx, friction=False):
@@ -514,7 +575,12 @@ def _c8():
             Run("vam_newton", vam, 0.05, chorin=True, q0=vam_q0,
                 pressure_solve=PressureSolve.newton),
             Run("vam_t2", vam, 0.05, chorin=True, q0=vam_q0, time_order=2),
-            Run("vam_tri", tri, 0.05, chorin=True, q0=vam_q0, backends=JF)]
+            Run("vam_tri", tri, 0.05, chorin=True, q0=vam_q0, backends=JF),
+            # periodic channel: each backend's default pressure solve (JAX / NumPy: the
+            # assembled 'auto', foam / AMReX: hypre) vs the matrix-free GMRES
+            Run("per", vam_periodic, 0.05, dt=0.01, chorin=True, q0=periodic_q0),
+            Run("per_auto", vam_periodic, 0.05, dt=0.01, chorin=True, q0=periodic_q0,
+                backends=("jax",), solver=dict(pressure_linear_solver=LinearSolver.auto))]
 
 
 def _c35():
@@ -687,7 +753,9 @@ CASES = {
     "C1": ("smooth: bump at rest, walls, t = 2.5", _c1()),
     "C2": ("shock: bump in flow (0.3, 0.1), walls, O2 + MOOD", _c2()),
     "C3": ("lake at rest over a bed bump, 100 steps",
-           [Run(f"o{o}", partial(lake, o, 24), 100 * DT_LAKE, dt=DT_LAKE) for o in (1, 2)]),
+           [Run(f"o{o}", partial(lake, o, 24), 100 * DT_LAKE, dt=DT_LAKE) for o in (1, 2)]
+           + [Run(f"swe_{f}_o{o}", partial(lake_swe, o, f), 100 * DT_LAKE, dt=DT_LAKE,
+                  backends=JFA) for f in LAKE_SWE for o in (1, 2)]),
     "C4": ("channel over a bump vs Bernoulli (inflow/outflow/wall BCs)",
            [Run(f"{v}_o{o}_n{n}", partial(channel, v, o, n), CHANNEL[v]["t_end"])
             for v in CHANNEL for o in (1, 2) for n in C4_N]
@@ -722,7 +790,11 @@ CASES = {
                    CHANNEL["sub"]["t_end"], backends=JF) for o in (1, 2) for n in C4_N]),
     "C13": ("periodic in x: shifted bump in a uniform flow",
             [Run(f"o{o}_x{x0}", partial(periodic, o, x0), PERIODIC["t_end"],
-                 configs=("serial", "mpi2", "mpi4")) for o in (1, 2) for x0 in (2.5, 7.5)]),
+                 configs=("serial", "mpi2", "mpi4")) for o in (1, 2) for x0 in (2.5, 7.5)]
+            # the seam face reads the partner cell's aux (face_aux): NonconservativeRusanov's
+            # face kernel takes hinv from both cells' aux
+            + [Run(f"nc_o{o}_x{x0}", partial(periodic, o, x0, _ncr()), PERIODIC["t_end"],
+                   backends=JFA) for o in (1, 2) for x0 in (2.5, 7.5)]),
     "C14": ("IMEX: SWE + Manning friction (implicit source), bump in flow, t = 0.3",
             [Run(f"o{o}_n{n}", partial(imex_bump, o, n), 0.3, imex=Imex.lie,
                  configs=ALL5 if (o, n) == (2, 40) else ("serial",))
