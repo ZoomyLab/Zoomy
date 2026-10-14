@@ -27,6 +27,7 @@ __all__ = [
     "guard_eigenvalue_powers",
     "gate_eigenvalues_dry",
     "regularize_fractional_powers",
+    "norm_derivative_at_zero",
 ]
 
 
@@ -1149,5 +1150,90 @@ def regularize_fractional_powers(eps, *, exclude=()):
 
     _op.name = "regularize_fractional_powers"
     _op.description = f"b**r -> (b + eps**2)**r for fractional r (eps={eps})"
+    _op.coverage = {}
+    return _op
+
+
+# ── the derivative of a norm at its zero ───────────────────────────────────────
+
+def _psd_quadratic(P) -> bool:
+    """Whether `P` is a positive semidefinite quadratic form (homogeneous of degree 2, numeric
+    coefficients) in its free symbols.
+    """
+    gens = sorted(P.free_symbols, key=str)
+    try:
+        poly = sp.Poly(P, *gens)
+    except sp.PolynomialError:
+        return False
+    if not gens or not poly.is_homogeneous or poly.total_degree() != 2:
+        return False
+    G = [[0.0] * len(gens) for _ in gens]
+    for monom, c in poly.terms():
+        if not c.is_number:
+            return False
+        i, j = [k for k, e in enumerate(monom) for _ in range(e)]
+        G[i][j] += float(c) / (1 if i == j else 2)
+        G[j][i] += 0.0 if i == j else float(c) / 2
+    import numpy as np
+    eig = np.linalg.eigvalsh(np.array(G))
+    return bool(eig.min() >= -1e-12 * max(1.0, float(np.abs(eig).max())))
+
+
+def _nonnegative(S) -> bool:
+    """Whether `S` is >= 0 wherever it is defined, as a product of positive numbers, even
+    powers and positive semidefinite quadratic forms (a squared Euclidean norm, scaled).
+    """
+    for f in sp.Mul.make_args(sp.factor_terms(S)):
+        if f.is_number:
+            if not f.is_extended_nonnegative:
+                return False
+            continue
+        b, e = f.as_base_exp()
+        if e.is_Integer and e % 2 == 0:
+            continue
+        if not (e.is_Integer and e > 0 and _psd_quadratic(b)):
+            return False
+    return True
+
+
+def norm_derivative_at_zero():
+    """Operation (default, before the source linearization): every `S**r` in the source slots
+    with `S >= 0` a scaled squared Euclidean norm (`_nonnegative`) and rational `r >= 1/2` not an
+    integer (`|u| = (u.u)**(1/2)` of a friction law) becomes `conditional(S > 0,
+    conditional(S > 0, S, 1)**r, S)`: the same value, and the derivative 0 at `S = 0` (S has its
+    minimum there, `dS = 0`) instead of `dS / (2 sqrt(S)) = 0/0` = NaN.  That is the derivative
+    of `S**r` for `r > 1/2` and the least-norm subgradient for `r = 1/2`; the Newton Jacobian of
+    an implicit friction source (JAX: AD) and the point-implicit `source_jacobian_*` stay finite
+    at rest.  No regularization: values are unchanged.
+    """
+    from zoomy_core.model.kernel_functions import conditional as cond   # differentiable
+    half = sp.Rational(1, 2)
+
+    def _norm_power(x):
+        """Whether `x` is such a power."""
+        return (isinstance(x, sp.Pow) and x.exp.is_Rational and not x.exp.is_integer
+                and x.exp >= half and not x.base.is_number and _nonnegative(x.base))
+
+    def _rewrite(expr):
+        """Guard the norm powers of one expression."""
+        return sp.sympify(expr).replace(
+            _norm_power, lambda x: cond(x.base > 0, cond(x.base > 0, x.base, 1) ** x.exp,
+                                        x.base))
+
+    def _op(sm):
+        """Apply the operation to `sm` in place."""
+        keep = ("source", "source_explicit")
+        _op.coverage = map_operator_slots(
+            sm, _rewrite, exclude=[s for s in OPERATOR_SLOTS if s not in keep])
+        if _op.coverage.get("source") == "rewritten":
+            if getattr(sm, "source_jacobian_wrt_variables", None) is not None:
+                sm.source_jacobian_wrt_variables = ZArray(
+                    sm._compute_source_jacobian_wrt_variables())
+            if getattr(sm, "source_jacobian_wrt_aux_variables", None) is not None:
+                sm.source_jacobian_wrt_aux_variables = ZArray(
+                    sm._compute_source_jacobian_wrt_aux_variables())
+
+    _op.name = "norm_derivative_at_zero"
+    _op.description = "S**r, S a squared norm: conditional(S > 0, ., S), derivative 0 at S = 0"
     _op.coverage = {}
     return _op
