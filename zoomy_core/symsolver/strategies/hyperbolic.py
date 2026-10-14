@@ -59,6 +59,7 @@ class HyperbolicTemplate:
         imex = typed(Imex, imex, "imex") or None
         if imex is Imex.ssp2 and time_order not in (None, 2):
             raise ValueError(f"imex 'ssp2' is of time order 2, not {time_order}")
+        check_numerics(nsm)
         self.nsm = nsm
         self.cfl = cfl
         self.dimension = dimension
@@ -253,6 +254,30 @@ class HyperbolicTemplate:
             lambda time, Q, Qaux, going, n_write: going, body_live,
             (time, Q, Qaux, going, 1))
         return time, Q, Qaux
+
+
+def check_numerics(nsm):
+    """Raise at setup on a (model, Riemann class) pair whose scheme would run silently
+    wrong: face terms that do not discretize a live entry of the nonconservative matrix
+    drop that term of the PDE (a conservative Rusanov / HLL / HLLC on a model with a bed
+    slope or a moment coupling; `PositiveRusanov` / `PositiveHLL` discretize the bed column
+    only, through the hydrostatic reconstruction).
+    """
+    from zoomy_core.fvm.riemann_solvers import dropped_nonconservative_entries
+    riemann = getattr(nsm, "riemann", None)
+    if riemann is None:
+        return
+    dropped = dropped_nonconservative_entries(riemann, nsm)
+    if dropped:
+        names = [str(s) for s in nsm.state]
+        columns = sorted({names[j] for _, j, _ in dropped})
+        rows = sorted({names[i] if i < len(names) else str(i) for i, _, _ in dropped})
+        raise ValueError(
+            f"riemann={riemann.__name__} on the model with state {names}: its face terms do "
+            f"not discretize the nonconservative product B(Q) grad Q in the columns {columns} "
+            f"(rows {rows}), so the run would drop that term of the PDE (a bed slope: the lake "
+            "at rest moves).  Use a path-conservative flux, e.g. "
+            "PositiveNonconservativeRusanov or PositiveNonconservativeHLL.")
 
 
 def _time_loop(Q, Qaux, time, time_end, dt_write, step, dt_checkpoint=None):

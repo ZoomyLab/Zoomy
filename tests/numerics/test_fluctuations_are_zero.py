@@ -7,12 +7,15 @@ The two cases below are the ones that killed the predecessor detector
 model-only test can pass both:
 
 * 2-D SWE has a genuinely non-zero model NCP (``B[hu][b] = B[hv][b] = g*h``,
-  bed slope, because ``b`` is in the state) — yet under ``PositiveRusanov``
-  every emitted fluctuation entry is literal zero, because the Audusse
-  reconstruction sets ``b_face = max(b_L, b_R)`` equal on both sides.  A
-  model-only detector blocks the conservative fast path here.
-* ``Rusanov`` / ``HLL`` / ``HLLC`` never override ``numerical_fluctuations``
-  and inherit the identically-zero base — again regardless of the model.
+  bed slope, because ``b`` is in the state) — yet under ``Rusanov`` / ``HLL`` /
+  ``HLLC`` every emitted fluctuation entry is literal zero: they never override
+  ``numerical_fluctuations`` and inherit the identically-zero base, regardless
+  of the model (the symbolic solvers refuse that pair at setup: it drops the bed
+  slope).  A model-only detector blocks the conservative fast path here.
+* ``PositiveRusanov`` on the same SWE emits a fluctuation: Audusse's
+  consistency source restoring the pressure SWE keeps in its flux (ANALYSIS 50;
+  until 2026-10-14 it read only ``hydrostatic_pressure``, empty for SWE, and the
+  lake at rest moved).
 """
 
 import sympy as sp
@@ -68,10 +71,11 @@ def test_swe_model_ncp_is_nonzero():
     assert any(e.is_zero is not True for e in entries)
 
 
-def test_positive_rusanov_erases_swe_fluctuation():
-    """Non-zero model NCP, zero emitted fluctuation — the Audusse case."""
+def test_positive_rusanov_carries_swe_consistency_source():
+    """SWE keeps ``g h^2/2`` in its flux: the consistency source ``S~`` of the
+    hydrostatic reconstruction restores it, so a fluctuation is emitted."""
     nsm = _nsm(_swe(), PositiveRusanov)
-    assert nsm.fluctuations_are_zero is True
+    assert nsm.fluctuations_are_zero is False
 
 
 def test_conservative_solvers_never_build_a_fluctuation():
@@ -90,23 +94,20 @@ def test_nonconservative_solvers_do_build_one():
         is False
 
 
-def test_positive_nonconservative_hll_erases_swe_fluctuation():
-    """Single-dissipation PosNCHLL on SWE is the Audusse case again: the
-    reconstruction equalises ``b*`` (kills the bed-column NCP), SWE's empty
-    ``hydrostatic_pressure`` slot kills ``S̃``, and the LF ``s_max·Id·Δq``
-    now lives ONLY in the HLL flux — so every emitted fluctuation entry is
-    literal zero, exactly like ``PositiveRusanov`` above.  (Before the
-    double-dissipation fix the spurious fluctuation-side LF term kept this
-    flag False.)"""
+def test_positive_nonconservative_hll_carries_swe_consistency_source():
+    """Single-dissipation PosNCHLL on SWE: the reconstruction equalises ``b*``
+    (kills the bed-column NCP) and the LF ``s_max·Id·Δq`` lives ONLY in the HLL
+    flux, but the consistency source ``S~`` of the pressure SWE keeps in its flux
+    remains (ANALYSIS 50)."""
     assert _nsm(_swe(), PositiveNonconservativeHLL).fluctuations_are_zero \
-        is True
+        is False
 
 
-def test_audusse_cancellation_is_swe_specific():
-    """PositiveRusanov zeroes SWE's fluctuation but NOT SME's — the flag must
-    distinguish them, which is why it reads the built expression rather than
-    keying on the Riemann class."""
-    assert _nsm(_swe(), PositiveRusanov).fluctuations_are_zero is True
+def test_flag_is_a_property_of_the_pair():
+    """One model, two Riemann classes, two answers — the flag reads the built
+    expression rather than keying on the model or on the Riemann class."""
+    assert _nsm(_swe(), Rusanov).fluctuations_are_zero is True
+    assert _nsm(_swe(), PositiveRusanov).fluctuations_are_zero is False
     assert _nsm(_sme(), PositiveRusanov).fluctuations_are_zero is False
 
 
@@ -156,7 +157,7 @@ def test_flag_is_emitted_into_both_headers():
     """REQ-209 defect 2: the constant must actually reach the backends.
     ``Numerics.H`` is its primary home (it is the (model x riemann) artifact);
     ``Model.H`` carries it alongside ``has_diffusion`` / ``dt_max``."""
-    for riemann, expected in ((PositiveRusanov, "true"),
+    for riemann, expected in ((Rusanov, "true"),
                               (NonconservativeRusanov, "false")):
         nsm = _nsm(_swe(), riemann)
         line = f"static constexpr bool fluctuations_are_zero = {expected};"

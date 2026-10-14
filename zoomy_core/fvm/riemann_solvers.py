@@ -37,6 +37,36 @@ def _spectral_core(M):
     return keep or [0]
 
 
+def _bed_column(model):
+    """`{bed index}` of the model's state (the declared bed role, else the state `b`), or
+    the empty set."""
+    roles = getattr(model, "roles", None)
+    bed = getattr(roles, "bed", None) if roles is not None else None
+    if bed is None:
+        names = [str(s) for s in model.state]
+        bed = names.index("b") if "b" in names else None
+    return frozenset() if bed is None else frozenset((int(bed),))
+
+
+def dropped_nonconservative_entries(riemann, model):
+    """The live entries `(row, column, direction)` of `model.nonconservative_matrix` whose
+    product `B grad Q` the face terms of the Riemann class `riemann` do not discretize
+    (outside `treated_nonconservative_columns`): a scheme that runs with one drops a term
+    of the PDE without any error.
+    """
+    B = getattr(model, "nonconservative_matrix", None)
+    columns = getattr(riemann, "treated_nonconservative_columns", None)
+    if B is None or columns is None:
+        return []
+    treated = columns(model)
+    B = sp.Array(B)
+    if B.rank() != 3:
+        return []
+    n_eq, n_st, dim = B.shape
+    return [(i, j, k) for i in range(n_eq) for j in range(n_st) if j not in treated
+            for k in range(dim) if sp.sympify(B[i, j, k]).is_zero is not True]
+
+
 class FieldHandle:
     """A named field resolved to a slot of `Q` or `Qaux`, exposing its face symbols
     `minus` / `plus` and cell symbol `state`. Built by
@@ -519,9 +549,11 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
 
     def _model_eval(self, operator_name, Q, Qaux, p, n=None):
         """Evaluate the SystemModel operator `operator_name` (`flux`,
-        `eigenvalues`, ...) at the given state by substituting its symbols.
+        `eigenvalues`, ...), or a definition over the model's symbols, at the given
+        state by substituting its symbols.
         """
-        definition = getattr(self.model, operator_name)
+        definition = (getattr(self.model, operator_name) if isinstance(operator_name, str)
+                      else operator_name)
         sub_map = {}
         for sym, val in zip(self.model.state, list(Q)):
             sub_map[sym] = val
@@ -639,6 +671,58 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         P = self._model_eval("hydrostatic_pressure", q, aux, p)
         return (F + P) @ n
 
+    # ── the lake at rest: what the hydrostatic reconstruction must restore ──
+    def rest_flux_definition(self):
+        """The physical flux `F + P` at the lake at rest of the model's own state, shape
+        `(n, d)`: the depth and bed rows kept, every other state row zero (no velocity, no
+        non-hydrostatic pressure).  It is the hydrostatic pressure wherever the model keeps
+        it: `hydrostatic_pressure` (the derived models: their `F` vanishes at rest, so this
+        is `P` itself) or the conservative `flux` (`SWE`: `g h^2 / 2` in `F`, `P = 0`).
+
+        References:
+            Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090
+        """
+        keep = {f.index for f in (self.find_field("h", required=False),
+                                  self.find_field("b", required=False))
+                if f is not None and f.container == "q"}
+        rest = {s: sp.S.Zero for i, s in enumerate(self.model.state) if i not in keep}
+        F = sp.ImmutableDenseNDimArray(self.model.flux)
+        P = sp.ImmutableDenseNDimArray(self.model.hydrostatic_pressure)
+        return P + F.applyfunc(lambda e: sp.sympify(e).xreplace(rest))
+
+    def consistency_flux_definition(self):
+        """The rest flux the scheme's conservative numerical flux evaluates at the
+        hydrostatically reconstructed states, which the consistency source `S~` restores to
+        the cell value: `rest_flux_definition` (`Quasilinear*`: zero, no conservative flux).
+        """
+        return self.rest_flux_definition()
+
+    def consistency_flux_is_zero(self):
+        """Whether `consistency_flux_definition` is structurally zero (no `S~`)."""
+        return all(sp.sympify(e) == 0 for e in sp.flatten(self.consistency_flux_definition()))
+
+    def hydrostatic_consistency(self, qL, qR, auxL, auxR, qLs, qRs, auxLs, auxRs):
+        """Audusse's consistency source per side, `(D_plus, D_minus)` increments: the
+        consistency flux of each raw face state minus that of its reconstructed state,
+        `Dm = (Pi(q_L) - Pi(q_L*)) n`, `Dp = (Pi(q_R*) - Pi(q_R)) n`.  At a lake at rest the
+        face terms then sum to `Pi(q_i) n` over the faces of a cell: exactly zero.
+
+        References:
+            Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090
+        """
+        Pi, p, n = self.consistency_flux_definition(), self.parameters, self.normal
+        PL, PR = self._model_eval(Pi, qL, auxL, p), self._model_eval(Pi, qR, auxR, p)
+        PLs, PRs = self._model_eval(Pi, qLs, auxLs, p), self._model_eval(Pi, qRs, auxRs, p)
+        return (PRs - PR) @ n, (PL - PLs) @ n
+
+    @classmethod
+    def treated_nonconservative_columns(cls, model):
+        """The columns (state indices) of the model's `nonconservative_matrix` the face terms
+        of this class discretize: none on the conservative base (Rusanov, HLL, HLLC); a
+        live entry elsewhere is dropped.
+        """
+        return frozenset()
+
     def wave_speed_bounds(self, qL, qR, auxL, auxR, p, n):
         """`(s_L, s_R)`, the slowest and fastest signal speeds at the face: here the
         local Lax-Friedrichs pair `(-a, +a)` with `a` the Rusanov dissipation
@@ -712,6 +796,32 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
             Audusse, Bristeau 2005, https://doi.org/10.1016/j.jcp.2004.12.016
         """
         return ZArray.zeros(self.n_variables)
+
+    def _bed_edge_source(self):
+        """The in-cell bed-slope product of a (cell, edge) pair: the bed column of the
+        nonconservative matrix, integrated along the segment cell -> edge by the
+        Gauss-Legendre rule of the path-conservative classes (exact for `g h`), times the
+        bed jump `b_e - b_c`: Audusse et al.'s centred source `g (h_c + h_e) / 2 (b_e - b_c)`
+        of their second-order scheme.
+
+        References:
+            Audusse et al. 2004, https://doi.org/10.1137/S1064827503431090
+        """
+        bed = _bed_column(self.model)
+        if not bed:
+            return ZArray.zeros(self.n_variables)
+        bed = next(iter(bed))
+        qc, qe = self.variables_minus, self.variables_plus
+        auxc, auxe = self.aux_variables_minus, self.aux_variables_plus
+        xi_np, wi_np = np.polynomial.legendre.leggauss(3)
+        column = ZArray.zeros(self.n_variables)
+        for xi, wi in zip(0.5 * (xi_np + 1), 0.5 * wi_np):
+            B = self._model_eval("nonconservative_matrix", qc + xi * (qe - qc),
+                                 auxc + xi * (auxe - auxc), self.parameters)
+            column += ZArray([wi * sum(B[i, bed, d] * self.normal[d]
+                                       for d in range(len(self.normal)))
+                              for i in range(self.n_variables)])
+        return column * (qe[bed] - qc[bed])
 
 
 class Rusanov(Numerics):
@@ -1072,8 +1182,8 @@ class PositiveRusanov(Rusanov):
         return self._compute_flux(qLs, qRs, qauxL, qauxR, self.parameters, self.normal)
 
     def numerical_fluctuations(self):
-        """The base fluctuations plus Audusse's consistency source `S~ = P_raw - P*`,
-        which restores well-balancing.
+        """The base fluctuations plus Audusse's consistency source `S~ = Pi_raw - Pi*`
+        (`hydrostatic_consistency`), which restores well-balancing.
         """
         qLs, qRs, qauxL, qauxR = self.hydrostatic_reconstruction(
             self.variables_minus,
@@ -1081,28 +1191,9 @@ class PositiveRusanov(Rusanov):
             self.aux_variables_minus,
             self.aux_variables_plus,
         )
-
-        P_mat_L_raw = self._model_eval(
-            "hydrostatic_pressure",
-            self.variables_minus,
-            self.aux_variables_minus,
-            self.parameters,
-        )
-        P_mat_R_raw = self._model_eval(
-            "hydrostatic_pressure",
-            self.variables_plus,
-            self.aux_variables_plus,
-            self.parameters,
-        )
-        P_mat_L_star = self._model_eval(
-            "hydrostatic_pressure", qLs, qauxL, self.parameters
-        )
-        P_mat_R_star = self._model_eval(
-            "hydrostatic_pressure", qRs, qauxR, self.parameters
-        )
-
-        Dm_jump = (P_mat_L_raw - P_mat_L_star) @ self.normal
-        Dp_jump = (P_mat_R_star - P_mat_R_raw) @ self.normal
+        Dp_jump, Dm_jump = self.hydrostatic_consistency(
+            self.variables_minus, self.variables_plus, self.aux_variables_minus,
+            self.aux_variables_plus, qLs, qRs, qauxL, qauxR)
 
         base_fluct = super().numerical_fluctuations()
         Dp_base = ZArray(base_fluct[0, :])
@@ -1112,6 +1203,24 @@ class PositiveRusanov(Rusanov):
         Dm = Dm_base + Dm_jump
 
         return ZArray([Dp, Dm])
+
+    def numerical_cell_edge_source(self):
+        """The next class's in-cell term, plus the bed's (`_bed_edge_source`) where that
+        class does not integrate the bed column: a reconstructed bed varies inside the cell,
+        and without it a second-order run drops that part of the bed slope (and is not
+        well-balanced).
+        """
+        base = super().numerical_cell_edge_source()
+        if _bed_column(self.model) <= super().treated_nonconservative_columns(self.model):
+            return base
+        return base + self._bed_edge_source()
+
+    @classmethod
+    def treated_nonconservative_columns(cls, model):
+        """The next class's columns plus the bed's: the hydrostatic reconstruction and `S~`
+        discretize the bed-slope product `B[:, b] grad b`.
+        """
+        return super().treated_nonconservative_columns(model) | _bed_column(model)
 
 
 class NonconservativeRusanov(Rusanov):
@@ -1168,6 +1277,11 @@ class NonconservativeRusanov(Rusanov):
         )
         out = super().numerical_fluctuations()
         return out + nc_fluct
+
+    @classmethod
+    def treated_nonconservative_columns(cls, model):
+        """Every column: the path integral discretizes the whole nonconservative product."""
+        return frozenset(range(len(model.state)))
 
     def _call_model_matrix(self):
         """The matrix integrated along the path: the model's nonconservative matrix."""
@@ -1303,7 +1417,7 @@ class PositiveHLL(HLL):
 
     def numerical_fluctuations(self):
         """The next fluctuations on the MRO plus Audusse's consistency source
-        `S~ = P_raw - P*`, independent of the Riemann solver.
+        `S~ = Pi_raw - Pi*` (`hydrostatic_consistency`), independent of the Riemann solver.
         """
         qLs, qRs, qauxL, qauxR = self.hydrostatic_reconstruction(
             self.variables_minus,
@@ -1311,34 +1425,28 @@ class PositiveHLL(HLL):
             self.aux_variables_minus,
             self.aux_variables_plus,
         )
-
-        P_mat_L_raw = self._model_eval(
-            "hydrostatic_pressure",
-            self.variables_minus,
-            self.aux_variables_minus,
-            self.parameters,
-        )
-        P_mat_R_raw = self._model_eval(
-            "hydrostatic_pressure",
-            self.variables_plus,
-            self.aux_variables_plus,
-            self.parameters,
-        )
-        P_mat_L_star = self._model_eval(
-            "hydrostatic_pressure", qLs, qauxL, self.parameters
-        )
-        P_mat_R_star = self._model_eval(
-            "hydrostatic_pressure", qRs, qauxR, self.parameters
-        )
-
-        Dm_jump = (P_mat_L_raw - P_mat_L_star) @ self.normal
-        Dp_jump = (P_mat_R_star - P_mat_R_raw) @ self.normal
+        Dp_jump, Dm_jump = self.hydrostatic_consistency(
+            self.variables_minus, self.variables_plus, self.aux_variables_minus,
+            self.aux_variables_plus, qLs, qRs, qauxL, qauxR)
 
         base_fluct = super().numerical_fluctuations()
         Dp_base = ZArray(base_fluct[0, :])
         Dm_base = ZArray(base_fluct[1, :])
 
         return ZArray([Dp_base + Dp_jump, Dm_base + Dm_jump])
+
+    def numerical_cell_edge_source(self):
+        """As `PositiveRusanov.numerical_cell_edge_source`: the bed's in-cell term where
+        the next class does not integrate the bed column."""
+        base = super().numerical_cell_edge_source()
+        if _bed_column(self.model) <= super().treated_nonconservative_columns(self.model):
+            return base
+        return base + self._bed_edge_source()
+
+    @classmethod
+    def treated_nonconservative_columns(cls, model):
+        """The next class's columns plus the bed's (as `PositiveRusanov`)."""
+        return super().treated_nonconservative_columns(model) | _bed_column(model)
 
 
 class PositiveNonconservativeRusanov(PositiveRusanov, NonconservativeRusanov):
@@ -1350,11 +1458,12 @@ class PositiveNonconservativeRusanov(PositiveRusanov, NonconservativeRusanov):
     supports_batched_faces = False
 
     def get_path_integral_states(self):
-        """The reconstructed states when the model has a `hydrostatic_pressure` for
-        `S~` to compensate, else the raw states (reconstructed endpoints would then
-        change the mass flux).
+        """The reconstructed states when the scheme has a rest flux for `S~` to
+        restore (`consistency_flux_definition`: the hydrostatic pressure, in `P` or in
+        `F`), else the raw states (reconstructed endpoints would then change the mass
+        flux).
         """
-        if getattr(self.model, "hydrostatic_pressure_is_zero", False):
+        if self.consistency_flux_is_zero():
             return (self.variables_minus, self.variables_plus,
                     self.aux_variables_minus, self.aux_variables_plus)
         return self.hydrostatic_reconstruction(
@@ -1472,13 +1581,23 @@ class QuasilinearRusanov(NonconservativeRusanov):
 
 
 class PositiveQuasilinearRusanov(PositiveRusanov, QuasilinearRusanov):
-    """`QuasilinearRusanov` on the hydrostatically reconstructed states."""
+    """`QuasilinearRusanov` on the hydrostatically reconstructed states.  The path
+    integral of the full quasilinear matrix between the reconstructed states carries the
+    pressure and the bed together (`g h* (eta_R - eta_L)`, zero at a lake at rest), so
+    there is no conservative flux and no `S~` to restore.
+    """
     name = param.String(default="PositiveQuasilinearRusanovV2")
 
     def numerical_flux(self):
         """Zero: the conservative part is inside the path integral."""
         zeros = [sp.Integer(0)] * self.n_variables
         return ZArray(zeros)
+
+    def consistency_flux_definition(self):
+        """Zero: no conservative flux is evaluated at the reconstructed states (adding
+        `S~` would count the pressure jump twice: not well-balanced, and inconsistent)."""
+        n, d = self.n_variables, len(self.normal)
+        return sp.ImmutableDenseNDimArray.zeros(n, d)
 
     def get_path_integral_states(self):
         """The hydrostatically reconstructed face states."""
