@@ -483,16 +483,38 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
                                     SystemModel.spectral_radius_method),
             "spectral_radius_method"))
 
-    def _speed_matrix(self, Q, Qaux, p, n):
+    def _speed_matrix(self, Q, Qaux, p, n, normal_frame=False):
         """`A_n = sum_d A[:, :, d] n_d` at `(Q, Qaux)` (the wave-speed aux), restricted to the
-        rows and columns that carry its spectrum (`_spectral_core`), as a list of rows.
+        rows and columns that carry its spectrum (`_spectral_core`), as a list of rows; with
+        `normal_frame` in the face's (normal, tangential) frame (`_normal_frame`).
         """
         A = self._model_eval("quasilinear_matrix", Q, self._wave_speed_aux(Q, Qaux), p)
         nrm = list(n)
         M = [[sum(A[i, j, d] * nrm[d] for d in range(len(nrm)))
               for j in range(self.n_variables)] for i in range(self.n_variables)]
+        if normal_frame:
+            M = self._normal_frame(M, nrm)
         keep = _spectral_core(M)
         return [[M[i][j] for j in keep] for i in keep]
+
+    def _normal_frame(self, M, nrm):
+        """`T M T^T`, `T` rotating each horizontal vector `(q_x, q_y)` of the state to `(q.n, q.t)`,
+        `t = (-n_y, n_x)`: a similarity (same spectrum), in which a wall's reflected state has a
+        signed permutation of the inner state's matrix, so the bounds of the two are mirror images
+        and a wall's HLL mass flux vanishes.  2 horizontal directions; else `M`.
+        """
+        from zoomy_core.model.boundary_conditions import derive_momentum_field_indices
+        try:
+            groups = derive_momentum_field_indices(self.model)
+        except RuntimeError:
+            return M
+        if len(nrm) != 2 or any(len(g) != 2 for g in groups):
+            return M
+        T = sp.eye(len(M))
+        for i, j in groups:
+            T[i, i], T[i, j], T[j, i], T[j, j] = nrm[0], nrm[1], -nrm[1], nrm[0]
+        R = T * sp.Matrix(M) * T.T
+        return [[R[i, j] for j in range(len(M))] for i in range(len(M))]
 
     def _gelfand(self, M):
         """`gelfand_bound` of the square matrix `M` (list of rows): an upper bound of rho(M)."""
@@ -509,7 +531,8 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         spectra of `A_n` at both face states, from Gelfand bounds of shifted matrices: for any
         real `c`, `rho(A + c I) >= max_i |lambda_i + c| >= max_i Re lambda_i + c`, so
         `s_R = bound(A + a I) - a`, `s_L = a - bound(a I - A)`; `a` the face's bound of rho (the
-        Rusanov speed), both clamped to `[-a, a]`.  Branch-free, every backend.
+        Rusanov speed), both clamped to `[-a, a]`; the shifted matrices in the face's normal
+        frame, so a wall's pair is symmetric (no mass through it).  Branch-free, every backend.
 
         References:
             Horn, Johnson 2012 (sections 5.6, 8.1), https://doi.org/10.1017/CBO9781139020411
@@ -520,7 +543,7 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         for sign in (1, -1):                     # bound(A + a I), bound(a I - A), both states
             per_state = []
             for q, aux in ((qL, auxL), (qR, auxR)):
-                M = self._speed_matrix(q, aux, p, n)
+                M = self._speed_matrix(q, aux, p, n, normal_frame=True)
                 per_state.append(self._gelfand(
                     [[sign * x + (a if i == j else 0) for j, x in enumerate(row)]
                      for i, row in enumerate(M)]))

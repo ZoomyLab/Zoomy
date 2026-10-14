@@ -82,3 +82,33 @@ def test_hll_order1_dambreak_stays_positive():
     assert t == pytest.approx(0.2) and min(h_min) >= 0.0
     vol = np.asarray(mesh.cell_volumes)[:Q.shape[1]]
     assert abs((Q[1] - Q0[1]) @ vol) <= 1e-12 * (Q0[1] @ vol)
+
+
+def test_wall_pair_is_symmetric_at_an_oblique_wall():
+    """SME(1) 2-D: at a face with normal (cos 0.7, sin 0.7) and the reflected state on the
+    outside (a wall), s_L = -s_R to round-off (the shifted matrices are bounded in the face's
+    normal frame), so the HLL mass flux through the wall vanishes."""
+    sm = SystemModel.from_model(SME(level=1, dimension=3, closures=[Newtonian(), StressFree()]))
+    nsm = default_wave_speed(NumericalSystemModel.from_system_model(sm))
+    num = HLL(nsm.sm)
+    Q, A, P, N = (list(num.variables), list(num.aux_variables), list(num.parameters),
+                  list(num.normal))
+    QR = list(num.variables_plus)
+    sL, sR = num.wave_speed_bounds(Q, QR, A, A, P, N)
+    mods = [{"gelfand_bound": gelfand_bound,
+             "conditional": lambda c, x, y: np.where(c, x, y)}, "numpy"]
+    f = sp.lambdify([*Q, *QR, *A, *P, *N], [sL, sR], modules=mods)
+    names = [str(q) for q in Q]
+    rng = np.random.default_rng(5)
+    nrm = np.array([np.cos(0.7), np.sin(0.7)])
+    pv = [float(getattr(nsm.sm.parameter_values, str(p))) for p in P]
+    for _ in range(50):
+        qL = {k: rng.uniform(-2, 2) for k in names}
+        qL["h"], qL["b"] = rng.uniform(0.1, 2.0), 0.0
+        qR = dict(qL)
+        for lvl in ("0", "1"):
+            u = np.array([qL[f"q_x_{lvl}"], qL[f"q_y_{lvl}"]])
+            qR[f"q_x_{lvl}"], qR[f"q_y_{lvl}"] = u - 2 * (u @ nrm) * nrm
+        aux = [1.0 / qL["h"] if str(a) == "hinv" else 0.0 for a in A]
+        lo, hi = f(*[qL[k] for k in names], *[qR[k] for k in names], *aux, *pv, *nrm)
+        assert abs(lo + hi) <= 1e-12 * abs(hi)
