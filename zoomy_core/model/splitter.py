@@ -1394,12 +1394,15 @@ def split_for_pressure_structural(sm, pressure_vars, dt):
     # time ones), via ``xreplace`` so it reaches inside the surviving ``∂_x``
     # compounds without expanding them.  ``.subs`` zeroes the pressure modes
     # inside the unevaluated derivatives too, so no horizontal doit is needed.
+    # A derivative of a number (a pressure term zeroed to ∂_x(0)) is evaluated too:
+    # it is 0, while left standing the lifting registers it as an aux of the
+    # non-state target '0' (`target_kind='unknown'`).
     coords_set = set(coords)
 
     def _collapse_nonhorizontal(e):
         e = sp.sympify(e)
         repl = {d: d.doit() for d in e.atoms(sp.Derivative)
-                if not any(v in coords_set for v in d.variables)}
+                if not any(v in coords_set for v in d.variables) or d.expr.is_number}
         return e.xreplace(repl) if repl else e
 
     pred_names = [f"pred_{state_names[e2s[i]]}" for i in evolution_rows]

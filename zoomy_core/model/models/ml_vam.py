@@ -409,6 +409,17 @@ class MLVAM(BaseModel):
         l_par = [sp.Symbol(f"l_{j}", positive=True) for j in range(1, N)]
         l_all = [*l_par, sp.S.One - sum(l_par)]
         frac = {hl[j]: l_all[j] * ht for j in range(N)}
+
+        def _frac(e):
+            """`e` with the layer depths h_ℓ = l_ℓ h.  The fractions l_ℓ are constants, so a
+            derivative of a layer depth is l_ℓ times that of h (chain rule): a bare `.subs(frac)`
+            leaves the compound ∂(l_ℓ h), which the lifting registers as an aux of the non-state
+            target `h*l_ℓ` that no backend computes (the w rows' interface-slope terms read 0).
+            """
+            e = sp.sympify(e)
+            return e.xreplace({D: l_all[j] * sp.Derivative(ht, *D.variable_count)
+                               for D in e.atoms(sp.Derivative)
+                               for j in range(N) if D.expr == hl[j]}).subs(frac)
         q_mod = {ell: {xd: [sp.Function(qname(xd, ell), real=True)(k, t, *horiz)
                             for k in range(Nu + 1)] for xd in horiz}
                  for ell in range(1, N + 1)}
@@ -498,7 +509,7 @@ class MLVAM(BaseModel):
                     # frac (h_ℓ→l_ℓ·h) then evaluate ONLY the fraction's ∂_t
                     # (so ∂_t(l_ℓ·h)→l_ℓ·∂_t h feeds the global-mass sub) —
                     # keep ∂_x(F) folded so the momentum flux stays conservative.
-                    row = evaluate_time_derivatives(momd[xd][k].subs(frac), t)
+                    row = evaluate_time_derivatives(_frac(momd[xd][k]), t)
                     row = sp.expand(row).subs(sp.Derivative(ht, t), dth_glob)
                     for a, side, sgn in ((ell, 1, +1), (ell - 1, 0, -1)):
                         if 1 <= a <= N - 1:
@@ -523,7 +534,7 @@ class MLVAM(BaseModel):
                                    sp.expand(evaluate_time_derivatives(
                                        row.subs(par), t)))
             for k in range(Nu + 1):                       # vertical (no swap)
-                row = evaluate_time_derivatives(momz[k].subs(frac), t)
+                row = evaluate_time_derivatives(_frac(momz[k]), t)
                 row = sp.expand(row).subs(sp.Derivative(ht, t), dth_glob).subs(G_sol)
                 m.add_equation(f"momentum_z_{ell}_{k}",
                                sp.expand(evaluate_time_derivatives(
@@ -533,7 +544,7 @@ class MLVAM(BaseModel):
                 # (1/h)·∂_x(h·q_k) folded (→ nonconservative routing, as VAM's
                 # mass modes) — a blanket doit distributes it into a bare flux
                 # + a B[h] term and breaks the MLVAM(1)==VAM P-row reduction.
-                cst = sp.expand(evaluate_time_derivatives(cst.subs(frac), t))
+                cst = sp.expand(evaluate_time_derivatives(_frac(cst), t))
                 cst = sp.expand(cst.subs(sp.Derivative(ht, t), dth_glob)).subs(G_sol)
                 m.add_equation(f"constraint_{ell}_{j}",
                                sp.expand(evaluate_time_derivatives(
