@@ -36,12 +36,16 @@ END_TIME = {"bingham-0": 2.0 * _BINGHAM_TSCALE}
 #: analytics case writes the Liu & Mei threshold as a constant field for the viz prelude)
 SUMMARY_STORE = {"bingham-analytics-0"}
 #: not run, with the reason
-SKIP = {
-    "coupling-live-0": "known gap: the SME-VOF live coupling is not ported to the symbolic "
-                       "solvers (not QR-wired); it drives a host checkout's case tree in place "
-                       "(SME_VOF_CASE, writes snap_gui_live there). E2E_LIVE_COUPLING=1 runs it",
-    "coupling-triple-live-0": "known gap: as coupling-live-0. E2E_LIVE_COUPLING=1 runs it",
-}
+SKIP = {}
+#: cases whose job submits participants to other backends (a coupling across images): the
+#: backends that must be up besides the case's own (servers register in ZOOMY_PEERS)
+PEERS = {"coupling-live-0": ("jax",),             # SME arm on JAX | VOF tank on OpenFOAM
+         "coupling-triple-live-0": ("jax",)}      # two SME arms on JAX | VOF tank
+#: cases with no host run to compare with (dev mode): the reason
+NO_HOST_RUN = {c: "a coupling across backend images (its participants run on the servers); "
+                  "the old-vs-new comparison of the live coupling: "
+                  "library/zoomy_gui/projects/tools/symsolver/figures/coupling_live_old_vs_new.py"
+               for c in PEERS}
 #: per case: the conserved row and the bound on its relative change (closed domains, round-off
 #: as matrix C6); open domains (inflow / outflow, the replayed coupling boundary) have none
 #: (Bingham threshold: open incline; Bingham analytics: a one-field summary store)
@@ -128,7 +132,7 @@ def gui_cases(checkout: Path = CHECKOUT) -> list[GuiCase]:
                 continue
             seen.add(key)
             cid = f"{z.name.removesuffix('-session.zip').removesuffix('.zip')}-{i}"
-            skip = None if os.environ.get("E2E_LIVE_COUPLING") else SKIP.get(cid)
+            skip = SKIP.get(cid)
             out.append(GuiCase(cid, s.get("title") or cid, tag, _qr_keys(z.name),
                                {"session": s, "timeEnd": TIME_LIMITS.get(cid)},
                                TIME_LIMITS.get(cid), skip))

@@ -17,7 +17,15 @@ Layer sum: with identical layer states (the single-layer profile restricted to e
 of the mode-0 rows equals the single-layer SME / VAM row; with different layer states the sum is
 sum_l d_e(h_l <s'_l> - delta h_l <Pi_l>) - Pi(b) d_d b (interface terms cancel).
 
-    python gate48_inplane_multilayer.py [mlsme:0:2 mlsme:1:2 mlvam:0:2 mlvam:1:2 mlsme:0:3 ...]
+ML-VAM w rows, `vertical_traction` (spec suffix `ws`, ANALYSIS 45j): `one_sided` = the pointwise
+projection above; `shared` adds (2k+1)/rho [-phi_k(1) (f* - f_l(z_1^-)).grad z_1 (lower layer),
++phi_k(0) (f* - f_l(z_1^+)).grad z_1 (upper)], f = rho nu d_z u, f* the mean of the two traces.
+Checked: rows = reference, identical layer states give shared = one_sided, and the mode-0 layer
+sum of shared is the telescoped d_e sum_l h_l <f_l> - f(eta).grad eta + f(b).grad b, while
+one_sided keeps -(f(z_1^-) - f(z_1^+)).grad z_1.
+
+    python gate48_inplane_multilayer.py [mlsme:0:2 mlsme:1:2 mlvam:0:2 mlvam:1:2 mlsme:0:3 ...
+                                         mlvam:1:2:ws ...]
 """
 import sys
 import time
@@ -29,7 +37,7 @@ import gate47_inplane_projection as G47
 from zoomy_core.model.derivation.basisfunctions import Legendre_shifted
 from zoomy_core.model.models import SME, VAM
 from zoomy_core.model.models.ml_sme import MLSME
-from zoomy_core.model.models.ml_vam import MLVAM
+from zoomy_core.model.models.ml_vam import MLVAM, VerticalTraction
 from zoomy_core.model.models.closures import (Newtonian, NavierSlip, StressFree, UpwindInterface,
                                               InterfaceQuantity)
 from zoomy_core.model.models.equations import Stress
@@ -204,10 +212,73 @@ def check(kind, level, dim, upwind=False):
     return ncl, rows, sums
 
 
+def check_vertical(level, dim):
+    """`vertical_traction` one_sided / shared (module docstring): ``[(label, ok)]``."""
+    X = (x,) if dim == 2 else (x, y)
+    nd = len(X)
+    sms = {}
+    for vt in VerticalTraction:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sms[vt] = SystemModel.from_model(MLVAM(
+                n_layers=NL, level=level, dimension=dim, stress=Stress.full, vertical_traction=vt,
+                closures=[Newtonian(), NavierSlip(), StressFree()]))
+    sm = sms[VerticalTraction.shared]
+    F = G47.fields(sm, X)
+    l1 = sm.parameters.l_1
+    ops = {vt: G47.sm_operator(s_, F, X) for vt, s_ in sms.items()}
+    ref = reference("mlvam", level, F, X, l1)
+    Ls = layer_fields("mlvam", level, F, X, l1)
+    f = [[rho * nu * Ls[li]["Dz"](Ls[li]["U"][e]) for e in range(nd)] for li in range(NL)]
+    fb, fa = [f[0][e].subs(zeta, 1) for e in range(nd)], [f[1][e].subs(zeta, 0) for e in range(nd)]
+    gz = [sp.diff(Ls[1]["z0"], X[e]) for e in range(nd)]
+    corr = {}
+    for li, own, side, sgn in ((0, fb, 1, -1), (1, fa, 0, 1)):
+        for k in range(level + 1):
+            corr[f"r_{li + 1}_{k}"] = ((2 * k + 1) / rho * sgn * Ls[li]["phi"][k].subs(zeta, side)
+                                       * sum(((fb[e] + fa[e]) / 2 - own[e]) * gz[e] for e in range(nd)))
+    zero = lambda e: sp.simplify(sp.expand(sp.sympify(e).doit())) == 0
+    out = [(f"{vt.value}: w rows = reference",
+            all(zero(ops[vt][r] - ref[r] - (corr[r] if vt is VerticalTraction.shared else 0))
+                for r in corr)) for vt in VerticalTraction]
+    out.append(("horizontal rows: shared = one_sided",
+                all(zero(ops[VerticalTraction.shared][r] - ops[VerticalTraction.one_sided][r])
+                    for r in ops[VerticalTraction.shared] if r.startswith("q"))))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sm1 = SystemModel.from_model(VAM(level=level, dimension=dim, stress=Stress.full,
+                                         closures=[Newtonian(), NavierSlip(), StressFree()]))
+    Fs = G47.fields(sm1, X)
+    rs = restrict("mlvam", level, Fs, X, sp.Rational(1, 1))
+    Fs.update({f"r_{k}": rs[f"r_1_{k}"] for k in range(level + 1)})
+    lay = {F[k]: v for k, v in restrict("mlvam", level, Fs, X, l1).items()}
+    out.append(("identical layer states: shared = one_sided",
+                all(zero((ops[VerticalTraction.shared][r] - ops[VerticalTraction.one_sided][r])
+                         .subs(lay)) for r in corr)))
+    integ = lambda g: sp.integrate(sp.expand(g), (zeta, 0, 1))
+    eta, b = F["b"] + F["h"], F["b"]
+    tele = (sum(sp.diff(sum(Ls[li]["h"] * integ(f[li][e]) for li in range(NL)), X[e])
+                - f[1][e].subs(zeta, 1) * sp.diff(eta, X[e]) + f[0][e].subs(zeta, 0) * sp.diff(b, X[e])
+                for e in range(nd)) / rho)
+    jump = sum((fb[e] - fa[e]) * gz[e] for e in range(nd)) / rho
+    s0 = {vt: ops[vt]["r_1_0"] + ops[vt]["r_2_0"] for vt in VerticalTraction}
+    out.append(("mode-0 layer sum: shared telescopes", zero(s0[VerticalTraction.shared] - tele)))
+    out.append(("mode-0 layer sum: one_sided = telescoped - [f].grad z_1 / rho",
+                zero(s0[VerticalTraction.one_sided] - tele + jump)))
+    return out
+
+
 def main(specs):
     for spec in specs:
         kind, lvl, dim, *opt = spec.split(":")
         up = "up" in opt
+        if "ws" in opt:
+            t0 = time.time()
+            res = check_vertical(int(lvl), int(dim))
+            print(f"gate48 MLVAM({lvl}) dim {dim} vertical_traction: "
+                  + "; ".join(f"{lab}: {'ok' if ok else 'FAIL'}" for lab, ok in res)
+                  + f"  [{time.time() - t0:.0f} s]", flush=True)
+            continue
         t0 = time.time()
         ncl, rows, sums = check(kind, int(lvl), int(dim), up)
         bad = {k: v for k, v in rows.items() if v != 0}

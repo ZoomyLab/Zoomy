@@ -18,6 +18,7 @@ E2E_BACKENDS=jax,amrex pytest tests/backend_e2e -m backend_e2e -k malpasset
 pytest tests/backend_e2e -m backend_e2e -k matrix                       # the matrix part only
 pytest tests/backend_e2e -m backend_e2e -k "matrix and jax and (C15- or C22-)"   # cases of a backend
 pytest tests/backend_e2e -m backend_e2e -k C16                          # preCICE across containers
+E2E_GPUS=0,1 pytest tests/backend_e2e -m backend_e2e -k "matrix and gpu"   # GPU configs (--nv)
 ```
 
 Python env: the `zoomy` stack (numpy, scipy, sympy, h5py, matplotlib, jax for the in-process
@@ -36,7 +37,7 @@ JAX comparison), `node` (the GUI's own composition), `apptainer` or `docker`, `r
 | `E2E_JOB_TIMEOUT`, `E2E_MATRIX_TIMEOUT` | per job / per container matrix run, s (840) |
 | `E2E_SAME_TOL`, `E2E_MATRIX_TOL` | host run = container run: GUI cases, matrix (1e-9) |
 | `E2E_MATRIX_HOST_STORE` | compare the container runs with this matrix store instead of fresh host runs |
-| `E2E_LIVE_COUPLING=1` | also run the live coupling sessions (they write into the host checkout) |
+| `E2E_GPUS` | the GPUs the gpuN configs may use (`CUDA_VISIBLE_DEVICES`, else every GPU `nvidia-smi -L` lists); a config needing more is skipped |
 
 Images (apptainer): `E2E_IMAGE_<NAME>`, `E2E_IMAGES/<container>.sif`, the checkout's
 `containers/<c>/<c>.sif`, `~/git/Zoomy/containers/<c>/<c>.sif`; docker: `ghcr.io/zoomylab/<c>:latest`.
@@ -59,6 +60,14 @@ packages), `PYTHONNOUSERSITE=1`, a scratch HOME / TMPDIR under `$E2E_WORK`.
   code and the route of Run come from the card rules the GUI loads (`zoomy_cli/src/cards.mjs`).
   `time_end` is set where a quick look needs it (`sessions.TIME_LIMITS`: Malpasset 2 s), as a
   reader would in the Parameters panel.
+- Coupled sessions across images (`sessions.PEERS`: the live SME | VOF couplings): the case runs
+  on its solver card's backend (OpenFOAM: the VOF tank) and its job submits the other
+  participants (the SME arms) to the backends they need (JAX), as the GUI submits a case
+  (`zoomy_server.peers`). Every server binds one directory at `/e2e/couple`
+  (`ZOOMY_COUPLE_DIR`, preCICE's exchange directory) and finds the others in its
+  `peers.json` (`ZOOMY_PEERS`, `{adapter tag: url}`, rewritten as servers come up); the test
+  starts the peers first. No host run (`sessions.NO_HOST_RUN`): the comparison with the old
+  solver is `library/zoomy_gui/projects/tools/symsolver/figures/coupling_live_old_vs_new.py`.
 - Protocol (`harness.GuiClient` = `HttpAdapter.submitCase`): `POST /api/v1/cases`, poll
   `GET /api/v1/jobs/<id>` every 2 s, `GET /api/v1/jobs/<id>/results/hdf5`.
 - Checks: every float finite; at least 2 snapshots and the last at `time_end` (the QR suite's
@@ -100,6 +109,14 @@ Distributed, with the image's MPI (JAX: OpenMPI 5 + mpi4jax, `mpiexec`; foam: Op
 `decomposePar` + `mpirun -parallel`; AMReX: OpenMPI 4.1, `mpiexec`): C1 `o2_n40` on 2 ranks = the serial run
 in the same image (matrix C7, round-off), C35 `c1` restart on 2 ranks (bitwise), AMReX C17
 `box` on 2 ranks = 1 rank.
+On GPUs (`GPU`; the container started with `--nv` and `CUDA_VISIBLE_DEVICES` from `E2E_GPUS`;
+JAX and AMReX, the images that carry CUDA): C1 `o2_n40` on 1 GPU (`gpu1`) and C5 `n48` on 2
+GPUs, one rank each (`gpu2`; JAX: the image's OpenMPI 5 + mpi4jax with its CUDA bridge, halos
+through host memory, `python -m zoomy_jax.gpurank`; AMReX: the CUDA build with the image's
+nvcc, OpenMPI 4.1.6). Each = the host's run of the same config (JAX: the `zoomy-cuda` env, as
+the matrix runs it; AMReX: `symsolver` through `apptainer exec --nv` with the same image) to
+round-off, and the matrix's C9 (GPU = the serial CPU run, both in the image) and C6 (mass) on
+the container's runs. Without enough GPUs the GPU configs are skipped (CI's hosted runners).
 
 **preCICE across containers** (`test_couple_across_containers.py`, matrix C16): gate 3's 1-D
 dam break split at x = 0.5, each participant in its own image, two `apptainer exec` processes
@@ -128,7 +145,7 @@ on what the image ships.
 | 3-D compressible Euler | C23 `o1_n8`, `o2_n8` | all four | C18-C21, C24 (the same kernels, larger) |
 | restart (each backend's restart state: h5, foam time directories, AMReX output) | C35 `c1` serial and mpi2 | all four (numpy serial) | `c8` (the Chorin restart with the lagged pressure; 3 min on the host for its four runs) |
 | wet/dry + MOOD, IMEX, implicit diffusion | C5; C14, C31, C33; C26, C28, C32 | all four | - |
-| GPU (CUDA jaxlib, nvcc, AmgX, hypre-CUDA) | - | none | every gpu1 / gpu2 config (C9, the GPU parts of C15, C17): no GPU image is published, by decision |
+| GPU (JAX's CUDA plugin + NVIDIA's CUDA wheels, mpi4jax's CUDA bridge; nvcc + CUDA 12.6 libraries) | C1 `o2_n40` gpu1, C5 `n48` gpu2 (2 GPUs, one rank each): = host, C9, C6 | jax, amrex | C8 / C14 / C26 on GPUs (the same build paths; C8 AMReX: hypre-CUDA, built at run time), the GPU parts of C15, C17; CUDA-aware MPI (in no image: halos staged through the host); AmgX (`zoomy_jax_mpi` only) |
 | large tier (L1-L5) | - | - | scaling, catchment: more than 8 cores, GPUs |
 | the other cases (C2, C3, C10-C13, C18-C21, C24, C27, C29, C30, C34, C36) | - | - | physics on paths the subset already exercises; C29, C30, C34 compare with JAX in-process |
 
@@ -179,6 +196,53 @@ C35 57 + 51; C1 mpi2 32, C17 mpi2 18, C35 mpi2 42. C16 (both participants, cache
 jax_jax 27, jax_foam 26, foam_foam 15, amrex_amrex 12, amrex_jax 27; mpi2: jax_jax 37,
 foam_foam 16, amrex_amrex 12.
 
+## GPU-capable images (2026-10-14, dev/gpu-images, dev mode)
+
+One image per backend for CPU-only and GPU machines (`containers/README.md`): `zoomy_jax` adds
+JAX's CUDA 12 plugin with NVIDIA's CUDA wheels (`containers/zoomy_jax/cuda-pins.txt`: the
+versions of the host's `zoomy-cuda` env) to the unchanged conda-forge CPU jaxlib, and builds
+mpi4jax with its CUDA bridge; `zoomy_amrex` adds nvcc and the CUDA 12.6 libraries the CUDA
+build links (shared only). Sizes, before = the GHCR images of 2026-10-14
+(`zoomy_jax:0.4.171`, `zoomy_amrex:0.1.171`), after = this branch's recipes built with
+apptainer 1.5.2; unpacked = `du -sx /` in the image:
+
+| image | SIF before | SIF after | unpacked before | unpacked after |
+|---|---|---|---|---|
+| zoomy_jax | 1.45 GB | 4.32 GB (+2.87) | 4.87 GB | 9.43 GB (+4.56) |
+| zoomy_amrex | 0.72 GB | 1.61 GB (+0.89) | 2.29 GB | 3.70 GB (+1.41) |
+
+Local builds (16 cores): JAX 8:01 on the cached `zoomy_jax_dev` base, AMReX 4:56. CI
+(`build-containers.yml`) drops the hosted runner's preinstalled toolchains before building
+these two and puts apptainer's temporaries on the larger disk: the JAX image's docker build
+and SIF conversion need ~31 GB at the peak (docker store ~9.4 GB, its export, the unpacked
+rootfs, the 4.3 GB SIF; AMReX ~12 GB), more than a runner leaves free. Estimated, not run in
+CI (nothing pushed).
+
+Runs on the new images (GPUs 0 and 1 of the 4 x L40S node, driver 580; `E2E_GPUS=0,1`):
+
+| test | container = host | matrix checks (container) | s, container + host |
+|---|---|---|---|
+| jax C1 gpu1 | 5.8e-14 | C9 GPU vs serial CPU 1.5e-13, C6 mass 0 | 219 + 151 |
+| jax C5 gpu2 | 5.2e-15 | C9 5.2e-15, C6 1.9e-16, h_min 0 | 150 + 61 |
+| amrex C1 gpu1 | 0 | C9 0, C6 0 | 185 + 122 (the nvcc build in the image and on the host) |
+| amrex C5 gpu2 | 0 | C9 0, C6 0, h_min 0 | 103 + 52 |
+
+gpu2 binds one GPU per rank: AMReX's two ranks on GPU 0 and 1 (`nvidia-smi`), JAX's through
+`zoomy_jax.gpurank`, which now picks one device per rank from a listed
+`CUDA_VISIBLE_DEVICES` (before: every rank on the first) and runs the script as `python
+script.py` does (its directory on `sys.path`; matrix.py imports `cases` from there).
+
+CPU on the same images, no `--nv` (same as before the change): `matrix and jax and not gpu`
+16/16 (36:42 on 8 cores; container = host bit-identical but C5 4.3e-15, C8 5.5e-11 (tolerance
+1e-9), C15 3.7e-15, C22 1.6e-15, C23 3.5e-16, C26 5.3e-16, C31 1.9e-15, C32 2.2e-16; C1 `o2_n40`
+2 ranks vs serial 1.4e-13), `matrix and amrex and not gpu` 16/16 (32:06 on 8 cores;
+bit-identical but C8 2.5e-15, C23 3.5e-16, C31 2.6e-15), `C16` 8/8 (coupled vs single domain
+3.3e-15 to 5.2e-15, mass drift 0; jax_foam with the published OpenFOAM SIF: the one in
+`~/git/Zoomy/containers` still links preCICE 3.4.1 and refuses the 3.4.0 peers). The server
+of both images reports `status=ok` without a GPU (CI's smoke). Without `--nv` JAX logs that
+the CUDA plugin could not initialize and runs on the CPU (with `JAX_PLATFORMS=cpu`, as the
+harness sets, nothing is logged); AMReX builds the CPU variant unless a run asks for the GPU.
+
 ## Results (2026-10-14, dev/qr-backend-routing, dev mode)
 
 | backend | pass | not run |
@@ -186,7 +250,7 @@ foam_foam 16, amrex_amrex 12.
 | numpy | steffler-0, bingham-0, coupling-0, zoomy-codeprinter-0, bingham-analytics-0, bingham-threshold-0, card-solver-{numpy,imex-numpy,split-numpy} | |
 | jax | malpasset-0 (mass 0, host run identical), card-solver-{jax,imex-jax} | |
 | amrex | malpasset-1 (mass 2.3e-16), card-solver-{amrex,split-amrex} | |
-| openfoam | card-solver-foam | coupling-live-0, coupling-triple-live-0: the SME-VOF live coupling and the server's `/couple` path are not ported |
+| openfoam | card-solver-foam | (the server's legacy `/couple` template path: not ported; no session uses it) |
 
 Fixed against main 7ce6f03b, where the numpy sessions / cards failed on the server, the
 Malpasset sessions were not submitted and the JAX / AMReX cards ran a `class` construct:
@@ -245,7 +309,27 @@ round-off).
 `.github/workflows/backend-e2e.yml`: one job per backend on `ubuntu-latest`, docker images
 from GHCR (`E2E_RUNTIME=docker`), dev mode by default (this commit's `library/` mounted).
 Push to main: the QR-wired sessions of numpy, jax, amrex (`E2E_QR_ONLY=1`); manual dispatch:
-backends, mode, QR-only and a `-k` selection. The images fit a hosted runner (0.25 / 1.34 /
-0.75 / 1.12 GB compressed); the foam / AMReX matrix reference needs apptainer on the host and
-is skipped there. Not run yet: the workflow and the docker path of `harness.Container` were
-written without docker on the development machine.
+backends, mode, QR-only and a `-k` selection. The images fit a hosted runner (numpy / JAX /
+AMReX / OpenFOAM 0.25 / 1.34 / 0.75 / 1.12 GB compressed before the GPU-capable images; JAX
+and AMReX SIFs now 4.32 / 1.61 GB); the foam / AMReX matrix reference needs apptainer on the
+host and is skipped there; the GPU configs need a GPU and are skipped there. Not run yet: the
+workflow and the docker path of `harness.Container` (`--gpus` too) were written without docker
+on the development machine.
+
+## Results (2026-10-14, dev/smevof-live, dev mode)
+
+The live SME | VOF sessions on the symbolic solvers (OpenFOAM backend: the VOF tank and the
+`swePreciceCoupling` function object built in the job; JAX backend: the SME arm(s),
+`SymbolicHyperbolicSolverJax` with the column exchange and the characteristic coupled face),
+the GHCR images of 2026-10-14, `taskset -c 16-31`:
+
+| backend | pass | time |
+|---|---|---|
+| openfoam (+ jax peer) | coupling-live-0 | 120 s (46 s of it the function object's first build) |
+| openfoam (+ jax peer) | coupling-triple-live-0 | 76 s (the build cached) |
+
+Against the zoomyFoam participant on the same configuration (Fr* = 0.752, t_end 2.5 s),
+rel. L2 / Linf of the depth at the coupled face over the snapshots: pair 8.6e-5 / 1.3e-4;
+triple, arm with the dam 3.9e-4 / 6.7e-4, the arm downstream of the tank 5.4e-3 / 1.9e-2,
+where the zoomyFoam run itself moves by 3.5e-3 / 8.4e-3 when the reservoir is 1e-9 m deeper
+(`coupling_live_{pair,triple}_old_vs_new.json`).

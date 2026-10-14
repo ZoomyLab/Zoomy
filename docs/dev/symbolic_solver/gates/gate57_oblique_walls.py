@@ -1,4 +1,4 @@
-"""Gate 50: free-slip walls not aligned with an axis (ANALYSIS 49).
+"""Gate 57: free-slip walls not aligned with an axis (ANALYSIS 57).
 
 A `Wall` reflects the normal momentum and keeps the tangential: on an
 oblique face its ghost couples q_x and q_y, so neither row is Dirichlet or
@@ -34,7 +34,7 @@ the mesh rotated by 30 deg: h and the rotated momentum equal to round-off
 (max rel <= 1e-11).
 
 Arguments: `orders`, `rotation` (default both); `JAX` / `numpy` backend for
-`rotation` via GATE50_BACKEND (default jax).
+`rotation` via GATE57_BACKEND (default jax).
 """
 import functools
 import os
@@ -60,13 +60,13 @@ from zoomy_core.systemmodel.system_model import SystemModel
 from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
 
 #: meshes per kind (the annulus needs one level more: its field is steep at the walls, its
-#: first refinements pre-asymptotic); GATE50_NX overrides
+#: first refinements pre-asymptotic); GATE57_NX overrides
 NX = {"rbox-quad": (24, 48, 96), "rbox-tri": (24, 48, 96), "annulus": (48, 96, 192)}
-if os.environ.get("GATE50_NX"):
-    NX = {k: tuple(int(v) for v in os.environ["GATE50_NX"].split(",")) for k in NX}
+if os.environ.get("GATE57_NX"):
+    NX = {k: tuple(int(v) for v in os.environ["GATE57_NX"].split(",")) for k in NX}
 #: fit degrees per kind whose orders are gated; the annulus at p = 3 is information only: its
 #: interior degree-3 fits (10 samples, 9 monomials, two cells off the walls) do not converge
-#: on polar quads, with or without walls (ANALYSIS 49)
+#: on polar quads, with or without walls (ANALYSIS 57)
 GATED = {"rbox-quad": (2, 3), "rbox-tri": (2, 3), "annulus": (2,)}
 TAGS = ("left", "right", "bottom", "top")
 SLACK = 0.2
@@ -241,7 +241,7 @@ def part_orders(kinds):
                                                 for a, b in zip(e[:-1], e[1:]))
                                      + ("" if good or method != "closure" else "!"))
                 gated = method == "closure" and p in GATED[kind]
-                print(f"gate50 {kind:9s} p={p} {method:7s} " + "  ".join(parts)
+                print(f"gate57 {kind:9s} p={p} {method:7s} " + "  ".join(parts)
                       + (f"  {'PASS' if ok else 'FAIL'}" if gated else
                          "  (information)" if method == "closure" else ""), flush=True)
                 ok_all &= ok or not gated
@@ -289,7 +289,7 @@ def part_rotation(backend):
     eh = np.abs(h1 - h0).max() / np.abs(h0).max()
     eq = np.abs(q1 - q0).max() / np.abs(q0).max()
     ok = max(eh, eq) <= 1e-11
-    print(f"gate50 rotation {backend}: max rel h {eh:.1e}, q {eq:.1e}  "
+    print(f"gate57 rotation {backend}: max rel h {eh:.1e}, q {eq:.1e}  "
           f"{'PASS' if ok else 'FAIL'}", flush=True)
     return ok
 
@@ -302,8 +302,8 @@ def main():
         kinds = [a for a in args if a in MESHES] or list(MESHES)
         ok &= part_orders(kinds)
     if "rotation" in args:
-        ok &= part_rotation(os.environ.get("GATE50_BACKEND", "jax"))
-    print(f"SUMMARY gate50: {'OK' if ok else 'FAILED'} runtime {time.time() - t0:.0f}s",
+        ok &= part_rotation(os.environ.get("GATE57_BACKEND", "jax"))
+    print(f"SUMMARY gate57: {'OK' if ok else 'FAILED'} runtime {time.time() - t0:.0f}s",
           flush=True)
     return 0 if ok else 1
 

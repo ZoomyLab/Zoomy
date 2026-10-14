@@ -1,5 +1,5 @@
 """Runs that are not "march Q0 to t_end": AD (C15), preCICE coupling (C16), restart (C35),
-AMR (C17) and the wrapped gates 40 / 41 / 43 / 44 / 39 / 45 (C27-C30, C34).  Each
+AMR (C17; with diffusion: gate 53) and the wrapped gates 40 / 41 / 43 / 44 / 39 / 45 (C27-C30, C34).  Each
 returns {metric: value} (rank 0; None on the other ranks)."""
 import contextlib
 import os
@@ -180,6 +180,20 @@ def amr(case, config, work):
     return res
 
 
+def amr_diffusion(bc, path, work):
+    """Gate 53 (AMReX AMR, the diffusive fluxes refluxed): gate 41's heat equation with BC `bc`
+    (neu, per) on path `path` (expl, impl, ssp2): the covering fine level vs the fine single
+    level, the composite's mass change with reflux and without (`mass_nr`), and
+    L1(AMR - fine single) / L1(coarse single - fine single); `bc` shear: C32's viscous SME,
+    the covering fine level vs the fine single level."""
+    import gate53_amrex_amr_diffusion as G
+    out = Path(work)
+    out.mkdir(parents=True, exist_ok=True)
+    if bc == "shear":                   # viscous SME (Lie): the covering fine level only
+        return dict(fine_vs_single=G.shear_cover(out))
+    return G.measures(out, bc, path)
+
+
 @contextlib.contextmanager
 def on_backend(backend, G):
     """Run gate module `G`'s JAX hyperbolic solver as `backend`: jax unchanged, numpy the
@@ -313,13 +327,13 @@ def lsq_closure(p, bc, backend="jax"):
             for k in range(1, p + 1)}
 
 
-# ── C37: oblique walls (gate 50) ─────────────────────────────────────────────
+# ── C38: oblique walls (gate 57) ─────────────────────────────────────────────
 def oblique_orders(kind, backend="jax"):
-    """Gate 50's orders on ``kind`` (rbox-quad, rbox-tri, annulus): the max error of the
+    """Gate 57's orders on ``kind`` (rbox-quad, rbox-tri, annulus): the max error of the
     derivatives of order k = 1..p of q_x, q_y over the boundary and the interior cells, with
     the closure in the walls' normal frames ("closure") and the ghost as a fit sample
     ("ghost"), p = 2, 3, on its three meshes."""
-    import gate50_oblique_walls as G
+    import gate57_oblique_walls as G
     out = {"nx": list(G.NX[kind]), "gated": list(G.GATED[kind])}
     for p in (2, 3):
         with on_backend(backend, G):

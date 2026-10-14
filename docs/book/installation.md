@@ -62,8 +62,8 @@ Substitute any name from the table below.
 | Container | Backend tag | Docker | Apptainer SIF | Notes |
 | --- | --- | :---: | :---: | --- |
 | `zoomy_numpy` | `numpy` | ✅ | ✅ | reference solver; smallest image |
-| `zoomy_jax` | `jax` | ✅ | ✅ | CPU and GPU (`--nv`) |
-| `zoomy_amrex` | `amrex` | ✅ | ✅ | block-structured AMR; a GPU variant also builds |
+| `zoomy_jax` | `jax` | ✅ | ✅ | one image for CPU and GPU (`--nv`): JAX's CUDA 12 plugin + NVIDIA's CUDA libraries |
+| `zoomy_amrex` | `amrex` | ✅ | ✅ | block-structured AMR; one image for CPU and GPU (`--nv`): CUDA 12.6 compiler in the image |
 | `zoomy_dmplex` | `dmplex` | ✅ | ✅ | builds PETSc from source |
 | `zoomy_firedrake` | `firedrake` | ✅ | ✅ | |
 | `zoomy_openfoam` | `foam` | ✅ | ✅ | OpenFOAM 13 + preCICE 3 |
@@ -90,7 +90,25 @@ apptainer run IMG shell      # 3. interactive dev shell
 ```
 
 Apptainer shares the host network namespace, so `:8080` / `:8888` are reachable
-at `localhost` with no port publishing. Add `--nv` for GPU.
+at `localhost` with no port publishing.
+
+### GPUs
+
+`zoomy_jax` and `zoomy_amrex` are the same images on a laptop and on a GPU node: without a
+GPU they run on the CPU as before, with the host's NVIDIA driver brought in they use the
+GPU. Only the driver comes from the host:
+
+```bash
+apptainer exec --nv zoomy_jax.sif python run.py                 # JAX picks the GPU
+apptainer exec zoomy_jax.sif python run.py                      # the same image on the CPU
+docker run --rm --gpus all ghcr.io/zoomylab/zoomy_jax:latest    # Docker: NVIDIA container toolkit
+```
+
+JAX uses the GPU whenever one is visible (`JAX_PLATFORMS=cpu` keeps it on the CPU); ranks on
+GPUs: `mpiexec -n 2 python -m zoomy_jax.gpurank run.py`. AMReX compiles the generated solver
+for the CPU, or with CUDA when the run asks for it (`gpu=True`, see
+[Backends](guide/backends.md)). The CUDA libraries make the images larger: the SIFs are 4.3 GB
+(`zoomy_jax`, was 1.4 GB) and 1.6 GB (`zoomy_amrex`, was 0.7 GB).
 
 Use an image as a notebook kernel:
 

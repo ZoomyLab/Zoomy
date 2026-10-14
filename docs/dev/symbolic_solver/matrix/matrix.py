@@ -22,8 +22,9 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "gates"))
 import common  # noqa: E402,F401  (x64)
-from cases import (CASES, CHANNEL, C10_N, C10_VARIANTS, C31_K, C31_SWE, C31_VAM, C4_N,  # noqa: E402
-                   DIFF_ALL, DIFF_KINDS, DIFF_PATHS, NA, OBLIQUE, PERTURB, prepare)
+from cases import (CASES, CHANNEL, C10_N, C10_VARIANTS, C17_DIFF, C31_K, C31_SWE,  # noqa: E402
+                   C31_VAM, C4_N, DIFF_ALL, DIFF_KINDS, DIFF_PATHS, NA, OBLIQUE, PERTURB,
+                   prepare)
 from backends import BACKENDS  # noqa: E402
 
 STORE = Path(os.environ.get("MATRIX_STORE", HERE / "store"))
@@ -207,8 +208,9 @@ TH = {
                  ("sub", 2): (">=", 1.8, "theory 2"),
                  ("trans", 1): (">=", 0.55, "observed 0.71, pre-asymptotic (theory 1)"),
                  ("trans", 2): (">=", 1.8, "theory 2")},
-    "C5 foam": ("<=", 3.5e-2, "observed (foam 1.7e-2)"),
+    "C5 foam": ("<=", 3.5e-2, "observed (foam 1.7e-2; with the detector 1.5e-2 dam, 6.3e-3 bowl)"),
     "C5 amrex": ("<=", 1e-9, "observed 6e-10 (wet/dry eigenvalue cluster)"),
+    "C5 front acts": (">=", 1e-3, "observed 2.9e-3 foam, 4.8e-2 JAX (the shore cells demoted)"),
     "C8 foam": ("<=", 3e-2, "observed (foam 1.6e-2)"),
     "C10": {(1, 1): (">=", 0.8, "theory 1"), (2, 1): (">=", 0.8, "theory 1 (time)"),
             (2, 2): (">=", 1.5, "observed (theory 2, minmod)")},
@@ -256,7 +258,55 @@ TH.update({
     "C33 scheme": {"imex": ("<=", 1e-10, "tolerance (Newton 1e-12; observed 3e-12 C++, 4e-15 JAX)"),
                    "rk2": RO},
     "C33 xb": {"imex": ("<=", 1e-10, "tolerance (Newton 1e-12; observed 1.3e-12)"), "rk2": RO},
+    "C17 diff": ("<=", 0.75, "observed 0.37 expl, 0.59 impl / ssp2 (the fine halo takes the coarse "
+                             "level's new state in every stage: an O(dt) interface lag)"),
+    "C37 heat": (">=", 1.8, "theory 2 (stiff: nu dt / dx^2 = 12.8 at k = 0)"),
+    "C37 adv": {"ssp2": (">=", 1.8, "theory 2"), "lie1": (">=", 0.8, "theory 1"),
+                "lie2": ("<=", 1.4, "theory 1: the Lie splitting caps SSP-RK2")},
+    "C37 scheme": ("<=", 1e-10, "tolerance (Newton 1e-12, GMRES 1e-13)"),
+    "C37 xb": ("<=", 1e-9, "tolerance (Newton 1e-12: JAX exact jvp, C++ directional differences)"),
+    "C37 shear time": (">=", 1.8, "theory 2"),
+    "C37 vam": {"ssp2": (">=", 1.8, "theory 2 (increment projection)"),
+                "t2": ("<=", 1.4, "theory 1: the Lie diffusion per projection stage")},
 })
+
+
+def front_checks(add, b, g, J):
+    """C5 with the a-priori front detector (front_tol, Venkatakrishnan): the dam break and
+    the bowl with (`*_front`) and without (`*_off`) it: positivity, whether it acts, the
+    cross-backend difference, the bowl vs Thacker's exact depth."""
+    from cases import THACKER, thacker_bed, thacker_eta
+    ok = lambda *ds: all(x is not None for x in ds)  # noqa: E731
+    for k in ("dam", "bowl"):
+        for s in ("front", "off"):
+            for c in CONFIGS:
+                d = g("C5", f"{k}_{s}", c)
+                if d is not None:
+                    add("C5", f"{k}_{s} h_min", b, c, float(h(d).min()),
+                        (">=", 0.0, "theory (positivity)"), "")
+            d, j = g("C5", f"{k}_{s}"), J("C5", f"{k}_{s}")
+            if b not in ("jax", "numpy") and ok(d, j):
+                if b == "amrex":
+                    add("C5", f"{k}_{s} max rel vs JAX", b, "serial", relmax(d, j),
+                        TH["C5 amrex"], "")
+                else:
+                    add("C5", f"{k}_{s} L1 rel vs JAX", b, "serial", l1rel(d, j),
+                        TH["C5 foam"] if s == "front" else None,
+                        "" if s == "front" else "without the detector the limiters differ "
+                        "at a dry front: JAX's Venkatakrishnan (eps^2 = dx^2) overshoots the "
+                        "neighbour bounds, OpenFOAM's cellLimited<Venkatakrishnan> does not")
+            if k == "bowl" and d is not None:
+                cx, cy = THACKER["centre"]
+                r = np.hypot(d["xc"][0] - cx, d["xc"][1] - cy)
+                exact = np.maximum(0.0, thacker_eta(r, float(d["t"])) - thacker_bed(r))
+                add("C5", f"bowl_{s} L1(h - exact)", b, "serial",
+                    float(np.abs(h(d) - exact).mean()), None, "Thacker's paraboloid")
+        on, off = g("C5", f"{k}_front"), g("C5", f"{k}_off")
+        if ok(on, off):
+            add("C5", f"{k} detector acts: front vs off (L1 rel)", b, "serial", l1rel(on, off),
+                TH["C5 front acts"] if k == "bowl" else None,
+                "" if k == "bowl" else "foam 0: OpenFOAM's bounded Venkatakrishnan keeps "
+                "h_f >= 0 over the flat dry bed, nothing to demote")
 
 
 def euler_checks(add, b, g, J):
@@ -435,8 +485,8 @@ def gate_checks(add, b, g, J):
         m = metrics(d)
         add("C34", "nx 16 max rel |L - L_JAX|", b, "serial", m["rel_vs_jax"], TH["C34 xb"],
             "vs the exact div(h tau') " + " / ".join(f"{m[f'{k} exact']:.2e}" for k in ("q_x_0", "q_y_0")))
-    for kind in ("rbox-quad", "rbox-tri", "annulus"):          # C37 (gate 50)
-        d = g("C37", f"orders_{kind}")
+    for kind in ("rbox-quad", "rbox-tri", "annulus"):          # C38 (gate 57)
+        d = g("C38", f"orders_{kind}")
         if d is None:
             continue
         m = metrics(d)
@@ -446,16 +496,16 @@ def gate_checks(add, b, g, J):
                 for k in range(1, p + 1):
                     e = m[f"p{p}_closure_{where}_d{k}"]
                     gated = p in m["gated"]
-                    add("C37", f"{kind} p{p} d{k} {where} order {nx[-2]}->{nx[-1]}", b, "serial",
+                    add("C38", f"{kind} p{p} d{k} {where} order {nx[-2]}->{nx[-1]}", b, "serial",
                         order(*e[-2:]),
                         (">=", p + 1 - k - SLACK, f"theory p+1-k = {p + 1 - k}, slack {SLACK}, "
-                         "gate 50") if gated else None,
+                         "gate 57") if gated else None,
                         "max err " + " / ".join(f"{x:.2e}" for x in e) + "; ghost as sample: "
                         + " / ".join(f"{x:.2e}" for x in m[f"p{p}_ghost_{where}_d{k}"])
                         + ("" if gated else "; information: degree-3 interior fits on polar "
                            "quads (10 samples) do not converge, walls or not"))
-    d0, d1 = g("C37", "box_r0"), g("C37", f"box_r{OBLIQUE['theta']:g}")
-    if d0 is not None and d1 is not None:                 # C37: rotated = axis-aligned
+    d0, d1 = g("C38", "box_r0"), g("C38", f"box_r{OBLIQUE['theta']:g}")
+    if d0 is not None and d1 is not None:                 # C38: rotated = axis-aligned
         th = np.radians(OBLIQUE["theta"])
         R = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
         n0, n1 = names(d0), names(d1)
@@ -464,13 +514,13 @@ def gate_checks(add, b, g, J):
         q1 = R.T @ np.stack([d1["Q"][n1.index("q_x_0")], d1["Q"][n1.index("q_y_0")]])
         v = max(float(np.abs(h1 - h0).max() / np.abs(h0).max()),
                 float(np.abs(q1 - q0).max() / np.abs(q0).max()))
-        add("C37", f"box rotated {OBLIQUE['theta']:g} deg = axis-aligned (max rel, h and the "
+        add("C38", f"box rotated {OBLIQUE['theta']:g} deg = axis-aligned (max rel, h and the "
             "rotated q)", b, "serial", v, ("<=", 1e-11, "tolerance (round-off over 40 steps)"), "")
     if b not in ("jax", "numpy"):
         for k in ("box_r0", f"box_r{OBLIQUE['theta']:g}"):
-            d, j = g("C37", k), J("C37", k)
+            d, j = g("C38", k), J("C38", k)
             if d is not None and j is not None:
-                add("C37", f"{k} max rel vs JAX", b, "serial", relmax(d, j), RO,
+                add("C38", f"{k} max rel vs JAX", b, "serial", relmax(d, j), RO,
                     "the template's gradient and limiter (zoomy_core's tables)")
     d = g("C30", "polynomials")                     # C30
     if d is not None:
@@ -519,6 +569,118 @@ def imex_checks(add, b, g, J):
         d, j = g("C31", key), J("C31", key)
         if b not in ("jax", "numpy") and ok(d, j):
             add("C31", f"{key} max rel vs JAX", b, "serial", relmax(d, j), th, "")
+def _shear_err(d, v):
+    """L_inf of q_x against C32's exact u(y, t)."""
+    import cases as K
+    return float(np.abs(d["Q"][names(d).index("q_x_0")]
+                        - K.shear_exact(v, d["xc"][1], float(d["t"]))).max())
+
+
+def _shear_checks(add, b, g, J, case, pre):
+    """C32's checks of the shear decay runs `{pre}{v}_n{ny}` of `case`: the space order vs the
+    exact u(y, t), at ny 20 the error, h = 1, v = 0, u = u(y), and the C++ backends vs JAX."""
+    import cases as K
+    ok = lambda *ds: all(x is not None for x in ds)  # noqa: E731
+    ny = K.SHEAR["ny"]
+    for v in ("noslip", "free", "noslip_split"):
+        runs = [g(case, f"{pre}{v}_n{n}") for n in ny]
+        if ok(*runs):                                          # JAX: the order
+            es = [_shear_err(x, v) for x in runs]
+            add(case, f"{pre}{v} L_inf order {ny[-2]}->{ny[-1]}", b, "serial",
+                order(es[-2], es[-1]), TH["C32 order"], "L_inf " + " / ".join(f"{x:.2e}" for x in es)
+                + f"; order {ny[0]}->{ny[1]} {order(es[0], es[1]):.2f}")
+        d, j = g(case, f"{pre}{v}_n{ny[0]}"), J(case, f"{pre}{v}_n{ny[0]}")
+        if d is None:
+            continue
+        n_ = names(d)
+        add(case, f"{pre}{v} n{ny[0]} L_inf vs exact", b, "serial", _shear_err(d, v),
+            TH["C32 err"], "")
+        add(case, f"{pre}{v} n{ny[0]} max|h - 1|", b, "serial",
+            float(np.abs(d["Q"][n_.index("h")] - 1.0).max()), RO, "theory: h stays 1")
+        add(case, f"{pre}{v} n{ny[0]} max|q_y|", b, "serial",
+            float(np.abs(d["Q"][n_.index("q_y_0")]).max()), RO, "theory: v stays 0")
+        u = d["Q"][n_.index("q_x_0")]                          # x-independent: every x-derivative is 0
+        _, grp = np.unique(np.round(d["xc"][1], 9), return_inverse=True)
+        lo, hi = np.full(grp.max() + 1, np.inf), np.full(grp.max() + 1, -np.inf)
+        np.minimum.at(lo, grp, u)
+        np.maximum.at(hi, grp, u)
+        add(case, f"{pre}{v} n{ny[0]} x-variation of q_x (max rel)", b, "serial",
+            float((hi - lo).max() / np.abs(u).max()), RO, "theory: u = u(y)")
+        if b == "amrex" and j is not None:
+            add(case, f"{pre}{v} n{ny[0]} max rel vs JAX", b, "serial", relmax(d, j),
+                ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)"), "")
+        elif b == "foam" and j is not None:
+            add(case, f"{pre}{v} n{ny[0]} L_inf|foam - JAX| / L_inf(JAX - exact)", b, "serial",
+                float(np.abs(d["Q"] - j["Q"]).max() / _shear_err(j, v)), TH["C32 foam"],
+                "foam's own stencils at second order")
+
+
+def imex_diffusion_checks(add, b, g, J):
+    """C37 (gate 52): IMEX-SSP2 with the implicit diffusion in its stages.  The time order
+    against the semi-discrete exact solution, the solver against the scheme in matrix form,
+    C32's shear decay with IMEX-SSP2 (and its time order, Richardson), the C++ backends vs
+    JAX."""
+    import cases as K
+    import gate52_imex_diffusion as G50
+    ok = lambda *ds: all(x is not None for x in ds)  # noqa: E731
+
+    def rel(u, ex):
+        return float(np.abs(u - ex).max() / np.abs(ex).max())
+    for kind, case in K.C37_HEAT:
+        ds = [g("C37", f"heat_{kind}_{case}_k{k}") for k in K.C37_K]
+        if ok(*ds):
+            es = [rel(d["Q"][0], G50.heat_exact(kind, case, d["xc"], float(d["t"]))) for d in ds]
+            add("C37", f"heat {kind} {case} ssp2 order dt/4->dt/8", b, "serial",
+                order(es[-2], es[-1]), TH["C37 heat"],
+                "rel err vs the semi-discrete exact " + " / ".join(f"{x:.2e}" for x in es))
+    for pre, nu in (("advdiff", G50.NU_ADV), ("stiff", G50.NU_STIFF)):
+        for s in G50.SCHEMES:
+            ds = [g("C37", f"{pre}_{s}_k{k}") for k in K.C37_K]
+            if not ok(*ds):
+                continue
+            es, dev = [], []
+            for k, d in zip(K.C37_K, ds):
+                dt, t = G50.DT0 / 2 ** k, float(d["t"])
+                es.append(rel(d["Q"][0], G50.advdiff_exact(d["xc"], t, nu)))
+                ref = G50.matrix_scheme(s, G50.u0_advdiff(d["xc"]), dt, int(round(t / dt)), nu)
+                dev.append(rel(d["Q"][0], ref))
+            add("C37", f"{pre} (nu {nu:g}) {s} order dt/4->dt/8", b, "serial",
+                order(es[-2], es[-1]), TH["C37 adv"][s] if pre == "advdiff" else None,
+                "rel err vs the semi-discrete exact " + " / ".join(f"{x:.2e}" for x in es)
+                + ("; stiff: IMEX-SSP2 is not stiffly accurate (order reduction, 1.94 at dt/64 "
+                   "in matrix form)" if pre == "stiff" and s == "ssp2" else ""))
+            add("C37", f"{pre} (nu {nu:g}) {s} vs the scheme in matrix form (max rel)", b,
+                "serial", max(dev), TH["C37 scheme"], "")
+    ny = K.SHEAR["ny"][0]
+    _shear_checks(add, b, g, J, "C37", "shear_")
+    ds = [g("C37", f"shear_noslip_n{ny}")] + [g("C37", f"shear_noslip_n{ny}_k{k}")
+                                             for k in K.C37_K[1:]]
+    if ok(*ds):
+        d = [float(np.abs(ds[k]["Q"] - ds[k + 1]["Q"]).max()) for k in range(len(ds) - 1)]
+        add("C37", f"shear_noslip n{ny} time order (Richardson)", b, "serial",
+            order(d[-2], d[-1]), TH["C37 shear time"],
+            "max|Q(dt/2^k) - Q(dt/2^(k+1))| " + " / ".join(f"{x:.2e}" for x in d))
+    for s in K.C37_VAM:                         # Chorin: VAM(1) Stress.full, Richardson
+        e = [g("C37", f"vam_{s}_k{k}") for k in K.C37_K]
+        if ok(*e):
+            d = [err_ref(e[k], e[k + 1]) for k in range(len(e) - 1)]
+            add("C37", f"VAM Stress.full {s} order (Richardson)", b, "serial", order(*d[-2:]),
+                TH["C37 vam"][s], "L1(h) of dt/2^k - dt/2^(k+1) " + " / ".join(f"{x:.2e}" for x in d))
+    shear = [g("C37", f"shear_{v}_n{n}") for v in K.C37_SHEAR for n in K.SHEAR["ny"]]
+    shear = [x for x in shear if x is not None]
+    if shear:
+        add("C37", "shear mass change (rel)", b, "serial", max(map(mass, shear)), RO,
+            f"max over {len(shear)} runs")
+    if b not in ("jax", "numpy"):
+        for key in [f"heat_{kind}_{case}_k0" for kind, case in K.C37_HEAT] + ["advdiff_ssp2_k0"]:
+            d, j = g("C37", key), J("C37", key)
+            if ok(d, j):
+                add("C37", f"{key} max rel vs JAX", b, "serial", relmax(d, j), TH["C37 xb"], "")
+        d, j = g("C37", "vam_ssp2_k0"), J("C37", "vam_ssp2_k0")
+        if ok(d, j):
+            add("C37", "vam_ssp2_k0 max rel vs JAX", b, "serial", relmax(d, j), PRESS, "")
+
+
 @functools.lru_cache(maxsize=None)
 def _moment_jacobian():
     import cases
@@ -531,42 +693,11 @@ def visc_checks(add, b, g, J):
     import cases as K
     from scipy.linalg import expm
     ok = lambda *ds: all(x is not None for x in ds)  # noqa: E731
-    S, ny = K.SHEAR, K.SHEAR["ny"]
+    ny = K.SHEAR["ny"]
 
     def shear_err(d, v):
-        return float(np.abs(d["Q"][names(d).index("q_x_0")]
-                            - K.shear_exact(v, d["xc"][1], float(d["t"]))).max())
-    for v in ("noslip", "free", "noslip_split"):              # C32
-        runs = [g("C32", f"{v}_n{n}") for n in ny]
-        if ok(*runs):                                          # JAX: the order
-            es = [shear_err(x, v) for x in runs]
-            add("C32", f"{v} L_inf order {ny[-2]}->{ny[-1]}", b, "serial", order(es[-2], es[-1]),
-                TH["C32 order"], "L_inf " + " / ".join(f"{x:.2e}" for x in es)
-                + f"; order {ny[0]}->{ny[1]} {order(es[0], es[1]):.2f}")
-        d, j = g("C32", f"{v}_n{ny[0]}"), J("C32", f"{v}_n{ny[0]}")
-        if d is None:
-            continue
-        n_ = names(d)
-        add("C32", f"{v} n{ny[0]} L_inf vs exact", b, "serial", shear_err(d, v),
-            TH["C32 err"], "")
-        add("C32", f"{v} n{ny[0]} max|h - 1|", b, "serial",
-            float(np.abs(d["Q"][n_.index("h")] - 1.0).max()), RO, "theory: h stays 1")
-        add("C32", f"{v} n{ny[0]} max|q_y|", b, "serial",
-            float(np.abs(d["Q"][n_.index("q_y_0")]).max()), RO, "theory: v stays 0")
-        u = d["Q"][n_.index("q_x_0")]                          # x-independent: every x-derivative is 0
-        _, grp = np.unique(np.round(d["xc"][1], 9), return_inverse=True)
-        lo, hi = np.full(grp.max() + 1, np.inf), np.full(grp.max() + 1, -np.inf)
-        np.minimum.at(lo, grp, u)
-        np.maximum.at(hi, grp, u)
-        add("C32", f"{v} n{ny[0]} x-variation of q_x (max rel)", b, "serial",
-            float((hi - lo).max() / np.abs(u).max()), RO, "theory: u = u(y)")
-        if b == "amrex" and j is not None:
-            add("C32", f"{v} n{ny[0]} max rel vs JAX", b, "serial", relmax(d, j),
-                ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)"), "")
-        elif b == "foam" and j is not None:
-            add("C32", f"{v} n{ny[0]} L_inf|foam - JAX| / L_inf(JAX - exact)", b, "serial",
-                float(np.abs(d["Q"] - j["Q"]).max() / shear_err(j, v)), TH["C32 foam"],
-                "foam's own stencils at second order")
+        return _shear_err(d, v)
+    _shear_checks(add, b, g, J, "C32", "")
     c = g("C32", f"ctrl_n{ny[0]}")                             # C32 negative control (JAX)
     if c is not None:
         add("C32", "control: no-slip profile on free-slip walls, L_inf vs the no-slip exact", b,
@@ -627,7 +758,8 @@ NUMPY_TOL = {"C8": PRESS, "C10": PRESS,
              "C14": ("<=", 1e-8, "tolerance (implicit Newton 1e-8)"),
              "C26": ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)"),
              "C32": ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)"),
-             "C36": ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)")}
+             "C36": ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)"),
+             "C37": ("<=", 1e-8, "tolerance (Newton 1e-12, GMRES 1e-13)")}
 
 
 def numpy_checks(add, g, J):
@@ -694,7 +826,7 @@ def measure():
 
         def cross(case, label, keys, ns, tri=False, tol=RO):
             """AMReX = JAX (round-off); foam = JAX (the template's stencils,
-            ANALYSIS 49) where JAX's round-off sensitivity is measured, and on
+            ANALYSIS 57) where JAX's round-off sensitivity is measured, and on
             quads at O1; otherwise the foam - JAX difference vanishes or shrinks."""
             d = [(g(case, k), J(case, k)) for k in keys]
             if b in ("jax", "numpy") or not all(ok(*x) for x in d):
@@ -792,6 +924,7 @@ def measure():
             fn, th = (l1rel, TH["C5 foam"]) if b == "foam" else (relmax, TH["C5 amrex"])
             add("C5", f"{'L1' if b == 'foam' else 'max'} rel vs JAX", b, "serial",
                 fn(g("C5", "n48"), J("C5", "n48")), th, "")
+        front_checks(add, b, g, J)
         for k in ("vam", "vam_newton", "vam_t2", "vam_tri"):    # C8
             d, j = g("C8", k), J("C8", k)
             if b not in ("jax", "numpy") and ok(d, j):
@@ -850,6 +983,7 @@ def measure():
         imex_checks(add, b, g, J)
         restart_checks(add, b, g)
         visc_checks(add, b, g, J)
+        imex_diffusion_checks(add, b, g, J)
         for c in CONFIGS:                       # C17: AMR (gate 37)
             for k in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry"):
                 d = g("C17", k, c)
@@ -867,6 +1001,23 @@ def measure():
                     if key in m:
                         add("C17", f"{k} {lab}", b, c, m[key], th,
                             "no reflux: not conservative" if k == "boxnr" else "")
+            for k in C17_DIFF:                  # gate 53: diffusion refluxed
+                d = g("C17", k, c)
+                if d is None:
+                    continue
+                m = metrics(d)
+                expl = k.endswith("expl")
+                add("C17", f"{k} covering fine level vs fine single level (max rel)", b, c,
+                    m["fine_vs_single"], RO if expl else
+                    ("<=", 1e-9, "tolerance (Newton 1e-12, the level's own solve)"), "")
+                if "mass" not in m:             # diff_shear: the covering level only
+                    continue
+                add("C17", f"{k} patch mass change (rel), reflux", b, c, m["mass"], RO,
+                    f"{m['fine_cells']} fine cells")
+                add("C17", f"{k} patch mass change (rel), no reflux", b, c, m["mass_nr"], None,
+                    "the control: the diffusive fluxes at the interface differ")
+                add("C17", f"{k} L1(AMR - fine single) / L1(coarse single - fine single)", b, c,
+                    m["l1_ratio"], TH["C17 diff"], "")
             w = [g("C17", f"wave{n}") for n in (16, 32)]
             if c == "serial" and ok(*w):
                 add("C17", "wave order 16->32 (composite)", b, c,
@@ -880,9 +1031,11 @@ def measure():
                 if ds:
                     add("C6", f"{case} mass change (rel)", b, c, max(map(mass, ds)), RO,
                         f"max over {len(ds)} runs")
-        for case, key in (("C1", "o2_n40"), ("C5", "n48"), ("C8", "vam"), ("C13", "o2_x2.5"),
+        for case, key in (("C1", "o2_n40"), ("C5", "n48"), ("C5", "dam_front"),
+                          ("C5", "bowl_front"), ("C8", "vam"), ("C13", "o2_x2.5"),
                           ("C14", "o2_n40"), ("C21", "pulse_o1"), ("C21", "pulse_o2"),
-                          ("C21", "sod_y"), ("C26", "visc")):   # C7 / C9: parallel and GPU = serial CPU
+                          ("C21", "sod_y"), ("C26", "visc"), ("C37", "heat_quad_per_k0"),
+                          ("C37", "shear_noslip_n20")):   # C7 / C9: parallel and GPU = serial CPU
             for c in CONFIGS[1:]:
                 d, ser = g(case, key, c), g(case, key)
                 if ok(ser, d):

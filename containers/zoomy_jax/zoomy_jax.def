@@ -5,7 +5,9 @@ From: ghcr.io/zoomylab/zoomy_jax_dev:latest
 #   1. Solver API : apptainer run [--nv] zoomy_jax.sif [port]        (FastAPI :8080)
 #   2. Jupyter    : apptainer run [--nv] zoomy_jax.sif jupyter [port]     (Lab :8888)
 #   3. Dev/shell  : apptainer run [--nv] zoomy_jax.sif shell
-# JAX falls back to CPU without a GPU; use --nv for the device.
+# One image for CPU and GPU machines: JAX 0.9.2 with its CUDA 12 plugin and NVIDIA's
+# CUDA libraries (pip wheels; the host's driver is all a GPU needs, `--nv` brings it in).
+# Without a GPU (or with JAX_PLATFORMS=cpu) JAX runs on the CPU, the same jaxlib as before.
 #   apptainer build --fakeroot containers/zoomy_jax/zoomy_jax.sif containers/zoomy_jax/zoomy_jax.def
 #
 # NOTE: %files dest is /opt/src, NOT /tmp (Apptainer bind-mounts host /tmp in %post).
@@ -20,6 +22,7 @@ From: ghcr.io/zoomylab/zoomy_jax_dev:latest
     library/zoomy_server  /opt/src/zoomy_server
     library/zoomy_prepost /opt/src/zoomy_prepost
     library/zoomy_plotting /opt/src/zoomy_plotting
+    containers/zoomy_jax/cuda-pins.txt /opt/cuda-pins.txt
 
 %environment
     export PATH=/opt/conda/envs/zoomy/bin:$PATH
@@ -29,6 +32,9 @@ From: ghcr.io/zoomylab/zoomy_jax_dev:latest
     export ZOOMY_ROOT=/workspace
     export MPLBACKEND=Agg
     export OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+    # ranks on GPUs exchange halos through host memory (zoomy_jax_mpi: GPU -> GPU)
+    export MPI4JAX_USE_CUDA_MPI=${MPI4JAX_USE_CUDA_MPI:-0}
+    export NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 %post
     set -e
@@ -40,16 +46,30 @@ From: ghcr.io/zoomylab/zoomy_jax_dev:latest
         /opt/src/zoomy_plotting \
         pytest-html jupytext nbformat nbclient jupyterlab jupyter-server ipykernel
     rm -rf /opt/src
-    # MPI on the CPU for distributed runs (`comm=`; the matrix's mpiN configs) and preCICE
+    # MPI for distributed runs (`comm=`; the matrix's mpiN / gpu2 configs) and preCICE
     # (pyprecice 3.4.0, the other participants' version; petsc4py, imported before it by the
     # JAX participant), as in the Dockerfile (the stack pinned to the installed builds);
-    # GPU-aware MPI, AmgX: zoomy_jax_mpi
+    # GPU -> GPU MPI, AmgX: zoomy_jax_mpi
     pins=$(/opt/conda/bin/conda list -n zoomy --export '^(python|numpy|scipy|jax|jaxlib)$' \
            | grep -v '^#')
     /opt/conda/bin/mamba install -n zoomy -y -c conda-forge $pins \
-        "openmpi>=5,<6" mpi4py "mpi4jax=0.9.1.post2" "pyprecice=3.4.0" petsc4py
+        "openmpi>=5,<6" mpi4py "pyprecice=3.4.0" petsc4py
     /opt/conda/bin/conda clean -afy
     /opt/conda/envs/zoomy/bin/python -c "import petsc4py, precice; v = precice.get_version_information().split(b';')[0]; assert v == b'3.4.0', v; print('preCICE', v.decode())"
+    # The GPU half, as in the Dockerfile: JAX's CUDA 12 plugin for the installed jaxlib 0.9.2
+    # (conda-forge's CPU build stays, so CPU runs are unchanged) with NVIDIA's CUDA wheels, and
+    # mpi4jax 0.9.1.post2 built here with its CUDA bridge (conda-forge's is CPU-only), against
+    # this OpenMPI and the wheels' cudart; gcc and nanobind only for that build
+    # (versions: cuda-pins.txt)
+    apt-get update && apt-get install -y --no-install-recommends gcc g++
+    PIP_CONSTRAINT=/opt/cuda-pins.txt /opt/conda/envs/zoomy/bin/python -m pip install \
+        --no-cache-dir "jax-cuda12-plugin[with-cuda]"
+    /opt/conda/envs/zoomy/bin/python -m pip install --no-cache-dir nanobind
+    OMPI_CC=gcc OMPI_CXX=g++ PIP_CONSTRAINT=/opt/cuda-pins.txt /opt/conda/envs/zoomy/bin/python -m pip \
+        install --no-cache-dir --no-build-isolation --no-deps "mpi4jax==0.9.1.post2"
+    /opt/conda/envs/zoomy/bin/python -m pip uninstall -y nanobind
+    apt-get purge -y --auto-remove gcc g++ && rm -rf /var/lib/apt/lists/* /opt/cuda-pins.txt
+    /opt/conda/envs/zoomy/bin/python -c "import glob, mpi4jax, os; d = os.path.dirname(mpi4jax.__file__); assert glob.glob(d + '/_src/xla_bridge/mpi_xla_bridge_cuda*.so'), 'mpi4jax without CUDA'; import jax_cuda12_plugin, jaxlib; print('jaxlib', jaxlib.__version__, '+ CUDA plugin, mpi4jax CUDA bridge')"
     mkdir -p /workspace
 
 %runscript
@@ -73,4 +93,5 @@ From: ghcr.io/zoomylab/zoomy_jax_dev:latest
     zoomy-jupyter --help >/dev/null 2>&1 && echo "zoomy-jupyter CLI OK"
     /opt/conda/envs/zoomy/bin/python -c "import jupyterlab" && echo "jupyterlab OK"
     /opt/conda/envs/zoomy/bin/python -c "import petsc4py, precice" && echo "pyprecice OK"
+    JAX_PLATFORMS=cpu /opt/conda/envs/zoomy/bin/python -c "import jax; print('jax devices', jax.devices())"
     mpiexec -n 2 /opt/conda/envs/zoomy/bin/python -c "from mpi4py import MPI; import mpi4jax, jax.numpy as jnp; c = MPI.COMM_WORLD; s = mpi4jax.allreduce(jnp.ones(1), op=MPI.SUM, comm=c); assert float(s[0]) == c.Get_size() == 2; print('mpi4jax allreduce OK, rank', c.Get_rank())"
