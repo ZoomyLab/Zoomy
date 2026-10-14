@@ -35,6 +35,8 @@ import zoomy_core.model.initial_conditions as IC
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.systemmodel import SystemModel
 from zoomy_core.model.models import SME
+from zoomy_core.model.models.closures import (
+    ManningFriction, Newtonian, StressFree)
 from zoomy_core.model.boundary_conditions import BoundaryConditions, Extrapolation
 from zoomy_core.numerics import Limiter, NumericalSystemModel
 from zoomy_core.numerics.numerical_system_model import ReconstructionSpec
@@ -80,7 +82,10 @@ def _setup(order):
     """Build the SME(0) solver + interior partition flux op at ``order``."""
     bcs = BoundaryConditions([Extrapolation(tag="left"),
                               Extrapolation(tag="right")])
-    model = SME(level=0, dimension=2)
+    # a DECLARED closure left unbound raises UnclosedClosureError: close SME(0)
+    # with the suite's shallow-water closure set (``models.swe``)
+    model = SME(level=0, dimension=2,
+                closures=[Newtonian(), ManningFriction(), StressFree()])
     sm = SystemModel.from_model(model)
     sm.attach_boundary_conditions(bcs)
     ns = len(sm.state)

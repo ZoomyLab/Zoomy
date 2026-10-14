@@ -27,6 +27,8 @@ import zoomy_core.model.initial_conditions as IC
 import zoomy_core.model.boundary_conditions as BC
 from zoomy_core.mesh import LSQMesh
 from zoomy_core.model.models import SME
+from zoomy_core.model.models.closures import (
+    ManningFriction, Newtonian, StressFree)
 from zoomy_core.numerics import Limiter, NumericalSystemModel
 from zoomy_core.numerics.numerical_system_model import ReconstructionSpec
 from zoomy_core.systemmodel import SystemModel
@@ -55,9 +57,16 @@ N_STEPS = 6
 # and the test had to PIN ``momentum_field_indices=[[1, 2]]``.  The derived
 # model carries the rows, so ``Wall`` resolves the group ``[[2, 3]]`` itself and
 # no pin is needed anywhere in this file.
+def _swe_closures():
+    """The closure set of the suite's shallow-water model (``models.swe``): a
+    DECLARED closure that reaches the SystemModel unbound raises
+    ``UnclosedClosureError``, so ``SME(level=0)`` is never built bare."""
+    return [Newtonian(), ManningFriction(), StressFree()]
+
+
 def _swe2d_model(bcs, ic):
-    return SME(level=0, dimension=3, boundary_conditions=bcs,
-               initial_conditions=ic)
+    return SME(level=0, dimension=3, closures=_swe_closures(),
+               boundary_conditions=bcs, initial_conditions=ic)
 
 
 @pytest.mark.small
@@ -76,7 +85,8 @@ def test_spmd_real_solver_1d_transparent(order):
         bcs = BC.BoundaryConditions([
             BC.Periodic(tag="left", periodic_to_physical_tag="right"),
             BC.Periodic(tag="right", periodic_to_physical_tag="left")])
-        sm = SystemModel.from_model(SME(level=0, dimension=2))
+        sm = SystemModel.from_model(
+            SME(level=0, dimension=2, closures=_swe_closures()))
         sm.attach_boundary_conditions(bcs)
         names = [str(s) for s in sm.state]; ih = names.index("h")
         sm.initial_conditions = IC.UserFunction(

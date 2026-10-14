@@ -8,9 +8,17 @@ import json, pathlib, numpy as np
 DIR = pathlib.Path(__file__).parent / "refs"
 DIAG = DIR / "diagnostics"
 TIMES = DIR / "timings.json"
-SLOWER_OK = 1.25          # a test may get 25% slower (user ruling 2026-07-21:
-                          # 10% sits below this shared box's noise floor —
-                          # 23% spread measured on identical code); faster ratchets down
+SLOWER_OK = 1.5           # a test may get 50% slower; faster ratchets down.  Was 1.25 (user
+                          # ruling 2026-07-21: 10% sits below this shared box's noise floor,
+                          # 23% spread measured on identical code); on the box of 2026-10-14
+                          # (8 pinned cores) of five full runs of identical code one was clean
+                          # and four each failed a different gate: vam_first_order 19.7 -> 27.0 s,
+                          # bc_wall +37%, ritter_dry_o2_small +35%, bc_periodic +132%
+JIT_SLACK = 2.0           # s, on top of that for a test whose reference is below JIT_FLOOR:
+JIT_FLOOR = 10.0          # its wall time is mostly XLA compile, which does not scale with the
+                          # reference (the persistent compile cache hits or misses; measured on
+                          # identical code: bc_periodic 1.5 s and 3.6 s, ritter_dry_o2_small
+                          # 3.3 s and 4.5 s, a cold single-file run 3x)
 
 
 def dump(name, **arrays):
@@ -48,7 +56,8 @@ def check(name, overwrite=False, **arrays):
 
 
 def check_time(name, seconds, overwrite=False):
-    """Fail if >10% slower than the recorded time; lower it if faster."""
+    """Fail if more than `SLOWER_OK` slower than the recorded time (plus `JIT_SLACK` for a
+    reference below `JIT_FLOOR`); lower the record if faster."""
     db = json.loads(TIMES.read_text()) if TIMES.exists() else {}
     ref = db.get(name)
     print(f"[time] {name}: {seconds:.2f} s (ref {ref})")
@@ -57,5 +66,6 @@ def check_time(name, seconds, overwrite=False):
         DIR.mkdir(exist_ok=True)
         TIMES.write_text(json.dumps(dict(sorted(db.items())), indent=1))
         return
-    assert seconds <= ref * SLOWER_OK, \
-        f"{name}: {seconds:.2f}s vs {ref:.2f}s (+{100*(seconds/ref-1):.0f}%)"
+    limit = ref * SLOWER_OK + (JIT_SLACK if ref < JIT_FLOOR else 0.0)
+    assert seconds <= limit, \
+        f"{name}: {seconds:.2f}s vs {ref:.2f}s (+{100*(seconds/ref-1):.0f}%, limit {limit:.2f}s)"
