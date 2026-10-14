@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       container:
-        description: "Build a specific container (folder name under containers/)"
+        description: "Build specific containers (folder names under containers/, space- or comma-separated)"
         required: false
         default: ""
 
@@ -72,7 +72,7 @@ jobs:
           }
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.container }}" ]; then
-            add_raw "${{ github.event.inputs.container }}"
+            for c in $(echo "${{ github.event.inputs.container }}" | tr ',' ' '); do add_raw "$c"; done
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             # Manual dispatch without specific container: rebuild all
             for c in $ALL; do add_raw "$c"; done
@@ -84,6 +84,15 @@ jobs:
               head="HEAD"
             fi
             echo "Diff range: $base -> $head"
+            # The checkout is shallow: a push of several commits has its `before` outside it,
+            # and every `git diff` below then failed into its 2>/dev/null, reading as "nothing
+            # changed" (c494260e, 9 commits: numpy/amrex/openfoam not rebuilt) or, under
+            # `! git diff --quiet`, as "changed" (every install spec).  A diff needs only the
+            # two trees: fetch the base commit; one that cannot be fetched fails the job.
+            if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+              git fetch --no-tags --depth=1 origin "$base"
+            fi
+            git cat-file -e "$base^{commit}"
 
             # the image's folder: recipes, but also what they bake (zoomy-entry, BACKEND,
             # VERSION, scripts); docs do not rebuild
