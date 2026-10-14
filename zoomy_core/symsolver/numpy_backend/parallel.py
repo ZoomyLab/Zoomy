@@ -358,8 +358,8 @@ class _PetscSystem:
     def update(self, rows, cols, vals, rebuild):
         """New matrix values; the preconditioner rebuilt, or kept (lagged)."""
         old, self.A = self.A, self._matrix(rows, cols, vals)
-        self.ksp.setReusePreconditioner(not rebuild)
         self.ksp.setOperators(self.A)
+        self.ksp.getPC().setReusePreconditioner(not rebuild)
         old.destroy()
 
     def solve(self, rhs):
