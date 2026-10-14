@@ -298,3 +298,39 @@ def test_vector_closure_tables_differentiable():
         return jnp.sum(g["lsq_closure"] ** 2) + jnp.sum(g["lsq_gradQ"] ** 2)
     gX = np.asarray(jax.grad(J)(X0))
     assert np.isfinite(gX).all() and np.abs(gX).max() > 0
+
+
+def test_vector_closure_reproduces_polynomials_3d():
+    """A 3-component group on a rotated hexahedral box: n.q Dirichlet, the tangential plane
+    Neumann (the rows of I - n n^T), one joint fit per cell, edges and corners included."""
+    m = MESHES["hex"]()
+    p = 2
+    nc, nbf = int(m.n_inner_cells), int(m.n_boundary_faces)
+    kinds = np.array([[DIRICHLET] * nbf, [NEUMANN] * nbf, [NEUMANN] * nbf], dtype=np.int8)
+    rc = RowClosure(kinds, ((0, 1, 2),), np.ones((1, nbf), dtype=bool))
+    topo = build_topology(m, lsq_degree=p, closure={("t", "state"): rc})
+    a, b = np.radians(25.0), np.radians(40.0)
+    Rz = np.array([[np.cos(a), -np.sin(a), 0], [np.sin(a), np.cos(a), 0], [0, 0, 1]])
+    Rx = np.array([[1, 0, 0], [0, np.cos(b), -np.sin(b)], [0, np.sin(b), np.cos(b)]])
+    g = compute_geometry(topo, Rx @ Rz @ np.asarray(m.vertex_coordinates, float)[:3])
+    fs = [_poly(3, p, 500 + k) for k in range(3)]
+    cc = np.asarray(g["cell_centers"])[:3, :nc]
+    own = topo.boundary_owner
+    n = np.asarray(g["face_normals"])[:3, topo.boundary_faces]
+    n = n / np.linalg.norm(n, axis=0)
+    dn = np.asarray(g["d_normal"])
+    foot = cc[:, own] + dn * n
+    u = np.stack([f(cc) for f in fs])
+    uf = np.stack([f(foot) for f in fs])
+    du = np.stack([sum(n[c] * f(foot, tuple(int(c == e) for e in range(3))) for c in range(3))
+                   for f in fs])                                   # d/dn of each component
+    uo = u[:, own]
+    un, ufn = (n * uo).sum(0), (n * uf).sum(0)
+    tan = lambda v: v - (n * v).sum(0) * n                          # noqa: E731
+    G = n * (2 * ufn - un) + tan(uo) + 2 * dn * tan(du)            # Dirichlet n.q, Neumann t.q
+    closed = np.asarray(lsq_derivatives(topo, g, u, G, topo.lsq_closure_class[("t", "state")]))
+    for k, mi in enumerate(topo.lsq_monomial_multi_index):
+        for r, f in enumerate(fs):
+            ref = f(cc, tuple(int(v) for v in mi))
+            s = max(np.abs(ref).max(), 1.0)
+            assert np.abs(closed[r, :, k] - ref).max() / s < 1e-9, (mi, r)
