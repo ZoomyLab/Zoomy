@@ -1,17 +1,15 @@
 # NumPy backend
 
-```{warning}
-Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
-```
+The NumPy backend runs the solver templates in plain Python: no JAX, no compiler, serial.
+It lives **inside** `zoomy_core`, in `zoomy_core.symsolver.numpy_backend`; there is no separate
+package.  It takes the same `NumericalSystemModel` as every other backend and, being the
+lightest, also runs where nothing else installs (Pyodide, the browser).
 
-The NumPy backend is the **reference implementation** every other backend is
-verified against. It ships **inside** `zoomy_core` at `library/zoomy_core/zoomy_core/fvm/`
-— there is no separate `zoomy_numpy` package. Same `Model` / `SystemModel` API.
-
-- Pure Python / NumPy / SciPy; no external solver dependency.
-- Cell-centred finite-volume; symbolic Riemann solver; NCP path integral.
-- Solvers are `param.Parameterized` — every knob is class-level and
-  auto-introspected by the GUI / CLI.
+- The template is printed to Python source by `PyPrinter` and run against
+  `numpy_backend.runtime` (the building blocks: gradients, Riemann problems on all faces,
+  reductions, linear solves) and `NumpyKernels` (the NSM's kernels).
+- Pure Python / NumPy / SciPy; [PyAMG](https://github.com/pyamg/pyamg) is optional.
+- Serial: `comm=` raises `NotImplementedError`.  No AD and no preCICE; use [JAX](jax.md).
 
 ## Install
 
@@ -19,196 +17,94 @@ verified against. It ships **inside** `zoomy_core` at `library/zoomy_core/zoomy_
 pip install zoomy_core
 ```
 
-## Solver inventory
+## Solvers
 
-| Class | File | What it adds |
+| Class | Template | Call |
 | --- | --- | --- |
-| `HyperbolicSolver` | `fvm/solver_numpy.py:274` | Explicit RK1 / SSP-RK2 flux + symbolic Riemann + source. **The reference.** |
-| `FreeSurfaceFlowSolver` | `fvm/solver_numpy.py:1072` | Positive (hydrostatic-reconstruction) Rusanov + η=h+b well-balanced reconstruction + wet/dry. Needs `h`, `b`. |
-| `RoeFreeSurfaceFlowSolver` | `fvm/solver_numpy.py:1122` | Free-surface with path-conservative Roe `|A|` matrix dissipation. |
-| `IMEXSolver` | `fvm/solver_imex_numpy.py:41` | Explicit flux + implicit diffusion + implicit source (Newton / Newton-GMRES). |
-| `FSFIMEXSolver` | `fvm/solver_imex_numpy.py:333` | IMEX with the free-surface positive Rusanov flux. |
-| `SplittingSolver` | `fvm/solver_splitting_numpy.py:35` | Chorin pressure projection: hyperbolic → viscous diffusion → Poisson correction. |
-| `FSFSplittingSolver` | `fvm/solver_splitting_numpy.py:433` | Pressure-splitting for free-surface flow (velocities at `[2..2+dim-1]`). |
-| `ColumnIntegratingSolver` | `fvm/solver_column.py:24` | IMEX on extruded `(x,ζ)` meshes; depth integrals evaluated numerically per column. |
-| `DAESolver` | `fvm/solver_dae_numpy.py:54` | Monolithic index-1 DAE-PDE via Ascher-Ruuth-Spiteri IMEX-RK (ARS232 / ARS343). Order-1 correctness reference for the VAM chain. |
-| `ChorinSplitVAMSolver` | `fvm/solver_chorin_vam_numpy.py:300` | Chorin split of the VAM DAE into predictor + elliptic pressure + corrector sub-systems (from `split_for_pressure`). |
+| `SymbolicHyperbolicSolverNumpy` | `HyperbolicTemplate`: SSP-RK step of the flux, nonconservative and source terms, MOOD, IMEX | `setup(mesh, nsm)`, then `run(Q, Qaux)` |
+| `SymbolicChorinSolverNumpy` | `ChorinTemplate`: predictor, pressure solve, correction (`VAM`) | `setup(mesh, pred, press, corr)`, then `run(Q, Qaux)` |
 
-Common base: `Solver` (`fvm/solver_numpy.py:124`, a `param.Parameterized`) holds
-the `settings` parameter, state allocation, runtime construction, and the
-aux-refresh (it fills the local aux formula leg plus the LSQ-gradient leg from
-`sm.aux_registry`); every solver inherits it. Within NumPy the implicit solvers
-form a subclass chain `ColumnIntegratingSolver ← SplittingSolver ← IMEXSolver`,
-and the free-surface variants override only the numerics/reconstruction build.
+`setup` returns the initial state `(Q, Qaux)` from the SystemModel's initial conditions (a
+SystemModel is lifted to an NSM with the defaults); `run` returns `(time, Q, Qaux)`.  `Q` has the
+shape `(n_state, n_inner_cells)`; find a row by name, `[str(s) for s in nsm.state].index("h")`.
+`initial_aux(Q, Qaux)` recomputes the aux variables (the pointwise formulas and the derivative aux) of
+a state you wrote into `Q` yourself, as the Chorin example below does.
 
-## Operator-splitting stages
+## Settings
 
-```
-  [ explicit hyperbolic flux + source ]   -- RK1 / SSP-RK2 on F, B·∂_x Q, S_e
-              ▼
-  [ implicit / explicit diffusion ]        -- A:∇Q (optional, IMEX)
-              ▼
-  [ pressure Poisson correction ]          -- free-surface / incompressible
-              ▼
-  [ state update ]                         -- update_q, update_qaux
-```
+The settings shared by all backends (`time_end`, `cfl`, `dt`, `time_order`, `mood`, `imex`,
+`dt_write`, restart, and for Chorin `pressure_solve`, `projection`, `pressure_tol`) are the tables of
+[Solvers and options](../guide/solvers.md); they are `param` parameters declared on the class
+and checked at construction: a choice is a member of an `Option` enum, a plain string raises
+`TypeError`.  A solver carries no numerical knobs of the scheme: reconstruction order and
+limiter, the Riemann solver and the eigenvalue treatment belong to the
+`NumericalSystemModel` ([NumericalSystemModel](../guide/numerical-system-model.md)), so the same
+solver runs any discretisation.
 
-`HyperbolicSolver` runs stage 1; `IMEXSolver` adds stage 2; `SplittingSolver`
-adds the Chorin correction in stage 3; `DAESolver` collapses everything into
-a monolithic stage Newton (singular `mass_matrix` allowed);
-`ChorinSplitVAMSolver` runs predictor → elliptic → corrector on three
-sub-system models from `split_for_pressure`.
+NumPy adds:
 
-## Tunable `param` knobs
-
-A solver carries **only time-stepping knobs**. Numerical knobs
-(reconstruction order, limiter, eigenvalue regularisation) are *not* solver
-params — they live on the `NumericalSystemModel` so the same solver can run any
-discretisation. Passing them to a solver constructor raises `TypeError`.
-
-```python
-# HyperbolicSolver — time stepping only
-time_end   = param.Number(default=0.1, bounds=(0, None))
-min_dt     = param.Number(default=1e-6, bounds=(0, None))
-compute_dt = param.Parameter(default=None)   # default: timestepping.adaptive(CFL=0.9)
-
-# Numerical knobs — on the NumericalSystemModel specs, NOT the solver:
-ReconstructionSpec(order=2, limiter=Limiter.venkatakrishnan)   # 1=PWC, 2=MUSCL
-RegularizationSpec(eigenvalue_eps=1e-8)
-
-# IMEXSolver (plain class attrs, not yet param-typed)
-source_mode = "auto"; implicit_tol = 1e-8; implicit_maxiter = 8
-gmres_tol = 1e-7; gmres_maxiter = 40; jv_backend = "analytic"
-
-# SplittingSolver
-pressure_gmres_tol     = param.Number(default=1e-6)
-pressure_gmres_maxiter = param.Integer(default=200)
-viscosity              = param.Number(default=0.01)
-```
-
-`DAESolver`: `method` (`"ars232" | "ars343"`), `newton_tol`, `newton_maxit`,
-`h_index`, `nc_integration_order`, `well_balanced`, `jacobian_mode`
-(`"sparse_fd" | "dense_fd"`). `ChorinSplitVAMSolver`: `pressure_tol`,
-`pressure_maxit`, `time_order`, `pressure_solver` (`"gmres" | "lu"`),
-`riemann_solver` (`"hr" | "ncp"`). Aux-derivative limiting (for a shock
-that overshoots into the elliptic/source block) is model-declared via
-`zoomy_core.model.numerics.limit` (a `limited_derivative` tag), not a solver knob.
-
-## The numerics menu — what you compose, not subclass
-
-A solver picks its discretisation off a fixed menu carried by the
-`NumericalSystemModel`, never by editing the solver. Choose a Riemann flux
-(`riemann=`) and a `ReconstructionSpec(order, limiter, free_surface_aware)`:
-
-**Riemann fluxes** (`fvm/riemann_solvers.py`): `Rusanov`, `HLL`, `HLLC`,
-`PositiveRusanov` (Audusse hydrostatic reconstruction), `NonconservativeRusanov`
-(**the default**, NCP path-integral fluctuations),
-`WellBalancedNonconservativeRusanov`, `PositiveHLL`,
-`PositiveNonconservativeRusanov` (free-surface default),
-`NonconservativeRoe` (Roe `|A|=R|Λ|L` matrix dissipation),
-`PositiveNonconservativeHLL`, `QuasilinearRusanov`,
-`PositiveQuasilinearRusanov`.
-
-**Reconstruction** (`fvm/reconstruction.py`): `ConstantReconstruction(V2)`
-(1st order), `MUSCLReconstruction` / `LSQMUSCLReconstruction` (2nd order MUSCL),
-`SurfaceReconstruction` (well-balanced η=h+b), `FreeSurfaceMUSCL` /
-`FreeSurfaceLSQMUSCL` (+ wet/dry), `PrimitiveReconstruction`. Limiters:
-`venkatakrishnan`, `barth_jespersen`, `minmod`, `van_albada`.
-
-Time integration lives in `fvm/ode.py` (RK1/Heun-RK2/RK3/implicit),
-`fvm/imex_ark.py` (IMEX-ARK tableaux: `ars232`, `ars343`), and
-`fvm/timestepping.py` (`constant`, `adaptive(CFL=…)`). The full Riemann registry
-and how to add a variant are in [`../authoring/numerics.md`](../authoring/numerics.md#riemann-solvers).
-
-## How a solver consumes a Model / SystemModel
-
-Every `setup_simulation(mesh, model, write_output=True)` normalises once:
-
-```python
-# inside Solver.setup_simulation (paraphrased)
-mesh = ensure_lsq_mesh(mesh, model)
-if not isinstance(model, SystemModel):
-    model = SystemModel.from_model(model)          # freeze operators
-self.sm = model
-runtime = NumpyRuntimeModel.from_system_model(model)   # lambdify operators
-```
-
-The runtime is the only thing the timestep loop touches: routed solver-tag
-callables (`flux`, `nonconservative_flux`, `hydrostatic_pressure`, `source` /
-`source_explicit`, `diffusion_matrix`, `boundary_conditions`,
-`boundary_gradients`, `update_variables`). See
-[`../authoring/system-model.md`](../authoring/system-model.md) and
-[`../authoring/numerics.md`](../authoring/numerics.md) for tag routing.
+| option | default | meaning |
+|---|---|---|
+| `output` | `None` | HDF5 file for the snapshots of `dt_write` |
+| `on_write` | `None` | callback `on_write(time, Q, Qaux)` per snapshot |
+| `pressure_linear_solver` (Chorin) | `LinearSolver.auto` | `pyamg` (when installed) or matrix-free `gmres` |
+| `pressure_amg_rebuild`, `pressure_amg_growth` (Chorin) | `10`, `2.0` | rebuild the AMG hierarchy at least every N solves, or earlier once the GMRES iterations exceed `growth` times those after the last rebuild |
 
 ## End-to-end example: shallow water dam break
 
-Shallow water is `SME(level=0)`: the level-0 member of the shallow-moment
-hierarchy, derived by the same operators as every other level — no hand-written
-system anywhere. A 1-D case runs the `dimension=2` model on a 1-D mesh; the
-state is then `[b, h, q_0]`.
+Shallow water is `SME(level=0)`: the level-0 member of the shallow-moment hierarchy, derived by
+the same operators as every other level, with no hand-written system anywhere.  A 1-D case
+runs the `dimension=2` model on a 1-D mesh; the state is then `[b, h, q_0]`.  The case is
+`docs/book/examples/dambreak.py`, shared by the backend pages:
 
-```python
-import numpy as np
-
-import zoomy_core.model.boundary_conditions as BC
-import zoomy_core.model.initial_conditions as IC
-from zoomy_core.fvm import timestepping
-from zoomy_core.fvm.solver_numpy import HyperbolicSolver
-from zoomy_core.mesh import LSQMesh
-from zoomy_core.model.models import SME
-from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree
-from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
-from zoomy_core.systemmodel import SystemModel
-
-# Shallow water is the level-0 member of the shallow-moment hierarchy.
-model = SME(
-    level=0, dimension=2,
-    closures=[Newtonian(), ManningFriction(), StressFree()],
-    boundary_conditions=BC.BoundaryConditions(
-        [BC.Extrapolation(tag="left"), BC.Extrapolation(tag="right")]),
-)
-sm = SystemModel.from_model(model)                 # state [b, h, q_0]
-
-
-def ic(x):                                         # 2:1 dam break at x = 5
-    return np.array([0.0, 2.0 if x[0] < 5.0 else 1.0, 0.0])
-
-
-sm.initial_conditions = IC.UserFunction(function=ic)
-sm.aux_initial_conditions = IC.Constant(constants=lambda k: np.zeros(k))
-
-# Numerical knobs go on the NumericalSystemModel, not the solver:
-nsm = NumericalSystemModel.from_system_model(
-    sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod))
-
-mesh = LSQMesh.create_1d(domain=(0.0, 10.0), n_inner_cells=300)
-solver = HyperbolicSolver(time_end=0.5, compute_dt=timestepping.adaptive(CFL=0.9))
-Q, Qaux = solver.solve(mesh, nsm, write_output=False)
+```{literalinclude} ../examples/dambreak.py
+:language: python
 ```
 
-`LSQMesh.create_1d` from `zoomy_core.mesh` is the in-package 1-D constructor;
-richer unstructured 2-D / 3-D meshes come from `zoomy_mesh` (sibling subrepo at
-`library/zoomy_mesh/`). The snippet runs as-is in the
-[conda environment](../installation.md#conda--mamba--micromamba) or after
-`pip install zoomy_core`.
+Run it from `docs/book/examples/` after `source env.sh`:
 
-## Authoring checklist — what the solver expects
+```{literalinclude} ../examples/numpy_dambreak.py
+:language: python
+```
 
-- Canonical `M = I`: the model has applied `InvertMassMatrix` before
-  `from_model`. Only `DAESolver` tolerates a singular `mass_matrix`.
-- Every non-zero term tagged via `solver_tag(...)` and routed to a slot
-  (`flux`, `nonconservative_flux`, `hydrostatic_pressure`,
-  `implicit_source` / `explicit_source`, `implicit_diffusion` /
-  `explicit_diffusion`). Untagged ⇒ runtime returns zero. See the
-  [SystemModel tag catalogue](../authoring/system-model.md).
-- `parameters` declared with positivity / non-negativity tags.
-- `boundary_conditions` and `aux_boundary_conditions` supplied; mesh
-  boundary tags match BC tags. Periodic pairs are resolved on the mesh
-  before `from_model` freezes the BC into the indexed kernel.
-- With `ReconstructionSpec(order=2, ...)` on the `NumericalSystemModel`, choose
-  the `limiter` to match smoothness (default `Limiter.venkatakrishnan` for SWE-family).
-- For `FreeSurfaceFlowSolver` / `FSFIMEXSolver` / `FSFSplittingSolver`:
-  declare `h` and (when bathymetry is present) `b` in `variables` — these
-  slots drive wet/dry detection and the positive Rusanov path.
+```text
+t = 0.500, cells = 300, h in [1.00000, 2.00000], mass = 15.000000
+```
 
-**API reference**: see [zoomy_core](../api/_autodoc2/zoomy_core/zoomy_core.md).
+About 5 s.  At $t = 0.5$ the waves have not reached the open ends, so the extremes are the
+initial depths and the mass is that of the initial state, $2\cdot5 + 1\cdot5$.
+
+## Chorin projection: `VAM`
+
+`SymbolicChorinSolverNumpy` takes the three systems of the model's pressure split: the predictor
+NSM on the full state (`predictor_nsm` pads it and builds the numerics of the predictor), the
+pressure system and the corrector.  The VAM(1) channel of
+[Solvers and options](../guide/solvers.md) (matrix case C8), on NumPy:
+
+```{literalinclude} ../examples/chorin_vam_numpy.py
+:language: python
+```
+
+```text
+t = 0.007812, cells = 360, h in [0.01500, 0.34276]
+```
+
+About 15 s; the JAX solver of `chorin_vam.py` prints the same extremes.
+
+## Authoring checklist: what the solver expects
+
+- Every closure the model declares is supplied: a declared closure that reaches the SystemModel
+  unbound raises `UnclosedClosureError` (`SME(level=0)` needs `[Newtonian(), ManningFriction(),
+  StressFree()]` or another bed and surface stress).
+- Boundary-condition tags match the mesh's boundary tags; periodic pairs are resolved on the mesh
+  before the BC kernel is built.
+- The initial condition is set on the SystemModel (`sm.initial_conditions`), as the NSM reads it
+  at `setup`.
+- Choose the limiter to match the smoothness (`Limiter.venkatakrishnan` for smooth flow,
+  `Limiter.minmod` with shocks) on the `ReconstructionSpec`.
+- A free-surface model declares its state roles (`sm.roles`: depth, bed, momentum, gravity).
+  Generic code reads them instead of guessing from field names, and a model that declares none
+  gets no free-surface specialisation.  The derived models (`SME`, `VAM`, ...) declare them; a
+  hand-written SystemModel must.
+
+**API reference**: {doc}`zoomy_core.symsolver <../api/_autodoc2/zoomy_core/zoomy_core.symsolver>`.

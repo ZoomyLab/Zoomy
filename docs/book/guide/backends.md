@@ -3,34 +3,47 @@
 Every backend runs the same templates on the same NSM; the
 [test matrix](../testing/symsolver.md) holds them to the same checks.
 
-| | JAX | foam | AMReX |
-|---|---|---|---|
-| package | `zoomy_jax` | `zoomy_foam` | `zoomy_amrex` |
-| language | Python, XLA-compiled | C++ (OpenFOAM 13) | C++ (AMReX) |
-| runs in | the Python process | apptainer image | apptainer image (CPU or CUDA) |
-| meshes | 1-D, quads, triangles, 3-D (unstructured) | 1-D, quads, triangles, 3-D (unstructured) | Cartesian 1-/2-/3-D |
-| MPI | `comm=MPI.COMM_WORLD` under `mpiexec` | `nprocs=N` (decomposePar) | `ranks=N` |
-| GPU | `JAX_PLATFORMS=cuda`; one GPU per rank via `python -m zoomy_jax.gpurank` | no | `gpu=True` (one GPU per rank) |
-| extras | AD (`jax.jvp`, `jax.grad`), preCICE | preCICE | AMR (`amr=dict(...)`), preCICE |
-| call | `setup(mesh, nsm)`, then `run(Q, Qaux)` | `run(mesh, nsm, Q0, workdir)` | `run(mesh, nsm, Q0, workdir)` |
+| | NumPy | JAX | foam | AMReX |
+|---|---|---|---|---|
+| package | `zoomy_core` (`symsolver.numpy_backend`) | `zoomy_jax` | `zoomy_foam` | `zoomy_amrex` |
+| language | Python, NumPy | Python, XLA-compiled | C++ (OpenFOAM 13) | C++ (AMReX) |
+| runs in | the Python process | the Python process | apptainer image | apptainer image (CPU or CUDA) |
+| meshes | as JAX | 1-D, quads, triangles, 3-D (unstructured) | 1-D, quads, triangles, 3-D (unstructured) | Cartesian 1-/2-/3-D |
+| MPI | no (serial) | `comm=MPI.COMM_WORLD` under `mpiexec` | `nprocs=N` (decomposePar) | `ranks=N` |
+| GPU | no | `JAX_PLATFORMS=cuda`; one GPU per rank via `python -m zoomy_jax.gpurank` | no | `gpu=True` (one GPU per rank) |
+| extras | no JAX, no compiler | AD (`jax.jvp`, `jax.grad`), preCICE | preCICE | AMR (`amr=dict(...)`), preCICE |
+| call | `setup(mesh, nsm)`, then `run(Q, Qaux)` | `setup(mesh, nsm)`, then `run(Q, Qaux)` | `run(mesh, nsm, Q0, workdir)` | `run(mesh, nsm, Q0, workdir)` |
+| classes | `SymbolicHyperbolicSolverNumpy`, `SymbolicChorinSolverNumpy` | `SymbolicHyperbolicSolverJax`, `SymbolicChorinSolverJax` | `SymbolicHyperbolicSolverFoam`, `SymbolicChorinSolverFoam` | `SymbolicHyperbolicSolverAmrex`, `SymbolicChorinSolverAmrex` |
+
+The options of [Solvers and options](solvers.md) are the same on all four; this page
+lists what differs.  One page per backend: [NumPy](../backends/numpy.md),
+[JAX](../backends/jax.md), [AMReX](../backends/amrex.md), [OpenFOAM](../backends/openfoam.md).
+
+## NumPy
+
+The default backend: no JAX, no compiler, serial.  It prints the template as Python source
+and runs it against `zoomy_core.symsolver.numpy_backend.runtime`.  `comm=` raises
+`NotImplementedError`; use JAX for MPI.  Chorin solves the pressure with PyAMG when it is
+installed (`pressure_linear_solver=LinearSolver.auto`), else with matrix-free GMRES.
 
 ## JAX
 
-Double precision needs `jax.config.update("jax_enable_x64", True)` (or
-`JAX_ENABLE_X64=1`); without it JAX runs in float32.  A distributed run
-partitions the mesh (`zoomy_core.mesh.distributed`), each rank keeps its cells
-plus halo layers; `solver.partition.gather(Q)` collects the state on rank 0.
+`import zoomy_jax` switches JAX to double precision (`ZOOMY_JAX_ENABLE_X64=0` keeps float32);
+a script that imports `jax` first may set `jax.config.update("jax_enable_x64", True)` itself, as
+the examples do.  A distributed run partitions the mesh (`zoomy_core.mesh.distributed`), each
+rank keeps its cells plus halo layers; `solver.partition.gather(Q)` collects the state on rank 0.
 Bind GPUs at launch: `mpiexec -n 4 python -m zoomy_jax.gpurank run.py`.
 
 ## foam
 
 The driver prints `Solver.H` and `Kernels.H`, builds them with `wmake` in the
 OpenFOAM 13 image (`ZOOMY_OF_SIF`, default `~/of_build/zoomy_openfoam.sif`)
-and caches the binary by a hash of the sources (`library/zoomy_foam/.bincache`).
+and caches the binary by a hash of the sources (`ZOOMY_FOAM_BINCACHE`; default
+`library/zoomy_foam/.bincache` when writable, else `~/.cache/zoomy/foam_bincache`).
 `workdir` must be an absolute path.  Options: `nprocs`, `decomposition`
-(`"scotch"`, `"simple"`).  Second-order gradients use OpenFOAM's
-least-squares stencils, so foam agrees with JAX to the discretization error at
-second order and to round-off at first order.
+(`Decomposition.scotch`, `Decomposition.simple`; `zoomy_foam.symsolver`).  Second-order
+gradients use OpenFOAM's least-squares stencils, so foam agrees with JAX to the
+discretization error at second order and to round-off at first order.
 
 ## AMReX
 
@@ -45,9 +58,10 @@ the LSQ stencils are the zoomy mesh's own.
 ## Other packages
 
 `zoomy_core` still contains the earlier NumPy solvers (`zoomy_core.fvm`), and
-`zoomy_jax.fvm` the earlier JAX solvers; they are documented under
-[Legacy](../legacy.md).  Firedrake, FEniCSx, DMPlex and DUNE backends do not
-print the symbolic templates.
+`zoomy_jax.fvm` the earlier JAX solvers (`HyperbolicSolver`, `ChorinSplitVAMSolverJax`); the
+symbolic solvers superseded them; the remaining pages that mention them are under
+[Legacy](../legacy.md).
+Firedrake, FEniCSx, DMPlex and DUNE backends do not print the symbolic templates.
 
 API: {doc}`zoomy_jax <../api/_autodoc2/zoomy_jax/zoomy_jax>`,
 {doc}`zoomy_foam <../api/_autodoc2/zoomy_foam/zoomy_foam>`,

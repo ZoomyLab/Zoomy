@@ -1,7 +1,9 @@
 # FEniCSx backend
 
-```{warning}
-Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](../guide/index.md).
+```{note}
+FEniCSx has its own driver, `DolfinxHyperbolicSolver` (`library/zoomy_fenicsx/dolfinx_solver.py`),
+which does not print the symbolic solver templates of the [user guide](../guide/solvers.md); the
+[test matrix](../testing/symsolver.md) does not run it.
 ```
 
 `zoomy_fenicsx` drives [FEniCSx](https://fenicsproject.org/) — the next-gen
