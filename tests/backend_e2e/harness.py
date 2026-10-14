@@ -49,6 +49,18 @@ def cpus() -> str:
     return ",".join(runs)
 
 
+def gpus() -> list[str]:
+    """The GPUs a GPU config may use: `E2E_GPUS` (device ids, comma-separated), else
+    `CUDA_VISIBLE_DEVICES`, else every GPU `nvidia-smi -L` lists; [] without a GPU."""
+    for var in ("E2E_GPUS", "CUDA_VISIBLE_DEVICES"):
+        if os.environ.get(var) is not None:
+            return [g.strip() for g in os.environ[var].split(",") if g.strip()]
+    if not shutil.which("nvidia-smi"):
+        return []
+    r = subprocess.run(["nvidia-smi", "-L"], capture_output=True, text=True)
+    return [str(i) for i, ln in enumerate(r.stdout.splitlines()) if ln.startswith("GPU ")]
+
+
 # --------------------------------------------------------------------------- library
 
 def _git(*args, cwd) -> str:
@@ -178,7 +190,8 @@ class Container:
     HOME, build caches), no host home and no user site-packages (the host's editable installs
     would shadow the image's). `shared`: further `(host dir, container path)` binds, read-write
     (a directory two containers exchange through: preCICE's exchange directory); `extra_env`:
-    further environment.
+    further environment; `gpus`: the GPUs the container sees (apptainer `--nv`, docker
+    `--gpus`; `CUDA_VISIBLE_DEVICES`).
     """
     backend: Backend
     image: str
@@ -192,6 +205,7 @@ class Container:
     log: Path | None = None
     shared: tuple = ()
     extra_env: dict = field(default_factory=dict)
+    gpus: tuple = ()
 
     def env(self) -> dict:
         e = {"PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1", "MPLBACKEND": "Agg",
@@ -204,6 +218,8 @@ class Container:
             e["HOME"] = "/e2e/work/home"            # apptainer: --home
         if self.snap is not None and self.dev:
             e["PYTHONPATH"] = ":".join(f"/zoomy/library/{p}" for p in PACKAGES)
+        if self.gpus and self.rt == "apptainer":          # docker: --gpus binds them
+            e["CUDA_VISIBLE_DEVICES"] = ",".join(self.gpus)
         if (Path.home() / ".cache/zoomy/hypre-cpu-3.2.0").is_dir() and self.rt == "apptainer":
             e["ZOOMY_HYPRE_CACHE"] = "/e2e/zcache"    # the host's hypre build (read-only)
         e.update(self.extra_env)
@@ -223,7 +239,7 @@ class Container:
 
     def _apptainer(self, verb: str, args: list[str]) -> list[str]:
         cmd = ["taskset", "-c", cpus(), "apptainer", verb, "--cleanenv", "--contain", "--pid",
-               "--home", f"{self.work / 'home'}:/e2e/work/home"]
+               "--home", f"{self.work / 'home'}:/e2e/work/home", *(["--nv"] if self.gpus else [])]
         for src, dst, mode in self.binds():
             cmd += ["--bind", f"{src}:{dst}:{mode}"]
         envfile = self.work / "apptainer.env"           # --env splits values at commas
@@ -237,6 +253,8 @@ class Container:
             cmd.append("-d")
         if port:
             cmd += ["-p", f"127.0.0.1:{port}:8080"]
+        if self.gpus:
+            cmd += ["--gpus", f'"device={",".join(self.gpus)}"']
         for src, dst, mode in self.binds():
             cmd += ["-v", f"{src}:{dst}:{mode}"]
         for k, v in self.env().items():
