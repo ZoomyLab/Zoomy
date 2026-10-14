@@ -1067,7 +1067,7 @@ def gate_eigenvalues_dry(eps=None):
     `sm.eigenvalues_cfl`, leaving `sm.eigenvalues` physical (with its power guard) for the
     Riemann dissipation.  `eps` defaults to 0: a cell without water (h <= 0) has no wave speed,
     but every cell with h > 0 moves mass with its own velocity (the Audusse states keep it), so
-    its speed bounds the step however thin it is (ANALYSIS 49).
+    its speed bounds the step however thin it is (ANALYSIS 52).
     The dry gate carries the power guard because a branchless backend evaluates both arms; without
     a closed form it gates `numerical_eigenvalues` of `A_n` with `hinv` -> `1/max(1e-14, h)` (the
     Riemann speeds' matrix, `wave_speed_inverse_depth`), or the model's published

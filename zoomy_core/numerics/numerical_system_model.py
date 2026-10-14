@@ -1065,7 +1065,7 @@ class NumericalSystemModel(SystemModel):
         source_treatment = SourceTreatment(
             typed(SourceTreatment, source_treatment, "source_treatment"))
         # the derivative of a friction law's |u| at u = 0: 0, not 0/0 (value unchanged); before
-        # the linearization differentiates the source (ANALYSIS 49, item 4)
+        # the linearization differentiates the source (ANALYSIS 52, item 4)
         from zoomy_core.systemmodel.operations import norm_derivative_at_zero
         norm_derivative_at_zero()(sm)
         if source_treatment is SourceTreatment.linearized:
