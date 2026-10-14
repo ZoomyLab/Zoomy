@@ -101,3 +101,12 @@ def test_eigvals_dispatch_cpu_is_lapack():
     A = jnp.asarray(_cases()["random14"])
     assert np.array_equal(np.asarray(jax.jit(eigvals)(A)),
                           np.asarray(jax.jit(jnp.linalg.eigvals)(A)))
+
+
+def test_eigvals_device_under_vmap():
+    """Per cell under `vmap` (the runtimes' numerical-eigenvalue fallbacks) = the batched call
+    (to round-off: the vmapped prelude is compiled with other contractions)."""
+    A = _cases()["vam_like"]
+    per_cell = np.asarray(jax.jit(jax.vmap(eigvals_device))(jnp.asarray(A)))
+    whole = np.asarray(jax.jit(eigvals_device)(jnp.asarray(A)))
+    assert _matched_error(per_cell, whole, A) <= 1e-13
