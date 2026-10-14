@@ -8,6 +8,14 @@ From: ubuntu:24.04
 #     containers/zoomy_amrex/zoomy_amrex.sif containers/zoomy_amrex/zoomy_amrex.def
 #   apptainer run containers/zoomy_amrex/zoomy_amrex.sif [port]   # default 8080
 #
+# One image for CPU and GPU machines: it carries the CUDA 12.6 compiler and the
+# libraries a GPU build links, and the generated solver is compiled for the CPU or
+# with CUDA as the run asks (zoomy_amrex.symsolver `gpu=`; run_case:
+# ZOOMY_AMREX_CUDA=1).  A GPU run needs the host's NVIDIA driver in the container:
+#   apptainer exec --nv containers/zoomy_amrex/zoomy_amrex.sif <cmd>
+# Multi-GPU: one rank per GPU through this OpenMPI (not CUDA-aware: AMReX stages
+# the halos through the host).
+#
 # NOTE: %files dest is /opt/src, NOT /tmp — Apptainer bind-mounts the host /tmp
 # during %post, which would mask anything copied under /tmp.
 
@@ -31,7 +39,9 @@ From: ubuntu:24.04
     export ZOOMY_ADAPTER=amrex
     export ZOOMY_PORT=8080
     export LC_ALL=C
-    export PATH="/usr/local/bin:$PATH"
+    export CUDA_HOME=/usr/local/cuda
+    export PATH="/usr/local/bin:/usr/local/cuda/bin:$PATH"
+    export NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 %post
     set -e
@@ -41,6 +51,24 @@ From: ubuntu:24.04
         python3 python3-pip python3-dev python3-venv pkg-config \
         libopenmpi-dev openmpi-bin libhdf5-openmpi-dev wget \
     && rm -rf /var/lib/apt/lists/*
+
+    # CUDA 12.6 (NVIDIA's apt repository): nvcc and the libraries the CUDA build links
+    # (cudart, curand, cusparse: AMReX; cublas, cusolver: hypre-CUDA; nvtx: TINY_PROFILE;
+    # the driver stub libcuda.so for the link, the real one comes with --nv), shared
+    # libraries only: the static archives (1.5 GB) are deleted, but cudart's (nvcc links
+    # it).  Nothing runs on a GPU unless a run asks for the CUDA build, so a CPU-only
+    # machine never needs a driver.
+    wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
+        -O /root/cuda-keyring.deb
+    dpkg -i /root/cuda-keyring.deb && rm -f /root/cuda-keyring.deb
+    apt-get update && apt-get install -y --no-install-recommends \
+        cuda-nvcc-12-6 cuda-cudart-dev-12-6 cuda-driver-dev-12-6 cuda-cccl-12-6 \
+        cuda-nvtx-12-6 cuda-profiler-api-12-6 libcurand-dev-12-6 libcusparse-dev-12-6 \
+        libcublas-dev-12-6 libcusolver-dev-12-6 \
+    && rm -rf /var/lib/apt/lists/*
+    find /usr/local/cuda-12.6 -name 'lib*_static*.a' ! -name libcudart_static.a -delete
+    ln -sfn /usr/local/cuda-12.6 /usr/local/cuda
+    /usr/local/cuda/bin/nvcc --version | tail -1
 
     # h5py/meshio = HDF5 mesh/result IO; fastapi/uvicorn = the server.
     python3 -m pip install --no-cache-dir --break-system-packages \
@@ -100,3 +128,4 @@ From: ubuntu:24.04
     pkg-config --modversion libprecice
     zoomy-server  --help >/dev/null 2>&1 && echo "zoomy-server CLI OK"
     zoomy-jupyter --help >/dev/null 2>&1 && echo "zoomy-jupyter CLI OK"
+    nvcc --version | tail -1
