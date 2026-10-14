@@ -121,6 +121,18 @@ A dev branch publishes nothing: the images follow `main`. Rebuild by hand:
 `gh workflow run build-containers.yml -f container=<c>` (no `-f`: every image). The JAX image
 also ships OpenMPI 5 + mpi4py + mpi4jax (CPU), so it runs distributed (`comm=`, `mpiexec -n N`).
 
+Which recipe CI builds: a folder with a `Dockerfile` is built from it (the SIF is converted
+from that Docker image); a `.def` there is the local `apptainer build` of the same image and
+must carry the same steps (`zoomy_jax`, `zoomy_amrex`: both; `zoomy_openfoam`: the `.def`
+only). A step in the `.def` alone never reaches the published image: pyprecice was in
+`zoomy_jax.def` but not its Dockerfile, so the published JAX image could not couple.
+
+preCICE: every image that couples ships **3.4.0** (JAX: conda-forge pyprecice / precice
+3.4.0 with petsc4py; AMReX: libprecice 3.4.0 deb; OpenFOAM: libprecice 3.4.0 deb + pyprecice
+3.4.0). preCICE refuses to couple participants of different versions ("Mixing preCICE
+versions ... is forbidden"), so a version bump goes into all three recipes at once;
+`tests/backend_e2e/test_couple_across_containers.py` couples every pair across two images.
+
 ## Pulling prebuilt images (no local build)
 
 The Containers pipeline publishes every backend to ghcr (public, anonymous

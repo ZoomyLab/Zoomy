@@ -31,11 +31,18 @@ RUN /opt/conda/envs/zoomy/bin/python -m pip install --no-cache-dir \
 # mpi4py and mpi4jax from conda-forge. python / numpy / scipy / jax / jaxlib pinned to the
 # installed builds (--freeze-installed cannot solve: OpenMPI needs another libhwloc).
 # GPU-aware MPI and AmgX: containers/zoomy_jax_mpi.
+# preCICE (pyprecice 3.4.0 + conda-forge's libprecice 3.4.0) for coupling: the version of the
+# other participants (the AMReX and OpenFOAM images' libprecice); preCICE refuses to couple
+# different versions. In the MPI solve: conda-forge's precice comes in mpich and openmpi
+# variants, and this picks the openmpi one. petsc4py (the PETSc precice links): the JAX
+# participant (`runtime.PreciceAdapter`) imports it before precice. The import fails the
+# build, not a coupled run.
 RUN pins=$(/opt/conda/bin/conda list -n zoomy --export '^(python|numpy|scipy|jax|jaxlib)$' \
            | grep -v '^#') \
     && /opt/conda/bin/mamba install -n zoomy -y -c conda-forge $pins \
-      "openmpi>=5,<6" mpi4py "mpi4jax=0.9.1.post2" \
-    && /opt/conda/bin/conda clean -afy
+      "openmpi>=5,<6" mpi4py "mpi4jax=0.9.1.post2" "pyprecice=3.4.0" petsc4py \
+    && /opt/conda/bin/conda clean -afy \
+    && /opt/conda/envs/zoomy/bin/python -c "import petsc4py, precice; v = precice.get_version_information().split(b';')[0]; assert v == b'3.4.0', v; print('preCICE', v.decode())"
 
 # Server env + triple-purpose dispatch (parity with zoomy_jax.def): the GUI's
 # jax backend runs `apptainer run img [port]` on this image too.

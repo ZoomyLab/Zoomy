@@ -176,7 +176,8 @@ class Container:
     The library snapshot at /zoomy; `dev`: its packages first on PYTHONPATH (published: the
     image's own). Always: the harness at /e2e/harness, a scratch dir at /e2e/work (TMPDIR,
     HOME, build caches), no host home and no user site-packages (the host's editable installs
-    would shadow the image's).
+    would shadow the image's). `shared`: further `(host dir, container path)` binds, read-write
+    (a directory two containers exchange through: preCICE's exchange directory).
     """
     backend: Backend
     image: str
@@ -188,6 +189,7 @@ class Container:
     name: str | None = None
     port: int | None = None
     log: Path | None = None
+    shared: tuple = ()
 
     def env(self) -> dict:
         e = {"PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1", "MPLBACKEND": "Agg",
@@ -210,7 +212,7 @@ class Container:
             b.append((str(self.snap), "/zoomy", "rw"))
         if "ZOOMY_HYPRE_CACHE" in self.env():
             b.append((str(Path.home() / ".cache/zoomy"), "/e2e/zcache", "ro"))
-        return b
+        return b + [(str(src), dst, "rw") for src, dst in self.shared]
 
     def _prepare(self):
         for d in ("tmp", "home", "amrex_cache", "foam_cache"):
@@ -299,23 +301,34 @@ class Container:
 
     # ---- a command in the image ------------------------------------------------------
 
-    def run(self, argv: list[str], timeout: float, log: Path) -> int:
-        """`argv` in the image (apptainer exec / docker run), output to `log`."""
+    def start(self, argv: list[str], log: Path) -> subprocess.Popen:
+        """`argv` in the image (apptainer exec / docker run), output to `log`, not waited for
+        (`kill` ends it)."""
         self._prepare()
-        self.name = f"e2e-{self.backend.name}-run-{os.getpid()}-{int(time.time())}"
+        self.name = f"e2e-{self.backend.name}-run-{os.getpid()}-{time.time_ns()}"
         cmd = self._apptainer("exec", argv) if self.rt == "apptainer" else self._docker(argv)
         with open(log, "w") as f:
             f.write(" ".join(cmd) + "\n")
             f.flush()
-            p = subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT, start_new_session=True)
-            try:
-                return p.wait(timeout)
-            except subprocess.TimeoutExpired:
-                os.killpg(p.pid, signal.SIGKILL)
-                if self.rt == "docker":
-                    subprocess.run(["docker", "rm", "-f", self.name], capture_output=True)
-                p.wait()
-                raise
+            return subprocess.Popen(cmd, stdout=f, stderr=subprocess.STDOUT,
+                                    start_new_session=True)
+
+    def kill(self, p: subprocess.Popen):
+        """End a `start`ed command and everything it started."""
+        if p.poll() is None:
+            os.killpg(p.pid, signal.SIGKILL)
+            if self.rt == "docker":
+                subprocess.run(["docker", "rm", "-f", self.name], capture_output=True)
+        p.wait()
+
+    def run(self, argv: list[str], timeout: float, log: Path) -> int:
+        """`argv` in the image (apptainer exec / docker run), output to `log`."""
+        p = self.start(argv, log)
+        try:
+            return p.wait(timeout)
+        except subprocess.TimeoutExpired:
+            self.kill(p)
+            raise
 
 
 # --------------------------------------------------------------------------- the GUI's client

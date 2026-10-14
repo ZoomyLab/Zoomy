@@ -5,8 +5,11 @@ Dynamics, 3rd ed. (2009), ch. 4 (pressure function 4.5-4.7, Newton on p*,
 sampling 4.4).  Written here from the book; no third-party code.
 """
 import numpy as np
-import jax
-jax.config.update("jax_enable_x64", True)
+try:                    # the NumPy / foam / AMReX images ship no JAX (as common.py)
+    import jax
+    jax.config.update("jax_enable_x64", True)
+except ImportError:
+    pass
 
 import zoomy_core.model.boundary_conditions as BC
 import zoomy_core.model.initial_conditions as IC

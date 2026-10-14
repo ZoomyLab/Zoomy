@@ -4,49 +4,30 @@ step) vs the single-domain JAX march.
     python gate10_xcouple.py jax    Left = JAX, Right = foam
     python gate10_xcouple.py foam   Left = foam, Right = foam"""
 import os
-import re
 import shutil
 import subprocess
 import sys
 import threading
 
-import common as C
 import numpy as np
 
-from gate3_precice import single
-from zoomy_foam.symsolver import SymbolicHyperbolicSolverFoam
-from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+import couple_side as CS
+
+from gate9_foam import WORK as GATE_WORK
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-WORK = ("/tmp/claude-765404697/-mnt-userdrive-Users-home-adam-obbpb5az1dhsjzf-git-"
-        "zotero-rag/b5667895-053e-413b-8d69-8137a92fc71c/scratchpad/foam_cases/xcouple")
-T, WINDOW, h, dx = 0.05, 1e-3, 1, 1 / 200
+WORK = os.path.join(GATE_WORK, "xcouple")
+WINDOW = CS.WINDOW
 
 shutil.rmtree(WORK, ignore_errors=True)
 os.makedirs(WORK)
-cfg = open(os.path.join(HERE, "precice-config.xml")).read()
-cfg = re.sub(r'time-window-size value="[^"]*"', f'time-window-size value="{WINDOW}"', cfg)
-cfg = re.sub(r'max-time value="[^"]*"', f'max-time value="{T}"', cfg)
-cfg = cfg.replace('exchange-directory="."', f'exchange-directory="{WORK}"')
-config = os.path.join(WORK, "precice-config.xml")
-open(config, "w").write(cfg)
+config = str(CS.write_config(WORK))
 
 LEFT = sys.argv[1] if len(sys.argv) > 1 else "jax"
 
 
 def foam_side(name):
-    left = name == "Left"
-    mesh, nsm = C.dambreak_1d(0, 1, domain=(0.0, 0.5) if left else (0.5, 1.0),
-                              nx=100, x_dam=1.0 if left else 0.0)
-    me, peer = ("L", "R") if left else ("R", "L")
-    sj = SymbolicHyperbolicSolverJax(time_end=T)
-    Q0, _ = sj.setup(mesh, nsm)
-    sf = SymbolicHyperbolicSolverFoam(cfl=0.9, couple=dict(
-        participant=name, config=config, mesh=f"{name}-Mesh",
-        write=[f"{me}{i}" for i in range(3)], read=[f"{peer}{i}" for i in range(3)],
-        tag="right" if left else "left", side=0 if left else 1))
-    sf.build(sj.nsm, 1)                             # compile before the peer waits
-    return lambda: sf.run(sj.mesh_np, sj.nsm, np.asarray(Q0), os.path.join(WORK, name))
+    return CS.cxx_side("foam", name, config, WORK)
 
 
 res, runs = {}, {"Right": foam_side("Right")}
@@ -79,8 +60,7 @@ for th in threads:
 tR, QR = res["Right"]
 QL = res["Left"][1]
 Qc = np.concatenate([QL, QR], 1)
-Q0s, Qs = single(1, fixed_dt=WINDOW)
+m = CS.vs_single(Qc)
 print(f"{LEFT}(Left) <-> foam(Right), O1, window {WINDOW}: t foam {tR:.6g}, "
-      f"max|coupled-single| {np.abs(Qc - Qs).max():.2e}, "
-      f"mass drift {abs(Qc[h].sum() * dx - Q0s[h].sum() * dx):.1e}")
+      f"max|coupled-single| {m['coupled_vs_single']:.2e}, mass drift {m['mass']:.1e}")
 print("G10_DONE")

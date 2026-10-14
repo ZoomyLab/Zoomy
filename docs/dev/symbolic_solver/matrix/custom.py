@@ -130,11 +130,8 @@ def couple(pair, ranks):
         rc, out = _gate(["gate28_jax_couple_parallel.py", "1d", "1", "0.001", "window",
                          str(ranks), str(ranks)])
         if rc == 0:
-            from gate3_precice import single, h, dx
-            Q0, Qs = single(1, fixed_dt=1e-3)
-            Qc = np.load(GATES / f"Q_1d_o1_0.001_window_L{ranks}_R{ranks}.npy")
-            return dict(coupled_vs_single=float(np.abs(Qc - Qs).max()),
-                        mass=float(abs(Qc[h].sum() - Q0[h].sum()) * dx))
+            from couple_side import vs_single
+            return vs_single(np.load(GATES / f"Q_1d_o1_0.001_window_L{ranks}_R{ranks}.npy"))
     m = re.search(r"max\|coupled ?- ?single\| ([\d.e+-]+), mass drift ([\d.e+-]+)", out)
     if rc != 0 or m is None:
         raise RuntimeError(f"gate failed (rc {rc}):\n{out[-2000:]}")
