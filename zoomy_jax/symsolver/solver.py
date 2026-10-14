@@ -25,7 +25,7 @@ from zoomy_core.misc.options import OptionParam
 from zoomy_core.solver.constants import elliptic_constants
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings, LinearSolver
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
-from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
+from zoomy_core.symsolver.strategies.hyperbolic import CoupledFace, HyperbolicTemplate
 from zoomy_core.systemmodel.padding import pad_to_square
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
 from zoomy_jax.mesh.mesh import convert_mesh_to_jax
@@ -54,7 +54,9 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
                               "jax.grad.")
     ad_checkpoints = param.Integer(default=64, bounds=(1, None))
     couple = param.Dict(default=None, allow_None=True,
-                        doc="preCICE: dict(adapter=, tag=, side=).")
+                        doc="preCICE: dict(adapter=, tag=, side=[, face=CoupledFace, "
+                            "frozen_mass_row=bool]) (`HyperbolicTemplate.precice_march`; "
+                            "a `ColumnPreciceAdapter` towards a VOF peer).")
     comm = param.Parameter(default=None, doc=(
         "mpi4py communicator: a distributed run, each rank on its piece of "
         "the mesh (owned cells + halo).  setup() takes the global mesh and "
@@ -182,10 +184,13 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
             "Q Qaux p time time_end mesh")
         template = HyperbolicTemplate(self.nsm, **self._config())
         if self.couple:
+            c = self.couple
             return "hyperbolic_precice", PyPrinter().procedure(
                 "hyperbolic_precice", (Q, Qaux, p, time, mesh),
                 lambda *a: template.precice_march(
-                    *a, side=self.couple["side"], subcycling=self.subcycling))
+                    *a, side=c.get("side", 0), subcycling=self.subcycling,
+                    face=c.get("face", CoupledFace.shared),
+                    frozen_mass_row=c.get("frozen_mass_row", False)))
         return "hyperbolic", PyPrinter().procedure(
             "hyperbolic", (Q, Qaux, p, time, time_end, mesh), template.march)
 
