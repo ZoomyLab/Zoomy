@@ -25,6 +25,7 @@ from zoomy_core.solver.constants import TPFA_COS_FLOOR
 from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_closure_derivatives
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
+from zoomy_core.symsolver.vocabulary import march_error
 from zoomy_core.symsolver.numpy_backend.assembly import cell_pattern, host_amg_solve
 from zoomy_jax.fvm.implicit_ad import cellwise_solve, newton_root
 from zoomy_jax.mesh.mesh import lsq_gradient_per_field
@@ -963,7 +964,11 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         return halo(X, mesh)
 
     # ── effects ────────────────────────────────────────────────────────────
-    warned = []
+    warned, march_failures, march_checks = [], [], []
+    try:                    # host callbacks need a CPU device (JAX_PLATFORMS=cuda has none)
+        has_cpu = bool(jax.devices("cpu"))
+    except RuntimeError:
+        has_cpu = False
 
     def check_cfl(tok, dt_cfl, dt):
         """Warn once (host callback) when `dt` exceeds the CFL step `dt_cfl`; returns the next
@@ -978,6 +983,24 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         a, b = lax.stop_gradient(dt_cfl), lax.stop_gradient(dt)
         lax.cond(b > a * (1 + 1e-12), lambda: jax.debug.callback(host, a, b),
                  lambda: None)
+        return (tok + 1,)
+
+    def check_march(tok, time, time_end, dt, n_step, q_max):
+        """The march's end check: its arguments become extra outputs of the printed program
+        (`march_checks`; the solver's `run` raises `FloatingPointError` from them), and where
+        a CPU device takes host callbacks a callback raises on failure (also under AD).
+        Returns the next order token.
+        """
+        args = tuple(map(lax.stop_gradient, (time, time_end, dt, n_step, q_max)))
+        march_checks.append(args)
+        if has_cpu:
+            def host(*a):
+                """Record and raise the failure."""
+                msg = march_error(*a)
+                march_failures.append(msg)
+                raise FloatingPointError(msg)
+            ok = (args[0] >= args[1]) & jnp.isfinite(args[4])
+            lax.cond(ok, lambda: None, lambda: jax.debug.callback(host, *args, ordered=True))
         return (tok + 1,)
 
     def io_write(tok, time, Q, Qaux):
@@ -1054,7 +1077,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         io_save_state=io_save_state, io_load_state=io_load_state,
         root=root, linsolve=linsolve, implicit_diffusion=implicit_diffusion,
         diffusion=diffusion,
-        check_cfl=check_cfl,
+        check_cfl=check_cfl, check_march=check_march, march_failures=march_failures,
+        march_checks=march_checks,
         minimum=jnp.minimum, maximum=jnp.maximum, abs=jnp.abs, floor=jnp.floor)
     if couple is not None:
         m.update(_coupling(couple, rt, mesh_np, fc0, nf, partition))

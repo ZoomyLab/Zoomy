@@ -331,6 +331,15 @@ def newton_solver(residual):
 
 # ── HyperbolicSolver ────────────────────────────────────────────────────────
 
+def _raise_march_error(time, time_end, dt, n_step, q_max):
+    """Host side of the march's end check: raise `FloatingPointError` if it stopped before
+    `time_end` (a NaN time) or ended with a non-finite state (`vocabulary.march_error`)."""
+    from zoomy_core.symsolver.vocabulary import march_error
+    msg = march_error(time, time_end, dt, n_step, q_max)
+    if msg is not None:
+        raise FloatingPointError(msg)
+
+
 class HyperbolicSolver(HyperbolicSolverNumpy):
     """JAX HyperbolicSolver — JIT-compiled explicit time stepping.
 
@@ -2160,7 +2169,8 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             time_loop = self._compile_time_loop(
                 _advance, _couple_proceed, save_fields, _while_loop,
                 time_end=time_end, n_intervals=n_intervals,
-                log_every=_log_every, observer=observer)
+                log_every=_log_every, observer=observer,
+                check_end=type(self)._couple_proceed is HyperbolicSolver._couple_proceed)
             self._time_loop_cache[_cache_key] = time_loop
 
         return time_loop(time0, 0.0, i_snapshot, last_written, Q, Qaux,
@@ -2168,7 +2178,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
 
     @staticmethod
     def _compile_time_loop(_advance, _couple_proceed, save_fields, _while_loop,
-                           *, time_end, n_intervals, log_every, observer):
+                           *, time_end, n_intervals, log_every, observer, check_end=False):
         """The jitted march ``(time0, iteration, i_snapshot, last_written, Q,
         Qaux, parameters) -> (Q, Qaux, acc)``; `acc = ()` when `observer`
         is None.  Snapshot stamps are ``time0 + i * (time_end - time0) /
@@ -2240,6 +2250,11 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
 
             (time, iteration, i_snapshot, last_written, Qnew, Qauxnew,
              acc) = _while_loop(proceed, loop_body, loop_val)
+            if check_end:           # a NaN time ends the loop: raise, never return it
+                jax.debug.callback(
+                    _raise_march_error, *map(jax.lax.stop_gradient, (
+                        time, jnp.asarray(time_end, time.dtype), jnp.nan, iteration,
+                        jnp.max(jnp.abs(Qnew)))), ordered=True)
 
             # The end state.  The write stamps are ``i_snapshot * dt_snapshot``
             # with ``dt_snapshot = time_end / (snapshots - 1)``, so the last
