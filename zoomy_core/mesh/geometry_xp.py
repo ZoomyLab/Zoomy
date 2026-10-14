@@ -51,6 +51,9 @@ _LSQ_TIE = 1e-6
 _LSQ_MAX_LAYERS = 2
 #: Cells per batch of the extension (bounds the candidate arrays).
 _LSQ_CHUNK = 20000
+#: A boundary face whose normal lies within this angle (rad) of an axis is axis-aligned
+#: (:func:`_wall_frames`).
+_FRAME_TOL = 1e-9
 #: Relative cut-off of the closure fits' pseudo-inverses
 #: (:func:`_lsq_closure_matrices`): their null directions sit at round-off
 #: (~1e-16), a unisolvent fit's singular values at >= ``_LSQ_COND``.
@@ -104,8 +107,9 @@ class MeshTopology:
     # nearest the cell, (n_cells, max_nbr, dim); None: no periodic BC
     lsq_shift: Optional[np.ndarray] = field(repr=False, default=None)
     # boundary closure (ANALYSIS 40): per closure space ``(owner, space)``
-    # the class of each row (-1: no closure, the ghost-sample fit); the
-    # classes' kinds per boundary face and the closure cells are in
+    # the entry of each row (-1: no closure, the ghost-sample fit; a class;
+    # a vector row's terms ((src_row, class), ...), `closure_terms`);
+    # the classes' kinds per boundary face and the closure cells are in
     # ``lsq_plan["closure"]``
     lsq_closure_class: dict = field(repr=False, default_factory=dict)
 
@@ -153,10 +157,12 @@ class _FitCheck:
     """
 
     def __init__(self, dim, mon, centers, ghost_offsets, ghost_axis,
-                 translations=None):
-        """Store the monomials, cell centres, ghost offsets and axes, and optional periodic
-        translations.
+                 translations=None, frames=None):
+        """Store the monomials, cell centres, ghost offsets and axes, optional periodic
+        translations and the cells' wall frames `(n_cells, dim, dim)` (`_wall_frames`; None:
+        Cartesian).
         """
+        self.frames = frames
         self.dim = dim
         self.powers = np.asarray(mon, dtype=int).reshape(len(mon), dim)
         self.centers = np.asarray(centers, dtype=float)
@@ -205,6 +211,10 @@ class _FitCheck:
         gh = np.flatnonzero((B >= 0).any(axis=1))
         G = np.where((B[gh] >= 0)[..., None],
                      self.ghost_offsets[np.maximum(B[gh], 0)], 0.0)
+        if self.frames is not None:        # oblique walls: the fit in the wall frame
+            Fq = self.frames[cells]
+            D = np.einsum("nab,wnb->wna", Fq, D)
+            G = np.einsum("nab,njb->nja", Fq[gh], G)
         r2[gh] = np.maximum(r2[gh], (G * G).sum(axis=-1).max(axis=1, initial=0.0))
         live = r2 > 0
         r = np.sqrt(np.where(live, r2, 1.0))
@@ -268,14 +278,15 @@ class _ClosureCheck:
     rows) must have full column rank.
     """
 
-    def __init__(self, base, kinds, foot, normal):
-        """Store the base check, the closure `kinds` `(n_class, n_bf)`, foot offsets and outward
-        normals.
+    def __init__(self, base, kinds, foot, normal, vectors=()):
+        """Store the base check, the closure `kinds` `(n_class, n_bf)`, foot offsets, outward
+        normals and the vector classes (`_closure_classes`).
         """
         self.base = base
         self.kinds = np.asarray(kinds)
         self.foot = np.asarray(foot, dtype=float)
         self.normal = np.asarray(normal, dtype=float)
+        self.vectors = tuple(vectors)
 
     def offsets(self, cells, S):
         """Sample offsets of the base check."""
@@ -290,7 +301,44 @@ class _ClosureCheck:
             act = np.flatnonzero(ok & (kb > GHOST).any(axis=1))
             if act.size:
                 ok[act] = self._constrained_ok(cells[act], S[act], B[act], kb[act])
+        for c in self.vectors:
+            Bi = np.maximum(B, 0)
+            kb = np.where((B >= 0)[None], c["kinds"][:, Bi], -1)      # (d, n, b)
+            rot = (B >= 0) & c["rotated"][Bi]
+            act = np.flatnonzero(ok & (kb > GHOST).any(axis=(0, 2)))
+            if act.size:
+                ok[act] = self._vector_ok(cells[act], S[act], B[act], kb[:, act], rot[act])
         return ok
+
+    def _vector_ok(self, cells, S, B, kb, rot):
+        """Full-column-rank test of the joint constrained fits of a vector group (`kb` `(d, n,
+        b)` component kinds, `rot` the faces in the normal frame).
+        """
+        from zoomy_core.numerics.boundary_closure import DIRICHLET, GHOST, NEUMANN
+        base = self.base
+        d = kb.shape[0]
+        D = base.offsets(cells, S)
+        Bi = np.maximum(B, 0)
+        F = np.where((B >= 0)[..., None], self.foot[Bi], 0.0)
+        Nf = self.normal[Bi]
+        r2 = np.maximum((D * D).sum(-1).max(axis=1, initial=0.0),
+                        (4 * F * F).sum(-1).max(axis=1, initial=0.0))
+        r = np.sqrt(np.where(r2 > 0, r2, 1.0))[:, None, None]
+        Vi = np.moveaxis(base._mono(D / r), 0, -1)                   # (n, w, M)
+        Vg = np.moveaxis(base._mono(2 * F / r), 0, -1)               # (n, b, M)
+        Vd = np.moveaxis(base._mono(F / r), 0, -1)
+        Vn = _normal_derivative_columns(np, F / r, Nf, [tuple(p) for p in base.powers])
+        Fr = _closure_frames(np, Nf, rot, d)                         # (n, b, K, d)
+        kf = _frame_kinds(np.moveaxis(kb, 0, -1), rot, d)            # (n, b, K)
+        n, w, M = Vi.shape
+        Vint = (np.eye(d)[None, :, None, :, None] * Vi[:, None, :, None, :]).reshape(
+            n, d * w, d * M)
+        sel = ((kf == GHOST)[..., None, None] * Vg[:, :, None, None, :]
+               + (kf == DIRICHLET)[..., None, None] * Vd[:, :, None, None, :]
+               + (kf == NEUMANN)[..., None, None] * Vn[:, :, None, None, :])
+        Vb = (Fr[..., None] * sel).reshape(n, -1, d * M)              # (n, b K, d M)
+        C = np.concatenate([Vint, Vb], axis=1)                        # (n, rows, d M)
+        return _full_rank_ok(np.transpose(C, (2, 1, 0)))
 
     def _constrained_ok(self, cells, S, B, kb):
         """Full-column-rank test of the constrained fits of cells `cells` for the face kinds
@@ -314,6 +362,44 @@ class _ClosureCheck:
                       0.0)
         C = np.concatenate([Vi, Vg, Vd, Vn], axis=2)               # (M, n, rows)
         return _full_rank_ok(C.transpose(0, 2, 1))
+
+
+def _closure_frames(xp, nb, rotated, d):
+    """Constraint frames `(..., K, d)` of a vector group of `d` components on boundary faces
+    with unit normals `nb` `(..., dim)`: on a `rotated` face the normal `n` and the tangential
+    rows (2-D: `t = (-n_y, n_x)`; 3-D: the rows of `I - n n^T`, whose squares sum to those of
+    any orthonormal tangent basis), elsewhere the Cartesian components; zero rows pad to
+    `K = 2` (d = 2) or `K = 4` (d = 3).
+    """
+    m = min(d, nb.shape[-1])
+    n = [nb[..., a] for a in range(m)] + [xp.zeros_like(nb[..., 0])] * (d - m)
+    zero = xp.zeros_like(n[0])
+    if d == 2:
+        rot = [[n[0], n[1]], [-n[1], n[0]]]
+    else:
+        rot = [[n[a] for a in range(d)]] + [
+            [(1.0 if a == b else 0.0) - n[a] * n[b] for b in range(d)] for a in range(d)]
+    K = len(rot)
+    cart = [[(xp.ones_like(zero) if a == b else zero) for b in range(d)] for a in range(d)]
+    cart += [[zero] * d] * (K - d)
+    r = xp.asarray(rotated)
+    rows = [xp.stack([xp.where(r, rot[k][b], cart[k][b]) for b in range(d)], axis=-1)
+            for k in range(K)]
+    return xp.stack(rows, axis=-2)
+
+
+def _frame_kinds(kinds, rotated, d):
+    """Kind of each frame row `(..., K)` (`_closure_frames`) from the group's row kinds
+    `(..., d)`: on a rotated face the first row's kind (normal) then the second row's
+    (tangential), elsewhere each component's own; padding rows are ghosts (zero rows).
+    """
+    from zoomy_core.numerics.boundary_closure import GHOST
+    kinds = np.asarray(kinds)
+    K = 2 if d == 2 else d + 1
+    rot = np.concatenate([kinds[..., :1]] + [kinds[..., 1:2]] * (K - 1), axis=-1)
+    cart = np.concatenate([kinds, np.full(kinds.shape[:-1] + (K - d,), GHOST,
+                                          dtype=kinds.dtype)], axis=-1)
+    return np.where(np.asarray(rotated)[..., None], rot, cart)
 
 
 def _full_rank_ok(C):
@@ -498,10 +584,97 @@ def _boundary_slots(owner, n_cells, boundary_face_centers, centers):
     return bdy, n_axis
 
 
+def _wall_frames(dim, bdy, normals):
+    """Static wall frames of the decoupled ghost fits (2-D).  A mirror ghost lies on its face's
+    normal line, so it informs the pure-normal monomials of the face frame; on an axis-aligned
+    face these are the pure monomials of the normal's axis.  A cell whose sampled boundary
+    faces are oblique turns its fit by `Q = R(k 90 deg) R(-phi_0)` (`phi_0` the angle of its
+    first face's normal, `k` the nearest axis: `Q n_0` lies on an axis, `|Q - I|` <= 45 deg),
+    if that one turn puts every face normal of the cell on an axis; otherwise (or in 3-D) the
+    cell keeps the Cartesian frame.
+
+    Args:
+        bdy: `(n_cells, b)` sampled boundary faces per cell (-1 padded).
+        normals: `(n_bf, dim)` unit outward normals.
+    Returns:
+        `(frame_face, turn, face_axis)`: per cell the boundary face defining its frame (-1:
+        Cartesian) and `k`; per boundary face the axis its normal takes in its cell's frame
+        (-1: Cartesian cell).
+    """
+    n_cells = bdy.shape[0]
+    frame_face = -np.ones(n_cells, dtype=int)
+    turn = np.zeros(n_cells, dtype=int)
+    n_bf = 0 if normals is None else np.asarray(normals).shape[0]
+    face_axis = -np.ones(n_bf, dtype=int)
+    if dim != 2 or normals is None or not n_bf or not bdy.shape[1]:
+        return frame_face, turn, face_axis
+    nrm = np.asarray(normals, dtype=float)
+    phi = np.arctan2(nrm[:, 1], nrm[:, 0])
+    k = np.rint(phi / (np.pi / 2)).astype(int)
+    psi = phi - k * (np.pi / 2)                        # in [-pi/4, pi/4]
+    has = bdy[:, 0] >= 0
+    f0 = np.maximum(bdy[:, 0], 0)
+    oblique = has & (np.abs(psi[f0]) > _FRAME_TOL)
+    valid = bdy >= 0
+    fb = np.maximum(bdy, 0)
+    d = psi[fb] - psi[f0][:, None]                      # turn mismatch, mod 90 deg
+    d = np.abs(d - np.rint(d / (np.pi / 2)) * (np.pi / 2))
+    same = (~valid | (d <= _FRAME_TOL)).all(axis=1)
+    cells = np.flatnonzero(oblique & same)
+    frame_face[cells] = f0[cells]
+    turn[cells] = k[f0[cells]]
+    for j in range(bdy.shape[1]):              # the axis Q n takes (phi - psi_0)
+        c = cells[valid[cells, j]]
+        f = bdy[c, j]
+        face_axis[f] = np.mod(np.rint((phi[f] - psi[f0[c]]) / (np.pi / 2)).astype(int), 2)
+    return frame_face, turn, face_axis
+
+
+def _turn_matrices(turn):
+    """`R(k 90 deg)` per entry of `turn`, `(n, 2, 2)` (exact integers)."""
+    c = np.rint(np.cos(np.asarray(turn) * np.pi / 2))
+    s = np.rint(np.sin(np.asarray(turn) * np.pi / 2))
+    return np.stack([np.stack([c, -s], axis=-1), np.stack([s, c], axis=-1)], axis=-2)
+
+
+def _frame_rotations(xp, nb, turn):
+    """Wall frames `Q = R(k 90 deg) R(-phi)` `(n, 2, 2)` from the unit normals `nb` `(n, 2)`
+    of the frame faces (differentiable in `nb`)."""
+    Rn = xp.stack([xp.stack([nb[:, 0], nb[:, 1]], axis=-1),
+                   xp.stack([-nb[:, 1], nb[:, 0]], axis=-1)], axis=-2)
+    return xp.matmul(xp.asarray(_turn_matrices(turn), dtype=nb.dtype), Rn)
+
+
+def _monomial_rotation(xp, Q, powers):
+    """`T` `(n, M, M)` with `m_a(Q y) = sum_b T[a, b] m_b(y)` for the monomials `powers`
+    (degree >= 1; a rotation keeps the degree): fit coefficients `a` in the turned frame are
+    `c = T^T a` in the Cartesian one."""
+    dim = Q.shape[-1]
+    index = {tuple(int(v) for v in pw): i for i, pw in enumerate(powers)}
+    zero = xp.zeros_like(Q[:, 0, 0])
+    rows = []
+    for pw in powers:
+        poly = {(0,) * dim: xp.ones_like(zero)}
+        for a, p in enumerate(pw):
+            for _ in range(int(p)):
+                new = {}
+                for mono, coef in poly.items():
+                    for b in range(dim):
+                        m2 = tuple(m + (i == b) for i, m in enumerate(mono))
+                        t = coef * Q[:, a, b]
+                        new[m2] = t if m2 not in new else new[m2] + t
+                poly = new
+        row = [zero] * len(powers)
+        for mono, coef in poly.items():
+            row[index[mono]] = coef
+        rows.append(xp.stack(row, axis=-1))
+    return xp.stack(rows, axis=-2)
+
+
 def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
                   n_inner_cells, boundary_owner, cell_vertices,
                   boundary_face_centers, ghost_offsets, sampled=None,
-                  translations=None, closure_kinds=None, normals=None):
+                  translations=None, closure_kinds=None, normals=None, vectors=()):
     """LSQ stencil selection (neighbours, boundary-face slots, ghost axes) without the
     pseudo-inverse: the vertex ring (face neighbours in 1D and for degree-1 wall cells) kept if
     its fit is unisolvent, else extended by nearest face neighbours.  Periodic seams get no ghost
@@ -516,13 +689,29 @@ def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
     required = get_required_monomials_count(degree, dim)
     bdy, n_axis = _boundary_slots(owner, n_cells, boundary_face_centers, centers)
     n = n_inner_cells
-    ghost_axis = np.argmax(np.abs(np.asarray(boundary_face_centers)
-                                  - np.asarray(centers)[np.maximum(owner, 0)]),
-                           axis=1) if owner.size else np.zeros(0, dtype=int)
-    check = _FitCheck(dim, mon, centers, ghost_offsets, ghost_axis, translations)
-    if closure_kinds is not None and len(closure_kinds):
+    # a ghost sits on its face's normal line (the mirror image of the cell centre), so it
+    # informs the pure monomials of the normal's axis -- not of the dominant axis of
+    # x_f - x_c, which on a wall triangle stretched along the wall is the tangential one
+    if normals is not None and owner.size:
+        ghost_axis = np.argmax(np.abs(np.asarray(normals, dtype=float)), axis=1)
+    else:
+        ghost_axis = np.argmax(np.abs(np.asarray(boundary_face_centers)
+                                      - np.asarray(centers)[np.maximum(owner, 0)]),
+                               axis=1) if owner.size else np.zeros(0, dtype=int)
+    frame_face, turn, face_axis = _wall_frames(dim, bdy, normals)
+    frames = None
+    ghost_axis = np.where(face_axis >= 0, face_axis, ghost_axis) if face_axis.size else ghost_axis
+    n_axis = np.where(bdy >= 0, ghost_axis[np.maximum(bdy, 0)], -1) if ghost_axis.size else n_axis
+    if (frame_face >= 0).any():                 # oblique walls: the fits in the wall frames
+        fr = frame_face >= 0
+        frames = np.repeat(np.eye(dim)[None], n_cells, axis=0)
+        frames[fr] = _frame_rotations(np, np.asarray(normals, dtype=float)[frame_face[fr]],
+                                      turn[fr])
+    check = _FitCheck(dim, mon, centers, ghost_offsets, ghost_axis, translations, frames)
+    if (closure_kinds is not None and len(closure_kinds)) or vectors:
         check = _ClosureCheck(check, closure_kinds,
-                              0.5 * np.asarray(ghost_offsets, dtype=float), normals)
+                              0.5 * np.asarray(ghost_offsets, dtype=float), normals,
+                              vectors=vectors)
     cells = np.arange(n)
     face = _face_stencils(nl, n)
     ring_mode = cell_vertices is not None and dim >= 2
@@ -585,14 +774,14 @@ def _lsq_stencils(n_cells, dim, neighbors_list, centers, lsq_degree,
         nz = [a for a in range(dim) if mi[a] != 0]
         if len(nz) == 1:
             pure_axis_rows.setdefault(nz[0], []).append(kk)
-    return mon, neighbors, bdy, n_axis, pure_axis_rows
+    return mon, neighbors, bdy, n_axis, pure_axis_rows, (frame_face, turn)
 
 
 def _lsq_plan(topo_n_cells, dim, mon, neighbors, bdy, n_axis, pure_axis_rows,
-              closure_kinds=None):
+              closure_kinds=None, vector_classes=(), frames=None):
     """Static assembly plan of the batched pseudo-inverses: plain, interior-only (`bint`) and
-    per-ghost pure-normal (`bone`) fits, zero rows for degenerate cells, and the closure cells
-    and kinds.
+    per-ghost pure-normal (`bone`) fits, zero rows for degenerate cells, and the closure cells,
+    kinds and vector classes.
     """
     n_cells, max_nbr = neighbors.shape
     max_bdy = bdy.shape[1]
@@ -622,16 +811,36 @@ def _lsq_plan(topo_n_cells, dim, mon, neighbors, bdy, n_axis, pure_axis_rows,
             row_src[c, r] = (n_plain + n_bint + p) * M + r
     bdy_mask = bdy >= 0
     closure = None
-    if closure_kinds is not None and len(closure_kinds):
+    if (closure_kinds is not None and len(closure_kinds)) or vector_classes:
         from zoomy_core.numerics.boundary_closure import GHOST
-        K = np.asarray(closure_kinds)
-        slot = np.where(bdy_mask[None], K[:, np.maximum(bdy, 0)], -1)
+        K = np.asarray(closure_kinds, dtype=np.int8)        # (n_class, n_bf)
+        bi = np.maximum(bdy, 0)
+        slot = np.where(bdy_mask[None], K[:, bi], -1)
         active = (slot > GHOST).any(axis=2)                 # (n_class, n_cells)
-        ccells = np.flatnonzero(active.any(axis=0))
+        groups = []
+        for c in vector_classes:                           # vector classes, joint fits
+            gslot = np.where(bdy_mask[None], c["kinds"][:, bi], -1)   # (d, n_cells, b)
+            groups.append((gslot, bdy_mask & c["rotated"][bi],
+                           (gslot > GHOST).any(axis=(0, 2))))
+        any_act = active.any(axis=0) if active.shape[0] else np.zeros(n_cells, dtype=bool)
+        for _, _, a in groups:
+            any_act = any_act | a
+        ccells = np.flatnonzero(any_act)
+        act = [active[:, ccells]]
+        cpl = []
+        for c, (gslot, rot, a) in zip(vector_classes, groups):
+            d = gslot.shape[0]
+            act.append(np.repeat(a[ccells][None], d * d, axis=0))
+            cpl.append({"kinds": gslot[:, ccells].astype(np.int8), "rotated": rot[ccells],
+                        "active": a[ccells], "blocks": np.asarray(c["blocks"], dtype=int)})
         closure = {"cells": ccells, "kinds": slot[:, ccells].astype(np.int8),
-                   "active": active[:, ccells]}
+                   "active": np.concatenate(act, axis=0), "vector": cpl}
+    frame = None
+    if frames is not None and (frames[0] >= 0).any():
+        fc = np.flatnonzero(frames[0] >= 0)
+        frame = {"cells": fc, "face": frames[0][fc], "turn": frames[1][fc]}
     return {
-        "closure": closure,
+        "closure": closure, "frame": frame,
         "plain": plain, "bint": bint,
         "bone_pos": np.array([p[0] for p in pairs], dtype=int),
         "bone_row": np.array([max_nbr + p[1] for p in pairs], dtype=int),
@@ -852,29 +1061,76 @@ def cell_face_geometry(mesh):
 
 def _closure_classes(closure, sampled, n_bf):
     """Deduplicate the closure kind rows into classes; faces without a ghost sample count as ghost
-    faces and rows without Dirichlet or Neumann faces have no class.
+    faces and rows without Dirichlet or Neumann faces have no class.  The rows of a vector group
+    with a face in its normal frame (`RowClosure.rotated`) form a vector class instead: one
+    joint fit of the group, whose `d x d` blocks (component j's samples -> component i's
+    derivatives) follow the row classes in the table stack.
+
+    Returns:
+        `(classes, vectors, per_key)`: `(n_class, n_bf)` kinds of the row classes; per vector
+        class `{"kinds": (d, n_bf), "rotated": (n_bf,), "blocks": (d, d) class ids}`; per key
+        and row its entry (`closure_terms`): a class id, -1, or the terms `((src_row, class),
+        ...)` of a vector row.
     """
-    from zoomy_core.numerics.boundary_closure import GHOST
+    from zoomy_core.numerics.boundary_closure import GHOST, RowClosure
+    sampled = np.asarray(sampled, dtype=bool)
     keys, rows = [], []
-    for key, K in closure.items():
-        K = np.where(np.asarray(sampled, dtype=bool)[None, :],
-                     np.asarray(K).reshape(-1, n_bf), GHOST)
-        keys.append((key, K.shape[0]))
+    for key, C in closure.items():
+        if isinstance(C, RowClosure):
+            K, grp, rot = C.kinds, tuple(C.groups), C.rotated
+        else:
+            K, grp, rot = C, (), None
+        K = np.where(sampled[None, :], np.asarray(K).reshape(-1, n_bf), GHOST)
+        live_groups = []
+        for gi, g in enumerate(grp):
+            r = np.asarray(rot[gi], dtype=bool) & sampled
+            if r.any():
+                live_groups.append((tuple(int(v) for v in g), K[list(g)].astype(np.int8), r))
+        keys.append((key, K.shape[0], live_groups))
         rows.append(K)
     if not rows:
-        return np.zeros((0, n_bf), dtype=np.int8), {}
+        return np.zeros((0, n_bf), dtype=np.int8), [], {}
     stack = np.concatenate(rows, axis=0)
-    live = (stack != GHOST).any(axis=1)
+    in_group = np.zeros(stack.shape[0], dtype=bool)
+    k = 0
+    for _, n, live_groups in keys:
+        for g, _, _ in live_groups:
+            in_group[[k + v for v in g]] = True
+        k += n
+    live = (stack != GHOST).any(axis=1) & ~in_group
     classes, inv = (np.unique(stack[live], axis=0, return_inverse=True)
                     if live.any() else (np.zeros((0, n_bf), dtype=np.int8),
                                         np.zeros(0, dtype=int)))
     cls = -np.ones(stack.shape[0], dtype=int)
     cls[live] = np.asarray(inv).reshape(-1)
+    n_rc = classes.shape[0]
+    vectors, seen, nxt = [], {}, n_rc
     out, k = {}, 0
-    for key, n in keys:
-        out[key] = tuple(int(c) for c in cls[k:k + n])
+    for key, n, live_groups in keys:
+        entry = [int(c) for c in cls[k:k + n]]
+        for g, Kg, r in live_groups:
+            sig = (len(g), Kg.tobytes(), r.tobytes())
+            if sig not in seen:
+                d = len(g)
+                blocks = nxt + np.arange(d * d).reshape(d, d)
+                nxt += d * d
+                seen[sig] = len(vectors)
+                vectors.append({"kinds": Kg, "rotated": r, "blocks": blocks})
+            blocks = vectors[seen[sig]]["blocks"]
+            for i, v in enumerate(g):
+                entry[v] = tuple((int(g[j]), int(blocks[i, j])) for j in range(len(g)))
+        out[key] = tuple(entry)
         k += n
-    return classes.astype(np.int8), out
+    return classes.astype(np.int8), vectors, out
+
+
+def closure_terms(row, entry):
+    """The closure terms `((src_row, class), ...)` of `row` from its `lsq_closure_class` entry:
+    a class id `k >= 0` is `((row, k),)`, -1 none, a vector row its own tuple.
+    """
+    if isinstance(entry, tuple):
+        return entry
+    return ((int(row), int(entry)),) if int(entry) >= 0 else ()
 
 
 def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
@@ -951,15 +1207,15 @@ def build_topology(mesh, *, nsm=None, lsq_degree=None, bcs=None,
         closure = {}
     elif closure is None and nsm is not None and n_bf:
         from zoomy_core.numerics.boundary_closure import closure_kinds
-        closure = closure_kinds(nsm, systems, branch, bn.T)
-    classes, closure_class = _closure_classes(closure or {}, ~periodic, n_bf)
-    mon, nbr, bdy, n_axis, pure_rows = _lsq_stencils(
+        closure = closure_kinds(nsm, systems, branch, bn.T, frames=True)
+    classes, vectors, closure_class = _closure_classes(closure or {}, ~periodic, n_bf)
+    mon, nbr, bdy, n_axis, pure_rows, frames = _lsq_stencils(
         n_cells, dim, nl, centers0[:dim].T, lsq_degree, n_inner, bowner,
         cv_ring, bfc0, ghost_off, sampled=~periodic,
         translations=periodic_ids[1] if periodic.any() else None,
-        closure_kinds=classes, normals=bn)
+        closure_kinds=classes, normals=bn, vectors=vectors)
     plan = _lsq_plan(n_cells, dim, mon, nbr, bdy, n_axis, pure_rows,
-                     closure_kinds=classes)
+                     closure_kinds=classes, vector_classes=vectors, frames=frames)
     shift = None
     if periodic.any():
         D = centers0[:dim, nbr].transpose(1, 2, 0) - centers0[:dim].T[:, None, :]
@@ -1220,6 +1476,20 @@ def _lsq_matrices(xp, topo, cc, fc, nrm):
         dXb = (2 * xp.sum(r * nb, axis=-1)[..., None] * nb) * bmask[..., None]
         parts.append(dXb)
     dX = xp.concatenate(parts, axis=1)                   # (n_cells, R, dim)
+    fr = plan.get("frame")
+    if fr is not None:                                   # oblique walls: the wall frames
+        nf = bn[fr["face"]]
+        Qf = _frame_rotations(xp, nf, fr["turn"])        # (n_fr, 2, 2)
+        Qall = xp.broadcast_to(xp.eye(dim, dtype=dX.dtype), (topo.n_cells, dim, dim))
+        if xp is np:
+            Qall = Qall.copy()
+            Qall[fr["cells"]] = Qf
+        else:
+            Qall = Qall.at[fr["cells"]].set(Qf)
+        on = np.zeros(topo.n_cells, dtype=bool)
+        on[fr["cells"]] = True
+        dX = xp.where(xp.asarray(on)[:, None, None],
+                      xp.einsum("nab,nrb->nra", Qall, dX), dX)
     V = _monomial_columns(xp, dX, plan["powers"])        # (n_cells, R, M)
     max_nbr = plan["max_nbr"]
     R = V.shape[1]
@@ -1259,13 +1529,38 @@ def _lsq_matrices(xp, topo, cc, fc, nrm):
     blocks.append(xp.zeros((1, M, R), dtype=V.dtype))
     S = xp.concatenate(blocks, axis=0).reshape(-1, R)
     A = S[plan["row_src"]]                               # (n_cells, M, R)
+    if fr is not None:                                   # back to the Cartesian monomials
+        T = _monomial_rotation(xp, Qall, plan["powers"])
+        A = xp.where(xp.asarray(on)[:, None, None], xp.einsum("nab,naR->nbR", T, A), A)
     return xp.transpose(A, (0, 2, 1))                    # (n_cells, R, M)
+
+
+def _constrained_tables(xp, V, C, nV):
+    """Null-space solution operators of `min |V c - y|` s.t. `C c = z` for batches `V` `(N, nV,
+    m)`, `C` `(N, nc, m)`: `c = Ab y + Bb z`, returns `(Ab, Bb)`.
+
+    References:
+        Lawson, Hanson 1995, https://doi.org/10.1137/1.9781611971217
+    """
+    m = V.shape[-1]
+    I = xp.eye(m, dtype=V.dtype)
+    Cp = xp.linalg.pinv(C, rtol=_LSQ_PINV_RTOL)                  # (N, m, nc)
+    Qc = xp.matmul(Cp, C)                                        # onto row(C)
+    # (V P)^+ as the first block of pinv([V P; C^+ C]): the projector rows
+    # lift the null directions of V P (exact zeros where the constraints
+    # fix every coefficient) to 1, so the relative cut-off sees O(1)
+    X = xp.concatenate([xp.matmul(V, I - Qc), Qc], axis=1)
+    Ab = xp.linalg.pinv(X, rtol=_LSQ_PINV_RTOL)[:, :, :nV]       # (N, m, nV)
+    Bb = xp.matmul(I - xp.matmul(Ab, V), Cp)                     # (N, m, nc)
+    return Ab, Bb
 
 
 def _lsq_closure_matrices(xp, topo, cc, fc, nrm, vol, A_base):
     """Constrained LSQ fits of the boundary closure, `(n_class, n_cc, R, M)` tables in the
     `lsq_gradQ` layout: minimise the residual over interior and ghost samples subject to one
-    Dirichlet value or Neumann normal-derivative constraint per face, in null-space form.
+    Dirichlet value or Neumann normal-derivative constraint per face, in null-space form.  A
+    vector class is one joint fit of its `d` components, the constraints in each
+    face's frame (`_closure_frames`): its `d x d` blocks follow the row classes.
 
     References:
         Lawson, Hanson 1995, https://doi.org/10.1137/1.9781611971217
@@ -1279,7 +1574,7 @@ def _lsq_closure_matrices(xp, topo, cc, fc, nrm, vol, A_base):
     from zoomy_core.numerics.boundary_closure import DIRICHLET, GHOST, NEUMANN
     dim = topo.dim
     cells, K = cl["cells"], cl["kinds"]                  # K (n_class, n_cc, b)
-    n_class, n_cc = K.shape[:2]
+    n_class, n_cc = K.shape[0], cells.size
     ccT = xp.transpose(cc[:dim])
     c0 = ccT[cells][:, None, :]
     dXc = ccT[topo.lsq_neighbors[cells]] - c0            # (n_cc, w, dim)
@@ -1299,36 +1594,79 @@ def _lsq_closure_matrices(xp, topo, cc, fc, nrm, vol, A_base):
     Vd = _monomial_columns(xp, foot, powers)
     Vn = _normal_derivative_columns(xp, foot, nb, powers)
     dt = Vc.dtype
-    isG = xp.asarray((K == GHOST)[..., None], dtype=dt)          # (k, n_cc, b, 1)
-    isD = xp.asarray((K == DIRICHLET)[..., None], dtype=dt)
-    isN = xp.asarray((K == NEUMANN)[..., None], dtype=dt)
-    V = xp.concatenate([xp.broadcast_to(Vc[None], (n_class,) + Vc.shape),
-                        isG * Vg[None]], axis=2)                 # (k, n_cc, w+b, M)
-    C = isD * Vd[None] + isN * Vn[None]                          # (k, n_cc, b, M)
-    N = n_class * n_cc
-    V = xp.reshape(V, (N, w + b, M))
-    C = xp.reshape(C, (N, b, M))
-    I = xp.eye(M, dtype=dt)
-    Cp = xp.linalg.pinv(C, rtol=_LSQ_PINV_RTOL)                  # (N, M, b)
-    Qc = xp.matmul(Cp, C)                                        # onto row(C)
-    # (V P)^+ as the first block of pinv([V P; C^+ C]): the projector rows
-    # lift the null directions of V P (exact zeros where the constraints
-    # fix every coefficient) to 1, so the relative cut-off sees O(1)
-    X = xp.concatenate([xp.matmul(V, I - Qc), Qc], axis=1)
-    Ab = xp.linalg.pinv(X, rtol=_LSQ_PINV_RTOL)[:, :, :w + b]   # (N, M, w+b)
-    Bb = xp.matmul(I - xp.matmul(Ab, V), Cp)                     # (N, M, b)
-    fac = (isD[..., 0] * 0.5
-           + isN[..., 0] * (s[:, None] / (2.0 * dn))[None])      # (k, n_cc, b)
-    fac = xp.reshape(fac, (N, 1, b))
-    Tb = xp.where(xp.reshape(xp.asarray(K == GHOST), (N, 1, b)),
-                  Ab[:, :, w:], Bb * fac)
-    T = xp.concatenate([Ab[:, :, :w], Tb], axis=2)               # (N, M, R)
     deg = np.asarray([sum(p) for p in powers], dtype=float)
     unscale = s[:, None] ** (-deg)[None, :]                      # (n_cc, M)
-    T = xp.reshape(T, (n_class, n_cc, M, w + b)) * unscale[None, :, :, None]
-    T = xp.transpose(T, (0, 1, 3, 2))                            # (k, n_cc, R, M)
-    return xp.where(xp.asarray(cl["active"])[..., None, None], T,
-                    A_base[cells][None])
+    nfac = s[:, None] / (2.0 * dn)                               # (n_cc, b)
+    tables = []
+    if n_class:
+        isG = xp.asarray((K == GHOST)[..., None], dtype=dt)          # (k, n_cc, b, 1)
+        isD = xp.asarray((K == DIRICHLET)[..., None], dtype=dt)
+        isN = xp.asarray((K == NEUMANN)[..., None], dtype=dt)
+        V = xp.concatenate([xp.broadcast_to(Vc[None], (n_class,) + Vc.shape),
+                            isG * Vg[None]], axis=2)                 # (k, n_cc, w+b, M)
+        C = isD * Vd[None] + isN * Vn[None]                          # (k, n_cc, b, M)
+        N = n_class * n_cc
+        Ab, Bb = _constrained_tables(xp, xp.reshape(V, (N, w + b, M)),
+                                     xp.reshape(C, (N, b, M)), w + b)
+        fac = isD[..., 0] * 0.5 + isN[..., 0] * nfac[None]           # (k, n_cc, b)
+        fac = xp.reshape(fac, (N, 1, b))
+        Tb = xp.where(xp.reshape(xp.asarray(K == GHOST), (N, 1, b)),
+                      Ab[:, :, w:], Bb * fac)
+        T = xp.concatenate([Ab[:, :, :w], Tb], axis=2)               # (N, M, R)
+        T = xp.reshape(T, (n_class, n_cc, M, w + b)) * unscale[None, :, :, None]
+        T = xp.transpose(T, (0, 1, 3, 2))                            # (k, n_cc, R, M)
+        tables.append(xp.where(xp.asarray(cl["active"][:n_class])[..., None, None], T,
+                               A_base[cells][None]))
+    for c in cl.get("vector", ()):
+        tables.append(_vector_tables(xp, c, Vc, Vg, Vd, Vn, nb, nfac, unscale,
+                                      A_base[cells]))
+    return xp.concatenate(tables, axis=0)
+
+
+def _vector_tables(xp, c, Vc, Vg, Vd, Vn, nb, nfac, unscale, A_cells):
+    """Block tables `(d*d, n_cc, R, M)` of a vector class: the joint constrained fit of the `d`
+    components (block-diagonal interior samples; ghost samples, Dirichlet values and Neumann
+    normal derivatives of the frame rows `F q` of each face), mapped back to the components'
+    sample differences; where the class has no constraint the base fit (diagonal) and zero.
+    """
+    from zoomy_core.numerics.boundary_closure import DIRICHLET, GHOST, NEUMANN
+    d = c["kinds"].shape[0]
+    n_cc, w, M = Vc.shape
+    b = Vg.shape[1]
+    dt = Vc.dtype
+    F = _closure_frames(xp, nb, c["rotated"], d)                 # (n_cc, b, K, d)
+    kf = _frame_kinds(np.moveaxis(c["kinds"], 0, -1), c["rotated"], d)   # (n_cc, b, K)
+    Kr = kf.shape[-1]
+    isG = xp.asarray(kf == GHOST, dtype=dt)
+    isD = xp.asarray(kf == DIRICHLET, dtype=dt)
+    isN = xp.asarray(kf == NEUMANN, dtype=dt)
+    eye = xp.eye(d, dtype=dt)
+    Vint = xp.reshape(eye[None, :, None, :, None] * Vc[:, None, :, None, :],
+                      (n_cc, d * w, d * M))
+    Fx = F[..., None]                                            # (n_cc, b, K, d, 1)
+    Vgh = xp.reshape(isG[..., None, None] * Fx * Vg[:, :, None, None, :],
+                     (n_cc, b * Kr, d * M))
+    Ccon = xp.reshape((isD[..., None, None] * Vd[:, :, None, None, :]
+                       + isN[..., None, None] * Vn[:, :, None, None, :]) * Fx,
+                      (n_cc, b * Kr, d * M))
+    nV = d * w + b * Kr
+    Ab, Bb = _constrained_tables(xp, xp.concatenate([Vint, Vgh], axis=1), Ccon, nV)
+    # inputs: per component j its w sample and b ghost differences; the ghost rows and the
+    # constraint right-hand sides read the frame rows of the ghost differences
+    fac = isD * 0.5 + isN * nfac[:, :, None]                     # (n_cc, b, K)
+    Gb = (xp.reshape(Ab[:, :, d * w:], (n_cc, d * M, b, Kr)) * isG[:, None]
+          + xp.reshape(Bb, (n_cc, d * M, b, Kr)) * fac[:, None])  # (n_cc, dM, b, K)
+    Tg = xp.einsum("nmbk,nbkj->nmjb", Gb, F)                    # (n_cc, dM, d, b)
+    Ti = xp.reshape(Ab[:, :, :d * w], (n_cc, d * M, d, w))
+    T = xp.concatenate([Ti, Tg], axis=3)                         # (n_cc, dM, d, R)
+    T = xp.reshape(T, (n_cc, d, M, d, w + b)) * unscale[:, None, :, None, None]
+    T = xp.transpose(T, (1, 3, 0, 4, 2))                         # (d, d, n_cc, R, M)
+    act = xp.asarray(c["active"])[:, None, None]
+    out = []
+    for i in range(d):
+        for j in range(d):
+            out.append(xp.where(act, T[i, j], A_cells if i == j else xp.zeros_like(A_cells)))
+    return xp.stack(out, axis=0)
 
 
 def compute_geometry(topo: MeshTopology, X, *, lsq=True):
@@ -1420,6 +1758,21 @@ def compute_geometry(topo: MeshTopology, X, *, lsq=True):
     return g
 
 
+def closure_rows(row, entry):
+    """The rows `src` the closure of `row` reads (itself; a vector row: its group) and the class
+    entries of `U[src]` that close `row` alone (`lsq_closure_derivatives`).
+    """
+    terms = closure_terms(row, entry)
+    src = sorted({int(row)} | {int(u) for u, _ in terms})
+    pos = {u: i for i, u in enumerate(src)}
+    cls = [-1] * len(src)
+    if len(terms) == 1 and terms[0][0] == row:
+        cls[pos[row]] = int(terms[0][1])
+    elif terms:
+        cls[pos[row]] = tuple((pos[int(u)], int(k)) for u, k in terms)
+    return src, cls
+
+
 def lsq_closure_derivatives(topo: MeshTopology, table, U, U_ghost, classes):
     """Boundary-closure LSQ derivatives for the rows of `U` that have a closure class, at the
     closure cells.
@@ -1427,7 +1780,8 @@ def lsq_closure_derivatives(topo: MeshTopology, table, U, U_ghost, classes):
     Args:
         U_ghost: ghost values at the boundary-face virtual points.
         table: class tables `geom["lsq_closure"]`.
-        classes: closure class per row of `U` (-1: none).
+        classes: closure entry per row of `U` (`lsq_closure_class`: a class, -1 none, or the
+            terms `((src_row, class), ...)` of a vector row, `src_row` a row of `U`).
     Returns:
         `(rows, D)` with `D` `(len(rows), n_cc, n_mon)` scaled derivatives, or
         `([], None)` without closure.
@@ -1436,22 +1790,39 @@ def lsq_closure_derivatives(topo: MeshTopology, table, U, U_ghost, classes):
     """
     xp = _xp_of(U)
     cl = topo.lsq_plan.get("closure")
-    rows = [v for v, k in enumerate(classes) if k >= 0]
+    terms = [closure_terms(v, k) for v, k in enumerate(classes)]
+    rows = [v for v, t in enumerate(terms) if t]
     if cl is None or not rows or not cl["cells"].size:
         return [], None
     cells = cl["cells"]
-    r = np.asarray(rows)
     nbr = topo.lsq_neighbors[cells]
     bdy = topo.lsq_boundary_face_neighbors[cells]
+    plain = all(len(terms[v]) == 1 and terms[v][0][0] == v for v in rows)
+    src = rows if plain else sorted({u for v in rows for u, _ in terms[v]})
+    r = np.asarray(src)
     Ur = U[r]
     uc = Ur[:, cells][:, :, None]
     parts = [Ur[:, nbr] - uc]
     if bdy.shape[1]:
         ub = U_ghost[r][:, np.maximum(bdy, 0)]
         parts.append(xp.where(xp.asarray(bdy >= 0)[None], ub - uc, 0.0))
-    delta = xp.concatenate(parts, axis=2)                # (n_r, n_cc, R)
-    T = table[np.asarray([classes[v] for v in rows])]    # (n_r, n_cc, R, M)
-    coeffs = xp.einsum("vcr,vcrm->vcm", delta, T)
+    delta = xp.concatenate(parts, axis=2)                # (n_src, n_cc, R)
+    if plain:
+        T = table[np.asarray([terms[v][0][1] for v in rows])]   # (n_r, n_cc, R, M)
+        coeffs = xp.einsum("vcr,vcrm->vcm", delta, T)
+    else:
+        pos = {u: i for i, u in enumerate(src)}
+        flat = [(v, u, k) for v in rows for u, k in terms[v]]
+        contrib = xp.einsum("tcr,tcrm->tcm", delta[np.asarray([pos[u] for _, u, _ in flat])],
+                            table[np.asarray([k for _, _, k in flat])])
+        out, t = [], 0
+        for v in rows:
+            acc = contrib[t]
+            for q in range(1, len(terms[v])):
+                acc = acc + contrib[t + q]
+            out.append(acc)
+            t += len(terms[v])
+        coeffs = xp.stack(out, axis=0)
     return rows, xp.asarray(topo.lsq_scale_factors, dtype=coeffs.dtype) * coeffs
 
 
@@ -1518,4 +1889,5 @@ def lsq_gradient(topo: MeshTopology, geom, U, U_ghost, classes=None):
 
 
 __all__ = ["MeshTopology", "build_topology", "compute_geometry", "periodic_vertices",
-           "lsq_derivatives", "lsq_gradient", "lsq_closure_derivatives"]
+           "lsq_derivatives", "lsq_gradient", "lsq_closure_derivatives", "closure_terms",
+           "closure_rows"]
