@@ -7,7 +7,7 @@ jax blocked. Pyodide: the same cells in Pyodide 0.29.3 under node, booted as
 pip-installed, so CPython imports them too), else the wheels are built here for Pyodide and
 CPython reads the checkout. A JAX session adds `zoomy_jax` from the checkout. Pass = every
 cell succeeds, every float in every HDF5 store the run wrote is finite, and a session that
-solves leaves a `simulation.h5` with its snapshots up to the session's `time_end`
+solves publishes its store (`open_hdf5`) with its snapshots up to the session's `time_end`
 (`session_runner.final_store_problem`). The sessions carry no reference outputs to compare
 against.
 """
@@ -20,6 +20,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -32,21 +33,12 @@ ENGINE = Q.GUI / "engine.py"
 RUN_MJS = HERE / "pyodide" / "run.mjs"
 BUILD_WHEELS = Q.ROOT / "docs" / "scripts" / "build_gui_wheels.py"
 TIMEOUT = int(os.environ.get("QR_TIMEOUT", "900"))
-#: Solver tags the browser runs itself; any other tag is submitted to a backend.
-BROWSER_LOCAL = (None, "numpy")
+BROWSER_LOCAL = Q.BROWSER_LOCAL
 NOT_IN_BROWSER = ["jax", "jaxlib", "zoomy_jax"]
 #: Time-limited variants, set through the session's own `time_end` knob (GUI Parameters
 #: panel); model, mesh and numerics are unchanged.
 TIME_LIMITS = {("malpasset-session.zip", 0): 2.0,    # Malpasset JAX: 2000 s -> 2 s
                ("malpasset-session.zip", 1): 2.0}    # Malpasset AMReX: 2000 s -> 2 s
-
-
-#: Where a solving session's `simulation.h5` must end (`session_runner.end_time`): the solver
-#: card's `time_end` parameter unless listed. A string is an expression over the cells' names
-#: (the settings, the model cell's constants); None: nothing is solved.
-END_TIME = {("bingham-session.zip", 0): "settings['time_end'] * tscale",    # time_end is t' = t / tscale
-            ("steffler-session.zip", 0): "_CASE_SETTINGS['run']['time_end']",   # no knob: the run card's own
-            ("coupling-session.zip", 0): None}                              # replays a recorded run
 
 
 def _amrex_sif():
@@ -92,13 +84,7 @@ def _case(zname, idx, session):
     if tag in UNAVAILABLE:
         cells = cells[:[r for r, _ in cells].index("settings")]
     solves = tag is not None and tag not in UNAVAILABLE
-    time_end = None
-    if solves:
-        card = (s.get("cardOverrides") or {}).get(s["selections"]["solver"]) or {}
-        time_end = END_TIME.get((zname, idx), (card.get("params") or {}).get("time_end"))
-        assert time_end is not None or (zname, idx) in END_TIME, \
-            f"{zname}#{idx}: no time_end to check the run against: the solver card's `time_end` " \
-            "parameter, else an END_TIME entry"
+    time_end = Q.time_end_spec(zname, idx, s) if solves else None
     return tag, {"cells": cells, "needs_store": solves, "time_end": time_end,
                  "blocked_modules": NOT_IN_BROWSER if tag in BROWSER_LOCAL else []}
 
@@ -142,14 +128,19 @@ def test_manifest_snapshot_is_current():
 
 @pytest.mark.qr
 def test_deploy_ships_projects_and_worker_version():
-    """render-webpage.yml deploys projects/ next to the worker and the wheels the worker
-    installs, built by the script the QR CI installs from; the harness pins its Pyodide."""
+    """render-webpage.yml deploys the GUI the browser tier tests (build_gui_site.sh): projects/
+    next to the worker and the wheels the worker installs, built by the script the QR CI
+    installs from; the harness pins its Pyodide."""
     deploy = (Q.ROOT / ".github/workflows/render-webpage.yml").read_text()
-    loop = re.search(r"for a in ([^;]+);", deploy)
+    site = "docs/scripts/build_gui_site.sh"
+    assert f"{site} docs/book/_build/html" in deploy, f"deploy does not build the GUI with {site}"
+    recipe = (Q.ROOT / site).read_text()
+    loop = re.search(r"for a in ([^;]+);", recipe)
     assert loop and "projects" in loop.group(1).split(), "deploy no longer copies projects/"
     build = "docs/scripts/build_gui_wheels.py"
-    assert f"{build} docs/book/_build/html/gui/gui/wheels" in deploy, "deploy serves no wheels"
-    assert build in (Q.ROOT / ".github/workflows/qr-cases.yml").read_text()
+    assert f'{build} "$GUI/gui/wheels"' in recipe, "deploy serves no wheels"
+    qr = (Q.ROOT / ".github/workflows/qr-cases.yml").read_text()
+    assert build in qr and site in qr
     worker = (Q.GUI / "pyodide-worker.js").read_text()
     pinned = json.loads((HERE / "pyodide/package.json").read_text())["dependencies"]["pyodide"]
     assert f"/pyodide/v{pinned}/" in worker, f"worker Pyodide != harness pyodide@{pinned}"
@@ -184,24 +175,27 @@ def _write_store(path, times):
 
 
 @pytest.mark.qr
-@pytest.mark.parametrize("artifact,own,time_end,expect", [
+@pytest.mark.parametrize("published,own,time_end,expect", [
     ([0.0, 1.0, 2.0], [0.0, 1.0, 2.0], 2.0, None),                       # a finished run
     ([0.0, 1.0, 2.0], [0.0, 1.0, 2.0], None, None),                      # nothing to compare t with
-    ([], [0.0, 1.0, 2.0], 2.0, "holds 0 snapshots"),                      # the copy taken too early
+    ([], [0.0, 1.0, 2.0], 2.0, "holds 0 snapshots"),                      # opened before the march
     ([0.0], [0.0, 1.0, 2.0], 2.0, "holds 1 snapshots"),
     ([0.0, 1.0], [0.0, 1.0, 2.0], 2.0, "before time_end"),                # the march stopped
-    (None, [0.0, 1.0, 2.0], 2.0, "left no simulation.h5"),
-], ids=["finished", "no-time_end", "copy-without-snapshots", "one-snapshot", "stopped-early",
-        "no-simulation.h5"])
-def test_final_store_check(artifact, own, time_end, expect, tmp_path, monkeypatch):
-    """A solving session is judged by the `simulation.h5` it leaves, not by the solver's own
-    output next to it: the JAX run returned before its snapshots were written, the copy held none,
-    and the complete `output/<name>.h5` made the run look finished."""
+    (None, [0.0, 1.0, 2.0], 2.0, "published no store"),
+], ids=["finished", "no-time_end", "opened-without-snapshots", "one-snapshot", "stopped-early",
+        "no-store"])
+def test_final_store_check(published, own, time_end, expect, tmp_path, monkeypatch):
+    """A solving session is judged by the store it published (`open_hdf5`; the store the GUI
+    shows and keeps), not by other outputs next to it: a complete `output/<name>.h5` does not
+    make a run that opened an unfinished store, or none, a finished one."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ZOOMY_DIR", str(tmp_path))
     _write_store(tmp_path / "output" / "case.h5", own)
-    if artifact is not None:
-        _write_store(tmp_path / "simulation.h5", artifact)
+    scope = {"store": None}
+    if published is not None:
+        _write_store(tmp_path / "tmp" / "zoomy_sim" / "sim.h5", published)
+        scope["store"] = SimpleNamespace(source_path=str(tmp_path / "tmp" / "zoomy_sim" / "sim.h5"))
+    monkeypatch.setattr(sys, "_shallowflow_scope", scope, raising=False)
     rep = R.run_case({"cells": [], "needs_store": True, "time_end": time_end}, None, str(tmp_path))
     if expect is None:
         assert rep["ok"] and rep["error"] is None, rep["error"]
@@ -214,15 +208,50 @@ def test_final_store_time_end_expression(tmp_path, monkeypatch):
     """`time_end` may be an expression over the cells' names, evaluated in the engine's scope."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ZOOMY_DIR", str(tmp_path))
-    monkeypatch.setattr(sys, "_shallowflow_scope", {"settings": {"time_end": 2.0}, "tscale": 0.5},
-                        raising=False)
     _write_store(tmp_path / "simulation.h5", [0.0, 0.5, 1.0])
+    monkeypatch.setattr(sys, "_shallowflow_scope", {"settings": {"time_end": 2.0}, "tscale": 0.5,
+                        "store": SimpleNamespace(source_path=str(tmp_path / "simulation.h5"))},
+                        raising=False)
     case = {"cells": [], "needs_store": True, "time_end": "settings['time_end'] * tscale"}
     assert R.run_case(case, None, str(tmp_path))["ok"]
     case["time_end"] = "settings['time_end'] * tscale * 2"
     assert "before time_end = 2.0" in R.run_case(case, None, str(tmp_path))["error"]
     case["time_end"] = "no_such_name"
     assert "NameError" in R.run_case(case, None, str(tmp_path))["error"]
+
+
+#: a solver card on the run_h5_path() / open_hdf5() contract (two snapshots, t = 0 and 1)
+_CONTRACT_CARD = """import numpy as np
+from zoomy_core.misc.io import write_mesh_to_hdf5, _save_fields_to_hdf5
+_h5_path = run_h5_path()
+write_mesh_to_hdf5(_h5_path, mesh)
+for k in range(2):
+    _save_fields_to_hdf5(_h5_path, k, float(k), np.zeros((1, mesh.n_cells)))
+open_hdf5(_h5_path)"""
+
+
+@pytest.mark.qr
+def test_engine_rerun_rewrites_its_store(tmp_path):
+    """The card worker (engine.py) runs a solver card twice (Run twice, a notebook's Run All
+    twice): run_h5_path() closes the store the first run opened, whose h5py handle would stop
+    the second run truncating the file; a visualization card keeps the published store."""
+    mesh = ("from zoomy_core.mesh import BaseMesh\n"
+            "mesh = BaseMesh.create_1d(domain=(0.0, 1.0), n_inner_cells=4)")
+    viz = "assert store is not None and store.n_snapshots == 2, store"
+    case = {"cells": [["mesh", mesh], ["run", _CONTRACT_CARD], ["visualization", viz],
+                      ["run again", _CONTRACT_CARD], ["visualization again", viz]],
+            "needs_store": True, "time_end": 1.0}
+    spec = tmp_path / "case.json"
+    spec.write_text(json.dumps(case))
+    (tmp_path / "tmp").mkdir()
+    env = dict(os.environ, TMPDIR=str(tmp_path / "tmp"))
+    if not os.environ.get("QR_WHEELS"):
+        env["PYTHONPATH"] = os.pathsep.join(str(Q.ROOT / "library" / p)
+                                            for p in ("zoomy_core", "zoomy_plotting"))
+    out = tmp_path / "report.json"
+    subprocess.run([sys.executable, str(HERE / "session_runner.py"), str(spec), str(ENGINE),
+                    str(out), str(tmp_path / "work")], env=env, timeout=TIMEOUT, check=False)
+    _verdict(json.loads(out.read_text()), "engine.py, solver card run twice")
 
 
 # --------------------------------------------------------------------------- CPython
@@ -260,7 +289,11 @@ def test_session_cpython(zname, idx, session, tmp_path):
     spec = tmp_path / "case.json"
     spec.write_text(json.dumps(case))
     path += [p for p in os.environ.get("PYTHONPATH", "").split(os.pathsep) if p]
-    env = dict(os.environ, PYTHONPATH=os.pathsep.join(path), JAX_PLATFORMS="cpu")
+    # the run's own temp dir: run_h5_path() is the process's tempdir/zoomy_sim/sim.h5, one per
+    # browser tab, here one per test (xdist runs several at once)
+    (tmp_path / "tmp").mkdir()
+    env = dict(os.environ, PYTHONPATH=os.pathsep.join(path), JAX_PLATFORMS="cpu",
+               TMPDIR=str(tmp_path / "tmp"))
     out = tmp_path / "report.json"
     subprocess.run([sys.executable, str(HERE / "session_runner.py"), str(spec), str(ENGINE),
                     str(out), str(tmp_path / "work")], env=env, timeout=TIMEOUT, check=False)

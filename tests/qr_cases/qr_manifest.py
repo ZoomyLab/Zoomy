@@ -24,6 +24,13 @@ PROJECTS = GUI / "projects"
 THESIS_MANIFEST = ROOT / "thesis" / "scripts" / "animations.yml"
 SNAPSHOT = HERE / "animations.yml"
 SITE = "https://zoomylab.github.io/Zoomy/"
+#: Solver tags the browser runs itself; any other tag is submitted to a backend.
+BROWSER_LOCAL = (None, "numpy")
+#: Where a solving session's store must end (`session_runner.end_time`): the solver card's
+#: `time_end` parameter unless listed. A string is an expression over the cells' names (the
+#: settings, the model cell's constants); None: nothing is solved.
+END_TIME = {("bingham-session.zip", 0): "settings['time_end'] * tscale",    # time_end is t' = t / tscale
+            ("coupling-session.zip", 0): None}                              # replays a recorded run
 
 
 def manifest_path() -> Path:
@@ -127,7 +134,9 @@ def compose(session: dict) -> list[tuple[str, str]]:
     tag = backend(session)
     if tag is not None:
         solver = _catalog("solvers", sel.get("solver")) or {}
-        settings = dict((ov.get(sel.get("solver")) or {}).get("params") or {})
+        # the GUI's Run and notebook (gatherSpec): the card's defaults under the session's values
+        settings = {**(solver.get("init") or {}),
+                    **((ov.get(sel.get("solver")) or {}).get("params") or {})}
         settings.setdefault("backend", tag)
         if solver.get("id"):
             settings.setdefault("solver_id", solver["id"])
@@ -136,3 +145,15 @@ def compose(session: dict) -> list[tuple[str, str]]:
     if sel.get("visualization"):
         cells.append(("visualization", code(sel["visualization"]).rstrip()))
     return cells
+
+
+def time_end_spec(zname, idx, session):
+    """The time a solving session's store must reach: `END_TIME`, else the solver card's
+    `time_end` parameter (a number or an expression for `session_runner.end_time`)."""
+    if (zname, idx) in END_TIME:
+        return END_TIME[(zname, idx)]
+    card = (session.get("cardOverrides") or {}).get(session["selections"]["solver"]) or {}
+    spec = (card.get("params") or {}).get("time_end")
+    assert spec is not None, (f"{zname}#{idx}: no time_end to check the run against: the solver "
+                              "card's `time_end` parameter, else an END_TIME entry")
+    return spec
