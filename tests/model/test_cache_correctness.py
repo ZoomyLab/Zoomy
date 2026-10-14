@@ -292,10 +292,35 @@ def test_rederive_cross_process_disk_hit_and_prebuilt(cache_dir):
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr[-500:]
     from zoomy_core.systemmodel import sm_cache
-    entries = list(sm_cache._prebuilt_dir().glob("*.pkl"))
+    entries = sorted(sm_cache._prebuilt_dir().glob("*.pkl"))
     assert len(entries) >= 10, "prebuilt cache missing - run build_prebuilt_cache"
-    sm = pickle.loads(entries[0].read_bytes())
-    assert hasattr(sm, "flux") and hasattr(sm, "state")
+    for entry in entries:             # every shipped entry, not whichever glob lists first
+        sm = pickle.loads(entry.read_bytes())
+        assert hasattr(sm, "flux") and hasattr(sm, "state"), entry.name
+
+
+@pytest.mark.small
+def test_boundary_conditions_pickle_holds_no_param_internals():
+    """A pickled `BoundaryConditions` carries no `param` Parameter objects: their slots differ
+    between `param` versions (`default_factory` from 2.3), so the shipped `_prebuilt`
+    `SystemModel` pickles would load only under the `param` that wrote them.
+    """
+    import pickletools
+    from zoomy_core.model.boundary_conditions import (
+        BoundaryConditions, Dirichlet, Extrapolation)
+
+    bcs = BoundaryConditions([Extrapolation(tag="b"), Dirichlet(tag="a", value=2.0)])
+    blob = pickle.dumps(bcs)
+    seen, globals_ = [], set()
+    for op, arg, _ in pickletools.genops(blob):
+        if op.name in ("SHORT_BINUNICODE", "BINUNICODE", "UNICODE"):
+            seen.append(arg)
+        elif op.name == "STACK_GLOBAL":
+            globals_.add((seen[-2], seen[-1]))
+    assert not [g for g in globals_ if g[0] == "param.parameters"], globals_
+    back = pickle.loads(blob)
+    assert back.list_sorted_function_names == ["a", "b"]
+    assert len(back._boundary_functions) == len(back._boundary_gradient_functions) == 2
 
 
 @pytest.mark.rederive
