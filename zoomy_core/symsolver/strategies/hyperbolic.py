@@ -262,10 +262,26 @@ def check_numerics(nsm):
     wrong: face terms that do not discretize a live entry of the nonconservative matrix
     drop that term of the PDE (a conservative Rusanov / HLL / HLLC on a model with a bed
     slope or a moment coupling; `PositiveRusanov` / `PositiveHLL` discretize the bed column
-    only, through the hydrostatic reconstruction).
+    only, through the hydrostatic reconstruction); and on a model's
+    `equilibrium_reconstruction` the symbolic solvers do not honour (`bernoulli`,
+    `projected_bernoulli`: NotImplementedError; `audusse` without a hydrostatic
+    reconstruction in the Riemann class).
     """
     from zoomy_core.fvm.riemann_solvers import dropped_nonconservative_entries
     riemann = getattr(nsm, "riemann", None)
+    reconstruction = getattr(nsm, "equilibrium_reconstruction", "none") or "none"
+    if reconstruction in ("bernoulli", "projected_bernoulli"):
+        raise NotImplementedError(
+            f"equilibrium_reconstruction={reconstruction!r} (moving-equilibrium well-balancing) "
+            "is not implemented on the symbolic solvers; they keep the lake at rest only "
+            "(the hydrostatic reconstruction of the Positive* fluxes).  Use 'none' / "
+            "'audusse', or the legacy zoomy_core.fvm solver (ANALYSIS 50).")
+    if (reconstruction == "audusse" and riemann is not None
+            and not hasattr(riemann, "hydrostatic_reconstruction")):
+        raise ValueError(
+            f"equilibrium_reconstruction='audusse' with riemann={riemann.__name__}: the "
+            "symbolic solvers take the hydrostatic reconstruction from the Riemann class "
+            "(a Positive* flux, e.g. PositiveNonconservativeRusanov), which this one has not.")
     if riemann is None:
         return
     dropped = dropped_nonconservative_entries(riemann, nsm)
