@@ -248,7 +248,10 @@ class Sigma3D(BaseModel):
         # of τ̃_xx: physical −(h/ρ)∂_x τ_xx maps (via ∂_x|_z = ∂_x|_ζ − (∂_x zc/h)∂_ζ)
         # to −(1/ρ)[h ∂_x τ̃_xx − ∂_ζ τ̃_xx · ∂_x zc].  τ̃_xx=0 (shallow closure)
         # ⇒ this term vanishes and we recover the shallow-moment momentum exactly.
-        inplane = -(h * d.x(tau_xx_t) - d.zeta(tau_xx_t) * d.x(zc)) / rho
+        # ∂_x zc = ∂_x b + ζ ∂_x h: ζ is a coordinate of its own (the chain rule; a bare
+        # ∂_x(b + h ζ) would leave ∂_x(h ζ), which the lifting registers as an aux of the
+        # non-state target `h*zeta` that no backend computes)
+        inplane = -(h * d.x(tau_xx_t) - d.zeta(tau_xx_t) * (d.x(b) + zeta * d.x(h))) / rho
         cons_mom = (d.t(mom) + d.x(mom * u + g * h**2 / 2) + d.zeta(mom * omega)
                     + g * h * d.x(b) - e_x * g * h + viscous
                     + inplane)

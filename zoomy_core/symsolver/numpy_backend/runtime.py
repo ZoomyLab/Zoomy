@@ -18,6 +18,7 @@ from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_derivatives
 from zoomy_core.misc.logger_config import logger
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
+from zoomy_core.symsolver.discretization.residual import check_derivative_aux
 from zoomy_core.symsolver.numpy_backend.assembly import cell_pattern, host_amg_solve
 
 
@@ -58,6 +59,8 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
     Returns:
         dict name -> callable
     """
+    check_derivative_aux([nsm, *(sub for sub, _ in (systems or {}).values())],
+                         ("state", "function"), "numpy")
     nc = int(mesh_np.n_inner_cells)
     nf = int(mesh_np.n_faces)
     n_bf = int(mesh_np.n_boundary_faces)
