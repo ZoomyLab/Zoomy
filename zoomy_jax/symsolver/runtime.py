@@ -25,8 +25,10 @@ from zoomy_core.solver.constants import TPFA_COS_FLOOR
 from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_closure_derivatives
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
+from zoomy_core.symsolver.discretization.residual import check_derivative_aux
 from zoomy_core.symsolver.vocabulary import march_error
-from zoomy_core.symsolver.numpy_backend.assembly import cell_pattern, host_amg_solve
+from zoomy_core.symsolver.numpy_backend.assembly import (cell_pattern, host_amg_solve,
+                                                          operator_neighbors)
 from zoomy_jax.fvm.implicit_ad import cellwise_solve, newton_root
 from zoomy_jax.mesh.mesh import lsq_gradient_per_field
 from zoomy_jax.fvm.reconstruction_jax import (
@@ -108,6 +110,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         dict name -> callable
     """
     sm = rt.sm
+    check_derivative_aux([nsm, *(sub for sub, _ in (systems or {}).values())],
+                         ("state", "function"), "jax")
     nc = int(mesh_np.n_inner_cells)
     nf = int(mesh_np.n_faces)
     n_bf = int(mesh_np.n_boundary_faces)
@@ -119,8 +123,13 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
     is_bnd[bf_face] = True
     interior = np.flatnonzero(~is_bnd)
     iA, iB, inner = fc0[interior], fc1[interior], fc0[bf_face]
-    fc_other = np.where(is_bnd, fc0, fc1)            # inner cell at boundary
+    # the other cell of a face: at a boundary face the inner cell, at a periodic seam the
+    # partner cell across it (``boundary_face_cells``; the inner cell elsewhere), whose aux
+    # and wave speed the seam face's Riemann problem and CFL step read (an interior face's)
+    fc_other = np.where(is_bnd, fc0, fc1)
+    fc_other[bf_face] = bf_cells
     fc_cfl = np.where(fc1 < nc, fc1, fc0)
+    fc_cfl[bf_face] = np.where(bf_cells < nc, bf_cells, fc0[bf_face])
     # faces a partition cut: the inner state, no BC (nothing owned reads it)
     names = list(mesh_np.boundary_conditions_sorted_names)
     numbers = np.asarray(mesh_np.boundary_face_function_numbers, dtype=int)[:n_bf]
@@ -167,7 +176,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         return k(QL, QR, AL, AR, p, mesh.face_normals)
 
     def face_aux(Qaux, mesh):
-        """Owner and neighbour aux per face (the inner cell twice at a boundary face)."""
+        """Owner and neighbour aux per face (the inner cell twice at a boundary face, the
+        partner cell across a periodic seam)."""
         return Qaux[:, j(fc0)], Qaux[:, j(fc_other)]
 
     def face_wavespeed(k, Q, Qaux, p, mesh):
@@ -222,11 +232,12 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         return _bc_at(ghost, Q[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells)
 
     def boundary_states(ghost, Q, Qaux, p, time, mesh):
-        """The GHOST per boundary face and the inner cell's aux."""
+        """The GHOST per boundary face and its cell's aux (the inner cell's; across a
+        periodic seam the partner cell's, the ghost being that cell)."""
         if n_bf == 0:
             return (jnp.zeros((Q.shape[0], 1)), jnp.zeros((Qaux.shape[0], 1)))
         return (_bc_at(ghost, Q[:, j(bf_cells)], Qaux, p, time, mesh, bf_cells),
-                Qaux[:, j(inner)])
+                Qaux[:, j(bf_cells)])
 
     def boundary_traces(bc, Q, QL, QR, Qaux, p, time, mesh):
         """`QR` with the outer FACE state `bc(QL)` on the boundary faces (periodic seam: the
@@ -501,7 +512,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
     pyamg = _pyamg() if ls.get("backend") == "pyamg" else None
     hyp = _hypre() if ls.get("backend") == "hypre" else None
     patterns = {}
-    lsq_nbrs = (np.asarray(mesh_np.lsq_neighbors)
+    # the assembled sparsity: the LSQ stencil and the periodic partners (operator_neighbors)
+    lsq_nbrs = (operator_neighbors(topo, mesh_np)
                 if amgx is not None or pyamg is not None or hyp is not None else None)
 
     def assembled(op, n, ncells=nc, n_rows=None):

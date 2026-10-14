@@ -1,0 +1,62 @@
+"""The JAX symbolic solver: a periodic seam is an interior face, so the run is invariant under
+moving the seam.  The seam face reads the partner cell's aux (`face_aux`) and wave speed;
+`NonconservativeRusanov` reads the regularised `hinv` of both cells in its face kernel, and
+before the fix the 2 seam cells' momentum differed by 1e-4 after one step.
+"""
+import numpy as np
+import pytest
+
+import zoomy_core.model.boundary_conditions as BC
+import zoomy_core.model.initial_conditions as IC
+from zoomy_core.fvm.riemann_solvers import NonconservativeRusanov
+from zoomy_core.mesh import LSQMesh
+from zoomy_core.model.models import SME
+from zoomy_core.model.models.closures import ManningFriction, Newtonian, StressFree
+from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
+from zoomy_core.symsolver.settings import CflWaveSpeed
+from zoomy_core.systemmodel.system_model import SystemModel
+
+pytestmark = [pytest.mark.small, pytest.mark.jax]
+
+L, NX, SHIFT = 10.0, 40, 7
+
+
+def _run(level, order, shift, **kw):
+    from zoomy_jax.symsolver.solver import SymbolicHyperbolicSolverJax
+    bcs = [BC.Periodic(tag="left", periodic_to_physical_tag="right"),
+           BC.Periodic(tag="right", periodic_to_physical_tag="left")]
+    sm = SystemModel.from_model(SME(level=level, dimension=2, boundary_conditions=BC.BoundaryConditions(bcs),
+                                    closures=[Newtonian(), ManningFriction(), StressFree()]))
+    names = [str(s) for s in sm.state]
+
+    def ic(x):
+        xs = 2 * np.pi * ((x[0] + shift) % L) / L
+        q = np.zeros(len(names))
+        h = 0.5 + 0.2 * np.sin(xs) + 0.05 * np.cos(3 * xs)
+        q[names.index("h")] = h
+        q[names.index("q_0")] = h * (0.3 + 0.1 * np.cos(xs))
+        if level >= 1:
+            q[names.index("q_1")] = 0.05 * h * np.sin(xs)
+        return q
+    sm.initial_conditions = IC.UserFunction(function=ic)
+    nsm = NumericalSystemModel.from_system_model(
+        sm, riemann=NonconservativeRusanov,
+        reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
+    s = SymbolicHyperbolicSolverJax(mood=False, **kw)
+    Q0, A = s.setup(LSQMesh.create_1d(domain=(0, L), n_inner_cells=NX), nsm)
+    _, Q, _ = s.run(Q0, A)
+    x = np.asarray(s.mesh_np.cell_centers)[0, :Q.shape[1]]
+    return np.asarray(Q)[:, np.argsort((x + shift) % L)]
+
+
+@pytest.mark.parametrize("level, order", [(0, 1), (1, 2)])
+def test_seam_shift_constant_dt(level, order):
+    kw = dict(time_end=0.2, dt=0.01, cfl_check_every=0)
+    a, b = _run(level, order, 0.0, **kw), _run(level, order, SHIFT * L / NX, **kw)
+    assert np.abs(a - b).max() <= 1e-14
+
+
+def test_seam_shift_adaptive_cells_dt():
+    kw = dict(time_end=0.3, cfl=0.9, cfl_wave_speed=CflWaveSpeed.cells)
+    a, b = _run(0, 2, 0.0, **kw), _run(0, 2, SHIFT * L / NX, **kw)
+    assert np.abs(a - b).max() <= 1e-13

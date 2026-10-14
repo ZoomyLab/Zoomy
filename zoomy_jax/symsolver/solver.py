@@ -294,10 +294,12 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
 
     def initial_aux(self, Q, Qaux, parameters=None, X=None):
         """The aux of the initial state: the pointwise formula plus the derivative aux with the BC
-        ghosts and the boundary closure.
+        ghosts and the boundary closure.  `Q`, `Qaux` (and `parameters`) may be any array-like
+        (NumPy, lists): they are converted to JAX arrays (traced values pass through).
         """
         from zoomy_core.symsolver.discretization.residual import derivative_rows
-        p = self.parameters if parameters is None else parameters
+        Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
+        p = self.parameters if parameters is None else jnp.asarray(parameters)
         mesh = self.mesh if X is None else R.geometry_of(self.topo, X)
         m, rt = self.module, self.rt
         if rt.update_aux_variables is not None:
