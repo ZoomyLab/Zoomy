@@ -44,6 +44,9 @@ SUBSET = {"C1": ("o1_n20", "o2_n20"),                          # SWE bump, walls
           "C23": ("o1_n8", "o2_n8"),                           # Euler 3-D
           "C35": ("c1_full", "c1_half", "c1_restart", "c1_typo")}   # restart (h5 / foam / AMReX)
 C35_C1 = SUBSET["C35"]
+#: cases that list runs for some backends only (cases.py `backends`): the others are not
+#: parametrized (a case that runs nothing on a backend fails, so a change there shows here)
+ONLY = {"C15": ("jax",), "C22": ("jax",), "C17": ("amrex",)}
 #: distributed runs: backend -> (config, case, runs), launched with the image's mpiexec (JAX:
 #: matrix.py; foam / AMReX: their drivers). A marching run is checked as matrix C7 (= the
 #: serial run, both in the image); every run by the matrix's checks of its case (C35: the
@@ -73,9 +76,7 @@ def tol(case: str, key: str) -> float:
         return RO if "_expl" in key else 1e-9                  # gate 43: Newton 1e-10
     if case == "C31":
         return 1e-9 if key.startswith("vam") else 1e-8         # PRESS; C14's Newton
-    # C5: the wet/dry front amplifies round-off (matrix TH["C5 amrex"], AMReX vs JAX 1e-9)
-    return {"C5": 1e-9, "C8": 1e-9, "C14": 1e-8, "C26": 1e-8, "C32": 1e-8,
-            "C33": 1e-10}.get(case, RO)
+    return {"C8": 1e-9, "C14": 1e-8, "C26": 1e-8, "C32": 1e-8, "C33": 1e-10}.get(case, RO)
 
 
 def _params():
@@ -84,7 +85,7 @@ def _params():
     out = []
     for b in H.selected_backends():
         out += [pytest.param(b, "serial", c, SUBSET[c], marks=pytest.mark.backend_e2e,
-                             id=f"{b}-{c}") for c in SUBSET]
+                             id=f"{b}-{c}-serial") for c in SUBSET if b in ONLY.get(c, (b,))]
         out += [pytest.param(b, cfg, c, keys, marks=pytest.mark.backend_e2e, id=f"{b}-{c}-{cfg}")
                 for cfg, c, keys in DISTRIBUTED.get(b, ())]
     return out

@@ -9,7 +9,7 @@ ROOT holds docs/dev/symbolic_solver/{matrix,gates} of the tested checkout; CONFI
 import no backend, so every image builds every case. In a container the foam / AMReX drivers
 build natively (`ZOOMY_{FOAM,AMREX}_IN_IMAGE=1`); for older drivers that always call
 `apptainer exec <image>`, the apptainer shim (shim/) stands in for it.
-Last line: `E2E_RESULT {key: ok | n/a | unsupported | err: ...}`.
+Last line: `E2E_RESULT {key: ok | n/a | unsupported | err: ... | unknown: ...}`.
 
 `--checks`: the matrix's own checks (`matrix.measure`, the thresholds of the table) of CASE on
 BACKEND over the runs in STORE, and the checks naming the case (C6 mass, C7 parallel = serial);
@@ -50,7 +50,9 @@ def main(root, store, work, backend, case, keys, config="serial", in_container=F
     for k in want:
         p = matrix.path(backend, config, case, k)
         r = next((r for r in runs if r.key == k), None)
-        if r is None or backend not in r.backends or config not in r.configs:
+        if r is None:
+            out[k] = f"unknown: no run {k!r} in cases.py's {case}"
+        elif backend not in r.backends or config not in r.configs:
             out[k] = "n/a"
         elif p.exists():
             out[k] = "ok"
