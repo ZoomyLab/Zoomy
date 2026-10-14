@@ -1466,12 +1466,48 @@ the spectrum of I - (D.G) L_a^{-1} on C8 triangles and C31 away from walls.  Det
   16^2, IMEX) runs on both, mass change 0, NumPy = JAX 1.4e-13.
 - **Found, not fixed (pre-existing, shallow too).**  ML-VAM's w rows register the aux d_x(l_1 h)
   with target 'h*l_1' and `target_kind='unknown'` (main's m15-type models, non-viscous terms),
-  the compound-aux pattern 45b found; backends likely read it as 0.
+  the compound-aux pattern 45b found; backends likely read it as 0.  (Fixed: 45i.)
 - **Open.**  ML-VAM w rows: the vertical balance is pointwise per layer, so its interface traces
   of tau_ez are one-sided (single-valued for continuous profiles only); a single-valued vertical
   traction there is a model choice.  ML with `Stress.shallow` keeps the one-sided interface shear
   (45f item (4)), unchanged by spec.  `interpolate_rows` slot 5 is still the hydrostatic part
   (45f item (2)).  small_slope=False with the full stress is not run.
+
+### 45i. ML-VAM: the compound aux d_x(l_1 h) of the w rows (2026-10-14, dev/mlvam-aux)
+
+- **Proof.**  Every ML-VAM tried (2 layers level 0, 1 (mean, upwind), 2, 1-D; level 0 2-D; 3
+  layers; `Stress.full`) registered `h*l_1_x` (3 layers also `h*l_2_x`, 2-D also `h*l_1_y`):
+  atom d_x(l_1 h), `target_kind='unknown'`, used only in the source of the w rows r_1_0, r_2_0
+  (products like q_1_0 q_1_0_x d_x(l_1 h) / h).  The Chorin predictor had a second one, `0_x`
+  (B d_x P with P = 0 left as an unevaluated d_x(0)).  On a smooth state (2 layers, level 1,
+  l_1 = 0.4, 100 cells) JAX `initial_aux` filled h*l_1_x = 0 (exact: l_1 h_x, up to 0.108).
+  NumPy raised `KeyError: 'state_index'` in `derivative_aux` (its ghost path reads the state
+  index before the target kind), so ML-VAM did not run on NumPy at all.
+- **Cause.**  `derive_layer` keeps d_x h_l of the interface heights unevaluated (w at the layer
+  bottom, the omega-tilde resolution); the assembly's `.subs(frac)` (h_l = l_l h) made d_x h_1 the
+  compound d_x(l_1 h).  The horizontal and constraint rows carry it linearly (the extractor reads
+  it into the NCP column of h), the w rows also in products with q_x (source, hence an aux).
+- **Fix.**  `ml_vam.py` `_frac`: d^n h_l -> l_l d^n h before the substitution (l_l is a
+  constant: chain rule), at the three row sites (horizontal, w, constraint).  `splitter.py`: the
+  predictor also evaluates a derivative of a number (d_x(0) = 0), as it already did for the
+  non-horizontal ones.
+- **Checks.**  The six configs above: every operator entry after the fix equals the one before
+  with h*l_j_d := l_j h_d (symbolically); no derivative aux with a non-state target is left,
+  in the model or the split.  Goldens m15 / s03 re-blessed for that reason: every changed entry
+  equals the old one after that substitution (m15: NCP [q_2_1, r_2_1, P_2_0, P_2_1 <- h] and
+  source rows r_1_0, r_2_0, r_2_1; s03 predictor: the same, the 0_x term, eigenvalues_cfl), the
+  aux list loses h*l_1_x (s03: and 0_x; `update_aux_variables` shifts by those rows).  New test
+  `tests/model/test_mlvam_derivative_aux.py`: (1) every derivative aux of the model and its split
+  targets a state; (2) the w rows' source with the LSQ aux against exact derivatives
+  (d_x(l_1 h) = l_1 h'), smooth field, max rel 2.1e-3 / 5.3e-4 at nx 64 / 128 (order 2.0);
+  before the fix 0.63 / 0.63.
+- **Run** (2 layers, level 1, l_1 = 0.4, 1-D, 100 cells on [-1.5, 1.5], Gaussian bed 0.08, a
+  0.04 wave on 0.34, u ~ 0.3, CFL 0.45, t = 0.5; P = 0 right, extrapolation left; JAX): after
+  minus before, max abs / max |Q_row|: h 2.9e-5, q_l_0 1.4e-4 to 1.7e-4, q_l_1 3.8e-3 to 4.2e-3,
+  r 7e-4 to 2.3e-3, P_l_0 1.6e-3 / 3.4e-3, P_1_1 1.8e-2.  NumPy (now runs) = JAX 6.6e-11.
+- **Seen, not changed.**  Sigma3D (m16) registers `h*zeta_x` with `target_kind='unknown'` (the
+  same pattern, zeta a coordinate there).  NumPy's `derivative_aux` raises on any non-state
+  target when the BC ghosts are present (JAX skips it, reading 0).
 
 ## 46. JAX distributed pressure solve (pyamg): the iteration count does not scale (2026-10-13)
 
