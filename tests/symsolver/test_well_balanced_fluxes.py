@@ -133,12 +133,12 @@ def test_not_well_balanced_by_construction_runs(riemann):
                                      "PositiveQuasilinearRusanov", "NonconservativeRoe"])
 @pytest.mark.parametrize("order", [1, 2])
 def test_moving_flow_pressure_placement(riemann, order):
-    """A flow over the bump: SWE (pressure in F) = SME(0) (pressure in P) up to the
-    wave-speed difference of the two models (SME(0) has no closed-form spectrum: Gelfand
-    bound, HLL = Lax-Friedrichs); the exact Roe matrix agrees to round-off.  Before the fix
-    PositiveHLL differed by O(0.1)."""
+    """A flow over the bump: SWE (pressure in F) = SME(0) (pressure in P).  HLL (Davis speeds
+    of the spectrum, a bound of it for SME(0)) and the exact Roe matrix agree to round-off;
+    the Rusanov family up to its dissipation speed (SME(0) has no closed-form spectrum: the
+    Gelfand bound, 1.7e-6 / 3.2e-6).  Before the fix PositiveHLL differed by O(0.1)."""
     _, _, a = _run("swe", 1, riemann, order, flow=0.1, nsteps=40)
     _, _, b = _run("sme", 1, riemann, order, flow=0.1, nsteps=40)
     bound = 1e-14 if riemann == "NonconservativeRoe" else (
-        3e-3 if "HLL" in riemann else 1e-5)
+        1e-12 if "HLL" in riemann else 1e-5)
     assert np.abs(a - b).max() <= bound
