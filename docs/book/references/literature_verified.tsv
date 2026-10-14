@@ -63,3 +63,4 @@ hypre	10.1007/3-540-47789-6_66	Falgout, Yang 2002, hypre: a library of high perf
 almgren-bell-crutchfield	10.1137/S1064827599357024	Almgren, Bell, Crutchfield 2000, approximate projection methods (pressure increment)
 marche-2007	10.1016/j.euromechflu.2006.04.007	Marche 2007, two-dimensional viscous shallow water model
 gallardo-front	10.1016/j.jcp.2007.08.007	Gallardo, Parés, Castro 2007, well-balanced high-order FV with dry areas (a-priori wet/dry front detector)
+horn-johnson-matrix	10.1017/CBO9781139020411	Horn, Johnson 2012, Matrix Analysis, 2nd ed. (spectral radius below every matrix norm, Gelfand's formula; Collatz-Wielandt)
