@@ -1,7 +1,7 @@
 """Driver of the NumPy backend: prints the solver template (hyperbolic, Chorin) of a
-NumericalSystemModel with `PyPrinter` and runs it against `numpy_backend.runtime`, serially;
-the default backend (no JAX, no compiler).  Mirrors `zoomy_jax.symsolver.solver` without AD,
-GPU, MPI and preCICE.
+NumericalSystemModel with `PyPrinter` and runs it against `numpy_backend.runtime`; the default
+backend (no JAX, no compiler).  Mirrors `zoomy_jax.symsolver.solver` without AD, GPU and preCICE;
+`comm=` (mpi4py) runs it distributed (`numpy_backend.parallel`, the JAX backend's partition).
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from zoomy_core.solver.constants import elliptic_constants
 from zoomy_core.symsolver import PyPrinter, default_wave_speed
 from zoomy_core.symsolver.numpy_backend import runtime as R
 from zoomy_core.symsolver.numpy_backend.kernels import NumpyKernels
+from zoomy_core.symsolver.numpy_backend.parallel import MpiLinearSolver
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings, LinearSolver
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
@@ -33,7 +34,14 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
     on_write = param.Callable(default=None, allow_None=True, doc="on_write(time, Q, Qaux).")
     output = param.String(default=None, allow_None=True,
                           doc="HDF5 file for the io.write snapshots.")
-    comm = param.Parameter(default=None, doc="Not supported (serial only).")
+    comm = param.Parameter(default=None, doc=(
+        "mpi4py communicator: a distributed run, each rank on its piece of the mesh (owned "
+        "cells + two halo layers, `mesh.distributed`).  setup() takes the global mesh and "
+        "returns the local state; partition.gather() collects it."))
+    mpi_linear_solver = OptionParam(
+        MpiLinearSolver, default=MpiLinearSolver.auto,
+        doc="Distributed runs: the linear solves (pressure, implicit diffusion) by PETSc "
+            "(petsc4py) or a distributed FGMRES; auto: PETSc when petsc4py is installed.")
 
     # ── setup ──────────────────────────────────────────────────────────────
     def setup(self, mesh, model):
@@ -53,17 +61,23 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
         """Read the mesh, build topology, geometry, kernels and the printed program; returns the
         initial `(Q, Qaux)`.
         """
-        if self.comm is not None:
-            raise NotImplementedError("numpy backend: serial only (comm), use zoomy_jax")
         from zoomy_core.mesh import distributed
         bcs = getattr(nsm.sm, "_bc_source", None)
+        self.partition, self.global_mesh = None, mesh
         self.mesh_file = mesh if isinstance(mesh, (str, os.PathLike)) else None
-        if self.mesh_file is not None:
-            mesh = distributed.read_mesh(mesh)
-        mesh = ensure_lsq_mesh(mesh, nsm)
-        if hasattr(mesh, "resolve_periodic_bcs") and bcs is not None:
-            mesh.resolve_periodic_bcs(bcs)
-        self.partition, self.global_mesh = None, mesh          # serial (the JAX API)
+        partners = None
+        if self.comm is not None and self.comm.Get_size() > 1:
+            local, self.partition = distributed.distribute(mesh, self.comm, bcs)
+            mesh = ensure_lsq_mesh(local, nsm)
+            self.partition.resolve_periodic(mesh)
+            partners = np.asarray(mesh.boundary_face_cells)
+        else:
+            if self.mesh_file is not None:
+                mesh = distributed.read_mesh(mesh)
+            mesh = ensure_lsq_mesh(mesh, nsm)
+            if hasattr(mesh, "resolve_periodic_bcs") and bcs is not None:
+                mesh.resolve_periodic_bcs(bcs)
+            self.global_mesh = mesh
         sm, nc = nsm.sm, int(mesh.n_inner_cells)
         Q = np.zeros((len(sm.state), nc))
         Qaux = np.zeros((len(sm.aux_state), nc))
@@ -72,8 +86,10 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
         if sm.aux_initial_conditions is not None:
             Qaux = sm.aux_initial_conditions.apply(mesh.cell_centers[:, :nc], Qaux)
         self.nsm, self.mesh_np = nsm, mesh
-        self.topo = build_topology(mesh, nsm=nsm,
-                                   systems=[sub for sub, _ in (systems or {}).values()])
+        self.topo = build_topology(
+            mesh, nsm=nsm, partners=partners,
+            periodic_ids=self.partition.periodic_ids if self.partition else None,
+            systems=[sub for sub, _ in (systems or {}).values()])
         X = np.asarray(mesh.vertex_coordinates)[:mesh.dimension]
         self.mesh, geom = R.geometry_of(self.topo, X)
         default_wave_speed(nsm)
@@ -83,11 +99,13 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
         on_save, on_load = self._restart()
         self.module = R.runtime(nsm, self.rt, mesh, self.topo, geom, on_write=self._writer(),
                                 on_save=on_save, on_load=on_load, systems=systems,
+                                partition=self.partition,
                                 implicit=dict(tol=self.implicit_tol,
                                               maxiter=self.implicit_maxiter,
                                               gmres_tol=self.gmres_tol,
                                               gmres_maxiter=self.gmres_maxiter,
-                                              linsolve=linsolve))
+                                              linsolve=linsolve,
+                                              mpi_linear_solver=self.mpi_linear_solver))
         if self.imex and nsm.source_derivative_specs:
             raise NotImplementedError(
                 "IMEX with derivative-dependent sources needs the global (Newton-GMRES) "
@@ -113,26 +131,39 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
             "hyperbolic", (Q, Qaux, p, time, time_end, mesh), template.march)
 
     def _writer(self):
-        """`on_write`, plus the HDF5 snapshots when `output` is set."""
+        """`on_write`, plus the HDF5 snapshots when `output` is set (distributed: each rank its
+        block with a parallel h5py, else gathered and written by rank 0 on the global mesh: the
+        serial file).
+        """
         if not self.output:
             return self.on_write
         from zoomy_core.misc import misc
         from zoomy_core.misc.io import _save_fields_to_hdf5, write_mesh_to_hdf5
-        names = [str(v) for v in self.nsm.state]
+        part, names = self.partition, [str(v) for v in self.nsm.state]
         path = os.path.join(misc.get_main_directory(), self.output)
-        if self.mesh_file is not None:
+        root = part is None or part.rank == 0
+        blocks = part is not None and part.parallel_io()
+        if blocks:                     # every rank writes its own block
+            part.write_mesh(path, names)
+        elif root and self.mesh_file is not None:
             import h5py
             with h5py.File(self.mesh_file, "r") as src, h5py.File(path, "w") as f:
                 src.copy(src["mesh"], f, "mesh")
                 f.create_group("fields").attrs["names"] = np.array(names, dtype="S")
-        else:
-            write_mesh_to_hdf5(self.output, self.mesh_np, names=names)
+        elif root:
+            write_mesh_to_hdf5(self.output, self.global_mesh, names=names)
         count, user = [0], self.on_write
 
         def write(time, Q, Qaux):
             """Write snapshot number `count` and call the user's `on_write`."""
-            _save_fields_to_hdf5(self.output, count[0], float(time), np.asarray(Q),
-                                 np.asarray(Qaux))
+            if blocks:
+                part.write_fields(path, count[0], time, Q, Qaux)
+            else:
+                Qg, Qauxg = ((Q, Qaux) if part is None
+                             else (part.gather(np.asarray(Q)), part.gather(np.asarray(Qaux))))
+                if root:
+                    _save_fields_to_hdf5(self.output, count[0], float(time), np.asarray(Qg),
+                                         np.asarray(Qauxg))
             count[0] += 1
             if user is not None:
                 user(time, Q, Qaux)
@@ -143,14 +174,26 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
         (`zoomy_core.symsolver.restart`); checks `restart_from` first.
         """
         from zoomy_core.symsolver import restart as rs
-        names = [str(v) for v in self.nsm.state]
+        part, names = self.partition, [str(v) for v in self.nsm.state]
         path = rs.restart_path(self.checkpoint, self.output)
-        on_save = None if path is None else (
-            lambda time, Q, Qaux: rs.write_state(path, time, Q, Qaux, names))
+        on_save = None
+        if path is not None:
+            def on_save(time, Q, Qaux):
+                """Write the march state (distributed: gathered, written by rank 0)."""
+                if part is not None:
+                    Q, Qaux = part.gather(np.asarray(Q)), part.gather(np.asarray(Qaux))
+                if part is None or part.rank == 0:
+                    rs.write_state(path, time, Q, Qaux, names)
         if self.restart_from is None:
             return on_save, None
-        rs.check_state(self.restart_from, names, int(self.mesh_np.n_inner_cells))
-        return on_save, lambda time, Q, Qaux: rs.read_state(self.restart_from)
+        rs.check_state(self.restart_from, names,
+                       part.n_global if part else int(self.mesh_np.n_inner_cells))
+
+        def on_load(time, Q, Qaux):
+            """The saved state (distributed: this rank's cells)."""
+            t, Q, Qaux = rs.read_state(self.restart_from)
+            return (t, Q, Qaux) if part is None else (t, part.scatter(Q), part.scatter(Qaux))
+        return on_save, on_load
 
     def initial_aux(self, Q, Qaux, parameters=None):
         """The aux of the initial state: the pointwise formula plus the derivative aux with the
@@ -171,7 +214,17 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
         if rows and ghost is not None:
             Qg = m["boundary_ghosts"](ghost, Q, Qaux, p, 0.0, self.mesh)
             Qaux = m["derivative_aux"](rt.aux_derivatives, Q, Qaux, self.mesh, Qg, rows)
-        return Qaux
+        return m["halo"](Qaux, self.mesh)
+
+    def integral(self, X):
+        """`sum_cells X vol` per row of `X` `(rows, cells)` over the whole mesh (e.g. the mass).
+        Distributed: a collective, call it on every rank (each gets the total).
+        """
+        vol = np.asarray(self.mesh_np.cell_volumes)
+        dist = self.module.get("_distributed")
+        if dist is None:
+            return np.asarray(X, dtype=float) @ vol[:np.shape(X)[-1]]
+        return dist.integral(X, vol)
 
     @property
     def parameters(self):

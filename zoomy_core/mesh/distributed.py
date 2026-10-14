@@ -506,6 +506,18 @@ class _Directory:
 
 
 # ── the distributed mesh ────────────────────────────────────────────────────
+def cut_faces(mesh):
+    """Mask of `mesh`'s boundary faces tagged `HALO` (cut by a partition); all False on a mesh
+    that is not a distributed piece.
+    """
+    n_bf = int(mesh.n_boundary_faces)
+    names = list(mesh.boundary_conditions_sorted_names)
+    if HALO not in names:
+        return np.zeros(n_bf, dtype=bool)
+    numbers = np.asarray(mesh.boundary_face_function_numbers, dtype=int)[:n_bf]
+    return numbers == names.index(HALO)
+
+
 class Partition:
     """One rank's piece: local cells (owned, then halo layer 1, then 2) and the exchange lists;
     `cells` / `vertices` map local to the source's numbering.
@@ -561,6 +573,19 @@ class Partition:
         out = np.zeros(G.shape[:-1] + (n_global,), dtype=G.dtype)
         np.add.at(out, (..., np.asarray(ids)), G)
         return self._hcomm.allreduce(out, op=MPI.SUM)
+
+    def owned(self, local_mesh):
+        """`(cells, faces)`: masks of the local cells and faces this rank counts in a global
+        reduction, each counted on exactly one rank -- a cell where it is owned, a face where the
+        lower-numbered (global) of its inner cells is owned.
+        """
+        nc = int(local_mesh.n_inner_cells)
+        cells_g = np.append(self.gids, np.iinfo(np.int64).max)
+        fc = np.asarray(local_mesh.face_cells)[:2]
+        side = np.where(fc < nc, fc, nc)
+        g = cells_g[side]
+        first = np.where(g[0] <= g[1], side[0], side[1])
+        return np.arange(nc) < self.n_own, first < self.n_own
 
     def resolve_periodic(self, local_mesh):
         """Point every periodic face whose partner cell this piece holds at the partner's halo copy."""

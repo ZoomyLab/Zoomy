@@ -1,7 +1,8 @@
 """NumPy runtime of the symbolic solvers: what each name of a printed solver means in plain
-numpy, block for block the serial path of `zoomy_jax.symsolver.runtime`.  `While` is a Python
-loop, `Cond` an if / else, `Root` a Newton iteration with a finite-difference Jacobian and
-`LinSolve` a restarted GMRES (scipy), optionally AMG-preconditioned (pyamg).
+numpy, block for block `zoomy_jax.symsolver.runtime`.  `While` is a Python loop, `Cond` an if /
+else, `Root` a Newton iteration with a finite-difference Jacobian and `LinSolve` a restarted GMRES
+(scipy), optionally AMG-preconditioned (pyamg).  Distributed (a `partition`): `halo` and the
+reductions are MPI collectives and the linear solves distributed (`numpy_backend.parallel`).
 
 References:
     Saad, Schultz 1986, https://doi.org/10.1137/0907058
@@ -14,6 +15,7 @@ from typing import NamedTuple
 import numpy as np
 
 from zoomy_core.fvm.reconstruction import DenseDiffusionOperator
+from zoomy_core.mesh.distributed import cut_faces
 from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_derivatives
 from zoomy_core.misc.logger_config import logger
 from zoomy_core.model.boundary_conditions import boundary_face_branches
@@ -42,9 +44,9 @@ def geometry_of(topo, X):
 
 
 def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_load=None,
-            implicit=None, systems=None):
+            implicit=None, systems=None, partition=None):
     """The name table (dict of callables) a printed solver runs against: the numpy
-    implementation of every `zoomy_core.symsolver` block on this mesh, serial.
+    implementation of every `zoomy_core.symsolver` block on this mesh.
 
     Args:
         rt: the `NumpyKernels` of `nsm`
@@ -55,6 +57,8 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
             -> (time, Q, Qaux)`; None: no restart file / not restarting
         implicit: Newton and linear-solver settings of `root` and `linsolve`
         systems: further `{name: (nsm, NumpyKernels)}` a template uses besides `nsm`
+        partition: this rank's piece of a distributed run (`mesh.distributed.Partition`); its
+            halo exchange, global reductions and distributed solves replace the serial ones
     Returns:
         dict name -> callable
     """
@@ -74,6 +78,16 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
     fc_cfl = np.where(fc1 < nc, fc1, fc0)
     branch = np.asarray(boundary_face_branches(mesh_np, getattr(rt.sm, "_bc_source", None)),
                         dtype=int)[:n_bf]
+    # faces a partition cut: the inner state, no BC (nothing owned reads them)
+    cut = cut_faces(mesh_np)
+    phys = np.flatnonzero(~cut)
+    dist = None
+    if partition is not None:
+        from zoomy_core.symsolver.numpy_backend.parallel import Distributed
+        dist = Distributed(partition, mesh_np, (implicit or {}).get("mpi_linear_solver", "auto"))
+    halo = dist.halo if dist is not None else (lambda X, mesh: X)
+    norm = dist.norm if dist is not None else np.linalg.norm
+    root_rank = dist is None or dist.rank == 0
     periodic = bf_cells != inner
     has_periodic = bool(periodic.any())
     # a periodic face's outer trace is its partner face's inner trace
@@ -136,8 +150,14 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         nb = n[:, bf_face].T
         dn = np.sum(r * nb, axis=1)
         pos = cc + dn[:, None] * nb if ghost else fc[bf_face, :]
-        dist = dn if ghost else np.linalg.norm(r, axis=1)
-        return bc(branch, time, pos.T, dist, states, Qaux[:, cells_of_face], p, n[:, bf_face])
+        d = dn if ghost else np.linalg.norm(r, axis=1)
+        if not cut.any():
+            return bc(branch, time, pos.T, d, states, Qaux[:, cells_of_face], p, n[:, bf_face])
+        out = np.array(states, dtype=float, copy=True)
+        if len(phys):                     # a piece inside the domain has none
+            out[:, phys] = bc(branch[phys], time, pos[phys].T, d[phys], states[:, phys],
+                              Qaux[:, cells_of_face[phys]], p, n[:, bf_face[phys]])
+        return out
 
     def boundary_ghosts(ghost, Q, Qaux, p, time, mesh):
         """The GHOST (`boundary_ghost_state`) per boundary face."""
@@ -391,22 +411,26 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
 
     imp = {**dict(tol=1e-8, maxiter=6, gmres_tol=1e-7, gmres_maxiter=30), **(implicit or {})}
 
-    def _newton(f, x0, solve, norm=np.linalg.norm):
+    def _newton(f, x0, solve):
         """Newton on `f(x) = 0` from `x0`; `solve(x, r)` returns the update.  Warns when not
-        converged after `maxiter` updates.
+        converged after `maxiter` updates.  Distributed: the norm is global, every rank takes the
+        same number of updates.
         """
         x, r, i = x0, f(x0), 0
-        while i < imp["maxiter"] and norm(r) > imp["tol"]:
+        nr = norm(r)                      # a collective: on every rank, outside the guard
+        while i < imp["maxiter"] and nr > imp["tol"]:
             x = x + solve(x, r)
             r, i = f(x), i + 1
-        if not norm(r) <= imp["tol"]:
+            nr = norm(r)
+        if not nr <= imp["tol"] and root_rank:
             logger.warning(f"numpy newton: not converged after {i} of {imp['maxiter']} "
-                           f"updates: ||R||_2 = {float(norm(r)):.3e} > tol = {imp['tol']:.3e}")
+                           f"updates: ||R||_2 = {float(nr):.3e} > tol = {imp['tol']:.3e}")
         return x
 
     def root(f, x0):
         """Newton on `f(x) = 0` with a per-cell (block-diagonal) Jacobian by central
-        differences (step `eps^(1/3)` relative to the cell value).
+        differences (step `eps^(1/3)` relative to the cell value).  Distributed: cell-local, the
+        halo cells' copies too; the global norm stops every rank after the same update.
         """
         x0 = np.asarray(x0, dtype=float)
         n = x0.shape[0]
@@ -454,6 +478,8 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         b = np.asarray(b, dtype=float)
         shape = b.shape
         a0 = np.asarray(A(np.zeros(shape)), dtype=float)
+        if dist is not None:
+            return _dlinsolve(A, b, a0)
 
         def mv(x):
             """The linear part at `x`, evaluated at `x / max|x|` (a tiny iterate added to the
@@ -487,7 +513,43 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
                     f"{ls['maxiter']})")
         return x.reshape(shape)
 
-    flux_bf = np.arange(n_bf)
+    amg_mpi = {}
+
+    def _dlinsolve(A, b, a0):
+        """Distributed `linsolve` on the owned unknowns (`numpy_backend.parallel`): GMRES on the
+        matrix-free operator, or (`backend='pyamg'`) GMRES preconditioned by AMG on the
+        colour-assembled owned rows; raises above the accept gate (global residual).
+        """
+        from zoomy_core.symsolver.numpy_backend.parallel import amg_gmres, shell_gmres
+        k = b.shape[0]
+
+        def lin(X):
+            """The linear part at `X`, evaluated at `X / max|X|` (one global scale)."""
+            s = dist.reduce_max(np.abs(X))
+            if s == 0.0:
+                return np.zeros_like(X)
+            return s * (np.asarray(A(X / s), dtype=float) - a0)
+
+        def mv(xo):
+            """The linear part on the owned unknowns (its halo columns exchanged inside `A`)."""
+            return dist.own(lin(dist.embed(xo, k)))
+        bo = dist.own(b)
+        if pyamg is not None:
+            x = amg_gmres(dist, lambda X: np.asarray(A(X), dtype=float) - a0, bo, k,
+                          topo.lsq_neighbors, ls, amg_mpi.setdefault(k, {}))
+        else:
+            x = shell_gmres(dist, mv, bo, ls["tol"], ls["restart"], ls["maxiter"])
+        if ls.get("accept") is not None:
+            res, nb = mv(x) - bo, float(np.sqrt(dist.total(bo @ bo)))
+            r = float(np.sqrt(dist.total(res @ res))) / (nb if nb > 0 else 1.0)
+            if r > ls["accept"]:
+                raise RuntimeError(
+                    f"linsolve: relative residual {r:.3e} > accept gate {ls['accept']:.1e} "
+                    f"(target {ls['tol']:.1e}, restart {ls['restart']} x maxiter "
+                    f"{ls['maxiter']}; distributed, {dist.method})")
+        return dist.embed(x, k)
+
+    flux_bf = np.flatnonzero(~cut)            # cut faces (distributed) carry no flux
     # the two-point pattern: face neighbours and periodic partners (-1: none)
     pairs = np.concatenate([np.stack([iA, iB]), np.stack([iB, iA]),
                             np.stack([inner[periodic], bf_cells[periodic]])], axis=1)
@@ -539,6 +601,7 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         Xg = _bc_at(bc, X[:, bf_cells], Qaux, p, time, mesh, bf_cells) if n_bf else None
         if correction:
             G = np.transpose(_lsq(X, Xg)[:, :, topo.lsq_grad_cols], (0, 2, 1))  # (j, d, nc)
+            G = halo(G, mesh)                         # the halo cells' own stencils
             ia, ib, nI, e = (geo[q] for q in ("ia", "ib", "n", "e"))
             m = np.einsum("ijfde,df->ijfe", 0.5 * (A[:, :, ia] + A[:, :, ib]), nI)
             g = 0.5 * (G[:, :, ia] + G[:, :, ib])
@@ -588,17 +651,21 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         b = Q + 0.5 * dt * (D + 2.0 * C)
 
         def R(X):
-            """Crank-Nicolson residual `X - b - dt/2 D(X)` at `time + dt`."""
+            """Crank-Nicolson residual `X - b - dt/2 D(X)` at `time + dt` (distributed: its halo
+            columns refreshed first)."""
+            X = halo(X, mesh)
             return X - b - 0.5 * dt * _div(k, bc, X, Qaux, p, time + dt, mesh,
                                            correction=False)[0]
 
+        n_rows = None if dist is None else dist.n_own     # distributed: the owned rows
+
         def jacobian(x):
-            """The sparse Jacobian of `R` at `x` (cell-major unknowns) by central differences,
-            one pair of evaluations per colour of the face-neighbour pattern."""
-            import scipy.sparse as sps
+            """`(rows, cols, vals)` of the Jacobian of `R` at `x` (cell-major unknowns; the owned
+            rows when distributed, by the rank alone: halo off) by central differences, one pair
+            of evaluations per colour of the face-neighbour pattern."""
             k_, n = x.shape[0], x.size
             if n not in two_point:
-                two_point[n] = cell_pattern(n, nc, face_nbrs)
+                two_point[n] = cell_pattern(n, nc, face_nbrs, n_rows)
             rows, cols, colors = two_point[n]
             xc = x.T.reshape(-1)
             hx = 6e-6 * np.maximum(1.0, np.abs(xc))
@@ -608,22 +675,37 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
                 dR = (R((xc + e).reshape(-1, k_).T) - R((xc - e).reshape(-1, k_).T)).T.reshape(-1)
                 pick = colors[cols] == c
                 vals[pick] = dR[rows[pick]] / (2.0 * hx[cols[pick]])
-            return sps.csc_matrix((vals, (rows, cols)), shape=(n, n))
+            return rows, cols, vals
 
         last = [None]
         lu = jacobians.setdefault((Q.size, k), {})
 
         def update(x, r):
             """The Newton update against a factorized Jacobian, kept between the steps (lagged):
-            refactorized at a new `dt`, or when an update reduced the residual less than 10x."""
-            from scipy.sparse.linalg import splu
-            nr = np.linalg.norm(r)
+            refactorized at a new `dt`, or when an update reduced the residual less than 10x
+            (distributed: the global norm, a parallel LU)."""
+            nr = norm(r)
             if (lu.get("dt") != dt or "lu" not in lu
                     or (last[0] is not None and nr > 0.1 * last[0])):
-                lu.update(lu=splu(jacobian(x)), dt=dt)
+                if dist is None:
+                    import scipy.sparse as sps
+                    from scipy.sparse.linalg import splu
+                    rows, cols, vals = jacobian(x)
+                    lu.update(lu=splu(sps.csc_matrix((vals, (rows, cols)),
+                                                     shape=(x.size, x.size))), dt=dt)
+                else:
+                    from zoomy_core.symsolver.numpy_backend.parallel import no_halo
+                    with no_halo():
+                        rows, cols, vals = jacobian(x)
+                    if "lu" in lu:
+                        lu["lu"].close()
+                    lu.update(lu=dist.lu(rows, cols, vals, x.shape[0]), dt=dt)
             last[0] = nr
+            if dist is not None:
+                return dist.embed(lu["lu"].solve(dist.own(-r)), x.shape[0])
             return lu["lu"].solve(-r.T.reshape(-1)).reshape(-1, x.shape[0]).T
-        return _newton(R, np.asarray(Q, dtype=float), update)
+        X = _newton(R, np.asarray(Q, dtype=float), update)
+        return halo(X, mesh)
 
     # ── effects ────────────────────────────────────────────────────────────
     warned = []
@@ -632,8 +714,9 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         """Warn once when `dt` exceeds the CFL step `dt_cfl`; returns the next order token."""
         if float(dt) > float(dt_cfl) * (1 + 1e-12) and not warned:
             warned.append(True)
-            logger.warning(f"time step {float(dt):.3e} exceeds the CFL step "
-                           f"{float(dt_cfl):.3e} (warned once)")
+            if root_rank:
+                logger.warning(f"time step {float(dt):.3e} exceeds the CFL step "
+                               f"{float(dt_cfl):.3e} (warned once)")
         return (tok + 1,)
 
     def io_write(tok, time, Q, Qaux):
@@ -648,7 +731,12 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         if on_save is not None:
             on_save(time, Q, Qaux)
             amg_cache.clear()
+            for c in [*jacobians.values(), *amg_mpi.values()]:    # PETSc objects (collective)
+                for v in c.values():
+                    if hasattr(v, "close"):
+                        v.close()
             jacobians.clear()
+            amg_mpi.clear()
         return (tok + 1,)
 
     def io_load_state(tok, time, Q, Qaux):
@@ -681,13 +769,16 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         divergence=divergence,
         edge_source=edge_source, derivative_aux=derivative_aux,
         inadmissible=inadmissible, reduce_min=np.min, reduce_any=np.any,
-        halo=lambda X, mesh: X, put=put, zeros=zeros, clean_round_off=clean_round_off,
+        halo=halo, put=put, zeros=zeros, clean_round_off=clean_round_off,
         take=lambda Q, rows: np.asarray(Q)[list(rows)], reduce_max=np.max,
         logical_and=np.logical_and, select=select, while_loop=while_loop, cond=cond,
         io_write=io_write, io_save_state=io_save_state, io_load_state=io_load_state,
         root=root, linsolve=linsolve,
         implicit_diffusion=implicit_diffusion, diffusion=diffusion, check_cfl=check_cfl,
         minimum=np.minimum, maximum=np.maximum, abs=np.abs, floor=np.floor)
+    if dist is not None:
+        m.update(dist.blocks())
+        m["_distributed"] = dist
     return m
 
 
