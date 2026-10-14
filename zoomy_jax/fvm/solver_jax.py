@@ -1626,7 +1626,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
         it `None` and steps the source IMPLICITLY afterwards; the Chorin-VAM
         predictor leaves it `None` and adds the source in its own splitting
         cycle (Escalante eq. 11).  `None` ⇒ flux-only, byte-identical to
-        before.  The point-implicit `source_treatment="linearized"` update is
+        before.  The point-implicit `source_treatment=SourceTreatment.linearized` update is
         baked INTO the source operator itself (NSM rewrites `sm.source` into
         `(I − dt·J)⁻¹ S`), so folding it here linearizes inside each RK stage —
         no second split.
