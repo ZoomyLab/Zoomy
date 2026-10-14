@@ -177,7 +177,8 @@ class Container:
     image's own). Always: the harness at /e2e/harness, a scratch dir at /e2e/work (TMPDIR,
     HOME, build caches), no host home and no user site-packages (the host's editable installs
     would shadow the image's). `shared`: further `(host dir, container path)` binds, read-write
-    (a directory two containers exchange through: preCICE's exchange directory).
+    (a directory two containers exchange through: preCICE's exchange directory); `extra_env`:
+    further environment.
     """
     backend: Backend
     image: str
@@ -190,6 +191,7 @@ class Container:
     port: int | None = None
     log: Path | None = None
     shared: tuple = ()
+    extra_env: dict = field(default_factory=dict)
 
     def env(self) -> dict:
         e = {"PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1", "MPLBACKEND": "Agg",
@@ -204,6 +206,7 @@ class Container:
             e["PYTHONPATH"] = ":".join(f"/zoomy/library/{p}" for p in PACKAGES)
         if (Path.home() / ".cache/zoomy/hypre-cpu-3.2.0").is_dir() and self.rt == "apptainer":
             e["ZOOMY_HYPRE_CACHE"] = "/e2e/zcache"    # the host's hypre build (read-only)
+        e.update(self.extra_env)
         return e
 
     def binds(self) -> list[tuple[str, str, str]]:
