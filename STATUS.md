@@ -46,5 +46,18 @@ zoomy_foam, zoomy_gui, zoomy_amrex, all on `dev/smevof-live`), `~/git/wt-thsmevo
 - Old vs new (live runs, t <= 2.5): pair interface h rel L2 8.6e-5; triple arm Swe 3.9e-4,
   arm Swe2 5.4e-3 (old's own 1e-9 floor 3.5e-3). C16 jax_jax shared path unchanged (3.6e-15).
 
-## Next
-- thesis migration: sme_coupling_jax (subagent), sme_vof_coupling (migration/ run + compare).
+- zoomy_core 81beb82, zoomy_jax 751eb3f: Coupled faces are ghost rows of the derivative fits; a
+  characteristic coupling writes its column with the step's aux, derivatives seeing the
+  coupling's ghost (as zoomyFoam). zoomy_foam c93b53a: FO build moved in whole (concurrency).
+  e2e `-k live` rerun on these: 2 passed, metrics unchanged.
+- thesis (wt-thsmevof, mig/sme-vof): 83b79774 sme_coupling_jax (symbolic JAX over preCICE; new vs
+  old 4.6e-7 h, cause: Gelfand wave speed vs eig, eig gives 5e-16); de8e198e sme_vof_coupling
+  migration (Fr* 0.752 SME(0): new = old to 6e-11; existing statebc config: 2.5e-3, the w column
+  under cellLimited Gauss vs LSQ).
+
+## Open
+- Old zoomyFoam vs the symbolic kernels: q_1 rows differ ~1e-3 at fronts (SME(1) only; SME(0)
+  agrees to output precision). Not located (flux, fluctuation, source and assembly read the same).
+- Fr* 0.752 past t ~2.5 is chaotic for the old solver too; the triple needs fluxonly at the
+  outflow seam.
+- w column: zoomyFoam limits its Gauss gradient (cellLimited); the symbolic fit does not.
