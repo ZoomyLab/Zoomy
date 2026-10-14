@@ -92,7 +92,7 @@ def split():
 
 
 print(f"VAM(1) bump channel, {jax.devices()[0].platform}, spectral radius "
-      f"{os.environ.get('SPECTRAL', 'power')}, fold geometry {os.environ.get('FOLD', '0')}, CPU ({os.cpu_count()} cores visible: "
+      f"{os.environ.get('SPECTRAL', 'gelfand')}, fold geometry {os.environ.get('FOLD', '0')}, CPU ({os.cpu_count()} cores visible: "
       f"{len(os.sched_getaffinity(0))}), pressure solver {SOLVER}, run to t = {T_RUN}")
 for nx in NXS:
     ny = max(1, nx // 10)

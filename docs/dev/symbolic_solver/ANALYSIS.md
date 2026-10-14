@@ -1560,3 +1560,192 @@ the foam / JAX hypre and the foam kernel-I/O merges.  ms / step (Krylov iteratio
   with both GPUs busy (91 / 63 %), reproduced twice; 2, 8, 9 boxes are fine, and so are 3 boxes on
   2 GPUs at 10k cells and on 2 CPU ranks.  Not diagnosed (hypre GPU on an uneven 2 / 1 split is
   the suspect); the default no longer produces that layout.
+
+## 48. Wave speed without a closed-form spectrum: an upper bound of rho; the faces rule: MOOD repairs at their own step, the cells' speeds under the edge source (2026-10-14, dev/wavespeed-bound)
+
+The default wave speed of a model without closed-form eigenvalues (`zoomy_core.symsolver.WAVE_SPEED`)
+was power iteration on A_n^2 (10 steps from x = 1) times 1.06.  Power iteration converges to rho
+from below, so the product is an estimate, not a bound, and the CFL step and the HLL / Rusanov
+speeds lose their positivity guarantee.  Measured (gate 49, below): ratio to max|eig| down to 0.43
+on random ML-SME states and 0 on states of the Malpasset and C5 runs.
+
+**The bound** (`SpectralRadius.gelfand`, the new `WAVE_SPEED`; opaque `gelfand_bound(j, delta, *A_flat)`:
+`kernel_functions`, NumPy / JAX `userfunctions`, foam and AMReX `UserFunctions.H`; `power` and the
+`spectral_radius` kernel are removed):
+
+- `j` squarings, each after dividing by the max row sum: `s_i = ||C_i||_inf`, `C_(i+1) = (C_i / s_i)^2`,
+  `C_0 = A`, so `C_j = A^m / prod_i s_i^(2^(j-i))`, `m = 2^j`, entries <= 1 (no overflow).
+- One Collatz-Wielandt step on `|C_j|`: `x` = its row sums plus `delta` their max (positive),
+  `w = max_i (|C_j| x)_i / x_i`, so `rho(C_j) <= rho(|C_j|) <= w`.  `delta =
+  SystemModel.spectral_cw_offset = 2^-30`, emitted by core into every call (no literal in a
+  backend kernel).
+- `rho(A) <= s_0 sqrt(s_1 sqrt(... sqrt(s_(j-1) sqrt(w))))` from `rho(A)^m = rho(A^m)`; with
+  `||C_j||_inf` in place of `w` this is Gelfand's `||A^m||^(1/m)`, which tends to rho.  Horn,
+  Johnson 2012, https://doi.org/10.1017/CBO9781139020411: section 5.6 (rho <= every matrix norm,
+  Gelfand's formula), section 8.1 (rho(A) <= rho(|A|), Collatz-Wielandt).
+- Matrix products, sums, max and `sqrt` only (correctly rounded on every backend); `+inf` for a
+  non-finite entry (as the `eigenvalues` kernel), 0 for a zero matrix; JAX gradients finite at a
+  zero matrix.  `j = SystemModel.spectral_squarings = 7` (m = 128).
+- Why `x` is bounded away from 0: with the plain row sums, a row that is round-off (q_y ~ 1e-20 in
+  the quasi-1-D C10) still has a ratio of O(1), so `w` jumps with the round-off of each backend.
+  C10 `s2_t1_n30`, NumPy against JAX: 1.03e-5 (plain row sums), 1.16e-12 (with 2^-30 max), 1.49e-12
+  (`eig`).
+- A state whose row or column of A_n is structurally zero is dropped before printing (block
+  triangular with a zero block: same rho): `b` (SME, VAM), `P_0`, `P_1` (VAM predictor).  SME(0)
+  2-D: 4x4 -> 3x3, VAM(1) 2-D: 10x10 -> 7x7.
+
+**Rigour and tightness** (`gates/gate49_wave_speed_bound.py`: 65 sets, 1,890,568 matrices, the
+production path `local_max_abs_eigenvalue` -> `gelfand_bound`, the NumPy and the JAX kernel each),
+bound / max|eig|; median and max over rho > 1e-8 ||A||:
+
+| set | matrices | min | median | max | power x 1.06, min |
+|---|---|---|---|---|---|
+| random: Gaussian, triangular (upper part 1, 1e3), Jordan blocks, nilpotent, complex pairs, V D V^-1; n = 2, 3, 5, 7, 10; scaled 1e-6 .. 1e6 | 128,000 | 1.000000000000000 | 1.000 - 1.360 | 1.569 | 0.17 |
+| SME(0..3) 1-D / 2-D, VAM(1) predictor, ML-SME(2 layers, level 0 / 1): random wet, thin, dry cells and thinned (Audusse) faces | 440,000 | 1.000000000000001 | 1.003 - 1.038 | 1.093 | 0.43 |
+| states of runs: Malpasset (new, GPU; old reference B, CPU), matrix store C1, C2, C4, C5, C8, C10, C14, C33, C36 | 1,322,568 | 1.000000000000000 | 1.000 - 1.003 | 1.059 | 0.000 |
+
+- Not below 1 anywhere (rho > 1e-100 ||A||; below that, dry round-off garbage such as q ~ 1e-240
+  at h = 0, the squares underflow and the bound may be 0).  No state needed the 40-digit recheck.
+  NumPy = JAX to 6e-11 on the run states (5e-6 on ill-conditioned random V D V^-1: squaring
+  amplifies round-off where ||C^2|| << ||C||^2); each kernel is a bound on its own.  C++ (the
+  foam source, host build, C++14) = NumPy to 5.5e-14 on 20,000 Gaussian 5x5.
+- Squarings and the Collatz-Wielandt (CW) step, median / max:
+
+| states | j = 4 | j = 5 | j = 6 | **j = 7** | j = 8 | j = 7 without CW |
+|---|---|---|---|---|---|---|
+| SME(0) 2-D thinned faces | 1.237 / 1.840 | 1.133 / 1.379 | 1.072 / 1.184 | 1.038 / 1.093 | 1.019 / 1.048 | 1.046 / 1.095 |
+| Malpasset run (new) | 1.002 / 1.351 | 1.001 / 1.162 | 1.000 / 1.078 | 1.000 / 1.038 | 1.000 / 1.019 | 1.012 / 1.040 |
+| C5 run (wet / dry) | 1.025 / 1.475 | 1.013 / 1.215 | 1.006 / 1.109 | 1.003 / 1.059 | 1.002 / 1.032 | 1.009 / 1.126 |
+| triangular, upper part 1e3, n = 10 | 11.26 / 22.04 | 3.42 / 5.39 | 1.85 / 2.42 | 1.36 / 1.57 | 1.17 / 1.25 | 1.60 / 1.85 |
+
+  The CW step costs one matrix-vector product.  Highly non-normal matrices stay loose (last row),
+  the model matrices do not.  j: the overestimate is a state-dependent factor on the dissipation;
+  C11 (1-D smooth wave, O2, L1(h) at nx 80 / 160 against the JAX nx 1280 reference): j = 6 3.86e-4
+  / 1.34e-4 (order 1.53, threshold 1.5), j = 7 3.91e-4 / 1.25e-4 (1.65), j = 8 3.96e-4 / 1.25e-4
+  (1.66), numerical eig 3.97e-4 / 1.23e-4 (1.69); the former power x 1.06 3.71e-4 / 1.06e-4 (1.81),
+  but at O1 its error was 1.7x that of eig (n 40: 1.41e-3 against 8.10e-4; j = 7: 8.2e-4).  Hence
+  j = 7: median on run states <= 0.3 % (the former default added 6 % everywhere).
+- Cost (the foam kernel, host build, -O3, one core; us / call, gelfand(7) / power(10)): n = 3 0.19 /
+  0.17, n = 5 0.49 / 0.32, n = 7 0.97 / 0.47, n = 9 1.17 / 0.61, n = 10 1.43 / 0.63.  The dropped
+  rows make the printed SME(0) 2-D matrix 3x3 (power ran on 4x4) and VAM(1) 7x7 (was 10x10).
+
+**Positivity, Malpasset** (SME(1), the GUI session model without `symbolic_spectrum`, order 1, CFL
+0.4, `hr`, 26,000 cells, to t = 120 s, the study's `run_case.py`).  The bound alone did not restore
+it:
+
+| run | wave speed | h_min | released water at 120 s (m^3) |
+|---|---|---|---|
+| B: old solver (reference) | closed form | 0 | 4,048,870 |
+| C: new solver | closed form | 0 | 4,053,340 |
+| before (Cnum, GPU) | power x 1.06 of A_n(KP hinv) | -1.26e-5 | 4,149,336 |
+| control, GPU | Gelfand of A_n(KP hinv) | -1.34e-5 | 4,149,850 |
+| control, CPU, to t = 5 s | numerical eig of A_n(KP hinv) | -1.70e-5 | - |
+| **new default, CPU** (6 restarted 20 s windows, 30 snapshots) | **Gelfand of A_n(1/max(1e-14, h))** | **0** | 4,149,474 |
+| new default, GPU 2: 25 snapshots / h_min every 0.05 s (2401 samples) | same | 0 / 0 | 4,149,512 |
+| control, GPU, every 0.05 s | power x 1.06 of A_n(1/max(1e-14, h)) | 0 | 4,149,421 |
+| control, GPU | closed form, HLL speeds forced to (-a, a) | 0 | 4,149,694 |
+
+- Cause: A_n carries the KP `hinv = sqrt(2) h / sqrt(h^4 + max(h, eps)^4)` (eps = 1e-3).  At an
+  Audusse face with h* < eps and q* = q h*/h != 0, `hinv*` is far below 1/h*: the speed of A_n(hinv*)
+  misses the transport velocity q*/h* of the mass flux (on thinned Malpasset states the closed form
+  exceeds rho(A_n(hinv*)) by up to 1.5e5) and the cell drains.  This is REQ-82, which gave the
+  closed-form `eigenvalues` slot `1/max(1e-14, h)` (`regularize_pow`); the numerical spectrum still
+  took A_n with the KP `hinv`.  Now every numerical-spectrum path (`gelfand`, `eig`, `bound`)
+  evaluates A_n with `hinv` -> `1/max(1e-14, h)` (`Numerics._wave_speed_aux`; one definition,
+  `operations.wave_speed_inverse_depth`), so the closed and the numerical spectrum are taken of the
+  same matrix.  Golden `p01_foam_vam` (the old foam printer's `eig` path) regenerated for it.
+- With that floor the former power estimate also kept h >= 0 on this run; the bound makes it a
+  guarantee (power x 1.06 is down to 0 on these very states, table above).
+- The +2.5 % released water of every numerical-spectrum run against C is not the wave speed: the
+  closed form with Rusanov speeds gives the same (4,149,694).  Without a closed-form spectrum HLL
+  has no Davis speeds and is local Lax-Friedrichs (-a, a).
+
+**Which step the scheme needs.**  At first order the h update is `h_K' = h_K - dt / |K| sum_f |e_f|
+F_h(U*_K, U*_N)` with the Audusse states (`h* <= h`, velocities kept).  For HLL / Rusanov,
+`F_h <= S_f h*_K` whenever `S_f = max(|s_L|, |s_R|)` bounds the velocities of both face states, so
+`h_K' >= h_K (1 - dt sum_f |e_f| S_f / |K|) >= 0` iff `dt sum_f |e_f| S_f <= |K|` (Audusse et al.
+2004, https://doi.org/10.1137/S1064827503431090).  `S_f` must be the speed of the Riemann problem
+the step solves at f.  The template's `dt = cfl 2 r_f / (d S_f)` (`r_f` the smaller inradius; on
+triangles `|K| = r_K P_K / 2`) gives `dt sum_f |e_f| S_f <= 2 cfl |K|`: cfl <= 1/2 (the runs: 0.4).
+At order 2 the update also carries the edge source, the NCP integrated inside each cell from its
+state to its traces (Pares 2006, https://doi.org/10.1137/050628052): a wave term of the cell's own
+states, which the step must bound as well.
+
+- `CflWaveSpeed.cells` takes `S_f` from the two cells' states: the Audusse states keep the velocity
+  and lower h, so their speed is at most the cells' (SWE / SME: u, alpha = q_1/h kept, c(h*) <=
+  c(h)), and the edge source moves the cell states themselves.
+- `CflWaveSpeed.faces` took `S_f` from the first stage's Riemann problems only.  Two holes, both on
+  the Malpasset thesis configuration (`malpasset_jax_model.py`: SME(1) mixing length, closed-form
+  spectrum, order 2 Venkatakrishnan + front detector + MOOD, `hr`, point-implicit source, CFL 0.4;
+  JAX, GPU):
+
+1. **MOOD's repair kept the order-2 candidate's step** ("the repairs keep the candidate's dt").
+   Per-step replay of main from the t = 29 s write (`dt2`: the candidate's step; `own`: the faces
+   rule on the repair's own Riemann problems): the first repair, t = 30.739 s, `dt2` = 12.6 ms, own
+   0.41 ms (1/31).  Cell 21011 (dam abutment, b = 90 m, h = 0.548 m, mode-0 velocity at the 30 m/s
+   cap, alpha_1 = q_1/h = 1.9e3 m/s) has first-order face speeds 1083, 1625, 2690 m/s; its order-2
+   traces have h = -0.16 .. -0.42 m at two faces, Audusse h* = 0 on both sides, speed 0.  The full
+   first-order fallback at `dt2` drained its neighbours to h = -4.28 m (cells 20370, 20498, 20754);
+   at its own step h >= 0.  Fix (`residual.mood_step`): a repair takes `dt = min(candidate dt, the
+   faces rule on its own first-stage speeds)` and the step returns it; an admissible candidate is
+   unchanged.  Unit test: an 8-cell 1-D state (random search; bed steps, dry / thin / deep cells)
+   where the repair at the candidate's step reaches h = -8.9e-3 at t = 0.01, >= 0 at its own.
+2. **The edge source moved cells no Riemann problem saw.**  With fix 1 alone h stayed >= 0 at every
+   write, but a wet cell whose order-2 traces are Audusse-dry on every face (zero flux, zero face
+   speed) kept its first moment under the edge source at a step its own speed never limited:
+   max alpha_1 (h > 1e-3 m) up to 1.9e16 m/s in transient episodes (12, 14 and 30 writes above
+   1e3 m/s in the 3 runs that recorded it); in 2 of 9 runs it overflowed: a non-finite face speed
+   made the global `dt` NaN, every entry NaN after one step, and the march loop ended without an
+   error (t = 687 s, 939 s; the run before this one: 996 s).  At t = 687 s, cell 8585 (b = 78.9 m,
+   h = 0.575 m): alpha_1 = 2.3e13 m/s, order-2 face speeds 0, 0, 0.11 m/s.  Control: the same step capped by
+   the cells rule: max alpha_1 665 / 935 m/s (2 runs).  Fix (`residual.residual`): with `dt_rule`,
+   order 2, an edge source and not every cell demoted, `dt = min(dt_rule(Riemann speeds),
+   dt_rule(cell speeds))` (the cells rule's `cell_wavespeed`).  Order 1 and models without an NCP are
+   unchanged.  Unit test: on 200 random SME(1) 1-D states the faces rule's order-2 step is <= the
+   cells' CFL step (without the term it exceeds it, e.g. 1.5465e-3 > 1.5425e-3).
+
+Malpasset to 2000 s, a write every 1 s (2001 writes; `results/wavespeed_bound/run.py`, figure
+`malpasset_wavespeed.png` from `deliverable.py`):
+
+| libraries | rule | runs | h_min (all writes) | max alpha_1 (m/s) | end |
+|---|---|---|---|---|---|
+| main 790dc047 | faces | 3 (to 40 s, 60 s, 2000 s) | -2.43, -2.37 m at t = 31 s; the 2000 s run stalled at t = 905 s | 1.9e3 (60 s) | 905 s |
+| MOOD repair at own step only | faces | 9 | 0 | 5.9e9 .. 1.9e16 (episodes) | NaN at 687 s, 939 s (2 of 9) |
+| **this branch** | **faces** | 5 | **0** | 229 .. 877 | 2000 s |
+| this branch | cells | 4 | 0 | 200 .. 265 | 2000 s |
+| main 790dc047 | cells | 2 | 0 | 259 | 2000 s |
+
+**The default (cells, the session's rule) is unchanged**: the branch only touches the steps of
+`dt_rule` (faces) and the kernel of models without a closed-form spectrum, neither on this path.
+CPU, main against this branch, a write every 1 s: Q bitwise equal at all writes (to 20 s before
+the edge-source term, to 10 s with it).  GPU to 2000 s: wet area (h > 0.05 m) max rel. difference
+1.1e-3, max-depth envelope L1 rel. 8.6e-4, inundated area 17.024 / 17.030 km^2, against a GPU
+repetition of the same code of 3.0e-3 / 1.5e-3 (atomics order).  Faces against cells (this branch):
+1.3e-3 / 9.9e-4.
+
+- The last resort of MOOD is positive whenever the first-order step is (cfl <= 1/2); the second
+  SSP-RK2 stage uses the first stage's speeds under either rule (covered by the margin 0.4 < 0.5
+  only).  Cost (GPU wall, 2000 s, incl. setup): faces 427 s (repair-only 377 s), cells 478 s.
+
+Cross-backend matrix (`matrix/README.md`, results 2026-10-14): the store rerun from empty, 962
+runs on core 082acb3, jax edc4c35, foam c4310bc, amrex a177451: 871 rows, 801 PASS, **0 FAIL**.
+Moved inside their thresholds: C11 smooth O2 order 1.81 -> 1.65 (>= 1.5; the exact spectrum gives
+1.69), O1 0.96 -> 1.02, C14 O1 0.59 -> 0.63 (the former power x 1.06 under-estimated the speed);
+C8 cross-backend / parallel differences 1e-10 -> 1e-11.  zoomy_core: 360 small tests pass (3 new:
+`tests/symsolver/test_wave_speed_bound.py`); goldens `p01_foam_vam` and `n02_vam_nsm` re-blessed
+(the numerical spectrum of A_n with `1/max(1e-14, h)`, above); rederive tier 40 pass, 1 failure
+that main bb5f636 has too (`test_rederive_cross_process_disk_hit_and_prebuilt`, AttributeError
+`default_factory`).
+
+Open:
+- The cells rule is not an upper bound at thin cells: `eigenvalues_cfl` is the spectrum gated to 0
+  for h <= `wet_dry_eps` (`gate_eigenvalues_dry`; numerical spectra with the KP `hinv`), but a thin
+  cell's flux moves its velocity.  1-D reproduction (SME(0), order 2 unlimited + MOOD, a 1e-3 m film
+  at 300 m/s next to a dry bed): h = -0.30 m under the cells rule with forward Euler, at a cell with
+  h = 6.7e-9 m and q/h = -2.3e9 m/s; order 1 stays positive.  Not changed (it would change the
+  default rule's results).
+- HLL without a closed-form spectrum is Rusanov (above); bounds of the signed extremes (e.g. the
+  bound of A + c I minus c) would give it Davis speeds.
+- A NaN `dt` ends the march loop silently (`time < time_end` is false); the loop should raise.
+- The first moment of the mixing-length SME(1) reaches alpha_1 ~ 260 m/s under the cells rule too
+  (the mode-0 velocity is capped at 30 m/s, mode 1 is not).

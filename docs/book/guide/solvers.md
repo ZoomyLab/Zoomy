@@ -53,7 +53,7 @@ LinearSolver.gmres)`.
 | `Decomposition` | `zoomy_foam.symsolver` |
 
 The numerics are typed the same way: `ReconstructionSpec(limiter=Limiter.minmod)`,
-`nsm.spectral_radius_method = SpectralRadius.power`,
+`nsm.spectral_radius_method = SpectralRadius.eig`,
 `UpwindInterface(quantity=InterfaceQuantity.stress)`.
 
 ## Options (all backends)
@@ -64,9 +64,9 @@ The numerics are typed the same way: `ReconstructionSpec(limiter=Limiter.minmod)
 | `cfl` | `0.9` | CFL number of the adaptive step (Chorin: divided by $2\,\mathrm{order} - 1$) |
 | `dt` | `None` | constant step; `None`: adaptive.  A constant step above the CFL step warns |
 | `cfl_check_every` | `10` | constant `dt`: test it against the CFL step every N steps (0: never) |
-| `cfl_wave_speed` | `CflWaveSpeed.faces` | `faces`: speeds of the first stage's Riemann problems (no extra eigensolve); `cells`: from the cell states |
+| `cfl_wave_speed` | `CflWaveSpeed.faces` | `faces`: speeds of the first stage's Riemann problems, at order 2 with an edge source (the NCP inside each cell) also the cells' own; `cells`: from the cell states |
 | `time_order` | `None` | SSP-RK order 1, 2, 3; `None`: the reconstruction order.  Chorin: outer stages, default 1 |
-| `mood` | `True` | a-posteriori MOOD at order 2: cells failing the model's admissibility redo at order 1 |
+| `mood` | `True` | a-posteriori MOOD at order 2: cells failing the model's admissibility redo at order 1 (with `faces`, at most the step of their own first-order face speeds) |
 | `imex` | `False` | `Imex.lie`: explicit RK step, then the implicit slots (`source`, `diffusion_matrix`) by implicit Euler; `Imex.ssp2`: IMEX-SSP2(2,2,2), the implicit source in every stage |
 | `implicit_tol`, `implicit_maxiter` | `1e-8`, `6` | Newton of the implicit solves |
 | `gmres_tol`, `gmres_maxiter` | `1e-7`, `30` | GMRES inside Newton |

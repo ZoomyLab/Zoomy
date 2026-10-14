@@ -19,7 +19,7 @@ initial conditions.  The solvers read the slots; they never inspect the model.
 | `source_explicit` | `(n_eq,)` | always explicit |
 | `diffusion_matrix` $A$ | `(n_eq, n_state, n_dim, n_dim)` | implicit slot, as `source` |
 | `diffusion_matrix_explicit` | same | always explicit |
-| `eigenvalues` | `(n_eq, 1)` or `None` | `None`: numerical wave speed (power iteration) |
+| `eigenvalues` | `(n_eq, 1)` or `None` | `None`: numerical wave speed (the Gelfand upper bound of the spectral radius) |
 | `mass_matrix` $M$ | `(n_eq, n_state)` | |
 
 Spatial derivatives the operators need are registered as aux variables

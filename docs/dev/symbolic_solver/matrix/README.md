@@ -82,7 +82,7 @@ is built in the NumPy / foam / AMReX images too), `backends.py` (adapters),
 
 Every case is built once (`cases.py`: mesh, model, IC, BCs, `t_end`, CFL,
 MOOD, constant `dt`, solver options) by backend-neutral code (`prepare`: LSQ
-mesh, `Q0`, spectral radius `eig`) and handed unchanged to each backend.
+mesh, `Q0`; the wave speed is the solvers' default, ANALYSIS 48) and handed unchanged to each backend.
 Models: SME(0), VAM(1) and the compressible Euler SystemModel
 (`zoomy_core.systemmodel.euler`).  Sizes: 20-100 cells per side, <= ~100
 steps; most runs take 5-30 s, the Chorin runs ~2.5 min (JAX: the setup of
@@ -144,8 +144,8 @@ foam and AMReX hypre BoomerAMG + FlexGMRES); L3 catchment (JAX: the
 L5 first; AMReX: `gates/catchment_amrex.py`, the 10 m raster with nodata
 cells as a bed-1e4 wall, against JAX on the same mesh); L4 setup / compile /
 memory vs mesh size; L5 parallel mesh + field write of the 14.8M-cell mesh.
-Each backend uses its default wave speed (JAX: eig on the CPU, power
-iteration on a GPU: JAX's eig is a host callback there).  A timed-out AMReX
+Each backend uses the default wave speed (the Gelfand bound,
+ANALYSIS 48, on every backend and device).  A timed-out AMReX
 run can log a SIGBUS: `timeout` kills apptainer, which unmounts the image
 under the still-running ranks.
 Results: the "Large tier" section of `table.md`.
@@ -308,6 +308,26 @@ the 2026-10-12 store:
 - C34 (new, gate 45): max rel vs the full SystemModel operator q_x 3.05e-2 / 7.69e-3 / 1.94e-3,
   q_y 4.62e-2 / 1.21e-2 / 3.07e-3 at nx 16 / 32 / 64 (orders 1.98 / 1.98); foam and AMReX
   give the same errors (L vs JAX 7e-8 foam, 6e-10 AMReX).
+
+## Results (table.md, 2026-10-14, dev/wavespeed-bound)
+
+The Gelfand upper bound as the wave speed of models without a closed-form spectrum, the faces rule
+with MOOD repairs at their own step and the cells' speeds under the order-2 edge source (ANALYSIS
+48).  The whole store rerun from empty, 962 runs on core 082acb3, jax edc4c35, foam c4310bc, amrex
+a177451: **871 rows, 801 PASS, 0 FAIL** (926 passing cells; the 2026-10-13 store 925, + AMReX
+mpi2 C17 lake).  Changes against the 2026-10-13 store (power x 1.06 wave speeds), all inside
+their thresholds:
+
+- C11 smooth O2 order 80->160 1.81 -> 1.65 (JAX, NumPy, AMReX), foam 1.78 -> 1.63 (>= 1.5; the
+  exact spectrum gives 1.69: power x 1.06 under-estimated the speed, i.e. the dissipation); O1
+  0.96 -> 1.02; C14 O1 order 0.59 -> 0.63.
+- C8 (VAM(1) Chorin): foam / AMReX vs JAX, Newton vs linear, parallel and GPU vs serial 1e-10 ->
+  1e-11; C11 AMReX `sub` O2 vs JAX 1.8e-7 -> 3.8e-6 (tolerance 2e-5, JAX's sensitivity); C15
+  Chorin FD - jvp 6.4e-9 -> 1.7e-8 (<= 1e-5).
+- C17 `lake` and `dry` do not return in a long-lived matrix process after the Euler `box` cases (also
+  on main bb5f636, whose store has neither `dry` nor mpi2 `lake`); `lake` ran in a fresh process
+  (serial, mpi2, gpu1: |u| 1.3e-15, = cpu1).  `dry`'s mass metric sums the NaN-masked AMR levels
+  (NaN on main and on this branch): left out, as before.
 
 ## Results (table.md, 2026-10-12, night rerun)
 

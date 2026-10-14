@@ -26,10 +26,10 @@ def _ad_solver(kind, ad_mode, comm):
         from cases import vam_wave, wave_q0
         import jax.numpy as jnp
         mesh, (pred, press, corr) = vam_wave(1, 30)
-        # power iteration, not eig: the eig tangent at a defective dominant
+        # the Gelfand bound, not eig: the eig tangent at a defective dominant
         # eigenvalue is ~1e15 (the VAM wave here hits one); the CPU's exact tie
         # cancels it, the GPU's split tie does not (NaN; ANALYSIS 44)
-        pred.spectral_radius_method, pred._call = SpectralRadius.power, None
+        pred.spectral_radius_method, pred._call = SpectralRadius.gelfand, None
         s = SymbolicChorinSolverJax(time_end=0.05, pressure_linear_solver=LinearSolver.gmres, **kw)
         Q, A = s.setup(mesh, pred, press, corr)
         names = [str(v) for v in s.nsm.state]

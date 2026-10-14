@@ -23,7 +23,7 @@ nsm = NumericalSystemModel.from_system_model(
 | `reconstruction.ties` | `{}` | `{row: lead}`: a row is limited at least as much as its lead |
 | `riemann` | from the model's tags, else `NonconservativeRusanov` (C1 bump: `PositiveNonconservativeRusanov`) | `zoomy_core.fvm.riemann_solvers`: `Rusanov`, `NonconservativeRusanov`, `HLL`, `HLLC`, ... |
 | `diffusion` | on if `diffusion_matrix` is nonzero | `DiffusionSpec` |
-| `spectral_radius_method` | `zoomy_core.symsolver.WAVE_SPEED` = `"power"` | wave speed of a model without closed-form eigenvalues: power iteration on $A^2$, the same on every backend and device |
+| `spectral_radius_method` | `zoomy_core.symsolver.WAVE_SPEED` = `SpectralRadius.gelfand` | wave speed of a model without closed-form eigenvalues: the upper bound $\lVert A_n^m\rVert^{1/m} \ge \rho(A_n)$, $m = 2^7$ (`spectral_squarings`), sharpened by a Collatz-Wielandt step (offset `spectral_cw_offset`), the same on every backend and device; `eig`: numerical eigenvalues |
 
 MOOD (the a-posteriori order fallback) is a solver option
 ([Solvers](solvers.md)); what it tests is the model's admissibility

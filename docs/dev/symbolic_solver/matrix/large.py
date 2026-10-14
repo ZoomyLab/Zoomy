@@ -52,8 +52,7 @@ def maxrss_gb():
 # ── hyperbolic timing: C1 bump O2, constant dt, N_STEPS steps ───────────────
 def bump(nx):
     import common as C
-    return C.bump_2d(2, nx=nx)        # each backend's default wave speed: JAX eig is
-                                      # CPU-only (a host callback on a GPU), power there
+    return C.bump_2d(2, nx=nx)        # the default wave speed (Gelfand bound) everywhere
 
 
 def time_jax(make, n_steps, dt, chorin=None, comm=None, q0=None):
