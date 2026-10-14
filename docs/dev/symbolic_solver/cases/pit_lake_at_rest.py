@@ -19,6 +19,11 @@ Measured 2026-10-14 (this script, JAX CPU), max |u| at t = 1 s over the wet cell
 | venk, no front detector | 4.1e-15 (MOOD redoes the inadmissible shore at order 1; without MOOD the march stalls) | 4.1e-15 |
 | venk, order 1 | 4.1e-15 | 4.1e-15 |
 
+foam (rt.H, 2026-10-14; no front detector on foam yet, so front_tol None): with the shore form
+2.98e-15 (quads) / 1.35e-14 (triangles), 2 and 4 ranks the same; without it also at rest
+(6.4e-15 / 4.9e-14): OpenFOAM's Venkatakrishnan has no eps and returns 0 at the shore minimum,
+as Barth-Jespersen does.
+
 Mechanism: a dry cell's eta = b enters the shore cells' LSQ stencil; a bank above the lake gives
 the free surface a slope there.  Barth-Jespersen / minmod return phi = 0 (the shore cell is a
 local minimum of eta), Venkatakrishnan (eps^2 = cell size^2) does not, so eta_f != eta_i at the
