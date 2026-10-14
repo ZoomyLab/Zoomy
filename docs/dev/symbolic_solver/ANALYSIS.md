@@ -1954,3 +1954,78 @@ refused by `InsertClosure` (their shallow-only closure needs a scaled form first
 wired; `small_slope_scaling` (frame slopes O(eps)) is still a separate step; SME's surface
 normal-stress condition `p(eta) = tau_zz(eta)` is used when the vertical row keeps a stress (same
 group, eps^2/De), not scaled as its own boundary row.
+
+## 59. JAX Chorin on the GPU: the cells-CFL eigensolve and the pressure solve (2026-10-14, dev/jax-chorin-perf)
+
+Case: thesis `escalante_vam_bump/run_mlvam2_jax_jit.py` (ML-VAM(2) level 1, 14 states, 60 cells,
+RIEMANN=hr ORDER=2 TORDER=2, MOOD, constant dt 1e-3), copy of thesis main, GPU 0 (L40S),
+`taskset -c 32-39`, float64.  Library: main a2ba0f57 (zoomy_core 9308483, zoomy_jax 468fd7f).
+
+**Reproduction.**  t = 3 (3000 steps): 671 s in all = build 20 s + `setup` 115-140 s + one XLA
+compile of the march 270-300 s + 265 s of steps; warm steps 0.088 s/step, flat to t = 3, the
+same with `on_write` every 100 steps.  `jax_log_compiles`: one compile of the march, none per
+step (the template is one jitted `lax.while_loop`).  The step4 report's "~1 s/step" does not
+reproduce; the legacy solver today (`ChorinSplitVAMSolverJax.run_jit_steps`, the thesis script
+of 40c26762, same GPU) runs 0.21 s/step.
+
+**Profile before** (nsys, 50 warm steps; per step):
+
+| cost | GPU time | launches / copies / syncs |
+|---|---|---|
+| `jnp.linalg.eigvals` = cuSOLVER `Xgeev`, 2 x 61 14x14 matrices (`face_wavespeed` of `eigenvalues_cfl`: the cells rule) | ~60 ms | 17000 / 2300 D2H / 3700 |
+| AmgX (FGMRES + aggregation AMG), 2 pressure solves | ~3 ms | 1800 / 450 / 640 (~12 ms of host time) |
+| the rest (XLA fusions in CUDA graphs: predictor, MOOD, colouring assembly, aux) | ~3 ms | |
+
+`Xgeev` is a host-driven routine called once per matrix; the CFL check of a constant-dt run reads
+the speeds every 10th step only, but they are computed every step (outside the `Cond`; the
+template is integ/20261014's, not touched here).
+
+**Fixes** (zoomy_jax; zoomy_core only the enum member):
+
+1. `zoomy_jax/fvm/eigvals.py`: `eigvals_device`, LAPACK `dgeev`'s eigenvalue path (`dgebal`
+   isolation + power-of-two scaling, `dgehd2`, `dlahqr` with the Ahues-Tisseur deflation and
+   `dlanv2`) written on whole `N x N` blocks with masks (N = 16 for n = 14): one Triton kernel
+   (Pallas, a program per matrix, the QR loop inside the kernel) on CUDA, the same code vmapped
+   elsewhere.  `eigvals` = LAPACK on the CPU (unchanged), `eigvals_device` on a GPU; used by the
+   `eigenvalues` userfunction and the numerical-eigenvalue fallbacks of `JaxRuntime`.  Its
+   jvp / vjp are `jnp.linalg.eigvals`' (section 44 unchanged).  `face_wavespeed` evaluates both
+   sides of every face in one batch (one eigensolve per step instead of two).  122 matrices:
+   cuSOLVER 67 ms, LAPACK on the host 8 ms, the kernel 0.9 ms (n = 30: 137 / 5.9 ms; n = 40,
+   8 warps: 180 / 34 ms; above n = 64 the XLA loop); vs LAPACK <= 2e-14 |A|
+   (unit test: random, structured, defective, badly scaled; batch-independent bitwise).  Not a
+   bound: `gelfand_bound` (section 48) for the cells rule would be cheaper but changes dt; left
+   as an option.
+2. `LinearSolver.dense`: an LU (`jnp.linalg.solve`) of the colour-assembled pressure matrix on the
+   device, inside `custom_linear_solve` (transpose solve for reverse AD).  `auto` on a GPU, serial:
+   dense up to `pressure_dense_max` = 1024 unknowns, AmgX above (dense 240: 0.6 ms, 1000: 4.9 ms,
+   2000: 14 ms; AmgX ~6 ms per solve at 240).
+
+**After** (warm steps, same bench):
+
+| state | s/step |
+|---|---|
+| main | 0.088 |
+| + device eig (vmapped XLA, 4.7 ms per eigensolve) | 0.021 |
+| + dense pressure LU | 0.0082 |
+| + Triton eig kernel | 0.0046 |
+| legacy `run_jit_steps` today | 0.21 |
+
+Split after (nsys, node-level, per step): 4.3 ms GPU busy of ~4.6 ms: XLA fusions 2.6 ms (960
+kernels: predictor, MOOD, assembly, aux), pressure LU 1.1 ms (2 x cuSOLVER `getrf` 240x240),
+eigensolve 0.6 ms (1 kernel); 7 host syncs (the loop and `Cond` predicates).  The case to t = 3:
+671 -> 432 s, now build + setup + compile (~430 s) against 14 s of steps.
+
+**Results.**  The case's 30 frames to t = 3: the eig changes bitwise identical (at constant dt the
+speeds only feed the CFL check); dense LU vs AmgX (rtol 1e-9): final state rel L2 3.6e-12, max
+over the frames 5.9e-11.  Matrix (per-worktree store, C8 C10 C31 jax serial, C8 gpu1): 12 PASS,
+0 FAIL (C9 C8 GPU vs serial 1.8e-11); C8 serial = main bitwise (4 runs: CPU keeps LAPACK, and the
+one-batch face speeds are per cell the same arithmetic); C8 gpu1 vs main gpu1 2.9e-12 (adaptive
+dt from the new eigensolve); C8 gpu1 with `LinearSolver.dense` vs serial GMRES 1.3e-11.  Tests:
+zoomy_core 375 pass; zoomy_jax 26 failures, the same ids as on main; QR 27 pass, 3 skip.
+
+**Open.**  (a) The march's XLA executable is never in the persistent cache: jax writes no entry for
+an executable with host callbacks (`check.cfl`, the linear-solve accept gate, `io.write`), so every
+run compiles 270-300 s.  (b) `setup` 115-140 s: sympy in the Riemann solver build
+(`riemann_solvers._model_eval` / `face_max_abs_eigenvalue` substitutions, cProfile).  (c) The
+pressure LU ignores the block-banded structure (1-D: 1.1 ms/step).  (d) At constant dt the cells
+speeds are evaluated every step for a check every 10th (template).
