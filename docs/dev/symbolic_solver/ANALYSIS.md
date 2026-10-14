@@ -1749,3 +1749,94 @@ Open:
 - A NaN `dt` ends the march loop silently (`time < time_end` is false); the loop should raise.
 - The first moment of the mixing-length SME(1) reaches alpha_1 ~ 260 m/s under the cells rule too
   (the mode-0 velocity is capped at 30 m/s, mode 1 is not).
+
+## 50. foam: the a-priori wet/dry front detector; implicit diffusion at the FD operator's floor (2026-10-14, dev/foam-front-diffusion)
+
+**The front detector (`front_cells`).**  `ReconstructionSpec.front_tol` (core e90f067) drives the
+reconstruction only: in every stage, before the step and in every MOOD redo, a cell whose depth
+extrapolated with the gradient of h and the limiter factor of eta falls below
+-(1/front_tol - 1) h at a face is demoted to first order (phi = 0; Gallardo, Pares, Castro 2007,
+https://doi.org/10.1016/j.jcp.2007.08.007).  It never sets a value and does not enter the CFL step.
+NumPy, JAX and AMReX had the block, foam's runtime did not: every `front_tol` model failed to
+build (`Solver.H: 'front_cells' was not declared in this scope`), i.e. each such matrix row would
+be a FAIL.  foam `rt.H` `front_cells`: each own cell over all its faces (internal, boundary,
+coupled) with foam's own G and phi, then the halo exchange: a halo column sees only the faces it
+shares with this rank, so its flag comes from its owner.
+
+The matrix had no run where the detector acts: C5 (minmod, flat bed) demotes nothing on any backend
+(a bounded limiter keeps h_f >= 0 over a flat dry bed).  New C5 runs at `front_tol` 0.5 with
+Venkatakrishnan (the Malpasset thesis configuration), each with (`*_front`: serial, mpi2, mpi4) and
+without (`*_off`) the detector: the dam break, and Thacker's axisymmetric paraboloid bowl (SWASHES
+2-D: a 1, r0 0.8, h0 0.1, [0, 4]^2, nx 48, t 0.5).  The bowl sits off the domain centre: centred,
+the 2-rank cut x = 2 is a symmetry line, and foam mpi2 without the flag's exchange equalled the run
+with it bitwise (the halo was never exercised).
+
+| run | foam vs JAX, L1 rel: off -> front | detector acts (front vs off, L1 rel): JAX / foam | foam ranks vs serial (mpi2 / mpi4) | the same without the flag's exchange |
+|---|---|---|---|---|
+| dam | 9.3e-2 -> 1.5e-2 | 8.6e-2 / 0 | 2.5e-15 / 2.4e-15 | - |
+| bowl | 4.7e-2 -> 6.3e-3 | 4.8e-2 / 2.9e-3 | 1.1e-16 / 1.1e-16 | 6.1e-6 / 7.9e-4 |
+
+- AMReX and NumPy = JAX to round-off on all four runs (<= 4.3e-15), ranks = serial on all three
+  backends; h_min = 0 everywhere.  Bowl L1(h - exact): JAX 1.4e-4 front, 2.0e-4 off; foam 1.2e-4 /
+  1.1e-4.
+- foam's detector does not act on the dam break: OpenFOAM's `cellLimited<Venkatakrishnan>` keeps the
+  face value within the neighbour extremes (limited/allowed = (r + 2)/(r^2 + r + 2) <= 1), so over a
+  flat dry bed h_f >= 0.  JAX's Venkatakrishnan (eps^2 = dx^2) overshoots where the neighbour
+  differences are below dx; that overshoot was the 9.3e-2 foam-JAX difference without the detector,
+  and the detector removes it.  On the bowl's sloping shore h_f = h + phi_eta G_h . r_f is bounded by
+  neither limiter: both backends demote.  With the detector the foam-JAX difference is the O2 stencil
+  difference of every foam O2 row (C5 n48: 1.7e-2).
+- The dam break without the detector changes its mass by 1.7e-13 on JAX / NumPy / AMReX (C6,
+  <= 1e-12): `clean_round_off` of the overshoot's round-off below zero; foam 1.9e-16.
+
+**Implicit diffusion: ~15x slower than JAX.**  Serial, one core each (`taskset -c 24`), the matrix
+runs unchanged, ms per step; foam's own split from `symFoam`'s summaries: right-hand side (the
+explicit D + 2C with the LSQ correction; foam assembles no matrix: Jacobian-free Newton-Krylov),
+linear solve (GMRES with its residual evaluations), rest (explicit step, source, aux).  JAX: the
+march only (second call, no compile; C26 adaptive: over foam's 9 steps, the same CFL rule); XLA fuses
+the step, no split.
+
+| run (cells, steps) | JAX | foam before: all = rhs + linear solve + rest | foam after: all = rhs + linear solve + rest | GMRES iterations / solve | residual evaluations / step |
+|---|---|---|---|---|---|
+| C26 visc (20^2, 9) | 4.1 | 37.7 = 0.24 + 33.6 + 3.8 | 5.6 = 0.23 + 1.85 + 3.6 | 64 -> 6 | 369 -> 23 |
+| C32 noslip n20 (8 x 20, 160) | 1.19 | 31.8 = 0.10 + 31.0 + 0.7 | 2.28 = 0.10 + 1.51 + 0.67 | 245 -> 13.2 | 727 -> 37 |
+| C32 free n20 | 1.18 | 33.3 = 0.10 + 32.4 + 0.7 | 2.48 = 0.10 + 1.67 + 0.71 | 245 -> 13.6 | 727 -> 38 |
+| C32 noslip_split n20 | 1.17 | 32.7 = 0.10 + 31.9 + 0.7 | 2.48 = 0.10 + 1.65 + 0.73 | 245 -> 13.4 | 727 -> 38 |
+| C33 imex k2 (8, 80) | 0.12 | 0.141 (no implicit diffusion: the point-implicit source) | 0.135 | - | - |
+| C34 n16, nu 1 (16^2, 1 step) | - | 12.3 = 0.22 + 8.1 + 4.0 | 5.1 = 0.24 + 0.55 + 4.3 | (123 -> 8 evaluations) | 123 -> 8 |
+| C36 sme1 (16^2, 20; foam is not a matrix backend of C36) | 6.9 | 72.0 = 0.44 + 68.6 + 2.9 | 6.6 = 0.40 + 3.5 + 2.7 | 64 -> 6.4 | 324 -> 20 |
+
+foam / JAX: before 9x (C26), 27-28x (C32), 10x (C36); after 1.4x, 1.9-2.1x, 1.0x.
+
+- Cause: the linear solve, not assembly (nothing is assembled), the operator or the preconditioner.
+  foam's Newton-Krylov takes the Jacobian action by a directional difference,
+  J v = (R(x + h v) - R(x)) / h, h = sqrt(eps)(1 + |x|)/|v| (rt_common.H `newton_krylov`), whose
+  round-off floor is ~sqrt(eps) relative.  The matrix cases ask `gmres_tol` 1e-13 (JAX meets it with
+  the exact JVP).  C32 (diagnostic print of the first solve): GMRES's own estimate reached 1.5e-12 at
+  iteration 5, every restart's true residual stayed at 1.6e-9 .. 3.0e-9, and all 60 restart cycles
+  (`gmres_maxiter`) ran: 245 iterations / solve for nothing.  Same pattern C26 (true floor 1.4e-9),
+  C34, C36.
+- Fix (zoomy_foam `linsolve`, the plain GMRES path): after a cycle whose estimate met `ls_tol`, a true
+  residual above `ls_tol` that did not halve since the previous restart ends the solve (the stall rule
+  `hypre_solve` already had), with a once-warning naming the floor.  A slowly converging cycle (its
+  estimate above `ls_tol`) is not affected.  Newton (`implicit_tol`) takes the same updates (2 / step;
+  C36 35 -> 33 solves); the solution: after - before max rel 1e-16 (C26, C32), 2.6e-13 (C36, Newton
+  1e-12), C34's L 7e-10 (= Q's round-off / dt 1e-7).
+- The remaining 2x on C32: 37 residual evaluations / step at 0.037 ms (160 cells), of which the
+  stall needs one more cycle (13 vs ~5 iterations / solve); the exact JVP needs printed derivatives of
+  `diffusion_matrix` and the ghost kernels.
+
+Cross-backend matrix (this worktree's store: the 2026-10-14 store of section 48 for JAX / NumPy /
+AMReX; foam rerun from empty, serial / mpi2 / mpi4, on foam f37481c, jax 751eb3f, amrex a177451 and
+core 31e7b85 / 9308483 (main's checkout advanced during the rerun: the nondim and ML-VAM merges); the
+new C5 runs on all four backends): 917 rows (871 before), **0 FAIL**.  Changed foam rows: C28 implicit foam vs JAX (1-D
+dir0 / dirL / neu / per 5.1e-11 / 8.1e-12 / 5.4e-11 / 2.7e-10 -> 6.0e-11 / 1.6e-11 / 6.0e-11 /
+1.3e-10, quad per 1.5e-10 -> 3.0e-10, <= 1e-9: Newton 1e-10 at the FD floor; main's foam on the same
+libraries reproduces the old values, so the stall stop moved them); C7 C26 parallel 6.6e-16 -> 5.6e-16
+(round-off).  New: 46 C5 / C7 rows.  QR suite: 28 passed, 2 skipped.
+
+Open:
+- foam has no exact Jacobian action (above); AMReX's implicit diffusion (amrex::GMRES) was not
+  measured here.
+- No Malpasset-type run (a real DEM) in the matrix: the thesis configuration
+  (`results/wavespeed_bound/run.py`) runs on JAX / GPU only.
