@@ -25,6 +25,7 @@ from zoomy_core.solver.constants import TPFA_COS_FLOOR
 from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_closure_derivatives
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
+from zoomy_core.symsolver.discretization.residual import check_derivative_aux
 from zoomy_core.symsolver.numpy_backend.assembly import cell_pattern, host_amg_solve
 from zoomy_jax.fvm.implicit_ad import cellwise_solve, newton_root
 from zoomy_jax.mesh.mesh import lsq_gradient_per_field
@@ -107,6 +108,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         dict name -> callable
     """
     sm = rt.sm
+    check_derivative_aux([nsm, *(sub for sub, _ in (systems or {}).values())],
+                         ("state", "function"), "jax")
     nc = int(mesh_np.n_inner_cells)
     nf = int(mesh_np.n_faces)
     n_bf = int(mesh_np.n_boundary_faces)
