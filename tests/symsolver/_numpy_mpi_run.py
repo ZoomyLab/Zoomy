@@ -1,7 +1,7 @@
 """Run under `mpiexec -n N` by `test_numpy_mpi.py`: the NumPy backend distributed vs serial on one
 rank, its halo exchange, reductions and linear solves.  Prints one JSON line on rank 0.
 
-    mpiexec -n 2 python _numpy_mpi_run.py hyperbolic|linsolve
+    mpiexec -n 2 python _numpy_mpi_run.py hyperbolic|linsolve|output
 """
 import json
 import sys
@@ -114,6 +114,39 @@ def linsolve():
         if rank == 0:
             out[str(method)] = float(np.abs(res[0] - res[1]).max() / np.abs(res[1]).max())
     return out
+
+
+def output():
+    """`output=` with `dt_write`: the distributed run's HDF5 file (gathered on rank 0) = the
+    serial run's, dataset for dataset."""
+    import os
+    import tempfile
+
+    import h5py
+    d = comm.bcast(tempfile.mkdtemp() if rank == 0 else None)
+    for c, name in ((comm, "mpi.h5"), (None, "serial.h5")):
+        if c is None and rank != 0:
+            continue
+        mesh, nsm = bump()
+        s = SymbolicHyperbolicSolverNumpy(time_end=0.5, dt_write=0.25, mood=False, comm=c,
+                                          output=os.path.join(d, name))
+        Q, A = s.setup(mesh, nsm)
+        s.run(Q, A)
+    if rank != 0:
+        return None
+    worst, n = 0.0, 0
+    with h5py.File(os.path.join(d, "mpi.h5")) as a, h5py.File(os.path.join(d, "serial.h5")) as b:
+        keys = []
+        b.visit(lambda k: keys.append(k) if isinstance(b[k], h5py.Dataset) else None)
+        missing = [k for k in keys if k not in a]
+        for k in keys:
+            if k in a and a[k].dtype.kind == "f":
+                x, y = np.asarray(a[k]), np.asarray(b[k])
+                worst = max(worst, float(np.abs(x - y).max() / max(np.abs(y).max(), 1e-300)))
+                n += 1
+    import shutil
+    shutil.rmtree(d, ignore_errors=True)
+    return dict(datasets=n, missing=missing, rel=worst)
 
 
 if __name__ == "__main__":

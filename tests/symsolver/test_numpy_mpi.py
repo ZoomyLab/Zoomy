@@ -65,3 +65,11 @@ def test_serial_backend_without_mpi4py():
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
                          timeout=600, env=env)
     assert out.returncode == 0 and "ok" in out.stdout, out.stderr[-3000:]
+
+
+def test_distributed_output_equals_serial():
+    """`output=` + `dt_write` on 3 ranks: rank 0 writes the serial file's layout (every serial
+    dataset present), the values to round-off."""
+    pytest.importorskip("h5py")
+    r = _mpirun("output")
+    assert r["datasets"] >= 5 and not r["missing"] and r["rel"] <= 1e-13, r
