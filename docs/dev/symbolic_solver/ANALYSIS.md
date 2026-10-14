@@ -2401,10 +2401,9 @@ the flux and the columns (`check_numerics`): Rusanov / HLL / HLLC on any model w
 `PositiveRusanov` / `PositiveHLL` on a model whose `B` couples more than the bed (SME(1)).
 `NonconservativeRusanov` / `QuasilinearRusanov` stay offered: consistent, not well-balanced by
 construction (Rusanov dissipation on the depth jump; 3.5e-3 above on both models alike).  A flow
-over the bump (40 steps): SWE (pressure in `F`) and SME(0) (in `P`) now agree to 1.7e-6 (the
-Rusanov speed: SME(0) has no closed-form spectrum, the Gelfand bound) or 1.4e-3 (HLL: without a
-closed form it is Lax-Friedrichs until dev/numerics-robust's Davis bounds); `NonconservativeRoe`
-exactly.  Before, SWE + PositiveHLL was off by O(0.1) (the river case's 57 %).  Matrix: C3 on
+over the bump (40 steps): SWE (pressure in `F`) and SME(0) (in `P`) now agree to 1.6e-13 (HLL,
+Davis speeds since 52c), 1.7e-6 (the Rusanov family: SME(0) has no closed-form spectrum, its
+dissipation speed is the Gelfand bound) and exactly (`NonconservativeRoe`).  Before, SWE + PositiveHLL was off by O(0.1) (the river case's 57 %).  Matrix: C3 on
 plain SWE with four Positive* fluxes, O1 / O2, all four backends: max |u| <= 2.5e-15.
 
 **2. The periodic seam's `face_aux`.**  NumPy and JAX gave a boundary face the inner cell's aux on
@@ -2466,7 +2465,11 @@ on all four backends, mpi2 / mpi4 on JAX, foam, AMReX: 845 PASS, 0 FAIL, 44 new 
 SWE, C13 seam aux, C8 periodic pressure); three rows moved at round-off (C14 1.50e-12 ->
 1.52e-12, C31 1.08e-13 -> 1.16e-13), every other row equal to 1e-6.  zoomy_core: small 451 pass,
 large / rederive only the known m05 golden and cache-correctness failures; QR (`-m qr`): 20 pass,
-10 skip (Pyodide not installed here).
+10 skip (Pyodide not installed here).  After the merge of integ/20261014 (52's step guard
+`Cond(time_new > time, ...)` and `check.march` in `_time_loop`, the nested checkpoint `Cond`;
+`landed` acts on the step inside `step`, so both compose: a merged sliver gives `time_new = time
++ cap`, i.e. the instant itself): zoomy_core small 473 pass, the same two known large / rederive
+failures; C3 / C8 / C13 / C14 / C31 / C37 serial + mpi2 all PASS; QR 20 pass, 10 skip.
 
 ### 58a. Moving-equilibrium well-balancing on the symbolic solvers: a plan
 

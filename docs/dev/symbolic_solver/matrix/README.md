@@ -215,6 +215,12 @@ GMRES tolerances; the landing merges a floating-point sliver step into the last 
 other row equal to 1e-6.  AMReX C17 `dry` does not finish within a 15-min command (no row, as in
 the 2026-10-14 store).
 
+After merging integ/20261014 (march check and step guard, Davis speeds, IMEX diffusion, shore
+fix, C37): C3, C8, C13, C14, C31, C37 rerun serial (four backends) and mpi2 (JAX, foam, AMReX):
+all PASS, 0 FAIL in the table (960 PASS rows; the other cases' rows are the pre-merge runs, so
+integ's new C5 front rows are absent here).  Against integ's table the six cases differ in the
+same three round-off rows as above; C37 (115 rows) all PASS.
+
 ## Results (2026-10-14, dev/numerics-robust: march check, thin cells, HLL Davis bounds, Manning at rest)
 
 ANALYSIS 52.  Every serial run of every case rerun on NumPy, JAX, foam and AMReX (830 runs; the
