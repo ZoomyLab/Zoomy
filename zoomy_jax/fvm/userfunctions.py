@@ -192,7 +192,8 @@ def gelfand_bound(j, *a_flat):
         scales.append(s)
         C = C @ C
     M = jnp.abs(C)
-    x = M.sum(-1)
+    r = M.sum(-1)
+    x = r + 2.0 ** -30 * r.max(-1)[..., None]       # > 0: w continuous in A
     y = jnp.einsum("...ik,...k->...i", M, x)
     w = jnp.where(x > 0, y / jnp.where(x > 0, x, 1.0), 0.0).max(-1)
     pos = w > 0
