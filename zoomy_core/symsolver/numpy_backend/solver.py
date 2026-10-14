@@ -1,7 +1,7 @@
 """Driver of the NumPy backend: prints the solver template (hyperbolic, Chorin) of a
 NumericalSystemModel with `PyPrinter` and runs it against `numpy_backend.runtime`, serially;
 the default backend (no JAX, no compiler).  Mirrors `zoomy_jax.symsolver.solver` without AD,
-GPU, MPI and preCICE.
+GPU, MPI and the hyperbolic preCICE coupling (the Chorin march couples by overlapping Schwarz).
 """
 from __future__ import annotations
 
@@ -83,6 +83,7 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
         on_save, on_load = self._restart()
         self.module = R.runtime(nsm, self.rt, mesh, self.topo, geom, on_write=self._writer(),
                                 on_save=on_save, on_load=on_load, systems=systems,
+                                couple=getattr(self, "couple", None),
                                 implicit=dict(tol=self.implicit_tol,
                                               maxiter=self.implicit_maxiter,
                                               gmres_tol=self.gmres_tol,
@@ -184,8 +185,9 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
         returns `(time, Q, Qaux)`."""
         p = self.parameters if parameters is None else np.asarray(parameters, dtype=float)
         time0 = self.time_start if time0 is None else time0
+        end = () if getattr(self, "couple", None) else (float(self.time_end),)
         out = self._fn(np.asarray(Q, dtype=float), np.asarray(Qaux, dtype=float), p,
-                       float(time0), float(self.time_end), self.mesh, 0)
+                       float(time0), *end, self.mesh, 0)
         return float(out[0]), out[1], out[2]
 
 
@@ -208,11 +210,20 @@ class SymbolicChorinSolverNumpy(SymbolicHyperbolicSolverNumpy, ChorinSettings):
         default=2.0, bounds=(1, None),
         doc="'pyamg': rebuild early once the GMRES iterations exceed this factor times those "
             "right after the last rebuild.")
+    couple = param.Dict(default=None, allow_None=True,
+                        doc="preCICE: dict(adapter=, tag=, overlap=layers) "
+                            "(`ChorinTemplate.precice_march`: the mesh reaches `layers` cell "
+                            "rings across the interface, its outer boundary tagged `tag`; "
+                            "the adapter a `zoomy_core.symsolver.precice_adapter."
+                            "PreciceAdapter`).")
 
     def setup(self, mesh, pred, press, corr):
         """Check the split, build the pressure and corrector kernels and the linear-solver
         settings, then `_setup`; returns the initial `(Q, Qaux)`.
         """
+        if self.couple and self.couple.get("overlap") is None:
+            raise ValueError("Chorin with preCICE coupling: couple=dict(adapter=, tag=, "
+                             "overlap=layers) (`ChorinTemplate.precice_march`)")
         if not isinstance(pred, NumericalSystemModel):
             pred = NumericalSystemModel.from_system_model(
                 pad_to_square(pred), additional_systems=[press, corr])
@@ -269,5 +280,8 @@ class SymbolicChorinSolverNumpy(SymbolicHyperbolicSolverNumpy, ChorinSettings):
         template = ChorinTemplate(self.nsm, self.press, self.corr,
                                   pressure_newton=self._newton(),
                                   projection=self.projection, **self._config())
+        if self.couple:
+            return "chorin_precice", PyPrinter().procedure(
+                "chorin_precice", (Q, Qaux, p, time, mesh), template.precice_march)
         return "chorin", PyPrinter().procedure(
             "chorin", (Q, Qaux, p, time, time_end, mesh), template.march)
