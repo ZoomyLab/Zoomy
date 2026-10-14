@@ -84,7 +84,7 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
     dist = None
     if partition is not None:
         from zoomy_core.symsolver.numpy_backend.parallel import Distributed
-        dist = Distributed(partition, mesh_np, (implicit or {}).get("mpi_linear_solver", "auto"))
+        dist = Distributed(partition, mesh_np, (implicit or {}).get("mpi_linear_solver"))
     halo = dist.halo if dist is not None else (lambda X, mesh: X)
     norm = dist.norm if dist is not None else np.linalg.norm
     root_rank = dist is None or dist.rank == 0

@@ -14,8 +14,9 @@ restarted FGMRES with block-Jacobi preconditioners from the rank's own block.
 References:
     Dalcin, Fang 2021, https://doi.org/10.1109/MCSE.2021.3083216
     Dalcin, Paz, Kler, Cosimo 2011, https://doi.org/10.1016/j.advwatres.2011.04.013
-    Balay et al. 2024, PETSc/TAO Users Manual, ANL-21/39 Rev. 3.21, https://petsc.org
+    Balay et al. 2025, PETSc/TAO Users Manual, https://doi.org/10.2172/2998643
     Amestoy, Duff, L'Excellent, Koster 2001, https://doi.org/10.1137/S0895479899358194
+    Li, Demmel 2003, https://doi.org/10.1145/779359.779361
     Henson, Yang 2002, https://doi.org/10.1016/S0168-9274(01)00115-5
     Saad 1993, https://doi.org/10.1137/0914028
 """
@@ -74,7 +75,7 @@ class Distributed:
     the owned ones globally `gid(c) k + r`, a contiguous range per rank (`Partition.offsets`).
     """
 
-    def __init__(self, part, mesh_np, method=MpiLinearSolver.auto):
+    def __init__(self, part, mesh_np, method=None):
         from mpi4py import MPI
         self.MPI, self.part = MPI, part
         self.comm = part.comm.Clone()
@@ -89,7 +90,7 @@ class Distributed:
         self.recv = {int(q): np.asarray(i, dtype=np.int64) for q, i in part.recv.items()}
         self.gids = np.asarray(part.gids, dtype=np.int64)
         self.offset, self.n_global = int(part.offsets[part.rank]), int(part.n_global)
-        method = MpiLinearSolver(method)
+        method = MpiLinearSolver.auto if method is None else MpiLinearSolver(method)
         self.PETSc = None
         if method in (MpiLinearSolver.auto, MpiLinearSolver.petsc):
             self.PETSc = _petsc()
