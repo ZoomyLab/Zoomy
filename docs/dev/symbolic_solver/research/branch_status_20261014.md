@@ -1,3 +1,5 @@
+# Branch status notes of the 2026-10-14 integration (dev/solver-combos, dev/numpy-mpi, dev/oblique-walls)
+
 # dev/numpy-mpi (wt-npmpi) -- status
 
 MPI for the NumPy backend (mpi4py; PETSc linear solves): ANALYSIS 54.  Merged integ/20261014
@@ -15,6 +17,18 @@ as integ's: the store holds only these backends / cases).  core 457 passed + the
 failures (all tiers); QR 27 passed, 3 skipped.  ANALYSIS 54 (renumbered).
 
 ---
+
+---
+
+# dev/oblique-walls (wt-oblique) — status
+
+Merged integ/20261014 (not pushed, not merged back).  ANALYSIS 57, gate 57, matrix C38.
+- Oblique walls (closure in the walls' normal frames): core 8cb9ff2 4f2d7a4, jax 43c1db9, foam d215a44.
+- foam O2 = the template's gradient / limiters (the shore form of ANALYSIS 50 in them): core
+  9f739cf, foam a37c9c8; merge: core bc90274, jax a8eb5d4, foam d5cbe75, amrex 514d9e0.
+- Checks after the merge: core 414 pass; gates 39/42/44/57 OK; QR 28 / 2 skipped; matrix
+  C2 C3 C5 C6 C12 C19 C26 C32 C37 C38 (jax, foam; serial, mpi2) 0 FAIL; pit lake foam serial /
+  mpi2 <= 1.1e-14.
 
 # dev/solver-combos (wt-features) — status
 

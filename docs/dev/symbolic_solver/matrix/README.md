@@ -1,10 +1,14 @@
 # Cross-backend test matrix (symbolic solvers)
 
 The acceptance test of every backend that prints the symbolic solver
-templates (JAX, foam, AMReX, and any future one).  Backends no longer agree
-to round-off (foam uses OpenFOAM's own stencils at second order); every
-backend must pass the same physics checks instead: convergence, exact
-solutions, conservation, symmetry, parallel = serial, GPU = CPU.
+templates (JAX, foam, AMReX, and any future one).  Every backend must pass the
+same physics checks: convergence, exact solutions, conservation, symmetry,
+parallel = serial, GPU = CPU.  Since ANALYSIS 57 foam's second-order gradient
+and limiters are the template's (zoomy_core's LSQ tables, as JAX and AMReX;
+OpenFOAM's own leastSquares lost the order on stretched wall triangles), so
+foam = JAX to round-off where nothing else differs (OpenFOAM's pressure
+solvers, Newton tolerances); the older foam-vs-JAX bounds below stay as
+regression bounds.
 
 **NumPy** (`zoomy_core.symsolver.numpy_backend`, the default install: no JAX, no
 compiler) prints the same templates as JAX and runs serially, and distributed
@@ -54,6 +58,7 @@ diffusion a finite-difference Newton-GMRES (JAX: exact AD).
 | diffusion blocks at boundaries: orders (gate 41, JAX); foam / AMReX = JAX (gate 43) | C28 | C28 | C28 (1-D, quads; triangles n/a: Cartesian) |
 | LSQ derivatives with the boundary closure (gate 44) | C29 | n/a (JAX-runtime kernels) | n/a (JAX-runtime kernels) |
 | LSQ polynomial reproduction (gate 39) | C30 | n/a (JAX-runtime kernels) | n/a (JAX-runtime kernels) |
+| oblique walls: a rotated walled box = the axis-aligned one; closure orders on rotated quads / triangles and a curved wall (gate 57) | C38 | C38 (rotation, = JAX) | n/a (Cartesian) |
 | in-plane viscosity with viscous walls vs an exact solution (no-slip / free-slip shear decay) | C32 | C32 | C32 |
 | BC channels: `face=` / `ghost=` set apart (`Wall` face, `Dirichlet` ghost: a viscous no-slip wall) | C32 | C32 | C32 |
 | vertical viscosity of the moment model (SME(2)) vs the exact `expm`; time order of the IMEX / SSP-RK source | C33 | C33 | C33 |
@@ -72,7 +77,7 @@ python matrix.py run --tier large L1 jax mpi2   # the large tier (never part of 
 python deliverable.py                           # store -> matrix.png
 ```
 
-BACKEND `jax foam amrex numpy`; CASE `C1`..`C37`; CONFIG `serial` (default)
+BACKEND `jax foam amrex numpy`; CASE `C1`..`C38`; CONFIG `serial` (default)
 `mpi2 mpi4 gpu1 gpu2` (`gpu2` = gpu-mpi: 2 ranks, a GPU each).  A run in the
 store is skipped (`--force` reruns), so a command that times out resumes.
 A run that raises `NotImplementedError` is stored as **unsupported**, any
@@ -107,7 +112,7 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C9 GPU | C1, C5, C8, C14 on gpu1 / gpu-mpi | max rel vs the same backend CPU serial (round-off; C8 pressure tolerance) |
 | C10 Chorin convergence | VAM(1), smooth wave (a 0.01, sigma 0.3) over the bump, no inflow, t 0.2, nx 30/60/120; space O1 (gate 7's config) and O2 minmod, time_order 1 / 2 | Richardson order log2(abs(h30-h60)/abs(h60-h120)): >= 0.8 (theory 1), space O2 + time 2 >= 1.5 (observed) |
 | C11 1-D | smooth wave (walls) nx 40/80/160 vs JAX nx 1280; C4 `sub` in 1-D | as C1 / C4 (O1 >= 0.9, O2 >= 1.8: theory) |
-| C12 triangles | C1 on triangles nx 10/20/40 (vs the C1 reference, sampled); C4 `sub` on triangles refined in x and y (ny 1/2/4; at a fixed ny foam O2 loses its order on the stretched wall triangles) | O1 >= 0.5, O2 >= 1.4 (observed, coarse); C4 as above |
+| C12 triangles | C1 on triangles nx 10/20/40 (vs the C1 reference, sampled); C4 `sub` on triangles refined in x and y (ny 1/2/4); `subny2`: C4 `sub` O2 at a fixed ny 2 (the wall triangles stretch with n: OpenFOAM's leastSquares lost the order there, foam O2 L1 3.0e-3 / 7.8e-4 / 1.5e-3 before ANALYSIS 57) | O1 >= 0.5, O2 >= 1.4 (observed, coarse); C4 as above |
 | C13 periodic | bump in a uniform flow 0.3, periodic in x, walls in y, t 1, at x0 = 2.5 and 7.5; `nc_*`: the same with `NonconservativeRusanov`, whose face kernel reads both cells' aux (the seam face: the partner's, ANALYSIS 58) | the two runs equal up to the shift by L/2 (round-off); foam O1 = JAX (round-off) |
 | C14 IMEX | bump in flow + Manning n 0.5 (implicit source), t 0.3, nx 20/40/80 vs JAX nx 160 | order >= 0.5 (O1, observed) / 0.8 (O2, Lie splitting); mass; parallel; GPU |
 | C15 AD (JAX) | hyperbolic and IMEX bump 12^2, Chorin C10 wave 30 x 3; dJ/dg | abs(FD - jvp) <= 1e-5 (rel); abs(rev - jvp) <= 1e-10; mpi2 / gpu1 jvp vs serial <= 1e-12 |
@@ -133,6 +138,7 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C35 restart | C1 `o2_n40` (adaptive dt) and C8 `vam` with `projection=Projection.increment` (the lagged pressure in Q's pressure rows): `full` 0 -> T with `dt_checkpoint` T/2 (the march lands there), `half` 0 -> T/2, `restart` from `half`'s restart state -> T; `typo`: `restart_from` misspelt; c1 serial and mpi2, c8 serial | max abs(restart - full) = 0 (spec: bitwise); `typo` raises FileNotFoundError naming `restart_from` before anything is built (spec) |
 | C37 IMEX-SSP2 + implicit diffusion | gate 52 (constant dt = 0.0125 / 2^k, k = 0..3, fixed mesh). `heat_{1d,quad}_{per,dir0}_k*`: gate 41's heat equation, nu 1, nx 32, t 0.05 (nu dt / dx^2 = 12.8 at k = 0), IMEX-SSP2, against the semi-discrete exact u0 exp(lambda t) (u0 an eigenvector of the two-point operator). `advdiff_{ssp2,lie1,lie2}_k*`: u_t + u_x = nu u_xx, nu 0.02, u = 0 at both ends (upwind and two-point operators do not commute), nx 64, t 0.25, against expm(t L) u0 (L probed on the NumPy backend); `stiff_*`: the same at nu 0.2 (nu dt / dx^2 = 10.2). `shear_{noslip,free,noslip_split}_n{20,40,80}`: C32 with IMEX-SSP2; `shear_noslip_n20_k{1,2,3}`: dt / 2^k. `vam_{ssp2,t2}_k*`: Chorin, C10's wave with VAM(1) + Newtonian `Stress.full` (the predictor's implicit diffusion_matrix), nu 0.01, space O1, increment projection, dt 8e-3 / 2^k: projected IMEX-SSP2 stages with the implicit diffusion vs Lie per stage (time_order 2). foam / AMReX: `heat_*_k0`, `advdiff_ssp2_k0`, `shear_*_n20`, `vam_ssp2_k0` | heat order dt/4 -> dt/8 >= 1.8 (theory 2); advdiff ssp2 >= 1.8, lie1 >= 0.8, lie2 <= 1.4 (theory: the Lie splitting caps SSP-RK2 at 1); every advdiff / stiff run vs the scheme in matrix form (the IMEX-SSP2 stages (I - A_ii dt L_d) Y_i = R_i, Lie's Crank-Nicolson) <= 1e-10 (tolerance: Newton 1e-12, GMRES 1e-13); stiff orders: information (IMEX-SSP2 is not stiffly accurate: 1.65 at k 2 -> 3, 1.94 at dt / 64 in matrix form); shear: C32's checks and thresholds, time order (Richardson) >= 1.8, mass <= 1e-12; VAM L1(h) Richardson: ssp2 >= 1.8 (theory 2), t2 <= 1.4 (theory 1: the Lie diffusion per stage); foam / AMReX heat and advdiff vs JAX <= 1e-9 (tolerance), vam_ssp2_k0 <= 1e-9 (pressure) |
 | C36 full stress, level 1 | SME(1) + `Newtonian`, `stress=Stress.full` (ANALYSIS 45h), periodic [0,1]^2, 16^2, smooth h, q_x_0, q_x_1, q_y_0, q_y_1, flat bed, lambda_s 0, nu 1e-2, O2 minmod, IMEX (Crank-Nicolson diffusion, Newton 1e-12), dt 1e-3, t 0.02 (JAX; NumPy) | the run completes; mass (C6) <= 1e-12; numpy = JAX <= 1e-8 (Newton / GMRES tolerances) |
+| C38 oblique walls | gate 57.  `box_r0`, `box_r30`: SME(0), `Wall` on every side of a box 10 x 4 (16 x 8 quads) rotated by 0 and 30 deg about the origin, a hump h = 1 + 0.2 exp(-r^2 / 0.8) at (3, 1.5) of the box frame in a flow (0.15, 0.05) of the box frame, O2 without limiter, LSQ degree 2 (the reconstruction gradient takes the boundary closure: the momentum in the walls' normal frames), numerical eigenvalues as the wave speed (the default bound on abs(A_n) depends on the momentum's basis: not rotation invariant), dt 2e-3 x 40 (JAX, foam, numpy). `orders_*` (JAX, numpy): gate 50's derivatives of q_x, q_y with a `Wall` field (n.q = 0, d(t.q)/dn = 0, generic at the walls) on the box rotated by 30 deg (quads, triangles; nx 24 / 48 / 96) and on polar quads of 1 <= r <= 2, 0 <= phi <= pi/2 (curved walls; nx 48 / 96 / 192), p = 2, 3, k = 1..p | rotated = axis-aligned, max rel of h and the rotated q <= 1e-11 (round-off; observed 1.5e-15); foam = JAX <= 1e-12; orders as C29 (>= p + 1 - k - 0.2), the annulus at p = 2 (its p = 3 interior degree-3 fits on polar quads do not converge, walls or not: information) |
 
 Sources: *theory* (order, positivity, symmetry), *tolerance* (round-off
 1e-12, the pressure solve), *spec* (the task's number), *observed* (about 2x

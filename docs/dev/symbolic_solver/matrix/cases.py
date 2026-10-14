@@ -662,6 +662,46 @@ def _c28():
                    for k in DIFF_KINDS for p in DIFF_PATHS for case in DIFF_ALL]
 
 
+# ── C38: oblique walls (gate 57) ────────────────────────────────────────────
+OBLIQUE = dict(theta=30.0, nx=16, dt=2e-3, steps=40)
+
+
+def oblique_box(theta):
+    """Gate 50's walled box (10 x 4, nx 16 x 8 quads) rotated by ``theta`` degrees about the
+    origin: SME(0), ``Wall`` on every side, O2 without limiter, LSQ degree 2 (the
+    reconstruction gradient takes the boundary closure: the momentum in the walls' normal
+    frames), numerical eigenvalues as the wave speed (the default bound on |A_n| depends on
+    the momentum's basis, so it is not rotation invariant)."""
+    import gate57_oblique_walls as G57
+    from zoomy_core.systemmodel.system_model import SpectralRadius
+    nsm = G57.nsm_for(2, order=2)
+    nsm.spectral_radius_method = SpectralRadius.eig
+    mesh = G57.box_mesh(OBLIQUE["nx"], theta=np.radians(theta), origin=(0.0, 0.0))
+    return ensure_lsq_mesh(mesh, nsm), nsm
+
+
+def oblique_q0(theta, names, xc):
+    """A hump at (3, 1.5) of the box frame in a uniform flow (0.15, 0.05) of the box frame."""
+    import gate57_oblique_walls as G57
+    R = G57.rotation(np.radians(theta))
+    xi = R.T @ xc[:2]
+    h = 1.0 + 0.2 * np.exp(-((xi[0] - 3.0) ** 2 + (xi[1] - 1.5) ** 2) / 0.8)
+    q = R @ (h * np.array([[0.15], [0.05]]))
+    Q = np.zeros((len(names), xc.shape[1]))
+    Q[names.index("h")] = h
+    Q[names.index("q_x_0")], Q[names.index("q_y_0")] = q
+    return Q
+
+
+def _c38():
+    from custom import oblique_orders
+    O = OBLIQUE
+    return ([Run(f"box_r{t:g}", partial(oblique_box, t), O["steps"] * O["dt"], dt=O["dt"],
+                 q0=partial(oblique_q0, t), backends=JF) for t in (0.0, O["theta"])]
+            + [Run(f"orders_{k}", None, 0.0, custom=lambda b, c, w, k=k: oblique_orders(k, b),
+                   backends=("jax",)) for k in ("rbox-quad", "rbox-tri", "annulus")])
+
+
 def _c29():
     from custom import lsq_closure
     return [Run(f"p{p}_{bc}", None, 0.0, custom=lambda b, c, w, p=p, bc=bc: lsq_closure(p, bc, b),
@@ -854,6 +894,7 @@ def _c37():
 
 #: why a backend has no run of a case (measure(): the label of its n/a row)
 NA = {("C29", b): "gate 44 calls the JAX runtime (derivative_aux)" for b in ("foam", "amrex")}
+NA[("C38", "amrex")] = "Cartesian grids only: no oblique walls"
 NA.update({("C30", b): "gate 39 calls the JAX runtime (lsq_gradient_per_field)"
            for b in ("foam", "amrex")})
 
@@ -904,12 +945,17 @@ CASES = {
     "C12": ("triangles: C1 bump and C4 channel",
             [Run(f"bump_o{o}_n{n}", on_triangles(partial(C.bump_2d, o, nx=4), n, n, (0, 10, 0, 10)),
                  2.5, backends=JF) for o in (1, 2) for n in (10, 20, 40)]
-            # refined in x AND y (ny = n / 25): at a fixed ny the triangles
-            # stretch with n, and OpenFOAM's leastSquares gradient at the
-            # walls loses its order on them (foam O2 n100 ny 2: 1.6e-3 > n50)
+            # refined in x AND y (ny = n / 25)
             + [Run(f"sub_o{o}_n{n}", on_triangles(partial(channel, "sub", o, 4), n,
                                                   max(1, n * NY // 50), (0, LENGTH, 0, WIDTH)),
-                   CHANNEL["sub"]["t_end"], backends=JF) for o in (1, 2) for n in C4_N]),
+                   CHANNEL["sub"]["t_end"], backends=JF) for o in (1, 2) for n in C4_N]
+            # at a fixed ny = 2 the wall triangles stretch with n: OpenFOAM's
+            # leastSquares gradient lost the order there (foam O2 n100 1.5e-3 >
+            # n50 7.8e-4); foam now takes the template's gradient (ANALYSIS 57)
+            + [Run(f"subny2_o2_n{n}{p}", on_triangles(partial(channel, "sub", 2, 4), n, NY,
+                                                      (0, LENGTH, 0, WIDTH)),
+                   CHANNEL["sub"]["t_end"], backends=JF if not p else ("jax",),
+                   perturb=PERTURB if p else 0.0) for n in C4_N for p in ("", "_pert")]),
     "C13": ("periodic in x: shifted bump in a uniform flow",
             [Run(f"o{o}_x{x0}", partial(periodic, o, x0), PERIODIC["t_end"],
                  configs=("serial", "mpi2", "mpi4")) for o in (1, 2) for x0 in (2.5, 7.5)]
@@ -974,6 +1020,9 @@ CASES = {
                  solver=IMPLICIT, backends=("jax",))]),
     "C37": ("IMEX-SSP2 with the implicit diffusion in its stages (gate 52): stiff heat equation, "
             "advection-diffusion, viscous shear decay", _c37()),
+    "C38": ("oblique walls (gate 57): a walled box rotated by 30 deg = the axis-aligned one; "
+            "boundary orders of the closure on rotated quads / triangles and a curved wall",
+            _c38()),
 }
 
 

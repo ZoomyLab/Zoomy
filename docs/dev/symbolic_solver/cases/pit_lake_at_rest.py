@@ -90,11 +90,23 @@ VARIANTS = {
 }
 
 
-def run(name, mood=True, t_end=1.0, **kw):
+def run(name, mood=True, t_end=1.0, backend="jax", nprocs=1, **kw):
+    """Max |u| over the wet cells after `t_end`; `backend` jax or foam (`nprocs` ranks)."""
     mesh, nsm = build(**kw)
-    s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=0.4, mood=mood)
-    Q, A = s.setup(mesh, nsm)
-    t, Q, _ = s.run(Q, A)
+    if backend == "foam":
+        import tempfile
+        from zoomy_core.mesh import ensure_lsq_mesh
+        from zoomy_foam.symsolver import SymbolicHyperbolicSolverFoam
+        mesh = ensure_lsq_mesh(mesh, nsm)
+        xc = np.asarray(mesh.cell_centers)[:, :int(mesh.n_inner_cells)]
+        Q0 = nsm.sm.initial_conditions.apply(xc, np.zeros((len(nsm.state), xc.shape[1])))
+        kwf = dict(nprocs=nprocs) if nprocs > 1 else {}
+        t, Q = SymbolicHyperbolicSolverFoam(time_end=t_end, cfl=0.4, mood=mood, **kwf).run(
+            mesh, nsm, Q0, tempfile.mkdtemp(prefix=f"pit_{name}_"))
+    else:
+        s = SymbolicHyperbolicSolverJax(time_end=t_end, cfl=0.4, mood=mood)
+        Q, A = s.setup(mesh, nsm)
+        t, Q, _ = s.run(Q, A)
     Q = np.asarray(Q)
     h = Q[1]
     wet = h > 1e-3
@@ -105,5 +117,7 @@ def run(name, mood=True, t_end=1.0, **kw):
 
 
 if __name__ == "__main__":
+    # PIT_BACKEND=foam (PIT_NPROCS ranks): the same variants on foam
+    be, nr = os.environ.get("PIT_BACKEND", "jax"), int(os.environ.get("PIT_NPROCS", "1"))
     for v in sys.argv[1:] or VARIANTS:
-        run(v, **VARIANTS[v])
+        run(v, backend=be, nprocs=nr, **VARIANTS[v])

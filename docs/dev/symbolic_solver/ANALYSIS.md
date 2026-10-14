@@ -1982,7 +1982,8 @@ flooding front) unchanged.  Boundary ghosts are not changed.  Printed as the 5-a
 OpenFOAM's own `leastSquares` gradient and `cellLimited` limiters, so `shore_lsq` /
 `shore_limiter` are those schemes' loops (`fv::leastSquaresGrad`, `fv::cellLimitedGrad`: the
 `leastSquaresVectors`, patch order, `small`, the minmod / Venkatakrishnan functions of r, k = 1)
-with the one change in the eta row; every other row stays `fvc::grad`.  A coupled neighbour's eta
+with the one change in the eta row; every other row stays `fvc::grad`.  (Superseded by section 57: foam's order-2
+gradient and limiters are the template's, with the shore form in them.)  A coupled neighbour's eta
 and depth come over its processor / cyclic patch (the halo exchange of both rows), so a rank sees
 the neighbour's wet/dry state.  `zoomy_foam/tests/shore_unit` (skewed 13 x 11 mesh, a cyclic pair,
 walls, 26 dry cells, 3 of them across the seam): per cell against OpenFOAM's schemes on the field
@@ -2461,6 +2462,130 @@ partition; at `implicit_tol` 1e-14 ranks = serial 8.0e-15.  The C7 threshold of 
 therefore the Newton tolerance, 1e-10 (`NUMPY_NEWTON_C37`).  numpy = JAX: C37 4.3e-12 serial,
 1.9e-12 mpi2; C32 1.6e-12; C26 2.3e-14 on every config.  Test: IMEX-SSP2 stiff
 advection-diffusion on 3 ranks = serial 2e-13 (PETSc) / 7e-13 (krylov).
+
+## 57. Oblique walls in the walls' normal frames; foam's O2 gradient is the template's (2026-10-14, dev/oblique-walls)
+
+**Oblique walls.**  A `Wall` reflects the normal momentum.  On a face not aligned with an axis its
+ghost couples q_x and q_y, so section 41 classed both rows as ghost rows (no constraint), and the
+decoupled ghost fit of the base table (section 28: a ghost informs only the pure monomials of its
+axis) took the axis of x_f - x_c, not the line the mirror ghost lies on.
+- Rows (`boundary_closure.face_closure` -> `RowClosure(kinds, groups, rotated)`): a vector group
+  (the BCs' `momentum_field_indices`) is classified in each face's normal frame wherever that fixes
+  more rows than the Cartesian frame: n.q Dirichlet, t.q Neumann (2-D t = (-n_y, n_x); 3-D the rows
+  of I - n n^T, whose squares sum to those of any orthonormal tangent basis).  Axis-aligned faces
+  keep their per-row kinds: on every matrix mesh but C38's the tables are unchanged.
+- Fit (`geometry_xp._vector_tables`): such a group is one vector class, one joint constrained fit
+  of its d components (block-diagonal samples; per face the frame rows F q as ghost samples,
+  Dirichlet values or Neumann normal derivatives; the null-space form of section 41).  Its d x d
+  block tables follow the row classes in `lsq_closure`; a vector row's `lsq_closure_class` entry
+  is its terms ((src_row, class), ...) (`closure_terms`, `closure_rows`), read by core
+  `lsq_closure_derivatives` (NumPy), the JAX `derivative_aux` / `gradient`, foam's `Kernels.H`
+  aux entries (two partner pairs) and `Fit`.  AMReX is Cartesian: no vector class.
+- Base fit (`_wall_frames`): the mirror ghost lies on the face normal, so it informs the
+  pure-normal monomials of the face frame.  A cell whose sampled boundary faces are oblique fits in
+  the frame Q = R(k 90 deg) R(-phi_0) (|Q - I| <= 45 deg) if one Q puts all its face normals on
+  axes (else Cartesian) and maps the coefficients back with the monomial rotation T (c = T^T a,
+  `_monomial_rotation`, differentiable in the nodes).  2-D; axis-aligned cells unchanged.
+- Checks (gate 57, `gates/gate57_oblique_walls.py`; matrix C38): a `Wall` field (n.q = 0,
+  d(t.q)/dn = 0, generic at the walls: an even part in q_n, an odd cubic part in q_t, which a ghost
+  sample cannot reproduce); orders of the derivatives of q_x, q_y over the boundary cells, last
+  pair (the interior as gate 44):
+
+| mesh (nx) | p | closure, k = 1 / 2 / 3 | ghost sample, k = 1 / 2 / 3 |
+|---|---|---|---|
+| box 10 x 4 rotated by 30 deg, quads (48 -> 96) | 2 | 2.01 / 0.86 | 1.0 / 0.0 |
+| | 3 | 2.93 / 1.92 / 0.91 | 1.0 / 0.0 / -1.0 |
+| same box, triangles (48 -> 96) | 2 | 1.93 / 0.89 | 0.9 / 0.1 |
+| | 3 | 3.01 / 1.95 / 0.96 | 1.0 / 0.0 / -1.0 |
+| annulus 1 <= r <= 2, polar quads, curved walls (96 -> 192) | 2 | 1.90 / 0.96 | 0.8 / 0.0 |
+| | 3 | 3.02 / 1.92 / 1.07 | 1.0 / 0.0 / -0.5 |
+
+  Polynomial vector fields are reproduced to 1e-11 on rotated quads, jittered quads and triangles
+  (p 2, 3; corners with two frames) and on rotated hexahedra (p 2; edges, corners)
+  (`test_gate_1a_core_lsq_closure.py`).  The rotated mesh: the same stencils (the axis rule
+  extended all 68 wall stencils of the rotated box, nx 24, by 1 to 5 cells), every derivative
+  tensor the rotated one to 7e-13; an O2 run (SME(0), LSQ degree 2, no limiter, 40 steps) of the walled box at 30 deg =
+  at 0 deg: max rel h / q 2.8e-3 / 3.2e-2 before, 3.9e-16 / 1.5e-15 after (JAX, NumPy; foam C38).
+- Limits.  The run takes `SpectralRadius.eig`: the default bound of section 48 works on |A_n| and
+  depends on the momentum's basis (4.4e-7 / 4.1e-6 with it).  A curved wall is its polygon: on polar
+  quads a wall cell's foot is its face's midpoint (normal e_r there) and the gate's field carries the
+  BC there to O(h^4); on triangles the foot is off the midpoint, the polygon's normal O(h) off the
+  wall's, and free slip is first order whatever the closure (geometry).  The base fit's frames are
+  2-D (3-D oblique cells stay Cartesian; the vector closure is 3-D).  Annulus p = 3: the interior
+  degree-3 fits two cells off the walls (10 samples, 9 monomials) do not converge (d3 ~1e2), on
+  main and without walls (the selection of section 37; information in C38).
+
+**foam's O2 gradient on stretched wall triangles** (section 43; C12 `sub` O2 at a fixed ny 2).
+foam L1(h) 3.0e-3 / 7.8e-4 / 1.5e-3 at n 25 / 50 / 100; JAX 6.9e-3 / 7.7e-4 / 1.3e-4.
+- Which block: foam printed `gradient` and the limiters with OpenFOAM's leastSquares and
+  cellLimited.  OpenFOAM's gradient with the template's limiter: 3.0e-3 / 7.8e-4 / 1.5e-3
+  (unchanged); the template's gradient with OpenFOAM's limiter: 5.2e-3 / 9.1e-4 / 1.6e-4.  The
+  gradient, not the limiter.  Not an instability: max |q_y| saturates at 2.4e-2 by t = 2 (JAX
+  1.6e-3), a steady state with 15x the transverse momentum over the bump.
+- Why: OpenFOAM 13's leastSquares (`leastSquaresVectors.C`) weights a neighbour by |S_f| (1 - w) /
+  |d|^2 and puts the boundary face value at the foot n (n.(C_f - C)) with weight |S_f| / d_n^2, face
+  neighbours only.  On these triangles it turns a field of x alone into a wall-normal derivative of
+  4.2e-3 / 1.6e-3 / 5.0e-4 at n 100 / 200 / 400 (order 1.4 - 1.7); zoomy_core's fit (vertex rings
+  inside, face neighbours and the decoupled mirror ghost at the walls, unweighted) 1.7e-3 / 4.2e-4 /
+  1.0e-4 (order 2).  The spurious transverse pressure force drives the q_y above.  Neither
+  conditioning nor missing constraint rows: at degree 1 there is no closure.
+- Fix: foam's `gradient` is zoomy_core's table through the `Fit` (`constant/zoomyStencil` now
+  carries each reconstruction row's closure entry, so at degree >= 2 the reconstruction rows close
+  as on JAX, vector rows included); foam's minmod, Barth-Jespersen and Venkatakrishnan are the
+  template's (face-neighbour and ghost bounds, as JAX and NumPy); OpenFOAM's `limited(...)`
+  schemes are gone.  C12 fixed ny: foam = JAX to 1.4e-15 / 5.2e-15 / 3.8e-10 (n 100: round-off
+  through limiter switches), L1 6.77e-3 / 7.65e-4 / 1.31e-4 (order 3.1 / 2.5).
+- The shore form of section 50 (merge of integ/20261014) lives in the same two blocks, as
+  zoomy_core's `lsq_derivatives(..., shore)` and the runtimes' `ghost_bounds(..., dry)` do it:
+  `Fit::gradient` (the base fit only; a closure fit keeps its samples, as on JAX) sends the depth
+  row with the values through the Fit's distribution map and takes min(eta_k - eta_i, 0) for a
+  stencil cell with h_k <= eps; `limit` bounds row eta with min(eta_k, eta_i) for a dry face
+  neighbour (halo columns on coupled patches).  OpenFOAM's shore loops (`shore_lsq`,
+  `shore_limiter`) and `tests/shore_unit` (their check against OpenFOAM's schemes) are gone.
+  Pit lake at rest (`cases/pit_lake_at_rest.py`, now `PIT_BACKEND=foam`; front detector on): foam
+  serial venk 2.3e-15, venk_tri 1.1e-14, tilted 5.2e-15 / 8.4e-15, wet, minmod, BJ, no_front,
+  order 1 <= 4.2e-15; 2 ranks the same; without the rule (the same build, shore arguments
+  ignored) 0.40 / 0.52 m/s, as JAX on main: foam's Venkatakrishnan now has eps^2 = (cell size)^2
+  too, so the rule is what keeps the lake at rest.
+- Found on the way (zoomy_core): the decoupled ghost's axis was argmax |x_f - x_c|.  On a wall
+  triangle stretched along the wall that is the tangential axis, and the ghost informed nothing:
+  wall-normal derivative of an x-only field 0.16 on the n 25 mesh (dx = 2 dy, a tie).  The axis is
+  now the normal's (the frame's on oblique walls): 2.7e-2.  Gates 39 (72 / 72), 42 (18 / 18), 44
+  (quads and triangles) pass.
+
+Cross-backend matrix (`matrix/README.md`, results 2026-10-15): the store rerun from empty on core
+9f739cf, jax 43c1db9, foam a37c9c8, amrex a177451, the CPU configs (serial, mpi2, mpi4, mpi8; no
+GPU here): 959 runs, 935 rows, 939 PASS cells, **2 FAIL**, both C17 `dry` (AMReX AMR, regrid on the
+dry front; a run added to C17 after the last full matrix): mass drift nan, its coarse output
+carries NaN cells; the same nan with main's libraries (h_min 0.1209 both), not touched here.
+Against the store of section 48: JAX 295 of 300 runs bitwise identical (the rest: C15 `chorin_rev`
+2e-12 relative, C35 `typo` messages), NumPy and AMReX all identical; foam's 88 O2 runs changed to
+foam = JAX: C1 O2 L1 diff 7e-16, C2 L1 2.6e-4 -> 3.8e-16, C4 sub / trans O2 max rel 3.6e-14 /
+3.1e-12, C5 1.7e-2 -> 1.9e-15, C11 sub O2 3.8e-6 (JAX's own sensitivity 2.2e-5), C23 O2 4.5e-14,
+C26 1.6e-3 -> 3.6e-16, C32 |foam - JAX| / |JAX - exact| 0.19 / 0.021 / 0.014 -> 2e-12; foam's
+orders are JAX's (C12 bump O2 1.92 -> 1.69, sub O2 2.76 -> 2.42, C19 o2minmod 1.87 -> 2.79).  The
+checks that measured a shrinking foam - JAX difference measure foam = JAX instead: max rel <=
+10 x JAX's round-off sensitivity where the `*_pert` runs exist (as AMReX), C23 O2 max rel <= 1e-12.
+New rows: C12 `subny2` (the fixed-ny case: JAX, foam, NumPy order 2.55; foam = JAX 3.8e-10 <= 10 x
+the sensitivity 2.7e-10) and C38 (all PASS).  zoomy_core: 375 small tests pass (goldens included);
+QR suite (`-m qr`, from the main tree's tests with these libraries first): 28 pass, 2 skipped.
+
+After the merge of integ/20261014 (core bc90274, jax a8eb5d4, foam d5cbe75, amrex 514d9e0): gates
+39 (72 / 72), 42 (18 / 18), 44 (all), 57 (orders, rotation 3.9e-16 / 1.5e-15) pass; zoomy_core
+414 small tests pass; QR suite 28 pass, 2 skipped.  Matrix rows of C2, C3, C5, C6, C12, C19, C26,
+C32, C37, C38 on JAX and foam, serial and mpi2, from an empty store: 215 rows, 189 PASS cells,
+0 FAIL.  JAX is integ's bitwise (C5 bowl checked); foam = JAX now also on integ's new C5 front
+runs (bowl / dam, front and off: 5e-16 / 1.8e-15; before 6.3e-3 / 4.7e-2 / 1.5e-2 / 9.3e-2) and
+C37 (<= 1.4e-14), and the dam's front detector acts on foam as on JAX (front vs off 8.6e-2,
+before 8e-17).
+
+Open:
+- The decoupled ghost fit's frames are 2-D; a 3-D oblique wall keeps the Cartesian decoupling.
+- Free slip on a polygonal approximation of a curved wall is first order off the face midpoints
+  (triangles): a curved-boundary treatment, not a closure question.
+- Degree-3 interior fits on polar quads (10 samples) do not converge (annulus p = 3).
+- The default wave-speed bound (section 48) is not rotation invariant.
+- C17 `dry`: the measure (or the AMR output) of the dry-front regrid run.
 
 ## 58. Library defects from the thesis-case migrations (2026-10-14, dev/migration-defects)
 

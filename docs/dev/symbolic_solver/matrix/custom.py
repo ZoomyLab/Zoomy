@@ -327,6 +327,23 @@ def lsq_closure(p, bc, backend="jax"):
             for k in range(1, p + 1)}
 
 
+# ── C38: oblique walls (gate 57) ─────────────────────────────────────────────
+def oblique_orders(kind, backend="jax"):
+    """Gate 57's orders on ``kind`` (rbox-quad, rbox-tri, annulus): the max error of the
+    derivatives of order k = 1..p of q_x, q_y over the boundary and the interior cells, with
+    the closure in the walls' normal frames ("closure") and the ghost as a fit sample
+    ("ghost"), p = 2, 3, on its three meshes."""
+    import gate57_oblique_walls as G
+    out = {"nx": list(G.NX[kind]), "gated": list(G.GATED[kind])}
+    for p in (2, 3):
+        with on_backend(backend, G):
+            E = [G.errors(kind, p, nx) for nx in G.NX[kind]]
+        out.update({f"p{p}_{method}_{where}_d{k}": [float(e[(method, k, where)]) for e in E]
+                    for method in ("closure", "ghost") for where in ("boundary", "interior")
+                    for k in range(1, p + 1)})
+    return out
+
+
 # ── C34: in-plane viscous operator vs the exact div(h tau') (gate 45) ────────
 def inplane_operator(backend, nx, work):
     """Gate 45 at ``nx``: the discrete in-plane viscous operator of SME(0) +
