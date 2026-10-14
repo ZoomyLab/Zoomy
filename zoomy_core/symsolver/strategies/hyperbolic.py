@@ -156,9 +156,9 @@ class HyperbolicTemplate:
                 (the richer of the two), its kernels printed as `interface.<slot>`: both
                 participants lift the pair, own as the peer reads it
                 (`couple.read_round_trip`) and peer (`couple.read`), into its state (the lower
-                level's missing moments zero), solve the same problem and keep the rows of
-                their own state (by name). Its state must contain the own state's names, its
-                parameters must be the own model's.
+                level's missing moments zero to round-off), solve the same problem and keep the
+                rows of their own state (by name). Its state must contain the own state's
+                names, its parameters must be the own model's.
 
         References:
             Chourdakis et al. 2022, https://doi.org/10.12688/openreseurope.14445.2
