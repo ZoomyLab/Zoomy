@@ -205,8 +205,9 @@ def _conservative_rows(nsm):
 def _amr_procedures(template):
     """Print the template pieces an AMR level loop calls: `step`, `dt_of` (the constant
     `dt` when set, else the CFL step), the
-    reconstruction maps `amr_w` / `amr_q`, `amr_clean`, `amr_stage_aux` (the pointwise aux
-    of a state), the stage weights `rk_weights`, the refluxed rows
+    reconstruction maps `amr_w` / `amr_q`, `amr_clean`, `amr_keep` (a refluxed cell keeps
+    the reconstruction variables of the rows that are not refluxed), `amr_stage_aux` (the
+    pointwise aux of a state), the stage weights `rk_weights`, the refluxed rows
     `reflux_rows` and, but for IMEX-SSP2, the stages of the step (`_amr_stages`).
 
     The stage weights integrate each stage's face terms over the step: SSP-RK's
@@ -257,6 +258,20 @@ def _amr_procedures(template):
         for a, _c in SSP_RK[template.time_order]:
             beta = [(1 - a) * b for b in beta] + [1 - a]
     refluxed = _conservative_rows(nsm)
+    kept = tuple(i for i in range(len(nsm.state)) if i not in refluxed)
+
+    def keep(Qo, Qn, Qaux, p, mesh):
+        """`Qn` with the reconstruction variables of the rows that are not refluxed taken
+        from `Qo`: a refluxed cell keeps its velocity (its momentum follows the corrected
+        depth), not its momentum.
+        """
+        if not kept:
+            return (Qn,)
+        Wo = w_of(Qo, stage_aux(nsm, Qo, Qaux, p, 0, 1, mesh), p, mesh)[0]
+        An = stage_aux(nsm, Qn, Qaux, p, 0, 1, mesh)
+        Wn = w_of(Qn, An, p, mesh)[0]
+        return q_of(put(Wn, kept, take(Wo, kept)), An, p, mesh)
+
     procs = [
         "#define ZS_AMR_PROCEDURES 1",
         CxxPrinter().procedure("step", (Q, Qaux, p, time, dt, mesh),
@@ -265,6 +280,7 @@ def _amr_procedures(template):
         CxxPrinter().procedure("amr_w", (Q, Qaux, p, mesh), w_of),
         CxxPrinter().procedure("amr_q", (W, Qaux, p, mesh), q_of),
         CxxPrinter().procedure("amr_clean", (Q, mesh), clean),
+        CxxPrinter().procedure("amr_keep", (Q, W, Qaux, p, mesh), keep),
         CxxPrinter().procedure("amr_stage_aux", (Q, Qaux, p, mesh),
                                lambda Q, Qaux, p, mesh: (stage_aux(nsm, Q, Qaux, p, 0, 1, mesh),)),
         "inline std::vector<double> rk_weights() { return {"
