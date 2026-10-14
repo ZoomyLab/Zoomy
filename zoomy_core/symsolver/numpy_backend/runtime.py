@@ -14,7 +14,7 @@ from typing import NamedTuple
 import numpy as np
 
 from zoomy_core.fvm.reconstruction import DenseDiffusionOperator
-from zoomy_core.mesh.geometry_xp import compute_geometry, lsq_derivatives
+from zoomy_core.mesh.geometry_xp import closure_rows, compute_geometry, lsq_derivatives
 from zoomy_core.misc.logger_config import logger
 from zoomy_core.model.boundary_conditions import boundary_face_branches
 from zoomy_core.symsolver.core import contract
@@ -343,7 +343,10 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
                 if e["target_kind"] != "state" or s not in rows:
                     continue
                 if s not in cache:
-                    cache[s] = _lsq(Q[s][None], Qg[s][None], (e["closure"],))[0]
+                    # the row's closure terms read the rows `src` (a vector row: its group)
+                    src, cls = closure_rows(s, e["closure"])
+                    idx = np.asarray(src)
+                    cache[s] = _lsq(Q[idx], Qg[idx], cls)[src.index(s)]
                 grad = cache[s][:, col]
             out[e["row"], :grad.shape[0]] = grad
         return out
