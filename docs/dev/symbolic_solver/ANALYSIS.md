@@ -1749,3 +1749,87 @@ Open:
 - A NaN `dt` ends the march loop silently (`time < time_end` is false); the loop should raise.
 - The first moment of the mixing-length SME(1) reaches alpha_1 ~ 260 m/s under the cells rule too
   (the mode-0 velocity is capped at 30 m/s, mode 1 is not).
+
+## 49. Non-dimensional scaling pipeline: the stress truncation by order (2026-10-14, dev/nondim)
+
+Design: `research/nondimensional_scaling.md` (P3).  Built in zoomy_core, opt-in; the hand rules
+stay the default.
+
+**What was built.**
+
+- `model/derivation/nondim.py`: `Dim` (M, L, T, rational exponents) and `PARAMETER_DIMENSIONS`;
+  `PiBasis` (Buckingham Pi: every group dimensionless, the groups independent and complete, else
+  `DimensionError` naming the group or a missing one, e.g. `missing e.g. U**2*rho/S`; every
+  quantity written through the repeating scales and the groups; `suggest()` gives a basis, the
+  operator never chooses groups).  The operators, all `m.apply(...)` on the 3-D rows before the
+  sigma map: `NonDimensionalize(scales, groups, ...)` (fields -> `scale * \check{f}` or `Affine`
+  background + fluctuation, a derivative in a coordinate picks up `1/scale`, each row divided by
+  its scale; every term must end as a group monomial times a field part, else "not dimensionally
+  homogeneous"); `ShallowScaling(horizontal, vertical, regime=Regime(...))` (drops every term
+  whose eps order, read off its group coefficient, exceeds its row's order; a second call without
+  arguments repeats the orders); `InsertClosure(closures)`; `Dimensionalize()` (the exact inverse:
+  the round trip is structure-preserving, the scaled frame never changes a kept term).
+- `InsertClosure`: the bulk closure's physical tensor (`Newtonian.tensor`) in the scaled
+  variables; its vertical shear fixes the free stress scale (`S = rho nu U / H`, so
+  `De = eps U H / nu`, thesis eq. (fr-de)).  **Consistency check:** every term of every
+  `tau_hat_ij` and of every bed / surface traction (`traction`, with the closure's group:
+  `NavierSlip.scaling_groups` `k_l = lambda_s / (rho U)`, Marche 2007 eq. (5.1) `k_l' = eps r_0`;
+  `ManningFriction` `C_n = g n^2 L / H^(4/3)`, O(1)) must be O(eps^0) or smaller under the
+  regime, else `ScalingError` naming the closure and component.  Substituted everywhere except
+  the horizontal rows' own shear `tau_dz`, which stays a closure variable (its traces carry the
+  traction, 45e); for it the row's order selects the kept closure terms (`ClosureRecord.shear`).
+- `model/models/scaling.py`: `FreeSurfaceNonDim(momentum, heights, free_surface, pressure)`, the
+  thesis choices (20_methodology eqs. (scaling-variables), (pressure-scaling) with
+  `Pressure.total` -> `p = rho g (s - z) + q`, `Pressure.nonhydrostatic` for VAM's / ML-SME's
+  pressure, (sme-stress-scaling), (fr-de); rows divided by `U^2/L`, `U^2/H`, `U/L`; default regime
+  `Fr, De = O(1)`, `e_x = O(eps)`); `ordered_truncation` sets `m.stress` from the outcome.
+- `SME`, `VAM`, `MLSME`: setting `scaling=ShallowScaling(...)` replaces `moment_scaling`, the
+  hydrostatic inertia drop (SME) and `apply_full_tensor`.  SME refuses a vertical order that keeps
+  the vertical inertia; ML-SME sets `Pi = 0` when no vertical row keeps a stress.
+
+**Term comparison** (rendered SystemModels, no cache; `tests/model/test_nondim_pipeline.py`):
+the hand truncation of every model is reproduced **byte-identically** by one regime and order:
+
+| model (hand rule) | regime | orders (h, v) | checked |
+|---|---|---|---|
+| SME `Stress.shallow` | Fr, De = O(1) (thesis) | (0, 0) | levels 0, 1, 2; 2-D level 1; SWE 1-D / 2-D + Manning |
+| SME `Stress.full` | De = O(eps) (Marche (5.1): 1/Re = eps nu_0) | (1, 1) | levels 0, 1, 2; 2-D level 1 |
+| SME `Stress.full` | De = O(eps^2) (Marche (3.2) -> (3.5): Re = O(1)) | (0, 0) | level 1 |
+| VAM `Stress.shallow` | 1/De = O(eps), k_l = O(eps^2) | (1, 2) | levels 0, 1, 2; 2-D; unclosed (m11) |
+| VAM `Stress.full` | De = O(1) or De = O(eps) | (2, 2) or (1, 2) | levels 1, 2 |
+| ML-SME `Stress.shallow` | Fr, De = O(1) | (0, 0) | 2 / 3 layers, level 0 / 1, mean / upwind, 2-D |
+| ML-SME `Stress.full` | De = O(eps) | (1, 1) | 2 layers, level 0 / 1, upwind stress |
+
+The `nu d_e d_e w` term of the vertical row (dropped by hand in `apply_full_tensor`) is
+`eps^4/De`, eps^2 below `nu d_e d_z u_e` in every regime: the second truncation drops exactly it
+(test `test_vertical_nu_dxx_w_dropped_by_order`).  `nu d_z d_z w` (from `tau_zz = 2 rho nu d_z
+w`) is `eps^2/De`, the order of `nu d_e d_z u_e`: it survives wherever the vertical stress does
+(SME: through `p`, Marche (3.11); VAM: inside `P = -sigma_zz - rho g (eta - z)`).
+
+**Where the hand truncation differs from the thesis regime (Fr, De = O(1)).**
+
+- VAM, orders (0, 2): the vertical row keeps `-d_x tau_xz / rho = -nu d_x d_z u` (eps^2/De, the
+  order of the vertical inertia VAM keeps).  VAM(1), state `[b, h, q_0, q_1, r_0, r_1, P_0, P_1]`,
+  hand minus pipeline: `nonconservative_matrix[r_0, h] = -4 nu q_1 / h^2`,
+  `nonconservative_matrix[r_0, q_1] = 2 nu / h`, nothing else.  The order-consistent VAM at
+  De = O(1) keeps that term; the hand VAM is consistent with the weak-viscosity regime above (the
+  thesis' reductions table: VAM is `1/De -> 0`), where the vertical stress is eps^3.
+- SME `Stress.full` at De = O(1): keeping the in-plane stress (eps^2) consistently keeps the eps^2
+  vertical inertia too, i.e. a non-hydrostatic model (orders (2, 2) are refused by SME).  Orders
+  (2, 0) drop the vertical stress and with it `tau_zz`: SME(0) hand minus pipeline
+  `diffusion_matrix[q_0, q_0, x, x] = 2 nu`, `[q_0, h, x, x] = -2 nu q_0 / h` and a source term,
+  i.e. Marche's `2 mu grad(h div u)` of (5.19).  The hand `Stress.full` SME is the consistent
+  truncation for De <= O(eps) (Marche's regime), not for De = O(1).
+- ML-SME: its stand-in layer rows (hand-written) have no vertical inertia, so orders (2, 2) at
+  De = O(1) reproduce `Stress.full`; (2, 0) drops the vertical stress (`Pi = 0`: no `d_e tau_ez`
+  of the own layer or of the layers above), which differs at level 1, not at level 0
+  (`d_z u = 0`).
+- The consistency check refuses De^-1 = O(eps) with Marche's k_l = O(eps): the bed traction is then
+  O(eps^-1) against the shear scale (slip length << H, a boundary layer).
+
+**Not changed / open.**  The models keep the hand rules by default (the thesis-regime VAM
+differs, above).  Bulk closures without a physical tensor (Elder, Bingham, k-epsilon, QR) are
+refused by `InsertClosure` (their shallow-only closure needs a scaled form first); ML-VAM is not
+wired; `small_slope_scaling` (frame slopes O(eps)) is still a separate step; SME's surface
+normal-stress condition `p(eta) = tau_zz(eta)` is used when the vertical row keeps a stress (same
+group, eps^2/De), not scaled as its own boundary row.

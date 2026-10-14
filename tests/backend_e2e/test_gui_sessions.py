@@ -78,6 +78,8 @@ def test_gui_case(backend, case, servers, lib, report, tmp_path, request):
         report.append(row)
         pytest.skip(case.skip)
     url = servers(backend)
+    for peer in S.PEERS.get(case.id, ()):      # the backends its job submits participants to
+        servers(peer)
     composed = S.compose([case], lib)[0]
     case_py, spec = composed["casePy"], composed["spec"]
     (tmp_path / "case.py").write_text(case_py)
@@ -142,7 +144,9 @@ def test_gui_case(backend, case, servers, lib, report, tmp_path, request):
 
     # the same case on the host (dev mode: the same library)
     container = servers.info[backend][4]
-    if H.MODE == "dev" and backend in HOST_RUN and (backend in ("numpy", "jax") or container.rt == "apptainer"):
+    if case.id in S.NO_HOST_RUN:
+        row["host_run"] = f"none: {S.NO_HOST_RUN[case.id]}"
+    elif H.MODE == "dev" and backend in HOST_RUN and (backend in ("numpy", "jax") or container.rt == "apptainer"):
         cells = [(r, c) for r, c in S.cells(case_py) if r not in ("visualization", "postproc")]
         cells.append(("outputs", KEEP_STORE))
         t1 = time.monotonic()

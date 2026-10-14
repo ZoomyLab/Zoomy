@@ -54,10 +54,22 @@ def report():
                                "provenance": H.provenance(), "rows": merged}, indent=1))
 
 
+#: where every server sees the shared coupling directory (zoomy_server.peers: ZOOMY_COUPLE_DIR)
+#: and the registry of the servers up (ZOOMY_PEERS, `{adapter tag: url}`, rewritten as servers
+#: come up): a coupled case's job submits its other participants to their backends' servers
+COUPLE = "/e2e/couple"
+
+
 @pytest.fixture(scope="session")
 def servers(snap):
-    """`servers(name) -> url`: the backend's zoomy-server, started once (skip without image)."""
+    """`servers(name) -> url`: the backend's zoomy-server, started once (skip without image).
+    Every server binds one coupling directory at `COUPLE` and finds the others in its
+    `peers.json`."""
     up, started = {}, []
+    couple = H.WORK / f"{H.CHECKOUT.name}-{H.MODE}" / "couple"
+    couple.mkdir(parents=True, exist_ok=True)
+    registry = couple / "peers.json"
+    registry.write_text("{}")
 
     def get(name):
         if name not in up:
@@ -67,11 +79,17 @@ def servers(snap):
                 up[name] = ("skip", f"{name}: {how}")
             else:
                 c = H.Container(b, img, snap, H.WORK / f"{H.CHECKOUT.name}-{H.MODE}" / name,
-                                dev=H.MODE == "dev")
+                                dev=H.MODE == "dev", shared=((couple, COUPLE),),
+                                extra_env={"ZOOMY_COUPLE_DIR": COUPLE,
+                                           "ZOOMY_PEERS": f"{COUPLE}/peers.json"})
                 started.append(c)
                 t0 = time.monotonic()
                 try:
-                    up[name] = ("url", c.serve(), how, round(time.monotonic() - t0, 1), c)
+                    url = c.serve()
+                    up[name] = ("url", url, how, round(time.monotonic() - t0, 1), c)
+                    peers = json.loads(registry.read_text())
+                    peers[b.adapter] = url
+                    registry.write_text(json.dumps(peers))
                 except Exception as e:
                     up[name] = ("fail", f"{name}: server did not come up: {e}")
         kind, val = up[name][:2]
