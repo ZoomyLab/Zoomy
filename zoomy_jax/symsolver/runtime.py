@@ -30,6 +30,7 @@ from zoomy_core.symsolver.discretization.residual import check_derivative_aux
 from zoomy_core.symsolver.vocabulary import march_error
 from zoomy_core.symsolver.numpy_backend.assembly import (cell_pattern, host_amg_solve,
                                                           operator_neighbors)
+from zoomy_core.symsolver.settings import LinearSolver
 from zoomy_jax.fvm.implicit_ad import cellwise_solve, newton_root
 from zoomy_jax.mesh.mesh import lsq_gradient_per_field
 from zoomy_jax.fvm.reconstruction_jax import (
@@ -181,15 +182,16 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         partner cell across a periodic seam)."""
         return Qaux[:, j(fc0)], Qaux[:, j(fc_other)]
 
+    sides = np.concatenate([fc0, fc_cfl])          # both cells of every face
+
     def face_wavespeed(k, Q, Qaux, p, mesh):
-        """Max |eigenvalue| per face over the two adjacent cells."""
+        """Max |eigenvalue| per face over the two adjacent cells; both sides in one batched
+        evaluation of `k` (a numerical spectrum is one eigensolve of the batch)."""
         n = mesh.face_normals
-        evA = jnp.abs(k(Q[:, j(fc0)], Qaux[:, j(fc0)], p, n))
-        evB = jnp.abs(k(Q[:, j(fc_cfl)], Qaux[:, j(fc_cfl)], p, n))
-        if evA.ndim > 1:
-            axes = tuple(range(evA.ndim - 1))
-            evA, evB = jnp.max(evA, axis=axes), jnp.max(evB, axis=axes)
-        return jnp.maximum(evA, evB)
+        ev = jnp.abs(k(Q[:, j(sides)], Qaux[:, j(sides)], p, jnp.concatenate([n, n], axis=-1)))
+        if ev.ndim > 1:
+            ev = jnp.max(ev, axis=tuple(range(ev.ndim - 1)))
+        return jnp.maximum(ev[:nf], ev[nf:])
 
     def face_inradius(mesh):
         """Per-face cell size: min inradius of the two adjacent cells."""
@@ -518,10 +520,14 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
     amgx = _jaxamg() if ls.get("backend") == "amgx" else None
     pyamg = _pyamg() if ls.get("backend") == "pyamg" else None
     hyp = _hypre() if ls.get("backend") == "hypre" else None
+    # serial: a dense LU for every system (LinearSolver.dense), or up to dense_max unknowns
+    dense_max = (None if partition is not None else
+                 np.inf if ls.get("backend") == LinearSolver.dense else ls.get("dense_max"))
     patterns = {}
     # the assembled sparsity: the LSQ stencil and the periodic partners (operator_neighbors)
     lsq_nbrs = (operator_neighbors(topo, mesh_np)
-                if amgx is not None or pyamg is not None or hyp is not None else None)
+                if amgx is not None or pyamg is not None or hyp is not None
+                or dense_max is not None else None)
 
     def assembled(op, n, ncells=nc, n_rows=None):
         """Values of the linear operator `op` on the cell pattern of the first `ncells` cells
@@ -811,9 +817,31 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
                      lambda: None)
         return x.reshape(shape)
 
+    def _dense_solve(mv, b, k):
+        """`mv(x) = b` by an LU of the matrix of `mv`, assembled by colouring (cell-major, `k`
+        unknowns per cell) into a dense array: one factorisation on the device, no host
+        round trip; differentiable via `custom_linear_solve` (the transpose: `A^T`).
+
+        References:
+            Golub, Van Loan 2013, Matrix Computations, 4th ed., ch. 3
+        """
+        n = int(b.shape[0])
+        to_cell = lambda x: x.reshape(k, -1).T.reshape(-1)       # noqa: E731
+        to_row = lambda x: x.reshape(-1, k).T.reshape(-1)        # noqa: E731
+        vals = assembled(lambda x: to_cell(mv(to_row(x))), n)
+        rows, cols, _ = patterns[(n, nc, None)]
+        M = jnp.zeros((n, n), b.dtype).at[rows, cols].set(vals)
+
+        def solver(M):
+            """The solve with the matrix `M` for `custom_linear_solve`."""
+            return lambda _, rhs: to_row(jnp.linalg.solve(M, to_cell(rhs)))
+        return lax.custom_linear_solve(
+            mv, b, solve=solver(M), transpose_solve=solver(M.T) if ad_mode == "reverse" else None)
+
     def linsolve(A, b):
-        """Solve `A x = b` for the linear map `A` (linearized once at 0) by GMRES, AmgX, hypre
-        or AMG-preconditioned GMRES, as configured; differentiable via `custom_linear_solve`.
+        """Solve `A x = b` for the linear map `A` (linearized once at 0) by GMRES, AmgX, hypre,
+        AMG-preconditioned GMRES or a dense LU, as configured; differentiable via
+        `custom_linear_solve`.
         Aborts above the accept gate; a partitioned run uses `_hypre_solve`,
         `_dlinsolve` or `_amgx_mpi`.
 
@@ -829,7 +857,9 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
         shape = b.shape                                  # Krylov on flat vectors
         mv = lambda x: lin(x.reshape(shape)).reshape(-1)
         b = b.reshape(-1)
-        if amgx is not None:   # cell-major unknowns, one k x k block per cell
+        if dense_max is not None and b.shape[0] <= dense_max:
+            x = _dense_solve(mv, b, shape[0])
+        elif amgx is not None:   # cell-major unknowns, one k x k block per cell
             n, k = int(b.shape[0]), shape[0]
             to_cell = lambda x: x.reshape(k, -1).T.reshape(-1)       # noqa: E731
             to_row = lambda x: x.reshape(-1, k).T.reshape(-1)        # noqa: E731

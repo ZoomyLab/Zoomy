@@ -601,6 +601,7 @@ class JaxRuntime:
                 self.module)
             n_state = self.n_state
             n_dim = self.n_dim
+            from zoomy_jax.fvm.eigvals import eigvals   # lazy: zoomy_jax.fvm imports this module
 
             @jax.jit
             def _eig_full_num(Q, Qaux, parameters, normal):
@@ -614,7 +615,7 @@ class JaxRuntime:
                     # exact (the dropped components are identically zero) and a
                     # no-op when the ranks already agree (1-D / 3-D).
                     A_n = jnp.einsum("ijk,k->ij", ql, n[:n_dim])
-                    return jnp.real(jnp.linalg.eigvals(A_n))
+                    return jnp.real(eigvals(A_n))
                 return jax.vmap(per_cell, in_axes=(1, 1, 1),
                                 out_axes=-1)(Q, Qaux, normal)
             self.eigenvalues = _eig_full_num
@@ -799,6 +800,7 @@ class JaxRuntime:
                 self.module,
             )
             n_dim = self.n_dim
+            from zoomy_jax.fvm.eigvals import eigvals   # lazy: zoomy_jax.fvm imports this module
 
             def _max_wavespeed(*all_args):
                 q = jnp.asarray(all_args[:n_state])
@@ -811,7 +813,7 @@ class JaxRuntime:
                 ql = jnp.asarray(_ql_scalar(q, qaux, p))
                 ql = ql.reshape(n_state, n_state, n_dim)
                 A_n = jnp.einsum("ijk,k->ij", ql, n)
-                evs = jnp.linalg.eigvals(A_n)
+                evs = eigvals(A_n)
                 return jnp.max(jnp.abs(evs.real))
 
         # Inject before lambdifying numerics.

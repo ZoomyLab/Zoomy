@@ -363,11 +363,17 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
     pressure_linear_solver = OptionParam(
         LinearSolver, default=LinearSolver.auto,
         members=[LinearSolver.auto, LinearSolver.gmres, LinearSolver.amgx, LinearSolver.pyamg,
-                 LinearSolver.hypre],
+                 LinearSolver.hypre, LinearSolver.dense],
         doc="amgx (GPU, optional JAX-AMG), pyamg (CPU, optional PyAMG), hypre (CPU, serial or "
-            "MPI: BoomerAMG + FlexGMRES, the shared library of build_hypre_cuda.sh cpu-env) or "
-            "gmres (matrix-free, always available); auto: amgx on a GPU, hypre on the CPU, else "
-            "pyamg, when installed, else gmres.")
+            "MPI: BoomerAMG + FlexGMRES, the shared library of build_hypre_cuda.sh cpu-env), "
+            "dense (serial: LU of the assembled matrix on the device) or gmres (matrix-free, "
+            "always available); auto: on a GPU dense up to pressure_dense_max unknowns (serial), "
+            "else amgx; on the CPU hypre, else pyamg, when installed, else gmres.")
+    pressure_dense_max = param.Integer(
+        default=1024, bounds=(0, None),
+        doc="'auto' on a GPU, serial: a linear system of at most this many unknowns is solved "
+            "by a dense LU on the device (one factorisation, no host synchronisation; AmgX's "
+            "setup and Krylov iterations cost more below ~1000 unknowns).  0: never.")
     pressure_amg_rebuild = param.Integer(
         default=10, bounds=(1, None),
         doc="'pyamg' / 'hypre': rebuild the AMG hierarchy at least every this "
@@ -427,7 +433,8 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
         return self._setup(mesh, pred, systems, linsolve=dict(
             tol=tol, restart=int(ell["c_elliptic_restart"]),
             maxiter=self.pressure_maxit, accept=max(1e-6, 10.0 * tol),
-            backend=self._pressure_backend(), amgx=self.pressure_amgx,
+            backend=self._pressure_backend(), dense_max=self._dense_max(),
+            amgx=self.pressure_amgx,
             coarse=self.pressure_coarse,
             amg_rebuild=self.pressure_amg_rebuild, amg_growth=self.pressure_amg_growth))
 
@@ -448,6 +455,15 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
         except ImportError:
             return "gmres"
         return name
+
+    def _dense_max(self):
+        """'auto' on a GPU, serial: the largest system the dense LU solves (the others go to the
+        backend of `_pressure_backend`); else `None`."""
+        serial = self.comm is None or self.comm.Get_size() == 1
+        if (self.pressure_linear_solver == LinearSolver.auto and serial
+                and jax.default_backend() == "gpu" and self.pressure_dense_max > 0):
+            return int(self.pressure_dense_max)
+        return None
 
     def _newton(self):
         """Newton `(tol, maxit)` for a nonlinear pressure constraint, `None` for the linear
