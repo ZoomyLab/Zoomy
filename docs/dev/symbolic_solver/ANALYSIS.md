@@ -2732,3 +2732,46 @@ stationary solution).  (4) Tests: MacDonald-type steady states (prescribed `h(x)
 integrated from it: the exact discrete steady state is known), frictionless and with Manning,
 levels 0-2; the lake at rest as its `u = 0` corner; every backend through the template.  2-D
 needs the streamline (a velocity vector), as in the old code's 1-D restriction.
+
+## 60. Steffler VAM: the spurious wall pressure and the 5280-cell divergence were the oblique walls (2026-10-15, dev/vam-wall-pressure)
+
+Thesis migration defect (`cases/migration_status/steffler.md`): `SymbolicChorinSolverJax` on the
+Steffler bend (VAM(1), dim 3, `elder_fix` + Chezy) put |P_0| up to 425 into the inner-wall cells
+at 2150 cells (o1, t = 20 s; the legacy `ChorinSplitVAMSolverJax` <= 4e-4) and diverged at 5280
+cells within ~15 steps for every dt and pressure solver.  No library change here: section 57
+(dev/oblique-walls, on integ2) removes it.  Matched runs, the thesis driver
+`steffler_vam_jax.py --level 1 --bulk elder_fix --bottom chezy --psolver hypre`, legacy dt,
+before (integ: core cda425d, jax 53a6fcc; * the migration's own runs, `matrix_symsolver`, on the
+libraries of that day) vs integ2 (core b56c274, jax 9f620e8):
+
+| run | before | integ2 | legacy (`matrix_elder`) |
+|---|---|---|---|
+| o1 5280, dt 1.18e-3 | NaN at t = 0.0175 (15 steps; P_0 6.7e2 at r = 3.158, t = 0.01) | finite to t = 6 (5080 steps); max P_0 1.7e-3 (t = 2), 1.1e-3 (t = 6) | 1.3e-3 (t = 2), 8.5e-4 (t = 6) |
+| o2 5280 | diverges* | finite to t = 2.5 (2120 steps), P_0 1.6e-2 | 1.5e-2 (t = 2) |
+| o1 2150, wall cells, t = 8 / 20 | 0.84 / 425* | 7.2e-4 / 8.9e-4 | 4.1e-4 / 2.9e-4 |
+| o2 500, wall cells, t = 10 / 40 / 60 | 6.7e-2 / 5.4e-2 / 4.7e-2* | 1.3e-3 / 1.0e-4 / 8.4e-5 | 4.5e-4 / 8.9e-5 / 7.9e-5 (t = 50) |
+
+Mechanism (cause the integ libraries had).  The pressure rows read the predictor's divergence
+`q_x_k_x + q_y_k_y` from degree-2 LSQ fits.  On the bend's walls (oblique faces) the `Wall` ghost
+couples q_x and q_y, so section 41 classed both rows as ghost rows, and the base table's decoupled
+ghost informed the axis of x_f - x_c instead of the face normal.  A solid-body rotation
+q_k = c_k h w (-y, x) (divergence free, tangential to the circular walls) gets a wall divergence
+of 1.5e-3 (k = 0) / 4.5e-4 (k = 1) on integ against a derivative scale h w = 6e-3 (25 %); integ2
+(normal-frame vector closure, n.q Dirichlet, t.q Neumann) 4.5e-5 / 1.4e-5, interior 3e-17 on
+both.  The pressure solve and its correction are therefore not a projection at those cells:
+iterating `ChorinTemplate.project` on that state (no predictor, 5280 cells) multiplies the bend
+wall pressure by 1.7-2.9 per projection on integ (2.3e-2 -> 4.3e-1 in 5, at the inner-wall row
+r = 3.158 where the runs blew up), and by 0.35 on integ2 (3.6e-3 -> 6.1e-5).  A growth per
+projection does not depend on dt, which is what the reported dt / solver sweeps saw; at 2150
+cells the factor is near 1 (slow growth from t = 5 s, saturation at 425).
+
+Remaining difference to the legacy (factor 2-3 in the startup front's P_0 at the wall, the late
+o2 values equal): not the wall closure of the divergence.  The legacy differentiated the momentum
+with extrapolated wall samples (`u_bf=None`); integ2 with those samples (the press system's wall
+ghosts of the q rows set to the inner cell, o1 2150, `--wave-speed bound`) gives P_0 1.3e-3 at
+t = 7 against 1.0e-3 without: the no-penetration closure is the better one and stays.  The legacy
+used other predictor numerics (Perron wave speed, its stencils; steffler.md, causes 1-2).
+
+Open (not a closure defect of this case): free slip on a curved wall is `d u_t/dn = kappa u_t`
+(zero shear), the vector closure imposes `d(t.q)/dn = 0` (the flat-wall form): O(h kappa) at the
+walls, the order of the 4.5e-5 above.
