@@ -24,7 +24,7 @@ from zoomy_core.symsolver import PyPrinter, default_wave_speed
 from zoomy_core.misc.options import OptionParam
 from zoomy_core.solver.constants import elliptic_constants
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings, LinearSolver
-from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
+from zoomy_core.symsolver.strategies.chorin import ChorinTemplate, check_overlap
 from zoomy_core.symsolver.strategies.hyperbolic import CoupledFace, HyperbolicTemplate
 from zoomy_core.symsolver.vocabulary import march_error
 from zoomy_core.systemmodel.padding import pad_to_square
@@ -469,6 +469,7 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
             projection=self.projection,
             **self._config())
         if self.couple:
+            check_overlap(template, self.couple["overlap"])
             return "chorin_precice", PyPrinter().procedure(
                 "chorin_precice", (Q, Qaux, p, time, mesh), template.precice_march)
         return "chorin", PyPrinter().procedure(
