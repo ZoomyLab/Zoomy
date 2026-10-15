@@ -598,11 +598,23 @@ def _c15():
             for k in ("hyperbolic", "imex", "chorin") for p in ("fwd", "rev")]
 
 
+#: the Chorin march coupled by overlapping Schwarz (gate 54: VAM(1), C10's wave, 30 | 30 cells,
+#: overlap `overlap_rings` = 2 per stage + 1, serial-implicit + IQN-ILS): pair -> (backend,
+#: projection, time_order, horizontal dimensions; 2: C10's quads, ny 2); serial only
+C16_VAM = {"vam_jax": ("jax", "standard", 1, 1), "vam_jax_increment": ("jax", "increment", 1, 1),
+           "vam_jax_t2": ("jax", "standard", 2, 1), "vam_jax_2d": ("jax", "standard", 1, 2),
+           "vam_numpy": ("numpy", "standard", 1, 1),
+           "vam_foam": ("foam", "standard", 1, 1), "vam_foam_2d": ("foam", "standard", 1, 2),
+           "vam_amrex": ("amrex", "standard", 1, 1), "vam_amrex_2d": ("amrex", "standard", 1, 2)}
+
+
 def _c16():
-    from custom import couple
+    from custom import couple, couple_chorin
     return [Run(pair, None, 0.0, custom=partial(lambda b, c, w, pair=pair: couple(pair, _ranks(c))),
                 configs=("serial", "mpi2"), backends=(pair.split("_")[0],), launch=False)
-            for pair in ("jax_jax", "jax_foam", "foam_foam", "amrex_amrex", "amrex_jax")]
+            for pair in ("jax_jax", "jax_foam", "foam_foam", "amrex_amrex", "amrex_jax")
+            ] + [Run(pair, None, 0.0, custom=partial(lambda b, c, w, bp=bp: couple_chorin(*bp)),
+                     backends=(bp[0],), launch=False) for pair, bp in C16_VAM.items()]
 
 
 C17_DIFF = tuple(f"diff_{bc}_{path}" for bc in ("neu", "per") for path in ("expl", "impl", "ssp2")
@@ -970,7 +982,8 @@ CASES = {
              for o in (1, 2) for n in (20, 40, 80)]
             + [Run("ref_n160", partial(imex_bump, 2, 160), 0.3, imex=Imex.lie, backends=("jax",))]),
     "C15": ("AD (JAX): jvp vs central FD, reverse vs forward, dJ/dg", _c15()),
-    "C16": ("preCICE: coupled (2 x 100 cells, window 1e-3, O1) vs single domain", _c16()),
+    "C16": ("preCICE: coupled (2 x 100 cells, window 1e-3, O1) vs single domain; the Chorin "
+            "march (VAM(1)) by overlapping Schwarz (gate 54)", _c16()),
     "C17": ("AMR (AMReX, gates 37, 51): covering, static patch, reflux, lake, regrid; diffusion",
             _c17()),
     "C18": ("Euler 3-D Sod along x, y, z (n x 2 x 2), HLL, t = 0.2",

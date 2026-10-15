@@ -2,6 +2,7 @@
 AMR (C17; with diffusion: gate 53) and the wrapped gates 40 / 41 / 43 / 44 / 39 / 45 (C27-C30, C34).  Each
 returns {metric: value} (rank 0; None on the other ranks)."""
 import contextlib
+import json
 import os
 import re
 import subprocess
@@ -136,6 +137,24 @@ def couple(pair, ranks):
     if rc != 0 or m is None:
         raise RuntimeError(f"gate failed (rc {rc}):\n{out[-2000:]}")
     return dict(coupled_vs_single=float(m.group(1)), mass=float(m.group(2)))
+
+
+def couple_chorin(backend, projection, time_order=1, dim=1):
+    """Gate 54 (`backend`, `projection`, `time_order`, `dim` horizontal dimensions): the Chorin
+    march (VAM(1), C10's wave) as two participants coupled by overlapping Schwarz (2 overlap rings
+    per SSP-RK stage + 1, serial-implicit, IQN-ILS on the pressure) vs the single domain:
+    max|coupled - single|, |mass coupled - single|, the coupling iterations per window."""
+    rings = 2 * time_order + 1                    # ChorinTemplate.overlap_rings (SSP-RK stages)
+    rc, out = _gate(["gate54_chorin_precice.py", str(rings), "serial-implicit", backend,
+                     projection, "iqn"], timeout=600, GATE54_TIME_ORDER=str(time_order),
+                    GATE54_DIM=str(dim))
+    m = re.search(r"^GATE54 (\{.*\})$", out, re.M)
+    if rc != 0 or m is None:
+        raise RuntimeError(f"gate 54 failed (rc {rc}):\n{out[-2000:]}")
+    d = json.loads(m.group(1))
+    return dict(coupled_vs_single=d["coupled_vs_single"], mass=d["mass"],
+                iterations_mean=float(np.mean(d["iterations"])),
+                iterations_max=float(max(d["iterations"])))
 
 
 # ── C17: AMReX AMR (gate 37) ────────────────────────────────────────────────
