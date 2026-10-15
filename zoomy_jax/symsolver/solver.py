@@ -24,7 +24,7 @@ from zoomy_core.symsolver import PyPrinter, default_wave_speed
 from zoomy_core.misc.options import OptionParam
 from zoomy_core.solver.constants import elliptic_constants
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings, LinearSolver
-from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
+from zoomy_core.symsolver.strategies.chorin import ChorinTemplate, check_overlap
 from zoomy_core.symsolver.strategies.hyperbolic import CoupledFace, HyperbolicTemplate
 from zoomy_core.symsolver.vocabulary import march_error
 from zoomy_core.systemmodel.padding import pad_to_square
@@ -59,7 +59,9 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
                             "frozen_mass_row=bool, interface=SystemModel | NSM]) "
                             "(`HyperbolicTemplate.precice_march`; a `ColumnPreciceAdapter` "
                             "towards a VOF peer or, with `interface`, towards another level "
-                            "of the model).")
+                            "of the model); Chorin: dict(adapter=, tag=, overlap=layers) "
+                            "(`ChorinTemplate.precice_march`: the mesh reaches `layers` cell "
+                            "rings across the interface, its outer boundary tagged `tag`).")
     comm = param.Parameter(default=None, doc=(
         "mpi4py communicator: a distributed run, each rank on its piece of "
         "the mesh (owned cells + halo).  setup() takes the global mesh and "
@@ -400,8 +402,12 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
         settings, then `_setup`; returns the initial `(Q, Qaux)`.
         """
         self._bind()
-        if self.couple:
-            raise NotImplementedError("Chorin with preCICE coupling")
+        if self.couple and self.couple.get("overlap") is None:
+            raise ValueError("Chorin with preCICE coupling: couple=dict(adapter=, tag=, "
+                             "overlap=layers), the mesh reaching `layers` cell rings across "
+                             "the interface (`ChorinTemplate.precice_march`)")
+        if self.couple and self.subcycling:
+            raise ValueError("the coupled Chorin march takes one step per window")
         if not isinstance(pred, NumericalSystemModel):
             pred = NumericalSystemModel.from_system_model(
                 pad_to_square(pred), additional_systems=[press, corr])
@@ -480,5 +486,9 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
             self.nsm, self.press, self.corr, pressure_newton=self._newton(),
             projection=self.projection,
             **self._config())
+        if self.couple:
+            check_overlap(template, self.couple["overlap"])
+            return "chorin_precice", PyPrinter().procedure(
+                "chorin_precice", (Q, Qaux, p, time, mesh), template.precice_march)
         return "chorin", PyPrinter().procedure(
             "chorin", (Q, Qaux, p, time, time_end, mesh), template.march)
