@@ -177,6 +177,9 @@ def amr(case, config, work):
     else:
         res["mass"] = float(abs(r["Q"][1].sum() / r["I0"][1].sum() - 1))
         res["h_min"] = float(min(np.nanmin(r["Q"][1]), np.nanmin(r["L1"][1])))
+        if case == "dry_long":          # the steps against the fine single level's
+            G.ref(out, case, numpy=False)
+            res["steps"] = float(r["steps"]) / float(np.load(out / f"ref_{case}.npz")["steps"])
     return res
 
 

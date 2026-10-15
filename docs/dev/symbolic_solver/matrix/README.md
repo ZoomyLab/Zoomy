@@ -117,7 +117,7 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C14 IMEX | bump in flow + Manning n 0.5 (implicit source), t 0.3, nx 20/40/80 vs JAX nx 160 | order >= 0.5 (O1, observed) / 0.8 (O2, Lie splitting); mass; parallel; GPU |
 | C15 AD (JAX) | hyperbolic and IMEX bump 12^2, Chorin C10 wave 30 x 3; dJ/dg | abs(FD - jvp) <= 1e-5 (rel); abs(rev - jvp) <= 1e-10; mpi2 / gpu1 jvp vs serial <= 1e-12 |
 | C16 preCICE | gates 28 (jax-jax), 10 (jax-foam), 26 (foam-foam): 2 x 100 cells, O1, window 1e-3 | coupled vs single domain and mass drift <= 1e-14 (gate 26) |
-| C17 AMR (AMReX) | gate 37: covering fine level, static patch (Euler wave), box with / without reflux, lake, regrid on the dry front. `diff_{neu,per}_{expl,impl,ssp2}` (gate 53): gate 41's heat equation, nu 0.05, base 16^2 + one level, u0 = 1 + a bump across the interface of the static patch [0.25, 0.75]^2, t 0.1; `expl` the explicit slot (SSP-RK), `impl` Lie / Crank-Nicolson, `ssp2` IMEX-SSP2: the covering level, the patch with and without reflux, the fine and the coarse single level. `diff_shear_impl`: C32's viscous SME (Stress.full, x-varying u0), Lie, the covering level | covering = fine single level, mass / energy with reflux, lake abs(u) <= 1e-12; wave order >= 1.5. Diffusion: covering = fine single level (expl round-off, implicit 1e-9), patch mass change with reflux <= 1e-12 (round-off; without: information, the control), L1(AMR - fine single) / L1(coarse single - fine single) <= 0.75 (observed 0.37 expl, 0.59 impl / ssp2: the fine halo takes the coarse level's new state in every stage, an O(dt) lag at the interface) |
+| C17 AMR (AMReX) | gate 37: covering fine level, static patch (Euler wave), box with / without reflux, lake, regrid on the dry front (`dry`: base 32^2, t 0.05; `dry_long`: base 64^2, t 0.1, the front at the walls). `diff_{neu,per}_{expl,impl,ssp2}` (gate 53): gate 41's heat equation, nu 0.05, base 16^2 + one level, u0 = 1 + a bump across the interface of the static patch [0.25, 0.75]^2, t 0.1; `expl` the explicit slot (SSP-RK), `impl` Lie / Crank-Nicolson, `ssp2` IMEX-SSP2: the covering level, the patch with and without reflux, the fine and the coarse single level. `diff_shear_impl`: C32's viscous SME (Stress.full, x-varying u0), Lie, the covering level | covering = fine single level, mass / energy with reflux, lake abs(u) <= 1e-12; wave order >= 1.5; dry: h_min >= 0, mass round-off, `dry_long` steps / the fine single level's steps <= 1.5 (observed 0.94; before ANALYSIS 55: 25 at time_order 1, NaN at 2). Diffusion: covering = fine single level (expl round-off, implicit 1e-9), patch mass change with reflux <= 1e-12 (round-off; without: information, the control), L1(AMR - fine single) / L1(coarse single - fine single) <= 0.75 (observed 0.37 expl, 0.38 impl: composite stages, ANALYSIS 55; 0.59 ssp2: its stages are not cut, the fine halo takes the coarse level's new state, an O(dt) lag at the interface) |
 | C18 Euler Sod 3-D | n x 2 x 2 along x, y, z, HLL, minmod, t 0.2, O1 / O2 + MOOD, n 50/100 | L1(rho) vs exact (Toro ch. 4) at n 100: O1 <= 4.2e-2, O2 <= 1e-2; order >= 0.45 / 0.8 (observed; discontinuous); x / y / z profiles and u_perp <= 1e-12 |
 | C19 Euler wave 3-D | periodic [0,1]^3, u (1, .5, .25), n 8/16/24, t 0.1, O1 / O2 none / O2 minmod | order 16->24: O1 >= 0.75 (observed), O2 >= 1.8 (theory); u and p constant (round-off) |
 | C20 Euler walls 3-D | 16^3, centred pulse, t 0.6, O1 / O2 + MOOD | mass, energy, mirror / permutation symmetry <= 1e-12 |
@@ -230,6 +230,17 @@ fix, C37): C3, C8, C13, C14, C31, C37 rerun serial (four backends) and mpi2 (JAX
 all PASS, 0 FAIL in the table (960 PASS rows; the other cases' rows are the pre-merge runs, so
 integ's new C5 front rows are absent here).  Against integ's table the six cases differ in the
 same three round-off rows as above; C37 (115 rows) all PASS.
+
+## Results (2026-10-15, dev/amrex-amr-gpu: AMReX AMR composite stages, GPU stream / smoother)
+
+ANALYSIS 55.  Main's store with the AMReX runs of C17 (serial, mpi2, gpu1), C5, C8, C26, C37 (every
+config) and the JAX serial references of C5, C8, C26, C37 rerun on core 63cdf15, amrex 9c133a5
+(image: the published `zoomy_amrex.sif` plus `libnvjitlink-12-6`).  Every AMReX row of C5-C9, C17,
+C26, C37: PASS (0 FAIL).  New rows: C17 `dry` (mass 0, h_min 0; was NaN), `dry_long` (steps 0.94
+of the fine single level's).  Moved: C17 `diff_*_impl` ratio 0.59 -> 0.38 (composite stages),
+`boxnr` (no-reflux control) mass / energy 6.15e-4 / 1.46e-3 (was 5.91e-4 / 1.44e-3), box energy
+2.2e-16 -> 0, C9 C8 GPU 7.2e-12 -> 8.8e-12 (hypre's GPU smoother).  `table.md` not regenerated
+(mixed store: its 13 FAILs are NumPy / foam / JAX ranks from main against integ's JAX serial).
 
 ## Results (2026-10-14, dev/numerics-robust: march check, thin cells, HLL Davis bounds, Manning at rest)
 

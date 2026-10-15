@@ -258,8 +258,9 @@ TH.update({
     "C33 scheme": {"imex": ("<=", 1e-10, "tolerance (Newton 1e-12; observed 3e-12 C++, 4e-15 JAX)"),
                    "rk2": RO},
     "C33 xb": {"imex": ("<=", 1e-10, "tolerance (Newton 1e-12; observed 1.3e-12)"), "rk2": RO},
-    "C17 diff": ("<=", 0.75, "observed 0.37 expl, 0.59 impl / ssp2 (the fine halo takes the coarse "
-                             "level's new state in every stage: an O(dt) interface lag)"),
+    "C17 diff": ("<=", 0.75, "observed 0.37 expl, 0.38 impl (composite stages, ANALYSIS 55), 0.59 "
+                             "ssp2 (its stages are not cut: the fine halo takes the coarse level's "
+                             "new state, an O(dt) interface lag)"),
     "C37 heat": (">=", 1.8, "theory 2 (stiff: nu dt / dx^2 = 12.8 at k = 0)"),
     "C37 adv": {"ssp2": (">=", 1.8, "theory 2"), "lie1": (">=", 0.8, "theory 1"),
                 "lie2": ("<=", 1.4, "theory 1: the Lie splitting caps SSP-RK2")},
@@ -1001,7 +1002,8 @@ def measure():
         visc_checks(add, b, g, J)
         imex_diffusion_checks(add, b, g, J)
         for c in CONFIGS:                       # C17: AMR (gate 37)
-            for k in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry"):
+            for k in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry",
+                      "dry_long"):
                 d = g("C17", k, c)
                 if d is None:
                     continue
@@ -1013,7 +1015,10 @@ def measure():
                         ("mass", "mass drift", RO if k != "boxnr" else None),
                         ("energy", "energy drift", RO if k != "boxnr" else None),
                         ("u", "max|u|", ("<=", 1e-12, "theory (well-balanced)")),
-                        ("h_min", "h_min", (">=", 0.0, "theory (positivity)"))):
+                        ("h_min", "h_min", (">=", 0.0, "theory (positivity)")),
+                        ("steps", "steps / the fine single level's steps",
+                         ("<=", 1.5, "observed 0.94 (the fine level sets the step; before "
+                                     "ANALYSIS 55: 25 at time_order 1, NaN at 2)"))):
                     if key in m:
                         add("C17", f"{k} {lab}", b, c, m[key], th,
                             "no reflux: not conservative" if k == "boxnr" else "")
