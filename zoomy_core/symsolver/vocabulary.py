@@ -315,6 +315,21 @@ class coupled_ghosts(Block):
     `2 face - own` (`own`, `face`: `(rows, coupled faces)`)."""
 
 
+# ── the overlap of a Schwarz-coupled participant (`zoomy_core.mesh.overlap`) ──────────
+class overlap_cells(Block):
+    """`(mesh)` -> cell mask of the overlap: the cells across the coupled interface that hold
+    the peer's values."""
+
+
+class overlap_states(Block):
+    """`(Q, mesh)` -> `(rows, mirror cells)`: the own cells the peer holds as its overlap."""
+
+
+class overlap_fill(Block):
+    """`(Q, peer, mesh)` -> `Q` with the overlap cells' columns from `peer`
+    `(rows, overlap cells)`."""
+
+
 # ── effects ─────────────────────────────────────────────────────────────────
 class io:
     """Output effects; `save_state` / `load_state`: the restart pair of the march state."""
@@ -337,6 +352,12 @@ class couple:                    # one preCICE participant
     window_complete = Effect(1)  # () -> the last advance completed a time window
     read_round_trip = Effect(1)  # () -> the own interface states as the peer reads them
                                  #    (in the interface model of a lifted shared face)
+    # implicit coupling (coupling iterations inside a window: the Chorin march's overlapping
+    # Schwarz): `read` is the peer's data at the window start, `read_iterate` at the window end
+    # (its last iteration; in the first iteration the window start), `repeat` after `advance`
+    # whether preCICE repeats the window (not converged: restart it from the window start)
+    read_iterate = Effect(1)     # () -> the peer's data of its last coupling iteration
+    repeat = Effect(1)           # () -> the window is repeated
 
 
 class check:

@@ -47,7 +47,7 @@ def geometry_of(topo, X):
 
 
 def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_load=None,
-            implicit=None, systems=None, partition=None):
+            implicit=None, systems=None, partition=None, couple=None):
     """The name table (dict of callables) a printed solver runs against: the numpy
     implementation of every `zoomy_core.symsolver` block on this mesh.
 
@@ -62,6 +62,8 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
         systems: further `{name: (nsm, NumpyKernels)}` a template uses besides `nsm`
         partition: this rank's piece of a distributed run (`mesh.distributed.Partition`); its
             halo exchange, global reductions and distributed solves replace the serial ones
+        couple: preCICE settings of an overlap (Schwarz-coupled) participant,
+            `dict(adapter=, tag=, overlap=)` (`ChorinTemplate.precice_march`)
     Returns:
         dict name -> callable
     """
@@ -865,7 +867,41 @@ def runtime(nsm, rt, mesh_np, topo, geom, *, on_write=None, on_save=None, on_loa
     if dist is not None:
         m.update(dist.blocks())
         m["_distributed"] = dist
+    if couple is not None:
+        m.update(_overlap_coupling(couple, rt, mesh_np))
     return m
+
+
+def _overlap_coupling(cfg, rt, mesh_np):
+    """Blocks and `couple_*` effects of a participant coupled by overlapping Schwarz
+    (`ChorinTemplate.precice_march`; `zoomy_core.symsolver.precice_adapter`)."""
+    from zoomy_core.symsolver.precice_adapter import overlap_participant
+    if cfg.get("overlap") is None:
+        raise NotImplementedError("numpy backend: preCICE coupling of the Chorin march only "
+                                  "(couple=dict(adapter=, tag=, overlap=))")
+    a = cfg["adapter"]
+    over, mirror = overlap_participant(cfg, mesh_np, int(rt.n_state))
+    mask = np.zeros(int(mesh_np.n_inner_cells), dtype=bool)
+    mask[over] = True
+
+    def fill(Q, peer, mesh):
+        """`Q` with the overlap's columns from `peer`."""
+        Q = np.array(Q, dtype=float)
+        Q[:, over] = peer
+        return Q
+
+    def eff(host):
+        """Effect body: the host call, the order token incremented."""
+        def body(tok, *args):
+            """Call the host; returns the next token and its outputs."""
+            r = host(*args)
+            return (tok + 1, *(r if isinstance(r, tuple) else (r,)))
+        return body
+    return dict(overlap_cells=lambda mesh: mask,
+                overlap_states=lambda Q, mesh: np.asarray(Q)[:, mirror], overlap_fill=fill,
+                couple_init=eff(a.init), couple_max_dt=eff(a.max_dt), couple_read=eff(a.read),
+                couple_read_iterate=eff(a.read_iterate), couple_write=eff(a.write),
+                couple_advance=eff(a.advance), couple_repeat=eff(a.repeat))
 
 
 def build(src, name, module):

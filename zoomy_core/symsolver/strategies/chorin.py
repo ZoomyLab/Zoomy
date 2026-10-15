@@ -7,14 +7,14 @@ RK3 and `imex=Imex.ssp2` uses IMEX-SSP2(2,2,2) with projected stages.
 import sympy as sp
 
 from zoomy_core.misc.options import Option, typed
-from zoomy_core.symsolver.core import LinSolve, While
+from zoomy_core.symsolver.core import Cond, LinSolve, While
 from zoomy_core.symsolver.discretization.residual import (
     explicit_step, full_aux, imex_step, implicit_step, mood_step)
-from zoomy_core.symsolver.discretization.time import IMEX_RK, SSP_RK, Imex
-from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
+from zoomy_core.symsolver.discretization.time import IMEX_RK, SSP_RK, Imex, cfl_dt, checked
+from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate, _write
 from zoomy_core.symsolver.vocabulary import (
-    boundary_ghosts, cells, derivative_aux, diffusion, halo, put, reduce_max,
-    take, zeros)
+    boundary_ghosts, cells, couple, derivative_aux, diffusion, halo, io, overlap_cells,
+    overlap_fill, overlap_states, put, reduce_max, select, take, zeros)
 
 
 class Projection(Option):
@@ -56,15 +56,23 @@ class ChorinTemplate(HyperbolicTemplate):
         self.pressure_newton = pressure_newton
         self.projection = typed(Projection, projection, "projection")
 
-    def step(self, Q, Qaux, p, time, dt, mesh, *, dt_rule=None):
+    def step(self, Q, Qaux, p, time, dt, mesh, *, dt_rule=None, dirichlet=None,
+             pressures=None):
         """One time step: the outer SSP-RK over projection stages; with `imex=Imex.ssp2`
         every stage solves the implicit source and is then projected.
 
         Args:
             dt_rule: the first stage picks `dt`.
+            dirichlet: `(mask, (P_1, .., P_m))`: the pressure solve of SSP-RK stage `i`
+                keeps the cells `mask` at the pressure `P_i` (the overlap of a Schwarz-coupled
+                participant, `precice_march`); not with `Imex.ssp2`.
+            pressures: a list that receives each stage's pressure.
         Returns:
             `(Q, Qaux, dt)`.
         """
+        if dirichlet is not None and self.imex is Imex.ssp2:
+            raise NotImplementedError("Dirichlet pressure data (the coupled march) with "
+                                      "IMEX-SSP2's projected stages")
         # Imex.ssp2: the pressure joins the implicit part S (the source and the two-point
         # part of the implicit diffusion, `implicit_stage`) in the tableau as the stage
         # correction B_i = A_ii dt G P_i (off the pressure rows); f, S act on the
@@ -106,25 +114,135 @@ class ChorinTemplate(HyperbolicTemplate):
             if dt_rule is not None:
                 Q, dt = Q
             return Q, full_aux(self.nsm, Q, Qaux, p, time + dt, dt, mesh), dt
-        Q0 = Q
-        for i, (a, c) in enumerate(SSP_RK[self.time_order]):
+        Q0, stages = Q, SSP_RK[self.time_order]
+        if dirichlet is not None and len(dirichlet[1]) != len(stages):
+            raise ValueError(f"dirichlet: {len(dirichlet[1])} stage pressures for "
+                             f"{len(stages)} stages")
+        for i, (a, c) in enumerate(stages):
             rule = dt_rule if i == 0 else None
+            held = None if dirichlet is None else (dirichlet[0], dirichlet[1][i])
             Q_stage, dt = self.stage(Q, Qaux, p, time + c * dt if i else time,
-                                     dt, mesh, rule)
+                                     dt, mesh, rule, held)
+            if pressures is not None:
+                pressures.append(take(Q_stage, tuple(self.press.equation_to_state_index)))
             Q = a * Q0 + (1 - a) * Q_stage
         return Q, full_aux(self.nsm, Q, Qaux, p, time + dt, dt, mesh), dt
 
-    def precice_march(self, *args, **kwargs):
-        """Not supported: raises `NotImplementedError`."""
-        raise NotImplementedError("Chorin with preCICE coupling")
+    def overlap_rings(self):
+        """The fewest overlap rings of `precice_march` in this configuration: 2 per SSP-RK
+        projection stage (the predictor's flux and its derivative aux each reach one ring
+        further), plus one.  Measured at reconstruction order 1 with a one-ring LSQ stencil
+        (gate 54, VAM(1)): one ring less is off by 1e-13 .. 5e-8 in some configurations
+        (the increment projection's lagged correction reaches one ring further); wider
+        derivative stencils need more.
+        """
+        return 2 * len(SSP_RK[self.time_order]) + 1
 
-    def stage(self, Q, Qaux, p, time, dt, mesh, dt_rule=None):
+    def precice_march(self, Q, Qaux, p, time, mesh):
+        """The march as one preCICE participant coupled by overlapping Schwarz: the mesh
+        reaches across the coupled interface into the peer's domain (the overlap,
+        `zoomy_core.mesh.overlap`), one step per time window of an implicit coupling scheme.
+        Every coupling iteration takes the whole step from the window start, the overlap
+        holding the peer's state at the window start: the predictor and the aux run over the
+        overlap too (the overlap must be wide enough that their invalid outer rings do not
+        reach the own cells' stencils), the pressure solve keeps the overlap's pressure at the
+        peer's of its last iteration (a Dirichlet subdomain solve) and the participant writes
+        its mirror cells (`overlap_states`, all rows).  preCICE repeats the window until the
+        exchanged data converge; at the fixed point every own-cell equation of the step reads
+        the peer's values, the single-domain step (to the coupling and pressure tolerances).
+        With several SSP-RK stages (`time_order` 2, 3) the exchanged rows are the state, then
+        each stage's pressure (the Dirichlet data of that stage's solve); the overlap must then
+        cover the stencils of every stage (`overlap_rings`, which the backends enforce).
+        Constant step = the window, reconstruction order 1, no MOOD, no IMEX-SSP2, no implicit
+        diffusion (a second solve over both domains).
+
+        References:
+            Toselli, Widlund 2005 (overlapping Schwarz), https://doi.org/10.1007/b137868
+            Chourdakis et al. 2022, https://doi.org/10.12688/openreseurope.14445.2
+        """
+        nsm, rows = self.nsm, tuple(self.press.equation_to_state_index)
+        if self.order != 1:
+            raise NotImplementedError("the coupled Chorin march at reconstruction order "
+                                      f"{self.order}: its overlap rings are not established "
+                                      "(`overlap_rings`, order 1)")
+        if self.mood:
+            raise NotImplementedError("the coupled Chorin march without MOOD (its "
+                                      "demotion is a global decision)")
+        if self.imex is Imex.ssp2:
+            raise NotImplementedError("the coupled Chorin march with IMEX-SSP2's projected "
+                                      "stages")
+        if nsm.call.diffusion_matrix is not None and self.imex is not None:
+            raise NotImplementedError("the coupled Chorin march with an implicit diffusion "
+                                      "(a second solve over both domains)")
+        cfl, dimension, every = self.cfl, self.dimension, self.cfl_check_every
+        dt_write = self.dt_write
+        # the exchanged rows: the state; with several stages then each stage's pressure
+        m, n_state, n_p = len(SSP_RK[self.time_order]), len(nsm.sm.state), len(rows)
+        state = tuple(range(n_state))
+        stage_rows = [tuple(n_state + i * n_p + r for r in range(n_p)) for i in range(m)]
+        n_rows = n_state + (0 if m == 1 else m * n_p)
+
+        def written(Q, P):
+            """The exchanged rows of the state `Q` and the stage pressures `P`."""
+            if m == 1:
+                return Q
+            X = put(zeros(n_rows, mesh), state, Q)
+            for r, P_i in zip(stage_rows, P):
+                X = put(X, r, P_i)
+            return X
+
+        def peer(data):
+            """The peer's exchanged rows on the overlap cells (zero elsewhere)."""
+            return overlap_fill(zeros(n_rows, mesh), data, mesh)
+
+        def window(time, Q, Qaux, going, n_write):
+            """One window: coupling iterations of the step from its start until preCICE
+            accepts the exchanged data."""
+            dt = checked(couple.max_dt(), time, every,
+                         lambda: cfl_dt(nsm, Q, Qaux, p, mesh, cfl, dimension))
+            if m == 1:                                     # the peer's window start
+                Q = overlap_fill(Q, couple.read(), mesh)
+            else:
+                Q = select(overlap_cells(mesh), take(peer(couple.read()), state), Q)
+
+            def iteration(Q1, Qaux1, going, repeat):
+                """The step from the window start, the overlap's stage pressures the peer's of
+                its last iteration; write the mirror, advance."""
+                if m == 1:
+                    P = (take(overlap_fill(Q, couple.read_iterate(), mesh), rows),)
+                else:
+                    Z = peer(couple.read_iterate())
+                    P = tuple(take(Z, r) for r in stage_rows)
+                stages = []
+                Q1, Qaux1, _ = self.step(Q, Qaux, p, time, dt, mesh,
+                                         dirichlet=(overlap_cells(mesh), P), pressures=stages)
+                couple.write(overlap_states(written(Q1, stages), mesh))
+                going = couple.advance(dt)
+                return Q1, Qaux1, going, couple.repeat()
+
+            Q, Qaux, going, _ = While(lambda Q1, Qaux1, going, repeat: repeat, iteration,
+                                      (Q, Qaux, going, sp.S.true))
+            time = time + dt
+            if dt_write is not None:
+                n_write = Cond(time >= (n_write - sp.Rational(1, 10**9)) * dt_write,
+                               lambda: _write(time, Q, Qaux, n_write), lambda: n_write)
+            return time, Q, Qaux, going, n_write
+
+        going = couple.init(overlap_states(written(Q, [take(Q, rows)] * m), mesh))
+        if dt_write is not None:
+            io.write(time, Q, Qaux)
+        time, Q, Qaux, *_ = While(lambda time, Q, Qaux, going, n_write: going, window,
+                                  (time, Q, Qaux, going, 1))
+        return time, Q, Qaux
+
+    def stage(self, Q, Qaux, p, time, dt, mesh, dt_rule=None, dirichlet=None):
         """One projection stage: predictor, pressure solve, correction; returns
         `(Q, dt)`.
 
         Args:
             dt_rule: `dt` is chosen only by the predictor's flux, so the stage keeps
                 the aux it is given.
+            dirichlet: see `step`.
         """
         if dt_rule is None:
             Qaux = full_aux(self.nsm, Q, Qaux, p, time, dt, mesh)
@@ -133,24 +251,28 @@ class ChorinTemplate(HyperbolicTemplate):
         lag = (take(Q, tuple(self.press.equation_to_state_index))
                if self.projection is Projection.increment else None)
         Q, dt = self.predictor(Q, Qaux, p, time, dt, mesh, dt_rule)
-        return self.project(Q, p, time, dt, mesh, lag), dt
+        return self.project(Q, p, time, dt, mesh, lag, dirichlet), dt
 
-    def project(self, Q, p, time, dt, mesh, lag=None):
+    def project(self, Q, p, time, dt, mesh, lag=None, dirichlet=None):
         """The pressure solve and the correction of `Q`.
 
         Args:
             lag: `None`: solve for the pressure.  Else the lagged pressure `P^n`:
                 correct with it, solve `press` on that state for `dP` (the corrector
                 is linear in the pressure) and correct `Q` with `P^n + dP`.
+            dirichlet: `(mask, P)`: the pressure of the cells `mask` is `P` (with `lag`, the
+                increment there is `P - P^n`).
         """
         if lag is None:
-            Q = pressure(self.press, Q, p, time, dt, mesh, self.pressure_newton)
+            Q = pressure(self.press, Q, p, time, dt, mesh, self.pressure_newton, dirichlet)
             return correct(self.corr, Q, p, time, dt, mesh)
         rows = tuple(self.press.equation_to_state_index)
         Q1 = put(correct(self.corr, put(Q, rows, lag), p, time, dt, mesh), rows,
                  zeros(len(rows), mesh))
-        dP = take(pressure(self.press, Q1, p, time, dt, mesh, self.pressure_newton),
-                  rows)
+        if dirichlet is not None:
+            dirichlet = (dirichlet[0], dirichlet[1] - lag)
+        dP = take(pressure(self.press, Q1, p, time, dt, mesh, self.pressure_newton,
+                           dirichlet), rows)
         return correct(self.corr, put(Q, rows, halo(lag + dP, mesh)), p, time, dt,
                        mesh)
 
@@ -175,10 +297,21 @@ class ChorinTemplate(HyperbolicTemplate):
         return Q, dt
 
 
-def pressure(press, Q, p, time, dt, mesh, newton=None):
+def check_overlap(template, layers):
+    """Raise unless `layers` overlap rings cover `template`'s step (`overlap_rings`)."""
+    need = template.overlap_rings()
+    if int(layers) < need:
+        raise ValueError(f"overlap: {int(layers)} cell rings; the coupled Chorin march with "
+                         f"time_order {template.time_order} needs at least {need} "
+                         "(`ChorinTemplate.overlap_rings`)")
+
+
+def pressure(press, Q, p, time, dt, mesh, newton=None, dirichlet=None):
     """Solve `press` for its own rows with the rest of `Q` frozen: one linear solve
     (GMRES) of the affine residual `A(P) = R(P) - R(0)`, or Newton from the current
-    pressure with `newton=(tol, maxit)`.
+    pressure with `newton=(tol, maxit)`.  `dirichlet=(mask, G)`: the cells `mask` keep the
+    pressure `G` (the rows of the cells `mask` are the identity: the subdomain solve of
+    overlapping Schwarz, the other cells' equations reading `G` there).
 
     References:
         Saad, Schultz 1986, https://doi.org/10.1137/0907058
@@ -197,21 +330,31 @@ def pressure(press, Q, p, time, dt, mesh, newton=None):
                                rows)
         return cells(press.call.source, Y, Y_aux, p, time, dt, mesh)
 
+    # the rows of the held cells: `fixed(their value, the residual's)`
+    if dirichlet is None:
+        fixed, held, free = (lambda A, B: B), (lambda P: P), (lambda r: r)
+    else:
+        mask, G = dirichlet
+        fixed = lambda A, B: select(mask, A, B)                        # noqa: E731
+        held = lambda P: select(mask, G, P)                            # noqa: E731
+        free = lambda r: select(mask, sp.S.Zero, r)                    # noqa: E731
     if newton is None:
         b = R(sp.S.Zero)
-        return put(Q, rows, halo(LinSolve(lambda P: R(P) - b, -b), mesh))
+        rhs = -b if dirichlet is None else fixed(G, -b)
+        P = LinSolve(lambda P: fixed(P, R(P) - b), rhs)
+        return put(Q, rows, halo(held(P), mesh))
     tol, maxit = newton
 
     def newton_step(P, r, k):
         """One Newton update `P + d` with `d` from a linear solve at the iterate.
         """
-        P = P + LinSolve(lambda d: R(P + d) - r, -r)
-        return P, R(P), k + 1
+        P = P + LinSolve(lambda d: fixed(d, R(P + d) - r), -r)
+        return P, free(R(P)), k + 1
 
-    P0 = take(Q, rows)
+    P0 = held(take(Q, rows))
     P, _, _ = While(lambda P, r, k: sp.And(k < maxit, reduce_max(abs(r)) > tol),
-                    newton_step, (P0, R(P0), 0))
-    return put(Q, rows, halo(P, mesh))
+                    newton_step, (P0, free(R(P0)), 0))
+    return put(Q, rows, halo(held(P), mesh))
 
 
 def correct(corr, Q, p, time, dt, mesh):
