@@ -2360,3 +2360,95 @@ the halo fill.  (2) VAM(1) Stress.full at nu 0.1 on C10's wave fails with the un
 too (NumPy singular cell Jacobian, JAX NaN).  (3) GPU configs not rerun (C9: C26 `visc`, C17 gpu1).
 (4) preCICE + Chorin: not implemented, plan in `STATUS.md` (the pressure solve couples both
 domains: overlapping Schwarz inside a preCICE implicit-coupling window).
+
+## 55. AMReX AMR by composite stages; the refluxed velocity; GPU streams, image, hypre smoother (2026-10-15, dev/amrex-amr-gpu)
+
+### 55a. C17 `dry`: the reflux of a stage the fine level never saw
+
+- **Where the depth goes negative** (depth checks after every transfer of the AMR loop: step, halo
+  fill, reflux, average-down, regrid).  Interpolation and average-down keep h >= 0 (`cell_cons_interp`
+  bounds every fine value by the coarse neighbours'); the reflux does not.  Step 83 (t 0.0456): the
+  uncovered coarse cell (7, 3) next to the fine level has h 1.7e-22 at t^n, 1.04e-8 after its coarse
+  step (inflow, through the coarse-fine face, from the covered cell, whose coarse value averages
+  wetter fine cells), -7.75e-12 after the reflux (8 symmetric cells); the next coarse step makes NaN.
+- **Cause.**  The fine level stepped after the coarse level's whole step, so its stage-2 halo held
+  the coarse state at t^{n+1}: water the coarse step had moved into the cell across the
+  coarse-fine face, which the reflux then replaces by the fine fluxes, left the halo into the fine
+  level.  For one stage (`time_order` 1) the end-of-step reflux is the composite forward Euler step
+  and h >= 0 (mass 0); for SSP-RK2 it is not (also at order 1: base 64, NaN at step 860).
+- **Fix (composite stages).**  The template prints the SSP-RK step cut into its stages (core
+  `_amr_stages`: `amr_stage<i>` = `a_i Q + (1 - a_i)(Y + dt L(Y))`, MOOD's `_cells` / `_o1`
+  variants, `amr_bad`, `amr_implicit` (Lie), `amr_post`); the AMR loop runs stage i on every level
+  coarse to fine, refluxes the stage's face terms (share `1 - a_i`) and averages down, then fills
+  the finer halos from the coarser level's state of the same stage.  Each stage is then a forward
+  Euler step of the scheme on the composite grid (a coarse cell next to the fine level updated with
+  the fine faces' fluxes of the same stage state).  MOOD judges the composite: the inadmissible
+  cells of every level (covered coarse cells excluded; a coarse cell's demotion carried into the
+  fine ghosts inside it), then every cell at first order with piecewise-constant halos.  That last
+  tier is the first-order scheme on the composite grid: a fine face's ghost state is the coarse
+  cell's own, so h' >= h_K (1 - dt sum_f |f| a_f / |K|) >= 0 under the levels' CFL step (52b; a
+  fine face of half the area under the fine level's own CFL bound).  IMEX-SSP2 keeps the whole-step
+  loop (55d).
+- C17 `dry`: mass 0, h_min 0 (91 steps); before: NaN at step 85.
+
+### 55b. The long-run hang: the reflux moved the depth, not the momentum
+
+- Only the conservative rows (b, h) are refluxed (AMREX.md round 5: refluxing the SWE momentum broke
+  the lake at rest).  A thin refluxed cell kept its momentum while its depth dropped: q/h up to 1e136
+  in the cells, and the cells rule (52b, 1/h for h < 1e-8) took that velocity into the step.  dry
+  at base 64 (forward Euler, t 0.1): 9,556 steps, 539 s; the fine single level 386 steps.
+- **Fix** (`amr_keep`, applied to the cells whose refluxed rows changed): a refluxed cell keeps the
+  reconstruction variables of the rows not refluxed (its velocity), the momentum follows the
+  corrected depth.  The lake at rest is untouched (no mass flux, no cell changes), a cell refluxed
+  to h = 0 gets q = 0.  The momentum's pressure / NCP part of the flux difference stays unrefluxed,
+  as before.
+- dry base 64, t 0.1: 364 steps (time_order 1), 363 (2); new C17 row `dry_long` (steps / the fine
+  single level's: 0.94, threshold 1.5).  Order 1, base 32, t 0.3: 1,612 -> 320 steps (SSP-RK2).
+
+### 55c. GPU: 3 boxes on 2 GPUs, the image, hypre's smoother
+
+- **Stall** (L2P 1M cells, `max_grid_size` 1067, 2 GPUs).  The first pressure solve's FlexGMRES
+  iterated on NaN (seconds per iteration); the assembled matrix had 100,107 singular 2 x 2 cell
+  blocks (row sums -1e25) in the second box of the rank with two boxes, a different count each run.
+  The march runs in a no-sync region (no synchronisation at the end of MFIter loops); AMReX does
+  not fuse its MultiFab operations (setVal, Copy, ...) on a rank with 2 to 8 boxes larger than 65^3
+  cells, so they run box by box on separate streams and raced the fused kernels that follow on
+  stream 0 (here: the probe vectors of the assembly).  2, 8, 9 boxes (fused, or one box per rank)
+  and the 10k / 256k-cell layouts never met it.  `amrex.max_gpu_streams = 1` -> correct matrix, 20
+  iterations.  **Fix:** symAmrex defaults to one GPU stream (kernels are one launch per box; no
+  loss measured).
+- **The image** (`zoomy_amrex.sif`, one image for CPU and CUDA) has no libnvJitLink, which
+  libcusparse needs and its apt package does not pull in: every hypre-CUDA build failed to link
+  (C8 gpu1 / gpu2).  Recipes (`Dockerfile`, `.def`) install `libnvjitlink-12-6`; verified with
+  this image plus that package (`containers/zoomy_amrex/zoomy_amrex.sif` of this worktree).  The
+  published image needs the rebuild.
+- **GPU selection**: `apptainer --cleanenv` dropped `CUDA_VISIBLE_DEVICES`: every GPU run took GPU
+  0 (and 1).  The driver passes it (`--env`).
+- **hypre iterations** (38 GPU vs 19 CPU): the GPU smoother was l1-Jacobi, the CPU's hybrid
+  symmetric Gauss-Seidel; HMIS has no device path in hypre (PMIS on the GPU).  With the CPU's
+  smoother on the GPU (triangular solves of the local block): 20 iterations, but L2P solve
+  1.88 s per solve against 0.36 s (2 GPUs; 1 GPU 2.38 s against 0.25 s).  Other device smoothers
+  (2 GPUs, iterations / ms per solve): two-stage GS (11) 30.6 / 407, (12) 29 / 433, Chebyshev (16)
+  23 / 281 (setup 218 instead of 140), hybrid GS forward (3) 28 / 1417.
+
+### 55d. AMR implicit time lag
+
+- Lie (gate 53, `impl`): the composite stages give the fine halo the coarse stage state in the
+  explicit stages and the Crank-Nicolson explicit half; L1(AMR - fine) / L1(coarse - fine) 0.59 ->
+  0.376 (Neumann) / 0.388 (periodic), at the explicit path's 0.367 / 0.380 (spatial).
+- IMEX-SSP2 (0.59, unchanged): its stages are implicit solves; cutting them needs per stage the
+  level's implicit solve with the halo from the coarser level's stage state, and the stage's
+  F_i and G_i corrected separately (the later stages weight them by At_ij and A_ij, the end by wt =
+  w): two face logs per stage and an average-down of the increments.  Not done (~150 lines).
+
+**Matrix** (main's store with C17 all configs, C5 / C8 / C26 / C37 AMReX on every config and their
+JAX serial references rerun; the `.sif` above): every AMReX row of C5, C6, C7, C8, C9, C17, C26,
+C37 passes (0 FAIL).  Changed AMReX rows: C17 `dry` (new: mass 0, h_min 0; mpi2 / gpu1 = serial),
+`dry_long` (new), `diff_*_impl` 0.59 -> 0.376 / 0.388 (55d), box energy 2.2e-16 -> 0, `boxnr`
+(the no-reflux control) mass / energy 5.91e-4 / 1.44e-3 -> 6.15e-4 / 1.46e-3; wave16 / wave32 L1
+5.27e-3 / 9.15e-4 to the printed digits (order 2.53); C9 C8 `vam` GPU vs CPU 7.2e-12 -> 8.8e-12
+(the smoother); covering cases, lake, `diff_*` covering and mass rows unchanged.  The C5 / C6 / C7
+/ C9 C14 rows that moved in the last digits are integ's (single-level AMReX, untouched here).  The
+table's 13 non-AMReX FAILs are the mixed store (NumPy / foam / JAX ranks from main against integ's
+JAX serial: C5 1.1e-2, C8 0.47, C26 2.3e-3); `table.md` not committed.  zoomy_core 397 passed;
+QR 27 passed, 3 skipped.
