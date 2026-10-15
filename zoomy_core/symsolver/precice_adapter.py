@@ -130,13 +130,10 @@ def overlap_participant(cfg, mesh, n_state):
     returns `(overlap, mirror)` (`zoomy_core.mesh.overlap.overlap_layers`)."""
     from zoomy_core.mesh.overlap import overlap_layers
     a = cfg["adapter"]
-    if int(cfg["overlap"]) < 2:
-        raise ValueError("overlap: at least 2 cell rings (the predictor state of the first ring, "
-                         "which the own cells' pressure stencils read, takes a flux from the "
-                         "second); wider for wider stencils (order 2, LSQ radius > 1)")
-    if len(a.wn) != n_state or len(a.rn) != n_state:
-        raise ValueError(f"an overlap participant writes and reads the {n_state} state rows "
-                         f"(got {len(a.wn)} / {len(a.rn)} data names)")
+    if len(a.wn) != len(a.rn) or len(a.wn) < n_state:
+        raise ValueError(f"an overlap participant writes and reads its {n_state} state rows "
+                         "(then, with several SSP-RK stages, each stage's pressure rows), as "
+                         f"many as the peer; got {len(a.wn)} / {len(a.rn)} data names")
     over, mirror = overlap_layers(mesh, cfg["tag"], cfg["overlap"])
     cc = np.asarray(mesh.cell_centers).T
     a.set_overlap_vertices(cc[mirror], cc[over])

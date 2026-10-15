@@ -20,7 +20,7 @@ from zoomy_core.symsolver import PyPrinter, default_wave_speed
 from zoomy_core.symsolver.numpy_backend import runtime as R
 from zoomy_core.symsolver.numpy_backend.kernels import NumpyKernels
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings, LinearSolver
-from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
+from zoomy_core.symsolver.strategies.chorin import ChorinTemplate, check_overlap
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_core.systemmodel.padding import pad_to_square
 from zoomy_core.systemmodel.system_model import _DT_SYMBOL
@@ -281,6 +281,7 @@ class SymbolicChorinSolverNumpy(SymbolicHyperbolicSolverNumpy, ChorinSettings):
                                   pressure_newton=self._newton(),
                                   projection=self.projection, **self._config())
         if self.couple:
+            check_overlap(template, self.couple["overlap"])
             return "chorin_precice", PyPrinter().procedure(
                 "chorin_precice", (Q, Qaux, p, time, mesh), template.precice_march)
         return "chorin", PyPrinter().procedure(

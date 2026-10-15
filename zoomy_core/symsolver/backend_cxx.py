@@ -16,7 +16,7 @@ from zoomy_core.symsolver.core import CxxPrinter
 from zoomy_core.symsolver.discretization import reconstruction as R
 from zoomy_core.symsolver.discretization.time import IMEX_RK, SSP_RK, Imex
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings
-from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
+from zoomy_core.symsolver.strategies.chorin import ChorinTemplate, check_overlap
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_core.symsolver.vocabulary import clean_round_off, pointwise, put, take
 
@@ -206,6 +206,7 @@ class CxxChorinBackend(CxxBackend, ChorinSettings):
                              "(`ChorinTemplate.precice_march`)")
         if self.subcycling:
             raise ValueError("the coupled Chorin march takes one step per window")
+        check_overlap(template, self.couple["overlap"])
         return template.precice_march(Q, Qaux, p, time, mesh)
 
 
