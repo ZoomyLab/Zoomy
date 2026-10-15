@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zoomy_core"
-version = "0.2.15"
+version = "0.2.16"
 description = "zoomy_core is the pure Python core of Zoomy: A simulation software for dimensionally-reduced free surface flows."
 readme = "README.md"
 requires-python = ">=3.11"
