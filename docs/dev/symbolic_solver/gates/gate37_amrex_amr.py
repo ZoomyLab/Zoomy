@@ -11,6 +11,9 @@ for every level), scratch.
                interface across the bump: |u|
     dry        radial dry dam break, regrid every 2 steps on the h difference:
                mass, min h
+    dry_long   the same at base 64 x 64 to t 0.1 (the front reaches the walls):
+               mass, min h, steps / the fine single level's steps (a refluxed thin
+               cell's velocity bounds the step: ANALYSIS 55)
 
     python gate37_amrex_amr.py ref   OUT CASE        # single-level fine (AMReX + NumPy)
     python gate37_amrex_amr.py run   OUT CASE CONFIG # CONFIG: cpu1, cpu2, gpu1
@@ -43,11 +46,12 @@ def system(case, n):
         _, nsm = C.bump_2d(2, nx=n, flow=(0.3, 0.1))
         return (LSQMesh.create_2d(domain=(0, 10, 0, 10), nx=n, ny=n), nsm, 0.5, 0.9,
                 dict(max_level=1, region=((0, 0), (10, 10))))
-    if case in ("cover_dry", "dry"):
+    if case in ("cover_dry", "dry", "dry_long"):
         mesh, nsm = C.dry_dambreak_2d(nx=n)
         amr = (dict(max_level=1, region=((0, 0), (1, 1))) if case == "cover_dry" else
                dict(max_level=1, tag=("h", "gradient", 0.05), regrid_int=2))
-        return mesh, nsm, 0.02 if case == "cover_dry" else 0.05, 0.45, amr
+        t_end = {"cover_dry": 0.02, "dry": 0.05, "dry_long": 0.1}[case]
+        return mesh, nsm, t_end, 0.45, amr
     if case.startswith("wave"):
         return (LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=n, ny=n),
                 nsm_of(wave_system(2, VEL), 2, limiter=Limiter.none), 0.2, 0.45,
@@ -80,7 +84,7 @@ def system(case, n):
 
 def base_n(case):
     return {"cover_o2": 16, "cover_dry": 24, "box": 24, "boxnr": 24, "lake": 24,
-            "dry": 32}.get(case) or int(case[4:])
+            "dry": 32, "dry_long": 64}.get(case) or int(case[4:])
 
 
 def initial(mesh, nsm):
@@ -95,20 +99,21 @@ def fine_mesh(case, n):
     return system(case, 2 * n)[0]
 
 
-def ref(out, case):
+def ref(out, case, numpy=True):
     """Single level on the fine grid: AMReX and zoomy_core's NumPy backend (= JAX to round-off,
-    matrix numpy checks; runs in the AMReX image), CFL from the cells."""
+    matrix numpy checks; runs in the AMReX image), CFL from the cells; `numpy` False: AMReX
+    alone (its steps)."""
     from zoomy_amrex.symsolver import SymbolicHyperbolicSolverAmrex
     from zoomy_core.symsolver.numpy_backend import SymbolicHyperbolicSolverNumpy
     n = base_n(case)
     mesh, nsm, t_end, cfl, _ = system(case, 2 * n)
     s = SymbolicHyperbolicSolverNumpy(time_end=t_end, cfl=cfl, cfl_wave_speed=CflWaveSpeed.cells)
     Q0, A0 = s.setup(mesh, nsm)
-    t, Qn, _ = s.run(Q0, A0)
+    t, Qn = s.run(Q0, A0)[:2] if numpy else (np.nan, np.full_like(np.asarray(Q0), np.nan))
     a = SymbolicHyperbolicSolverAmrex(time_end=t_end, cfl=cfl, cfl_wave_speed=CflWaveSpeed.cells)
     ta, Qa = a.run(s.mesh_np, s.nsm, np.asarray(Q0), out / f"work_ref_{case}")
-    np.savez(out / f"ref_{case}.npz", t=float(t), Q=np.asarray(Qn), Qa=Qa, ta=ta)
-    print(f"ref {case}: NumPy t={float(t):.4g} AMReX t={ta:.4g} "
+    np.savez(out / f"ref_{case}.npz", t=float(t), Q=np.asarray(Qn), Qa=Qa, ta=ta, steps=a.steps)
+    print(f"ref {case}: NumPy t={float(t):.4g} AMReX t={ta:.4g} ({a.steps} steps) "
           f"AMReX vs NumPy {rel(Qa, np.asarray(Qn)):.1e}", flush=True)
 
 
@@ -164,7 +169,7 @@ def table(out):
     print("| case | measure (CPU 1) | MPI 2 vs CPU 1 | GPU 1 vs CPU 1 |")
     print("|---|---|---|---|")
     for case in ("cover_o2", "cover_dry", "wave16", "wave32", "wave64", "box", "boxnr",
-                 "lake", "dry"):
+                 "lake", "dry", "dry_long"):
         r = {c: g(out / f"{case}_{c}.npz") for c in CONFIGS}
         if r["cpu1"] is None:
             continue
@@ -198,7 +203,10 @@ def table(out):
         else:
             m = (f"mass drift {abs(c1['Q'][1].sum() / c1['I0'][1].sum() - 1):.1e}, "
                  f"min h {min(np.nanmin(c1['Q'][1]), np.nanmin(c1['L1'][1])):.1e}, "
-                 f"fine cells {int(np.isfinite(c1['L1'][0]).sum())}")
+                 f"fine cells {int(np.isfinite(c1['L1'][0]).sum())}, steps {int(c1['steps'])}")
+            f = g(out / f"ref_{case}.npz")
+            if f is not None and "steps" in f:
+                m += f" (fine single level {int(f['steps'])})"
         print(f"| {case} | {m} | {par} |")
     errs = {}
     for case in ("wave16", "wave32", "wave64"):

@@ -547,7 +547,8 @@ def _c17():
     from custom import amr, amr_diffusion
     return [Run(case, None, 0.0, custom=lambda b, c, w, case=case: amr(case, c, w),
                 configs=("serial", "mpi2", "gpu1"), backends=("amrex",), launch=False)
-            for case in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry")
+            for case in ("cover_o2", "cover_dry", "wave16", "wave32", "box", "boxnr", "lake", "dry",
+                         "dry_long")
             ] + [Run(key, None, 0.0, custom=lambda b, c, w, key=key: amr_diffusion(
                 *key.split("_")[1:], w), backends=("amrex",), launch=False) for key in C17_DIFF]
 
