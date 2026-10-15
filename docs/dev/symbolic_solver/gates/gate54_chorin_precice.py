@@ -36,8 +36,10 @@ HERE = Path(__file__).resolve().parent
 DOMAIN, NX, DT, T = (-1.5, 1.5), 60, 2.0 ** -7, 0.25
 DX = (DOMAIN[1] - DOMAIN[0]) / NX
 WAVE = dict(H=0.34, a=0.01, x0=-0.5, s=0.3)
-PRESSURE = dict(pressure_tol=1e-13, pressure_restart=120, pressure_maxit=20)
-COUPLING_TOL = dict(rel=1e-12, abs=1e-13)        # preCICE: abs-limit must exceed 1e-14
+PRESSURE = dict(pressure_tol=float(os.environ.get("GATE54_PRESSURE_TOL", "1e-13")),
+                pressure_restart=120, pressure_maxit=20)
+COUPLING_TOL = dict(rel=float(os.environ.get("GATE54_COUPLING_TOL", "1e-12")),   # preCICE:
+                    abs=1e-13)                                              # abs > 1e-14
 TIMEOUT = 600
 DIM = int(os.environ.get("GATE54_DIM", "1"))     # horizontal dimensions (2: C10's quads, ny = 2)
 NAMES = (["b", "h", "q_0", "q_1", "r_0", "r_1", "P_0", "P_1"] if DIM == 1 else

@@ -2388,15 +2388,19 @@ template keeps in the loop carry (the checkpoint):
 At the fixed point every own-cell equation of the step reads the peer's values: the single-domain
 step, to the coupling and pressure tolerances.  The interface flux is the same Riemann problem on
 both sides (identical states and aux), so the mass is conserved.  The exchanged data are the
-n_state rows of the mirror cells (the full-state rule of the hyperbolic coupling, on W rings), no
-stage data.  New vocabulary: blocks `overlap_cells`, `overlap_states`, `overlap_fill`; effects
+n_state rows of the mirror cells (the full-state rule of the hyperbolic coupling, on W rings);
+with several SSP-RK projection stages (time_order 2, 3) then each stage's pressure rows, the
+Dirichlet data of that stage's solve (`step(dirichlet=(mask, (P_1, .., P_m)), pressures=[])`;
+the window start reads the state rows only).  The overlap must cover the stencils of every
+stage: `ChorinTemplate.overlap_rings()` = 2 per stage + 1, enforced by every driver (measured
+below; reconstruction order 2 is refused, its rings not established).  New vocabulary: blocks `overlap_cells`, `overlap_states`, `overlap_fill`; effects
 `couple.read_iterate`, `couple.repeat`.  `PreciceAdapter` moved to zoomy_core
 (`symsolver/precice_adapter.py`, re-exported by the JAX runtime) and drives the NumPy backend too;
 the C++ effects (`rt_common.H`) answer the checkpoint queries and write / read vertex subsets;
 foam takes the overlap and mirror cells from the driver (OpenFOAM numbering), AMReX the slabs of W
-layers at the coupled side (single rank).  Refused: MOOD (a global demotion decision), several
-projection stages (time_order > 1, IMEX-SSP2: each needs the peer's stage pressure), an implicit
-diffusion (a second global solve), several ranks per participant, W < 2.
+layers at the coupled side (single rank).  Refused: MOOD (a global demotion decision),
+IMEX-SSP2's projected stages, an implicit diffusion (a second global solve), several ranks per
+participant, reconstruction order 2, fewer than `overlap_rings()` rings.
 
 **Gate 54** (`gates/gate54_chorin_precice.py`): VAM(1), one horizontal dimension, C10's wave
 (H 0.34, a 0.01, x0 -0.5) over the bump on [-1.5, 1.5], 60 cells, left q = r = 0, right P = 0, O1,
@@ -2415,9 +2419,22 @@ relative or 1e-13 absolute on every exchanged row; the single domain on the same
 | AMReX (image) | serial-implicit, IQN-ILS | 2.8e-16 | 1.8e-16 | 6-7 |
 
 (The single domain loses 2.2e-5 of mass through its open right end; the coupled pair the same.)
-Overlap width (NumPy / JAX, no acceleration): W = 1: 1.4e-3 (the first overlap ring's predictor
-state, which the own cells' pressure stencils read, takes a flux from the second ring: refused
-now), W = 2, 3, 6: round-off.  The iteration count does not depend on W: the subdomain solve
+
+| variant (serial-implicit, IQN-ILS) | W | JAX | NumPy | foam | AMReX | iterations |
+|---|---|---|---|---|---|---|
+| SSP-RK2 stages (`GATE54_TIME_ORDER=2`) | 5 | 6.1e-16 | 6.0e-16 | 8.7e-16 | 3.1e-16 | 8-9 |
+| 2-D: C10's quads, ny 2, VAM(1) 2 horizontal dims (`GATE54_DIM=2`) | 3 | 8.5e-16 | 1.3e-15 | 1.35e-15 | 4.0e-16 | 6-8 |
+
+(|mass coupled - single| <= 3.6e-17 in all of them; foam increment 6.9e-16.)  Overlap width,
+max|coupled - single| (NumPy; standard / increment projection): time_order 1: W 1 1.4e-3 / -, W 2
+5.5e-15 / 5.3e-8, W 3 round-off / 4.7e-16; time_order 2: W 3 2.3e-8 / -, W 4 8.6e-16 / 1.1e-13
+(deterministic: unchanged at pressure tolerance 1e-15 and coupling tolerance 1e-10), W 5 6.0e-16 /
+2.9e-16; time_order 3: W 5 9.1e-15 / -, W 6 1.1e-15 / 9.0e-16, W 7 1.1e-15 / 9.0e-16.  The
+predictor's flux and its derivative aux each reach one ring per stage, the increment projection's
+lagged correction (before the solve) one more in some stages: `overlap_rings` = 2 m + 1 is exact
+in every measured case (the increment needs it at time_order 1 and 2).  A too thin overlap is not
+a convergence failure but a wrong fixed point (1e-13 .. 1e-3), so the drivers refuse it.
+The iteration count does not depend on W: the subdomain solve
 covers the own cells only, the overlap supplying Dirichlet data one ring deep, so this is
 minimal-overlap Schwarz (block Gauss-Seidel / Jacobi between the two subdomains; the measured
 contraction 0.32 per Gauss-Seidel iteration is the operator's, not the overlap's).  IQN-ILS on the
@@ -2429,15 +2446,21 @@ zoomy_core test `tests/symsolver/test_overlap_schwarz.py`: the rings of `overlap
 quads), and the coupled pair in process (NumPy, two threads, an in-memory parallel-implicit
 coupling without acceleration, 24 cells, 4 steps) = the single domain to < 1e-12.
 
-**Matrix C16**: rows `vam_jax`, `vam_jax_increment`, `vam_numpy`, `vam_foam`, `vam_amrex` (gate 54,
-serial): coupled vs single <= 1e-12 (the coupling tolerance), |mass coupled - single| <= 1e-14,
-iterations per window (information): 0 FAIL.  The hyperbolic pairs (jax_jax, jax_foam, foam_foam,
+**Matrix C16**: rows `vam_jax`, `vam_jax_increment`, `vam_jax_t2`, `vam_jax_2d`, `vam_numpy`,
+`vam_foam`, `vam_foam_2d`, `vam_amrex`, `vam_amrex_2d` (gate 54, serial, W = `overlap_rings`):
+coupled vs single <= 1e-12 (the coupling tolerance), |mass coupled - single| <= 1e-14, iterations
+per window (information): 0 FAIL.
+
+**foam build cache race** (fixed): two participants of one binary (the coupled Left and Right
+print the same program) built it concurrently; one ran the binary while the other linked it
+(`Permission denied`) and the cache kept a 0-byte `symFoam`.  `FoamDriver.build` now locks the
+build directory and links to `symFoam.tmp`, renamed into place (AMReX's pattern).  The hyperbolic pairs (jax_jax, jax_foam, foam_foam,
 amrex_amrex, amrex_jax; serial and mpi2, rerun on the changed adapter / C++ headers) equal the
 table to the printed digits.  zoomy_core 397 passed (default tier) + the new test; QR 27 passed, 3
 skipped; zoomy_jax `test_lifted_shared_face` 3 passed.
 
-**Open.**  (1) Several projection stages: the peer's stage pressures as further exchanged rows
-(one per stage and pressure row) and Dirichlet data per stage; W then covers the stencils of every
-stage.  (2) Several ranks per participant (the overlap's cells on several ranks).  (3) 2-D / 3-D:
-`overlap_layers` and the C++ slabs are general, gate 54 is 1-D only.  (4) A true overlap (solve the
+**Open.**  (1) IMEX-SSP2's projected stages (three projections per step, the final one on the
+combination) and reconstruction order 2 (its overlap rings).  (2) Several ranks per participant
+(the overlap's cells on several ranks).  (3) 3-D and unstructured overlaps over preCICE (the rings
+and the AMReX slabs are general; gate 54 runs 1-D and C10's quads).  (4) A true overlap (solve the
 inner overlap rings) to cut the iterations without acceleration.

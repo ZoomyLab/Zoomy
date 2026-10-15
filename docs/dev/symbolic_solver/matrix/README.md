@@ -42,7 +42,7 @@ diffusion a finite-difference Newton-GMRES (JAX: exact AD).
 | IMEX time order: Lie vs IMEX-SSP2(2,2,2), hyperbolic and Chorin | C31 | C31 (SSP2 = JAX) | C31 (SSP2 = JAX) |
 | AD: jvp vs FD, reverse vs forward (hyperbolic, IMEX, Chorin; 3-D Euler) | C15, C22 | n/a | n/a |
 | preCICE: coupled = single domain | C16 (jax-jax, jax-foam) | C16 (foam-foam, jax-foam) | C16 (amrex-amrex, amrex-jax) |
-| preCICE: the Chorin march coupled by overlapping Schwarz (VAM(1); NumPy too) | C16 (vam_jax, vam_jax_increment) | C16 (vam_foam) | C16 (vam_amrex) |
+| preCICE: the Chorin march coupled by overlapping Schwarz (VAM(1); NumPy too) | C16 (vam_jax, vam_jax_increment, vam_jax_t2, vam_jax_2d) | C16 (vam_foam, vam_foam_2d) | C16 (vam_amrex, vam_amrex_2d) |
 | AMR (reflux, regrid, one dt; gate 37); diffusion with refluxed diffusive fluxes (gate 53) | n/a | n/a | C17 |
 | compressible Euler 3-D: Sod, smooth wave, walls, MPI | C18-C21 | C18-C21 | C18-C21 |
 | Euler 3-D cross-backend (O1 round-off, O2 converging) | C23 | C23 | C23 |
@@ -109,7 +109,7 @@ the pressure template, ~130 s at any mesh size; foam/AMReX: printing).
 | C14 IMEX | bump in flow + Manning n 0.5 (implicit source), t 0.3, nx 20/40/80 vs JAX nx 160 | order >= 0.5 (O1, observed) / 0.8 (O2, Lie splitting); mass; parallel; GPU |
 | C15 AD (JAX) | hyperbolic and IMEX bump 12^2, Chorin C10 wave 30 x 3; dJ/dg | abs(FD - jvp) <= 1e-5 (rel); abs(rev - jvp) <= 1e-10; mpi2 / gpu1 jvp vs serial <= 1e-12 |
 | C16 preCICE | gates 28 (jax-jax), 10 (jax-foam), 26 (foam-foam): 2 x 100 cells, O1, window 1e-3 | coupled vs single domain and mass drift <= 1e-14 (gate 26) |
-| C16 preCICE Chorin (`vam_*`) | gate 54: VAM(1) 1-D, C10's wave, 30 \| 30 cells, overlap 3, window = dt 2^-7, serial-implicit + IQN-ILS | coupled vs single <= 1e-12 (the coupling tolerance), \|mass coupled - single\| <= 1e-14; iterations per window (information) |
+| C16 preCICE Chorin (`vam_*`) | gate 54: VAM(1) 1-D (`_2d`: C10's quads, ny 2), C10's wave, 30 \| 30 cells, overlap 2 per SSP-RK stage + 1 (`_t2`: SSP-RK2), window = dt 2^-7, serial-implicit + IQN-ILS | coupled vs single <= 1e-12 (the coupling tolerance), \|mass coupled - single\| <= 1e-14; iterations per window (information) |
 | C17 AMR (AMReX) | gate 37: covering fine level, static patch (Euler wave), box with / without reflux, lake, regrid on the dry front. `diff_{neu,per}_{expl,impl,ssp2}` (gate 53): gate 41's heat equation, nu 0.05, base 16^2 + one level, u0 = 1 + a bump across the interface of the static patch [0.25, 0.75]^2, t 0.1; `expl` the explicit slot (SSP-RK), `impl` Lie / Crank-Nicolson, `ssp2` IMEX-SSP2: the covering level, the patch with and without reflux, the fine and the coarse single level. `diff_shear_impl`: C32's viscous SME (Stress.full, x-varying u0), Lie, the covering level | covering = fine single level, mass / energy with reflux, lake abs(u) <= 1e-12; wave order >= 1.5. Diffusion: covering = fine single level (expl round-off, implicit 1e-9), patch mass change with reflux <= 1e-12 (round-off; without: information, the control), L1(AMR - fine single) / L1(coarse single - fine single) <= 0.75 (observed 0.37 expl, 0.59 impl / ssp2: the fine halo takes the coarse level's new state in every stage, an O(dt) lag at the interface) |
 | C18 Euler Sod 3-D | n x 2 x 2 along x, y, z, HLL, minmod, t 0.2, O1 / O2 + MOOD, n 50/100 | L1(rho) vs exact (Toro ch. 4) at n 100: O1 <= 4.2e-2, O2 <= 1e-2; order >= 0.45 / 0.8 (observed; discontinuous); x / y / z profiles and u_perp <= 1e-12 |
 | C19 Euler wave 3-D | periodic [0,1]^3, u (1, .5, .25), n 8/16/24, t 0.1, O1 / O2 none / O2 minmod | order 16->24: O1 >= 0.75 (observed), O2 >= 1.8 (theory); u and p constant (round-off) |
@@ -200,9 +200,11 @@ here has nu = 0.
 
 ANALYSIS 56.  C16 rerun on every pair and config (scratch store; the PreciceAdapter moved to
 zoomy_core, the C++ coupling effects changed): the hyperbolic pairs equal the table to the printed
-digits; new rows `vam_jax` 6.9e-16, `vam_jax_increment` 4.7e-16, `vam_numpy` 6.3e-16, `vam_foam`
-9.8e-16, `vam_amrex` 2.8e-16 (coupled vs single), |mass coupled - single| 0 / 0 / 0 / 1.8e-16 /
-1.8e-16, 6-7 coupling iterations per window; 0 FAIL.  table.md not regenerated (partial store).
+digits; new rows `vam_jax` 6.9e-16, `vam_jax_increment` 4.7e-16, `vam_jax_t2` 6.1e-16,
+`vam_jax_2d` 8.5e-16, `vam_numpy` 6.3e-16, `vam_foam` 9.8e-16, `vam_foam_2d` 1.35e-15,
+`vam_amrex` 2.8e-16, `vam_amrex_2d` 4.0e-16 (coupled vs single), |mass coupled - single|
+<= 1.8e-16, 6-9 coupling iterations per window; 0 FAIL.  table.md not regenerated (partial
+store).
 
 ## Results (2026-10-14, dev/numerics-robust: march check, thin cells, HLL Davis bounds, Manning at rest)
 

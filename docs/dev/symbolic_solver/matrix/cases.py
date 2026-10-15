@@ -532,11 +532,14 @@ def _c15():
             for k in ("hyperbolic", "imex", "chorin") for p in ("fwd", "rev")]
 
 
-#: the Chorin march coupled by overlapping Schwarz (gate 54: VAM(1) 1-D, C10's wave, 30 | 30
-#: cells, overlap 3, serial-implicit + IQN-ILS): pair -> (backend, projection); serial only
-C16_VAM = {"vam_jax": ("jax", "standard"), "vam_jax_increment": ("jax", "increment"),
-           "vam_numpy": ("numpy", "standard"), "vam_foam": ("foam", "standard"),
-           "vam_amrex": ("amrex", "standard")}
+#: the Chorin march coupled by overlapping Schwarz (gate 54: VAM(1), C10's wave, 30 | 30 cells,
+#: overlap `overlap_rings` = 2 per stage + 1, serial-implicit + IQN-ILS): pair -> (backend,
+#: projection, time_order, horizontal dimensions; 2: C10's quads, ny 2); serial only
+C16_VAM = {"vam_jax": ("jax", "standard", 1, 1), "vam_jax_increment": ("jax", "increment", 1, 1),
+           "vam_jax_t2": ("jax", "standard", 2, 1), "vam_jax_2d": ("jax", "standard", 1, 2),
+           "vam_numpy": ("numpy", "standard", 1, 1),
+           "vam_foam": ("foam", "standard", 1, 1), "vam_foam_2d": ("foam", "standard", 1, 2),
+           "vam_amrex": ("amrex", "standard", 1, 1), "vam_amrex_2d": ("amrex", "standard", 1, 2)}
 
 
 def _c16():
