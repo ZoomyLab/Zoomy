@@ -28,7 +28,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # One image for CPU and GPU machines (as zoomy_amrex.def): CUDA 12.6 from NVIDIA's apt
 # repository, nvcc and the libraries the CUDA build links (cudart, curand, cusparse: AMReX;
-# cublas, cusolver: hypre-CUDA; nvtx: TINY_PROFILE; the driver stub libcuda.so for the link,
+# cublas, cusolver: hypre-CUDA; nvJitLink: libcusparse needs it, its package does not pull
+# it in; nvtx: TINY_PROFILE; the driver stub libcuda.so for the link,
 # the real one comes with `docker run --gpus all` / `apptainer --nv`), shared libraries only:
 # the static archives (1.5 GB) are deleted in the same layer, but cudart's (nvcc links it).
 # The generated solver is compiled for the CPU or with CUDA as the run asks
@@ -39,7 +40,7 @@ RUN wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/
     && apt-get update && apt-get install -y --no-install-recommends \
         cuda-nvcc-12-6 cuda-cudart-dev-12-6 cuda-driver-dev-12-6 cuda-cccl-12-6 \
         cuda-nvtx-12-6 cuda-profiler-api-12-6 libcurand-dev-12-6 libcusparse-dev-12-6 \
-        libcublas-dev-12-6 libcusolver-dev-12-6 \
+        libcublas-dev-12-6 libcusolver-dev-12-6 libnvjitlink-12-6 \
     && rm -rf /var/lib/apt/lists/* \
     && find /usr/local/cuda-12.6 -name 'lib*_static*.a' ! -name libcudart_static.a -delete \
     && ln -sfn /usr/local/cuda-12.6 /usr/local/cuda \
