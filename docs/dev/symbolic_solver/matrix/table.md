@@ -411,14 +411,40 @@
 | C16 | amrex_amrex mass drift | amrex | 0.00e+00 PASS | 0.00e+00 PASS | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
 | C16 | amrex_jax coupled vs single (max) | amrex | 3.33e-15 PASS | 3.33e-15 PASS | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
 | C16 | amrex_jax mass drift | amrex | 0.00e+00 PASS | 0.00e+00 PASS | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
+| C16 | vam_amrex coupled vs single (max) | amrex | 2.78e-16 PASS | - | - | - | - | <= 1e-12 (the coupling tolerance (gate 54: preCICE rel 1e-12 on the exchanged rows, pressure GMRES 1e-13)) |
+| C16 | vam_amrex coupling iterations per window (mean / max) | amrex | 7.0 / 7 | - | - | - | - | information |
+| C16 | vam_amrex |mass coupled - single| | amrex | 1.78e-16 PASS | - | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
+| C16 | vam_amrex_2d coupled vs single (max) | amrex | 3.99e-16 PASS | - | - | - | - | <= 1e-12 (the coupling tolerance (gate 54: preCICE rel 1e-12 on the exchanged rows, pressure GMRES 1e-13)) |
+| C16 | vam_amrex_2d coupling iterations per window (mean / max) | amrex | 6.9 / 8 | - | - | - | - | information |
+| C16 | vam_amrex_2d |mass coupled - single| | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
 | C16 | foam_foam coupled vs single (max) | foam | 5.16e-15 PASS | 5.16e-15 PASS | - | n/a | n/a | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
 | C16 | foam_foam mass drift | foam | 0.00e+00 PASS | 0.00e+00 PASS | - | n/a | n/a | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
+| C16 | vam_foam coupled vs single (max) | foam | 9.80e-16 PASS | - | - | n/a | n/a | <= 1e-12 (the coupling tolerance (gate 54: preCICE rel 1e-12 on the exchanged rows, pressure GMRES 1e-13)) |
+| C16 | vam_foam coupling iterations per window (mean / max) | foam | 7.0 / 7 | - | - | n/a | n/a | information |
+| C16 | vam_foam |mass coupled - single| | foam | 1.78e-16 PASS | - | - | n/a | n/a | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
+| C16 | vam_foam_2d coupled vs single (max) | foam | 1.35e-15 PASS | - | - | n/a | n/a | <= 1e-12 (the coupling tolerance (gate 54: preCICE rel 1e-12 on the exchanged rows, pressure GMRES 1e-13)) |
+| C16 | vam_foam_2d coupling iterations per window (mean / max) | foam | 7.0 / 7 | - | - | n/a | n/a | information |
+| C16 | vam_foam_2d |mass coupled - single| | foam | 3.55e-17 PASS | - | - | n/a | n/a | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
 | C16 | jax_foam coupled vs single (max) | jax | 4.94e-15 PASS | - | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
 | C16 | jax_foam mass drift | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
 | C16 | jax_foam runs | jax | - | unsupported | - | - | - | information |
 | C16 | jax_jax coupled vs single (max) | jax | 3.61e-15 PASS | 3.61e-15 PASS | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
 | C16 | jax_jax mass drift | jax | 0.00e+00 PASS | 0.00e+00 PASS | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
-| C16 | runs | numpy | n/a | - | - | n/a | n/a | information |
+| C16 | vam_jax coupled vs single (max) | jax | 6.90e-16 PASS | - | - | - | - | <= 1e-12 (the coupling tolerance (gate 54: preCICE rel 1e-12 on the exchanged rows, pressure GMRES 1e-13)) |
+| C16 | vam_jax coupling iterations per window (mean / max) | jax | 7.0 / 7 | - | - | - | - | information |
+| C16 | vam_jax |mass coupled - single| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
+| C16 | vam_jax_2d coupled vs single (max) | jax | 8.45e-16 PASS | - | - | - | - | <= 1e-12 (the coupling tolerance (gate 54: preCICE rel 1e-12 on the exchanged rows, pressure GMRES 1e-13)) |
+| C16 | vam_jax_2d coupling iterations per window (mean / max) | jax | 6.9 / 8 | - | - | - | - | information |
+| C16 | vam_jax_2d |mass coupled - single| | jax | 3.55e-17 PASS | - | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
+| C16 | vam_jax_increment coupled vs single (max) | jax | 4.70e-16 PASS | - | - | - | - | <= 1e-12 (the coupling tolerance (gate 54: preCICE rel 1e-12 on the exchanged rows, pressure GMRES 1e-13)) |
+| C16 | vam_jax_increment coupling iterations per window (mean / max) | jax | 7.0 / 7 | - | - | - | - | information |
+| C16 | vam_jax_increment |mass coupled - single| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
+| C16 | vam_jax_t2 coupled vs single (max) | jax | 6.07e-16 PASS | - | - | - | - | <= 1e-12 (the coupling tolerance (gate 54: preCICE rel 1e-12 on the exchanged rows, pressure GMRES 1e-13)) |
+| C16 | vam_jax_t2 coupling iterations per window (mean / max) | jax | 8.2 / 9 | - | - | - | - | information |
+| C16 | vam_jax_t2 |mass coupled - single| | jax | 0.00e+00 PASS | - | - | - | - | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
+| C16 | vam_numpy coupled vs single (max) | numpy | 6.31e-16 PASS | - | - | n/a | n/a | <= 1e-12 (the coupling tolerance (gate 54: preCICE rel 1e-12 on the exchanged rows, pressure GMRES 1e-13)) |
+| C16 | vam_numpy coupling iterations per window (mean / max) | numpy | 6.9 / 7 | - | - | n/a | n/a | information |
+| C16 | vam_numpy |mass coupled - single| | numpy | 0.00e+00 PASS | - | - | n/a | n/a | <= 1e-14 (tolerance (gate 26: coupled = single domain at O1)) |
 | C17 | box energy drift | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C17 | box mass drift | amrex | 0.00e+00 PASS | - | - | - | - | <= 1e-12 (tolerance (round-off)) |
 | C17 | box vs CPU 1 rank (max rel) | amrex | - | 0.00e+00 PASS | - | - | - | <= 1e-12 (tolerance (round-off)) |
@@ -1975,4 +2001,4 @@ Notes:
 - C6 C33 mass change (rel), numpy serial: max over 6 runs
 - C6 C36 mass change (rel), numpy serial: max over 1 runs
 
-Summed run wall time (s, without process start-up): amrex 5141, foam 6811, jax 11116, numpy 4837
+Summed run wall time (s, without process start-up): amrex 5234, foam 6921, jax 11338, numpy 4876
