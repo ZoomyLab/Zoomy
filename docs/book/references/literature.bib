@@ -21,6 +21,36 @@
   keywords = {zoomy_core.symsolver.strategies.chorin}
 }
 
+@article{amestoy2001fully,
+  author   = {Amestoy, Patrick R. and Duff, Iain S. and L’Excellent, Jean-Yves and Koster, Jacko},
+  title    = {{A Fully Asynchronous Multifrontal Solver Using Distributed Dynamic Scheduling}},
+  journal  = {SIAM Journal on Matrix Analysis and Applications},
+  volume   = {23},
+  number   = {1},
+  pages    = {15--41},
+  year     = {2001},
+  doi      = {10.1137/S0895479899358194},
+  keywords = {zoomy_core.symsolver.numpy_backend.parallel}
+}
+
+@book{andbalay2025petsc,
+  author   = {and Balay, S. and Abhyankar, S. and Adams, M. and Brown, J. and Brune, P. and Buschelman, K. and Constantinescu, E. and Dalcin, L. and Benson, S. and Dener, A. and Eijkhout, V. and Faibussowitsch, J. and Gropp, W. and Hapla, V. and Isaac, T. and Jolivet, P. and Karpeev, D. and Kaushik, D. and Knepley, M. and Kong, F. and Kruger, S. and May, D. and McInnes, L. and Mills, R. and Mitchell, L. and Munson, T. and Roman, Jose and Rupp, K. and Sanan, P. and Sarich, J. and Smith, B. and Suh, H. and Zampini, S. and Zhang, H. and Zhang, J.},
+  title    = {{PETSc/TAO Users Manual Revision 3.24}},
+  year     = {2025},
+  doi      = {10.2172/2998643},
+  keywords = {zoomy_core.symsolver.numpy_backend.parallel}
+}
+
+@book{anderson1999lapack,
+  author    = {Anderson, E. and Bai, Z. and Bischof, C. and Blackford, L. S. and Demmel, J. and Dongarra, J. and Du Croz, J. and Greenbaum, A. and Hammarling, S. and McKenney, A. and Sorensen, D.},
+  title     = {{LAPACK Users’ Guide}},
+  publisher = {Society for Industrial and Applied Mathematics},
+  year      = {1999},
+  isbn      = {9780898719604},
+  doi       = {10.1137/1.9780898719604},
+  keywords  = {zoomy_jax.fvm.eigvals}
+}
+
 @article{audusse2004fast_lit,
   author   = {Audusse, Emmanuel and Bouchut, François and Bristeau, Marie-Odile and Klein, Rupert and Perthame, Benoît},
   title    = {{A Fast and Stable Well-Balanced Scheme with Hydrostatic Reconstruction for Shallow Water Flows}},
@@ -30,7 +60,7 @@
   pages    = {2050--2065},
   year     = {2004},
   doi      = {10.1137/S1064827503431090},
-  keywords = {zoomy_core.fvm.riemann_solvers, zoomy_core.model.basemodel, zoomy_core.symsolver.discretization.reconstruction, zoomy_core.symsolver.discretization.time, zoomy_core.systemmodel.system_model}
+  keywords = {zoomy_core.fvm.riemann_solvers, zoomy_core.model.basemodel, zoomy_core.model.models.malpasset, zoomy_core.symsolver.discretization.reconstruction, zoomy_core.symsolver.discretization.time, zoomy_core.systemmodel.system_model, zoomy_foam/symsolver/rt.H}
 }
 
 @article{audusse2005well_lit,
@@ -167,7 +197,7 @@
   pages    = {4028--4050},
   year     = {2011},
   doi      = {10.1016/j.jcp.2011.02.026},
-  keywords = {zoomy_core.numerics.numerical_system_model, zoomy_core.symsolver.discretization.residual}
+  keywords = {zoomy_amrex/Source/symsolver/amr_amrex.H, zoomy_core.numerics.numerical_system_model, zoomy_core.symsolver.discretization.residual}
 }
 
 @article{crank1947practical,
@@ -180,6 +210,41 @@
   year     = {1947},
   doi      = {10.1017/s0305004100023197},
   keywords = {zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_jax.symsolver.runtime}
+}
+
+@article{dahm2024numerical,
+  author   = {Dahm, Sina and Giesselmann, Jan and Helzel, Christiane},
+  title    = {{Numerical discretisation of hyperbolic systems of moment equations describing sedimentation in suspensions of rod-like particles}},
+  journal  = {Journal of Computational Physics},
+  volume   = {513},
+  pages    = {113162},
+  year     = {2024},
+  doi      = {10.1016/j.jcp.2024.113162},
+  keywords = {zoomy_core.symsolver.strategies.hyperbolic}
+}
+
+@article{dalcin2011parallel_lit,
+  author   = {Dalcin, Lisandro D. and Paz, Rodrigo R. and Kler, Pablo A. and Cosimo, Alejandro},
+  title    = {{Parallel distributed computing using Python}},
+  journal  = {Advances in Water Resources},
+  volume   = {34},
+  number   = {9},
+  pages    = {1124--1139},
+  year     = {2011},
+  doi      = {10.1016/j.advwatres.2011.04.013},
+  keywords = {zoomy_core.symsolver.numpy_backend.parallel}
+}
+
+@article{dalcin2021mpi4py_lit,
+  author   = {Dalcin, Lisandro and Fang, Yao-Lung L.},
+  title    = {{mpi4py: Status Update After 12 Years of Development}},
+  journal  = {Computing in Science \& Engineering},
+  volume   = {23},
+  number   = {4},
+  pages    = {47--54},
+  year     = {2021},
+  doi      = {10.1109/MCSE.2021.3083216},
+  keywords = {zoomy_core.symsolver.numpy_backend.parallel}
 }
 
 @article{davis1988simplified_lit,
@@ -277,6 +342,18 @@
   keywords = {zoomy_core.model.models.closures, zoomy_core.model.models.qr_kesme}
 }
 
+@article{francis1961qr,
+  author   = {Francis, J. G. F.},
+  title    = {{The QR Transformation A Unitary Analogue to the LR Transformation--Part 1}},
+  journal  = {The Computer Journal},
+  volume   = {4},
+  number   = {3},
+  pages    = {265--271},
+  year     = {1961},
+  doi      = {10.1093/comjnl/4.3.265},
+  keywords = {zoomy_jax.fvm.eigvals}
+}
+
 @article{gallardo2007well,
   author   = {Gallardo, José M. and Parés, Carlos and Castro, Manuel},
   title    = {{On a well-balanced high-order finite volume scheme for shallow water equations with topography and dry areas}},
@@ -286,7 +363,7 @@
   pages    = {574--601},
   year     = {2007},
   doi      = {10.1016/j.jcp.2007.08.007},
-  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.symsolver.discretization.reconstruction, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.symsolver.discretization.reconstruction, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
 }
 
 @article{gerbeau2001derivation,
@@ -321,7 +398,7 @@
   isbn      = {9781421407944},
   doi       = {10.56021/9781421407944},
   edition   = {Fourth},
-  keywords  = {zoomy_amrex/Source/UserFunctions.H, zoomy_core.fvm.riemann_solvers, zoomy_core.model.kernel_functions, zoomy_core.systemmodel.system_model, zoomy_core/zoomy_core/symsolver/rt_common.H, zoomy_foam/UserFunctions.H}
+  keywords  = {zoomy_core.systemmodel.system_model, zoomy_core/zoomy_core/symsolver/rt_common.H}
 }
 
 @article{gottlieb2001strong,
@@ -379,7 +456,7 @@
   pages    = {155--177},
   year     = {2002},
   doi      = {10.1016/S0168-9274(01)00115-5},
-  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.hypre, zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.symsolver.numpy_backend.parallel, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.hypre, zoomy_jax.symsolver.runtime}
 }
 
 @book{horn2012matrix,
@@ -387,9 +464,8 @@
   title     = {{Matrix Analysis}},
   publisher = {Cambridge University Press},
   year      = {2012},
-  isbn      = {9780521839402},
+  isbn      = {9780521548236},
   doi       = {10.1017/CBO9781139020411},
-  edition   = {Second},
   keywords  = {zoomy_amrex/Source/UserFunctions.H, zoomy_core.fvm.riemann_solvers, zoomy_core.model.kernel_functions, zoomy_foam/UserFunctions.H}
 }
 
@@ -414,7 +490,7 @@
   pages    = {357--397},
   year     = {2004},
   doi      = {10.1016/j.jcp.2003.08.010},
-  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.strategies.chorin, zoomy_core/zoomy_core/symsolver/rt_common.H, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.symsolver.core, zoomy_core.symsolver.discretization.residual, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.strategies.chorin, zoomy_core/zoomy_core/symsolver/rt_common.H, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
 }
 
 @article{koellermeier2020analysis_lit,
@@ -483,6 +559,18 @@
   isbn      = {9780511791253},
   doi       = {10.1017/CBO9780511791253},
   keywords  = {zoomy_core.symsolver.discretization.residual, zoomy_core.symsolver.numpy_backend.runtime, zoomy_jax.symsolver.runtime}
+}
+
+@article{li2003superlu,
+  author   = {Li, Xiaoye S. and Demmel, James W.},
+  title    = {{SuperLU_DIST: A scalable distributed-memory sparse direct solver for unsymmetric linear systems}},
+  journal  = {ACM Transactions on Mathematical Software},
+  volume   = {29},
+  number   = {2},
+  pages    = {110--140},
+  year     = {2003},
+  doi      = {10.1145/779359.779361},
+  keywords = {zoomy_core.symsolver.numpy_backend.parallel}
 }
 
 @article{liu2026jax,
@@ -554,6 +642,18 @@
   keywords = {zoomy_core.symsolver.discretization.residual, zoomy_core.symsolver.discretization.time}
 }
 
+@article{parlett1969balancing,
+  author   = {Parlett, B. N. and Reinsch, C.},
+  title    = {{Balancing a matrix for calculation of eigenvalues and eigenvectors}},
+  journal  = {Numerische Mathematik},
+  volume   = {13},
+  number   = {4},
+  pages    = {293--304},
+  year     = {1969},
+  doi      = {10.1007/BF02165404},
+  keywords = {zoomy_jax.fvm.eigvals}
+}
+
 @article{pimentelgarcia2022cell,
   author   = {Pimentel-García, Ernesto and Castro, Manuel J. and Chalons, Christophe and Morales de Luna, Tomás and Parés, Carlos},
   title    = {{In-cell discontinuous reconstruction path-conservative methods for non conservative hyperbolic systems - Second-order extension}},
@@ -623,7 +723,7 @@
   pages    = {461--469},
   year     = {1993},
   doi      = {10.1137/0914028},
-  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.hypre, zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_amrex/Source/symsolver/rt_amrex.H, zoomy_core.symsolver.numpy_backend.parallel, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.hypre, zoomy_jax.symsolver.runtime}
 }
 
 @article{scholz2023dispersion,
@@ -683,7 +783,19 @@
   pages    = {995--1011},
   year     = {1984},
   doi      = {10.1137/0721062},
-  keywords = {zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
+}
+
+@inproceedings{tillet2019triton,
+  author    = {Tillet, Philippe and Kung, H. T. and Cox, David},
+  title     = {{Triton: an intermediate language and compiler for tiled neural network computations}},
+  booktitle = {Proceedings of the 3rd ACM SIGPLAN International Workshop on Machine Learning and Programming Languages},
+  series    = {PLDI ’19},
+  pages     = {10--19},
+  publisher = {ACM},
+  year      = {2019},
+  doi       = {10.1145/3315508.3329973},
+  keywords  = {zoomy_jax.fvm.eigvals}
 }
 
 @article{toro1994restoration_lit,
@@ -729,7 +841,7 @@
   pages    = {120--130},
   year     = {1995},
   doi      = {10.1006/jcph.1995.1084},
-  keywords = {zoomy_core.numerics.numerical_system_model, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_jax.symsolver.runtime}
+  keywords = {zoomy_core.numerics.numerical_system_model, zoomy_core.symsolver.numpy_backend.runtime, zoomy_core.symsolver.vocabulary, zoomy_foam/symsolver/rt.H, zoomy_jax.symsolver.runtime}
 }
 
 @article{weller1998tensorial_lit,

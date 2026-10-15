@@ -64,3 +64,15 @@ almgren-bell-crutchfield	10.1137/S1064827599357024	Almgren, Bell, Crutchfield 20
 marche-2007	10.1016/j.euromechflu.2006.04.007	Marche 2007, two-dimensional viscous shallow water model
 gallardo-front	10.1016/j.jcp.2007.08.007	Gallardo, Parés, Castro 2007, well-balanced high-order FV with dry areas (a-priori wet/dry front detector)
 horn-johnson-matrix	10.1017/CBO9781139020411	Horn, Johnson 2012, Matrix Analysis, 2nd ed. (spectral radius below every matrix norm, Gelfand's formula; Collatz-Wielandt)
+mpi4py-2021	10.1109/MCSE.2021.3083216	Dalcin, Fang 2021, mpi4py: Status Update After 12 Years of Development (NumPy backend MPI)
+mpi4py-2011	10.1016/j.advwatres.2011.04.013	Dalcin, Paz, Kler, Cosimo 2011, Parallel distributed computing using Python (mpi4py, petsc4py)
+petsc-manual	10.2172/2998643	Balay et al. 2025, PETSc/TAO Users Manual Revision 3.24 (NumPy backend distributed linear solves)
+mumps	10.1137/S0895479899358194	Amestoy, Duff, L'Excellent, Koster 2001, MUMPS: a fully asynchronous multifrontal solver (distributed LU)
+superlu-dist	10.1145/779359.779361	Li, Demmel 2003, SuperLU_DIST: scalable distributed-memory sparse direct solver
+dahm-moment-coupling	10.1016/j.jcp.2024.113162	Dahm, Giesselmann, Helzel 2024, moment equations of rod suspensions; Theorem 4.4: inter-level coupling (lifted shared face)
+lawson-hanson	10.1137/1.9781611971217	Lawson, Hanson 1995, Solving Least Squares Problems (constrained LSQ fits)
+ruge-stueben-amg	10.1137/1.9781611971057.ch4	Ruge, Stueben 1987, Algebraic multigrid (pressure / implicit solves)
+lapack-guide	10.1137/1.9780898719604	Anderson et al. 1999, LAPACK Users' Guide (the device eigenvalue kernel follows xGEEV)
+francis-qr	10.1093/comjnl/4.3.265	Francis 1961, The QR transformation (Hessenberg QR eigenvalues on the device)
+parlett-reinsch	10.1007/BF02165404	Parlett, Reinsch 1969, Balancing a matrix for calculation of eigenvalues
+triton	10.1145/3315508.3329973	Tillet, Kung, Cox 2019, Triton (the device eigenvalue kernel)
