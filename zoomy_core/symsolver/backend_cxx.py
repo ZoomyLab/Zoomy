@@ -14,11 +14,13 @@ from zoomy_core.solver.constants import TPFA_COS_FLOOR, elliptic_constants
 from zoomy_core.symsolver import default_wave_speed
 from zoomy_core.symsolver.core import CxxPrinter
 from zoomy_core.symsolver.discretization import reconstruction as R
+from zoomy_core.symsolver.discretization.residual import (
+    implicit_step, post_step, residual, stage_aux)
 from zoomy_core.symsolver.discretization.time import IMEX_RK, SSP_RK, Imex
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
-from zoomy_core.symsolver.vocabulary import clean_round_off, pointwise, put, take
+from zoomy_core.symsolver.vocabulary import clean_round_off, inadmissible, pointwise, put, take
 
 RUNTIME_HEADER = Path(__file__).with_name("rt_common.H")
 
@@ -203,8 +205,10 @@ def _conservative_rows(nsm):
 def _amr_procedures(template):
     """Print the template pieces an AMR level loop calls: `step`, `dt_of` (the constant
     `dt` when set, else the CFL step), the
-    reconstruction maps `amr_w` / `amr_q`, `amr_clean`, the stage weights
-    `rk_weights` and the refluxed rows `reflux_rows`.
+    reconstruction maps `amr_w` / `amr_q`, `amr_clean`, `amr_keep` (a refluxed cell keeps
+    the reconstruction variables of the rows that are not refluxed), `amr_stage_aux` (the
+    pointwise aux of a state), the stage weights `rk_weights`, the refluxed rows
+    `reflux_rows` and, but for IMEX-SSP2, the stages of the step (`_amr_stages`).
 
     The stage weights integrate each stage's face terms over the step: SSP-RK's
     Shu-Osher weights, IMEX-RK's `wt`; the diffusive fluxes of a stage join its
@@ -253,6 +257,21 @@ def _amr_procedures(template):
         beta = []
         for a, _c in SSP_RK[template.time_order]:
             beta = [(1 - a) * b for b in beta] + [1 - a]
+    refluxed = _conservative_rows(nsm)
+    kept = tuple(i for i in range(len(nsm.state)) if i not in refluxed)
+
+    def keep(Qo, Qn, Qaux, p, mesh):
+        """`Qn` with the reconstruction variables of the rows that are not refluxed taken
+        from `Qo`: a refluxed cell keeps its velocity (its momentum follows the corrected
+        depth), not its momentum.
+        """
+        if not kept:
+            return (Qn,)
+        Wo = w_of(Qo, stage_aux(nsm, Qo, Qaux, p, 0, 1, mesh), p, mesh)[0]
+        An = stage_aux(nsm, Qn, Qaux, p, 0, 1, mesh)
+        Wn = w_of(Qn, An, p, mesh)[0]
+        return q_of(put(Wn, kept, take(Wo, kept)), An, p, mesh)
+
     procs = [
         "#define ZS_AMR_PROCEDURES 1",
         CxxPrinter().procedure("step", (Q, Qaux, p, time, dt, mesh),
@@ -261,11 +280,88 @@ def _amr_procedures(template):
         CxxPrinter().procedure("amr_w", (Q, Qaux, p, mesh), w_of),
         CxxPrinter().procedure("amr_q", (W, Qaux, p, mesh), q_of),
         CxxPrinter().procedure("amr_clean", (Q, mesh), clean),
+        CxxPrinter().procedure("amr_keep", (Q, W, Qaux, p, mesh), keep),
+        CxxPrinter().procedure("amr_stage_aux", (Q, Qaux, p, mesh),
+                               lambda Q, Qaux, p, mesh: (stage_aux(nsm, Q, Qaux, p, 0, 1, mesh),)),
         "inline std::vector<double> rk_weights() { return {"
         + ", ".join(repr(float(b)) for b in beta) + "}; }",
         "inline std::vector<int> reflux_rows() { return {"
-        + ", ".join(str(i) for i in _conservative_rows(nsm)) + "}; }"]
+        + ", ".join(str(i) for i in refluxed) + "}; }"]
+    if template.imex is not Imex.ssp2:
+        procs += _amr_stages(template, clean)
     return "\n\n".join(procs)
+
+
+def _amr_stages(template, clean):
+    """The SSP-RK step of `template` cut into its stages, for an AMR loop that advances all
+    levels stage by stage (each finer level's halo from the coarser level's state of the
+    same stage, each stage's face terms refluxed before the next one).
+
+    Prints `amr_stage<i>` (stage i: `Y -> a_i Q + (1 - a_i) (Y + dt L(Y))`, without the
+    halo), with MOOD also `amr_stage<i>_cells` (the cells of the mask `bad` at first order)
+    and `amr_stage<i>_o1` (every cell), the dispatcher `amr_stage`, the share `1 - a_i` of
+    each stage's face terms `amr_stage_weights`, `amr_bad` (the inadmissible cells),
+    `amr_implicit` (Lie: the implicit slots after the stages) and `amr_post` (the step's
+    hygiene and aux).
+    """
+    Q, Qaux, Y, p, time, dt, mesh, bad = sp.symbols("Q Qaux Y p time dt mesh bad")
+    nsm, order, imex, mood = template.nsm, template.order, template.imex, template.mood
+    stages = SSP_RK[template.time_order]
+
+    def stage(i, a, c, demote):
+        def f(Q, Qaux, Y, p, time, dt, mesh, bad=None):
+            """Stage i from the stage state `Y`; `Q` is the state at the step's start."""
+            Qs = Qaux if i == 0 else stage_aux(nsm, Y, Qaux, p, time + c * dt, dt, mesh)
+            L = residual(nsm, Y, Qs, p, time + c * dt, dt, mesh, order,
+                         demote if bad is None else bad, implicit_terms=not imex)
+            return clean(a * Q + (1 - a) * (Y + dt * L), mesh)
+        return f
+
+    args = (Q, Qaux, Y, p, time, dt, mesh)
+    procs = ["#define ZS_AMR_STAGES 1"]
+    for i, (a, c) in enumerate(stages):
+        procs.append(CxxPrinter().procedure(f"amr_stage{i}", args, stage(i, a, c, sp.S.false)))
+        if mood:
+            procs.append(CxxPrinter().procedure(f"amr_stage{i}_cells", (*args, bad),
+                                                stage(i, a, c, None)))
+            procs.append(CxxPrinter().procedure(f"amr_stage{i}_o1", args,
+                                                stage(i, a, c, sp.S.true)))
+
+    def call(i, suffix="", extra=""):
+        return (f"amr_stage{i}{suffix}(Q, Qaux, Y, p, time, dt, std::cref(mesh){extra}, 0L)")
+    lines = []
+    for i in range(len(stages)):        # a stage returns an expression or a Field
+        lines.append(f"    if (i == {i})\n    {{\n")
+        if mood:
+            lines.append(f"        if (mode == 1) return Field(std::get<0>("
+                         f"{call(i, '_cells', ', bad')}));\n"
+                         f"        if (mode == 2) return Field(std::get<0>({call(i, '_o1')}));\n")
+        lines.append(f"        return Field(std::get<0>({call(i)}));\n    }}\n")
+    procs.append(
+        "/// Stage i of the step; mode 0: the candidate, 1: the cells of `bad` at first order, "
+        "2: every cell.\ntemplate<class B> inline Field amr_stage(int i, [[maybe_unused]] int "
+        "mode, const Field& Q, const Field& Qaux, const Field& Y, const Col<NPAR>& p, double "
+        "time, double dt, const Mesh& mesh, [[maybe_unused]] const B& bad)\n{\n"
+        + "".join(lines) + "    return Y;\n}")
+    procs.append("inline std::vector<double> amr_stage_weights() { return {"
+                 + ", ".join(repr(float(1 - a)) for a, _ in stages) + "}; }")
+    procs.append(f"inline constexpr bool amr_mood = {'true' if mood else 'false'};")
+    if mood:
+        procs.append(CxxPrinter().procedure(
+            "amr_bad", (Q, Qaux, p, mesh),
+            lambda Q, Qaux, p, mesh: (inadmissible(nsm.call.admissible, Q, Qaux, p),)))
+    else:                                       # never called without MOOD
+        procs.append("inline auto amr_bad = [](auto Q, auto, auto, auto, auto tok) "
+                     "{ return std::make_tuple(Q, tok); };")
+    procs.append(f"inline constexpr bool amr_lie = {'true' if imex is Imex.lie else 'false'};")
+    procs.append(CxxPrinter().procedure(        # without Lie: the identity
+        "amr_implicit", (Q, Qaux, p, time, dt, mesh),
+        lambda Q, Qaux, p, time, dt, mesh: (
+            implicit_step(nsm, Q, Qaux, p, time + dt, dt, mesh) if imex is Imex.lie else Q,)))
+    procs.append(CxxPrinter().procedure(
+        "amr_post", (Q, Qaux, p, time, dt, mesh),
+        lambda Q, Qaux, p, time, dt, mesh: post_step(nsm, Q, Qaux, p, time + dt, dt, mesh)))
+    return procs
 
 
 def initial_state(mesh, model):
