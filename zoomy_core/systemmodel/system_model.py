@@ -453,42 +453,96 @@ def _attach_function_groups(sm, model, canonical_source=None) -> None:
         sm.position = Zstruct(X0=x, X1=y_pos, X2=z_pos)
 
 
-# ── spectral-radius bound (no eigen-decomposition) ───────────────────────
+# ── the wave speed of a system without a closed-form spectrum ───────────
 
 
-def _perron_radius_bound(M, iterations):
-    """`Min` over `k <= iterations` of `(max_i (M^k 1)_i)^(1/k)`, an upper bound on
-    `rho(M)` for a nonnegative symbolic matrix `M` given as rows; see
-    `SystemModel.spectral_radius_bound`.
+def spectral_core(M):
+    """Indices left after repeatedly dropping a state whose row or column of the square
+    symbolic matrix `M` (list of rows) is structurally zero: the matrix is then block
+    triangular with a zero block, so the kept block has the same spectral radius (`b`, VAM's
+    pressure rows).
+    """
+    keep = list(range(len(M)))
+    dropped = True
+    while dropped:
+        dropped = False
+        for i in list(keep):
+            if all(M[i][j] == 0 for j in keep) or all(M[j][i] == 0 for j in keep):
+                keep.remove(i)
+                dropped = True
+    return keep or [0]
+
+
+def normal_frame(sm, M, nrm):
+    """`T M T^T` for the lab-frame `A_n` rows `M`, `T` rotating each horizontal vector
+    `(q_x, q_y)` of the state (`derive_momentum_field_indices`) to `(q.n, q.t)`, `t = (-n_y,
+    n_x)`: a similarity (same spectrum).  In that frame `A_n` of a rotated state on a rotated
+    face is the unrotated one, so a bound built from its entries is rotation invariant, and a
+    wall's reflected state has a signed permutation of the inner state's matrix (ANALYSIS 52c,
+    61).  2 horizontal directions with 2-component vector groups of a square system (`M` over
+    the whole state); else `M` (1-D: `T = I`; a reduced system such as Chorin's pressure part).
+    """
+    from zoomy_core.model.boundary_conditions import derive_momentum_field_indices
+    if len(nrm) != 2:
+        return M
+    try:
+        groups = derive_momentum_field_indices(sm)
+    except RuntimeError:
+        return M
+    if (len(M) != len(sm.state) or any(len(g) != 2 for g in groups)
+            or any(i >= len(M) for g in groups for i in g)):
+        return M
+    T = sp.eye(len(M))
+    for i, j in groups:
+        T[i, i], T[i, j], T[j, i], T[j, j] = nrm[0], nrm[1], -nrm[1], nrm[0]
+    R = T * sp.Matrix(M) * T.T
+    return [[R[i, j] for j in range(len(M))] for i in range(len(M))]
+
+
+def speed_matrix(sm, M, nrm):
+    """The lab-frame `A_n` rows `M` in the face's normal frame (`normal_frame`), restricted to
+    the rows and columns that carry its spectrum (`spectral_core`)."""
+    R = normal_frame(sm, M, nrm)
+    keep = spectral_core(R)
+    return [[R[i][j] for j in keep] for i in keep]
+
+
+def gelfand(sm, M):
+    """`gelfand_bound` of the square matrix `M` (list of rows) with `sm`'s squarings and
+    Collatz-Wielandt offset: an upper bound of rho(M) (ANALYSIS 48)."""
+    from zoomy_core.model.kernel_functions import gelfand_bound
+    return gelfand_bound(
+        sp.Integer(getattr(sm, "spectral_squarings", SystemModel.spectral_squarings)),
+        sp.Float(getattr(sm, "spectral_cw_offset", SystemModel.spectral_cw_offset)),
+        *[x for row in M for x in row])
+
+
+def spectral_method(sm):
+    """`sm`'s `SpectralRadius` (typed: a plain string raises TypeError)."""
+    from zoomy_core.misc.options import typed
+    return typed(SpectralRadius, getattr(sm, "spectral_radius_method",
+                                         SystemModel.spectral_radius_method),
+                 "spectral_radius_method")
+
+
+def wave_speed_bound(sm, M, nrm):
+    """The wave speed of a system without closed-form eigenvalues: the Gelfand bound of
+    `A_n` (lab-frame rows `M`, normal `nrm`) in the face's normal frame (ANALYSIS 48, 61).
 
     References:
-        Golub, Van Loan 2013, https://doi.org/10.56021/9781421407944
+        Horn, Johnson 2012 (sections 5.6, 8.1), https://doi.org/10.1017/CBO9781139020411
     """
-    n = len(M)
-    v = [sp.Integer(1)] * n
-    candidates = []
-    for k in range(1, iterations + 1):
-        v = [sum(M[i][j] * v[j] for j in range(n)) for i in range(n)]   # Mᵏ·1
-        peak = sp.Max(*v, evaluate=False)
-        # ``evaluate=False`` on the root as well: ``sqrt(a·b)`` otherwise
-        # SPLITS into ``sqrt(a)·sqrt(b)`` (sympy can see the factors are
-        # non-negative), and the C printers emit one ``pow`` call per factor.
-        candidates.append(peak if k == 1 else
-                          sp.Pow(peak, sp.Rational(1, k), evaluate=False))
-    if len(candidates) == 1:
-        return candidates[0]
-    return sp.Min(*candidates, evaluate=False)
+    return gelfand(sm, speed_matrix(sm, M, nrm))
 
 
 class SpectralRadius(Option):
-    """How a Riemann solver bounds the wave speed rho(A_n) when no closed-form eigenvalues exist."""
-    #: numerical eigenvalues of A_n
-    eig = "eig"
+    """The wave speed of a system without closed-form eigenvalues (`spectral_radius_method`)."""
     #: the upper bound `||A_n^m||^(1/m)`, `m = 2^spectral_squarings`, with a Collatz-Wielandt
-    #: step (`kernel_functions.gelfand_bound`; zoomy_core.symsolver.WAVE_SPEED)
+    #: step, of A_n in the face's normal frame (`wave_speed_bound`; the default everywhere)
     gelfand = "gelfand"
-    #: the closed-form scalar upper bound (cheaper, more diffusive)
-    bound = "bound"
+    #: the numerical eigenvalues of A_n (`numerical_eigenvalues`; opt in: an estimate of rho,
+    #: no bound; a host callback on a GPU except JAX's device eigensolver)
+    eig = "eig"
 
 
 @dataclass
@@ -1305,8 +1359,8 @@ class SystemModel:
 
     @property
     def numerical_eigenvalues(self) -> ZArray:
-        """Eigenvalues of `A_n` as `n` calls to the opaque eigenvalue kernel, used for the
-        wave speed when the model has no closed-form `eigenvalues` (SME, VAM).
+        """Eigenvalues of `A_n` as `n` calls to the opaque eigenvalue kernel (hyperbolicity
+        analysis, the legacy printers); never a wave speed (`wave_speed_bound`).
         """
         from zoomy_core.model.kernel_functions import (
             eigenvalues as _ev, pick as _pick)
@@ -1320,64 +1374,17 @@ class SystemModel:
         stack = _ev(*A_flat)
         return ZArray([_pick(stack, sp.Integer(idx)) for idx in range(n)])
 
-    # Power-norm steps in :attr:`spectral_radius_bound`.  A pure
-    # cost/tightness dial — see that property for the measured table.
-    # Deliberately NOT a dataclass field: it is a scheme constant, not
-    # per-instance state, so it neither enters the SM cache key nor breaks
-    # unpickling of older blobs.
-    spectral_bound_iterations = 2
-
-    # WHICH path ``Numerics.local_max_abs_eigenvalue`` takes when the model
-    # carries no closed-form ``eigenvalues``.  DEFAULT FALSE: the exact
-    # :attr:`numerical_eigenvalues` spectrum, not :attr:`spectral_radius_bound`.
-    #
-    # The bound is an UPPER bound, and ``max|lambda|`` is consumed TWICE: by the
-    # CFL, where over-estimating is merely conservative, and by the Rusanov / LF
-    # / HLL dissipation, where over-estimating is EXTRA NUMERICAL DIFFUSION.
-    # ``spectral_radius_bound`` records its own tightness as a min ratio of
-    # 1.224 over 5064 states, so the dissipation is at least ~22 % too large
-    # wherever it is used, and looser near dry states.  MEASURED on the Ritter
-    # dry dam break (thesis 1d_wetdry, order 2, n = 50…400): with the bound the
-    # depth error is 1.44–1.55x the closed-form-spectrum result at every
-    # resolution and the velocity error 2.7–3.5x, with the velocity EOC turning
-    # erratic (0.56/1.96/1.37 against 0.93/1.09/0.95).  The convergence RATE
-    # survives, which is why this hid: only the error CONSTANT moves.
-    #
-    # Set True to trade that accuracy back for speed.  The bound exists for a
-    # real reason: it took the emitted foam ``SME(level=4, dimension=3)`` kernel
-    # from 23.13 to 0.241 us/call, and a per-face eigen-decomposition is O(n^3)
-    # per side per step.  So a large-level or coupled production run may well
-    # want it; a verification or convergence study must not have it silently on.
-    use_spectral_radius_bound = False
-    # Spectral radius of a model without a closed-form spectrum: `eig` (the
-    # numerical eigenvalues; CPU-only in JAX), `gelfand` (the upper bound
-    # ||A^m||^(1/m), m = 2^spectral_squarings, any device; ANALYSIS 48),
-    # `bound` (the closed-form |A| bound, = use_spectral_radius_bound).
-    # The symbolic solvers default to `gelfand` on every backend
-    # (zoomy_core.symsolver.WAVE_SPEED); this default serves the old solvers.
-    spectral_radius_method = SpectralRadius.eig
+    # The wave speed of a system without closed-form eigenvalues: by default the Gelfand bound
+    # ||A_n^m||^(1/m), m = 2^spectral_squarings, of A_n in the face's normal frame, on every
+    # backend and in every consumer (Riemann speeds, both CFL rules, MOOD, coupling;
+    # `wave_speed_bound`, ANALYSIS 48, 61); `SpectralRadius.eig` opts in to the numerical
+    # eigenvalues of A_n.  A plain string raises TypeError.
+    spectral_radius_method = SpectralRadius.gelfand
     spectral_squarings = 7
     # The Collatz-Wielandt vector of `gelfand_bound` is the row sums of |A^m| plus this times
     # their max: positive, so the bound is continuous in A and a row of round-off (q_y ~ 1e-20
     # in a quasi-1-D run) does not switch it between backends (ANALYSIS 48).
     spectral_cw_offset = 2.0 ** -30
-
-    @property
-    def spectral_radius_bound(self):
-        """Closed-form scalar upper bound on `rho(A_n)`, the `Min` over `k <= iterations` of
-        `(max_i (|A_n|^k 1)_i)^(1/k)`, so the CFL needs no eigen-decomposition.
-        Every candidate is an upper bound on its own, so `iterations` buys tightness only and
-        the CFL cannot become unsafe.
-
-        References:
-            Golub, Van Loan 2013, https://doi.org/10.56021/9781421407944
-        """
-        n = self.n_equations
-        qm = self.quasilinear_matrix
-        normal = list(self.normal.values())
-        M = [[sp.Abs(sum(qm[i, j, d] * normal[d] for d in range(self.n_dim)))
-              for j in range(n)] for i in range(n)]
-        return _perron_radius_bound(M, self.spectral_bound_iterations)
 
     def refresh_derived_operators(self, *, eigenvalues: bool = False):
         """Recompute `quasilinear_matrix` and the source jacobians from the current (possibly

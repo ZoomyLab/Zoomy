@@ -8,6 +8,8 @@ lake accelerated from rest (0.40 m/s within 1 s here; the clamp-saturated pits o
 thesis run).  The hydrostatic extension of the free surface in the stencil
 (``reconstruction.shore_extension``) keeps it at rest to round-off for every limiter.
 """
+import re
+
 import numpy as np
 import pytest
 
@@ -68,3 +70,47 @@ def test_pit_lake_stays_at_rest(limiter, eta0, tilt):
     assert (0 < wet.sum() < h.size) if eta0 < 1.0 else wet.all()
     assert u.max() < 1e-12, f"the lake moved: max |u| = {u.max():.3e}"
     assert np.ptp(eta) < 1e-12
+
+
+def test_shore_rule_follows_the_free_surface_roles():
+    """The dry-neighbour rule is free-surface specific (ANALYSIS 50, 62): active only where the
+    model declares the depth and bed roles and the reconstruction is the pair (h, eta = b + h)
+    with the bed derived, its rows the roles' (never fixed indices); every other system (Euler,
+    a conservative reconstruction, a reconstructed bed) prints the plain gradient and limiter
+    blocks."""
+    import zoomy_core.model.boundary_conditions as BC
+    from zoomy_core.numerics import BedReconstruction, ReconstructedVariables
+    from zoomy_core.symsolver.discretization.reconstruction import (bed_rows, maps,
+                                                                    shore_extension)
+    from zoomy_core.systemmodel.euler import compressible_euler
+
+    def nsm_of(sm, **spec):
+        return NumericalSystemModel.from_system_model(
+            sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod, **spec))
+
+    def rows_of(nsm):                  # as `reconstruct`
+        return bed_rows(nsm) if maps(nsm)[0] is not None else None
+
+    for level in (0, 1):
+        sm = SystemModel.from_model(SME(level=level, dimension=3,
+                                        closures=[Newtonian(), StressFree()]))
+        nsm = nsm_of(sm)
+        rows = rows_of(nsm)
+        assert rows == (sm.roles.bed, sm.roles.depth)
+        (eta, h), eps = shore_extension(nsm, rows)
+        assert (eta, h) == (sm.roles.depth, sm.roles.bed)
+        for spec in (dict(variables=ReconstructedVariables.conservative),
+                     dict(bed=BedReconstruction.reconstructed)):
+            other = nsm_of(sm, **spec)
+            assert shore_extension(other, rows_of(other)) == ()
+    euler = compressible_euler(2, 1.4, boundary_conditions=BC.BoundaryConditions(
+        [BC.Wall(tag=t) for t in TAGS]))
+    nsm = nsm_of(euler)
+    assert euler.roles.depth is None and rows_of(nsm) is None
+    s = SymbolicHyperbolicSolverNumpy(time_end=0.01, cfl=0.45)
+    s.setup(LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=4, ny=4), nsm)
+    blocks = [ln.strip() for ln in s.source.splitlines()
+              if "gradient(" in ln or "minmod(" in ln]
+    plain = (r"\w+ = gradient\(\w+, \w+, mesh\)",
+             r"\w+ = minmod\(\([\d, ]+\), \w+, \w+, \w+, mesh\)")
+    assert blocks and all(any(re.fullmatch(f, ln) for f in plain) for ln in blocks), blocks

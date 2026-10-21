@@ -438,7 +438,7 @@ class SME(BaseModel):
 
     def _register_hswme_spectrum(self, sm):
         """Publish the closed-form beta-HSWME spectrum as `sm.eigenvalues`; valid only where
-        the truncation drops nothing (level <= 1), otherwise defers to `_wave_speed_cone`.
+        the truncation drops nothing (level <= 1), otherwise `_no_closed_form`.
 
         References:
             Koellermeier, Rominger 2020, https://doi.org/10.4208/cicp.oa-2019-0065
@@ -499,14 +499,12 @@ class SME(BaseModel):
         #
         # So: publish the closed form only where the truncation changes nothing
         # (level ≤ 1 — byte-identical to before).  Otherwise leave
-        # ``eigenvalues = None``, which every consumer already reads as "no
-        # closed-form spectrum" and routes to ``spectral_radius_bound`` (HLL →
-        # local Lax-Friedrichs on a STRICT bound), and publish that same bound
-        # as the dt-only :attr:`~zoomy_core.systemmodel.system_model.
-        # SystemModel.eigenvalues_cfl` cone so the timestep does not fall back
-        # to a per-face numerical eigensolve.
+        # ``eigenvalues = None``, which every consumer reads as "no closed-form
+        # spectrum": the wave speed is then the Gelfand bound of A_n in the face's
+        # normal frame (``system_model.wave_speed_bound``, ANALYSIS 48, 61), in the
+        # Riemann speeds and the dt spectrum alike.
         if any(A.has(s_) for s_ in drop):
-            self._wave_speed_cone(sm)
+            self._no_closed_form(sm)
             return
         # ``drop`` is empty here (guard above), so this is the UNtruncated
         # matrix: at level ≤ 1 the SWE/SME(1) char-poly always factors in
@@ -522,39 +520,19 @@ class SME(BaseModel):
             sm.eigenvalues = sp.Matrix(n_eq, 1, lams)
         except Exception:
             # No radical factorization even at level ≤ 1 (should not happen) —
-            # fall back to the bound, never to a spectrum of a different matrix.
-            self._wave_speed_cone(sm)
+            # no closed form, never a spectrum of a different matrix.
+            self._no_closed_form(sm)
 
-    def _wave_speed_cone(self, sm):
-        """Set `eigenvalues = None` and publish a strict spectral-radius-bound cone as
-        `eigenvalues_cfl`, so the CFL needs no per-face eigensolve and HLL falls back to local
-        Lax-Friedrichs.
+    def _no_closed_form(self, sm):
+        """Set `eigenvalues = None` (no closed form): the wave speed is the normal-frame
+        Gelfand bound (`system_model.wave_speed_bound`) for the dissipation and the CFL.
         """
         import warnings
-        n_eq = sm.n_equations
         sm.eigenvalues = None
-        # OPT IN to the bound for the DISSIPATION too (``use_spectral_radius_bound``
-        # defaults False, i.e. the exact ``numerical_eigenvalues``, because the
-        # bound is extra numerical diffusion — measured 1.4-1.5x depth / 2.7-3.5x
-        # velocity error on the Ritter dry dam break).  That default is right for
-        # a model that CAN afford a per-face eigensolve.  This one cannot: the
-        # JAX backend lowers ``numerical_eigenvalues`` to ``jnp.linalg.eigvals``,
-        # which has NO GPU implementation, and the whole reason this branch
-        # exists is a 26k-cell GPU march.  So the choice here is not
-        # "accuracy vs speed" but "diffusive vs not runnable" — and the extra
-        # diffusion is a KNOWN, bounded error, where the wave speed it replaces
-        # was simply wrong.  A backend that can afford the eigensolve should set
-        # this back to False on the built system.
-        sm.use_spectral_radius_bound = True
-        rho = sm.spectral_radius_bound
-        rho = rho[0] if hasattr(rho, "__len__") else rho
-        cone = [-rho, rho] + [sp.S.Zero] * (n_eq - 2)
-        sm.eigenvalues_cfl = sp.Matrix(n_eq, 1, cone)
         warnings.warn(
             f"SME(level={self.level}): symbolic_spectrum is not available — the "
             f"β-HSWME closed form is the spectrum of the α≥2-TRUNCATED matrix, "
             f"which is not the one the solver marches from level 2 up (measured "
             f"below ρ(A·n) on 79% of states, worst 0.10×).  Publishing "
-            f"eigenvalues=None + the strict spectral_radius_bound cone in "
-            f"eigenvalues_cfl instead.")
+            f"eigenvalues=None: the wave speed is the Gelfand bound of A_n.")
 

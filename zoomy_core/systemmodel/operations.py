@@ -26,6 +26,7 @@ __all__ = [
     "equilibrate_constraint_rows",
     "guard_eigenvalue_powers",
     "gate_eigenvalues_dry",
+    "bound_wave_speed",
     "regularize_fractional_powers",
     "norm_derivative_at_zero",
 ]
@@ -723,6 +724,13 @@ def symbolic_spectrum():
     def _op(sm):
         """Apply the operation to `sm` in place."""
         sm.eigenvalues = ZArray(sm._compute_eigenvalues())
+        if getattr(sm, "eigenvalues_cfl", None) is not None:
+            # a dt spectrum published without the closed form (the bound) is stale: the
+            # gated closed form where a dry gate applies, else the closed form itself
+            sm.eigenvalues_cfl = None
+            roles = getattr(sm, "roles", None)
+            if roles is not None and roles.depth is not None:
+                gate_eigenvalues_dry()(sm)
     _op.name = "symbolic_spectrum"
     _op.description = "closed-form spectrum of the quasilinear matrix"
     return _op
@@ -1036,13 +1044,6 @@ def guard_eigenvalue_powers():
     return _op
 
 
-def _is_dry_gated(e, h, eps) -> bool:
-    """True when `e` is already `conditional(h <= eps, 0, .)`, so re-gating is a no-op."""
-    return (isinstance(e, sp.Function) and e.func.__name__ == "conditional"
-            and len(e.args) == 3 and e.args[0] == (h <= eps)
-            and e.args[1] == sp.S.Zero)
-
-
 def _dry_gate(h, eps, e):
     """`e` where `h > eps`, 0 where `h <= eps`; a NaN depth keeps `e` (NaN), so the step of a
     non-finite state is NaN and the march stops there (`check.march`)."""
@@ -1062,16 +1063,50 @@ def _cfl_inverse_depth(sm, h) -> dict:
     return out
 
 
+def cfl_wave_speed_bound(sm, subs=None):
+    """The dt spectrum of a system without closed-form eigenvalues, shape `(n_eq, 1)`: the
+    wave-speed bound of `A_n` in the face's normal frame (`system_model.wave_speed_bound`,
+    the Riemann speeds' bound) in row 0, zeros below (the consumers take `max |.|`), or with
+    `SpectralRadius.eig` the numerical eigenvalues of `A_n`; `subs` replaces aux symbols
+    first (the CFL inverse depth).
+    """
+    from zoomy_core.systemmodel.system_model import spectral_method, wave_speed_bound
+    if spectral_method(sm) == "eig":                 # opt in: the numerical eigenvalues
+        return [sp.sympify(e).xreplace(subs or {}) for e in sp.flatten(sm.numerical_eigenvalues)]
+    n, qm = sm.n_equations, sm.quasilinear_matrix
+    nrm = list(sm.normal.values())
+    M = [[sp.sympify(sum(qm[i, j, d] * nrm[d] for d in range(sm.n_dim))).xreplace(subs or {})
+          for j in range(n)] for i in range(n)]
+    return [wave_speed_bound(sm, M, nrm)] + [sp.S.Zero] * (n - 1)
+
+
+def bound_wave_speed():
+    """Operation: publish `cfl_wave_speed_bound` into `sm.eigenvalues_cfl` for a system
+    without closed-form eigenvalues whose dt spectrum no dry gate published (no depth, or no
+    `gate` guard), so the cells rule takes the same bound as the Riemann speeds; a no-op with
+    a closed form or a published dt spectrum.
+    """
+    def _op(sm):
+        """Apply the operation to `sm` in place."""
+        if sm.eigenvalues is not None or getattr(sm, "eigenvalues_cfl", None) is not None:
+            return
+        rows = cfl_wave_speed_bound(sm)
+        sm.eigenvalues_cfl = ZArray(rows).reshape(len(rows), 1)
+
+    _op.name = "bound_wave_speed"
+    _op.description = "publish the normal-frame Gelfand bound as the dt spectrum"
+    return _op
+
+
 def gate_eigenvalues_dry(eps=None):
     """Operation: publish a timestep-only spectrum `conditional(h <= eps, 0, e)` into
     `sm.eigenvalues_cfl`, leaving `sm.eigenvalues` physical (with its power guard) for the
     Riemann dissipation.  `eps` defaults to 0: a cell without water (h <= 0) has no wave speed,
     but every cell with h > 0 moves mass with its own velocity (the Audusse states keep it), so
     its speed bounds the step however thin it is (ANALYSIS 52).
-    The dry gate carries the power guard because a branchless backend evaluates both arms; without
-    a closed form it gates `numerical_eigenvalues` of `A_n` with `hinv` -> `1/max(1e-14, h)` (the
-    Riemann speeds' matrix, `wave_speed_inverse_depth`), or the model's published
-    `eigenvalues_cfl`, and is idempotent.
+    The dry gate carries the power guard because a branchless backend evaluates both arms;
+    without a closed form `e` is the Riemann speeds' bound (`cfl_wave_speed_bound`) of `A_n`
+    with `hinv` -> `1/max(1e-14, h)` (`wave_speed_inverse_depth`).  Idempotent.
     """
     def _op(sm):
         """Apply the operation to `sm` in place."""
@@ -1079,48 +1114,11 @@ def gate_eigenvalues_dry(eps=None):
         h = _depth_state(sm, "gate_eigenvalues_dry")
         e_eps = sp.S.Zero if eps is None else sp.Float(eps)
         if ev is None:
-            # NO CLOSED FORM (SME / VAM): the model computes its wave speeds by
-            # a runtime eigensolve.  EMBED that computation inside the gate
-            # rather than skipping — wrap the opaque
-            # ``numerical_eigenvalues`` kernel (itself derived from the CURRENT
-            # ``quasilinear_matrix``) in the same dry conditional.  The slot
-            # then carries "if wet, solve for the spectrum; if dry, 0", so a
-            # backend still just evaluates one operator and never needs a
-            # wet/dry rule of its own.
-            #
-            # Before this, the op returned early for these models, which is why
-            # the numerical-spectrum path was the one place a backend still had
-            # to carry its own dry threshold.
-            # The MODEL may already have published a dt spectrum of its own —
-            # SME(level>=2) puts its closed-form ``spectral_radius_bound`` cone
-            # here precisely because it has no valid closed-form ``eigenvalues``
-            # (``SME._wave_speed_cone``).  Gate THAT; only synthesise one from
-            # the opaque eigensolve when the model published nothing.  Before
-            # this the branch overwrote it unconditionally, which put a per-face
-            # numerical eigen-decomposition back on the dt path of exactly the
-            # models that had gone to the trouble of avoiding one.
-            published = getattr(sm, "eigenvalues_cfl", None)
-            if published is not None:
-                num = published
-            else:                        # A_n of the Riemann speeds: 1/h floored, not the KP hinv
-                num = [sp.sympify(e).xreplace(_cfl_inverse_depth(sm, h))
-                       for e in sp.flatten(sm.numerical_eigenvalues)]
-            # IDEMPOTENT.  The closed-form branch below rebuilds the gated copy
-            # from ``sm.eigenvalues`` (which this op never zeroes), so applying
-            # it twice is harmless there.  This branch reads the slot it also
-            # WRITES — and the op is genuinely applied twice on the common path
-            # (``NumericalSystemModel.eigenvalue_guard`` defaults to ``"gate"``
-            # AND cases pass it in ``extra_operations``), so without this the
-            # cone comes out wrapped in ``conditional(h>eps, conditional(h>eps,
-            # …), 0)`` — same value, twice the tree.
-            gated = [e if _is_dry_gated(e, h, e_eps)
-                     else _dry_gate(h, e_eps, e)
-                     for e in sp.flatten(num)]
-            # ``numerical_eigenvalues`` is RANK-1 (length n), but the
-            # eigenvalue slot contract is ``(n_eq, 1)`` — the same column shape
-            # the closed-form branch writes.  Reshaping to the rank-1 source
-            # shape instead made every downstream 2-D index raise
-            # "Dimension of index greater than rank of array".
+            # NO CLOSED FORM (SME, VAM): the slot carries "if wet, the bound of A_n in the
+            # face's normal frame; if dry, 0", so a backend evaluates one operator and needs
+            # no wet/dry rule of its own (ANALYSIS 48, 52b, 61).
+            rows = cfl_wave_speed_bound(sm, _cfl_inverse_depth(sm, h))
+            gated = [e if e == 0 else _dry_gate(h, e_eps, e) for e in rows]
             sm.eigenvalues_cfl = ZArray(gated).reshape(len(gated), 1)
             return
         guarded = [_guard_eigenvalue_expr(e, h) for e in flat]

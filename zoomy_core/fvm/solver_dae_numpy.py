@@ -300,7 +300,7 @@ class DAESolver(Solver):
         )
         # ``local_max_abs_eigenvalue`` is a real expression — for this
         # hand-built chain model (no closed-form spectrum) the symbolic
-        # Numerics uses ``SystemModel.spectral_radius_bound`` (the power-norm
+        # Numerics uses the Gelfand bound ``wave_speed_bound`` (an
         # upper bound) on the quasilinear matrix, so the flux lowers with no
         # opaque wave-speed kernel.
         numerics_module = dict(NumpyRuntimeModel.module)

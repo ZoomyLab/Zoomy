@@ -16,26 +16,29 @@ from zoomy_core.model.models.closures import Newtonian, StressFree
 from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
 from zoomy_core.symsolver.discretization.time import CflWaveSpeed
 from zoomy_core.symsolver.numpy_backend import SymbolicHyperbolicSolverNumpy
-from zoomy_core.systemmodel.operations import gate_eigenvalues_dry, symbolic_spectrum
-from zoomy_core.systemmodel.system_model import SystemModel
+from zoomy_core.systemmodel.operations import gate_eigenvalues_dry
+from zoomy_core.systemmodel.system_model import SpectralRadius, SystemModel
 
 pytestmark = [pytest.mark.solver, pytest.mark.small]
 
 
-def _sm():
+def _sm(closed_form=False):
     return SystemModel.from_model(SME(
-        level=0, dimension=2, closures=[Newtonian(), StressFree()],
+        level=0, dimension=2, closures=[Newtonian(), StressFree()], symbolic_spectrum=closed_form,
         boundary_conditions=BoundaryConditions([FromModel(tag=t, definition="wall")
                                                 for t in ("left", "right")])))
 
 
-@pytest.mark.parametrize("closed_form", [False, True])
-def test_thin_cell_speed_is_its_own(closed_form):
-    """A thin cell (h = 1e-9 < wet_dry_eps) at u = 300 m/s: the dt speed is |u| + sqrt(g h),
-    a dry cell (h = 0) with a round-off q: 0."""
-    sm = _sm()
-    nsm = NumericalSystemModel.from_system_model(
-        sm, extra_operations=[symbolic_spectrum()] if closed_form else [])
+@pytest.mark.parametrize("closed_form, eig", [(False, False), (False, True), (True, False)])
+def test_thin_cell_speed_is_its_own(closed_form, eig):
+    """A thin cell (h = 1e-9 < wet_dry_eps) at u = 300 m/s: the dt speed is |u| + sqrt(g h)
+    (closed form) or the Gelfand bound of it (no closed form: at most 1.1 x, ANALYSIS 48; the
+    near-defective pair u +- 1e-4 makes it 1.044 x here), a dry cell (h = 0) with a round-off
+    q: 0."""
+    sm = _sm(closed_form)
+    if eig:                            # opt in: the numerical eigenvalues (ANALYSIS 61)
+        sm.spectral_radius_method = SpectralRadius.eig
+    nsm = NumericalSystemModel.from_system_model(sm)
     assert (nsm.eigenvalues is not None) == closed_form
     s = SymbolicHyperbolicSolverNumpy(time_end=1.0)
     s.setup(LSQMesh.create_1d(domain=(0.0, 1.0), n_inner_cells=2), nsm)
@@ -45,7 +48,11 @@ def test_thin_cell_speed_is_its_own(closed_form):
     with np.errstate(all="ignore"):
         ev = np.abs(np.asarray(s.rt.eigenvalues_cfl(Q, A, s.parameters, np.array([[1.0]]))))
     speed = ev.reshape(-1, 2).max(0)
-    assert speed[0] == pytest.approx(300.0 + np.sqrt(9.81e-9), rel=1e-9)
+    exact = 300.0 + np.sqrt(9.81e-9)
+    if closed_form or eig:
+        assert speed[0] == pytest.approx(exact, rel=1e-9)
+    else:
+        assert exact <= speed[0] <= 1.1 * exact
     assert speed[1] == 0.0
 
 
@@ -72,3 +79,11 @@ def test_thin_film_stays_positive_under_the_cells_rule():
         return min(out)
     assert h_min([]) >= 0.0
     assert h_min([gate_eigenvalues_dry(1e-8)]) < -1e-4
+
+
+def test_spectral_radius_method_is_typed():
+    """`spectral_radius_method` takes `SpectralRadius`; a plain string raises TypeError."""
+    sm = _sm()
+    sm.spectral_radius_method = "eig"
+    with pytest.raises(TypeError, match="SpectralRadius.eig"):
+        NumericalSystemModel.from_system_model(sm)
