@@ -34,6 +34,7 @@ full = [
   "h5py",
   "matplotlib",
   "meshio",
+  "zoomy-plotting",          # zoomy_core.postprocessing re-exports it
 ]
 gui = [
   "pyvista",
