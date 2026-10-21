@@ -3353,3 +3353,32 @@ main vs main on gpu1 not rerun).  Wall per run, cache loaded: C8 serial 52-75 s 
 gpu1 110 -> 38 s, C10 56-133 s -> 27-90 s.  XLA:CPU logs `cpu_aot_loader` feature warnings
 (+prefer-no-gather / scatter) when it loads cached CPU programs (jax's own entries too).
 Not run (wrap-up): zoomy_core / zoomy_jax suites, QR suite.
+
+## 66. Two silent ignores of the JAX solver are errors: `ad_mode` after `setup`, snapshots in reverse mode (2026-10-21, dev/ad-traps)
+
+Defects (`zoomy_jax/symsolver/solver.py`, `runtime.py`):
+
+1. `ad_mode` is read once, in `_setup` (passed to `R.runtime`, which picks `lax.while_loop` or the
+   checkpointed equinox loop).  `solver.ad_mode = AdMode.reverse` after `setup` changed nothing;
+   `jax.grad` then failed deep inside the plain `lax.while_loop`.
+2. `AdMode.reverse` skipped `on_write` (`io_write`: `ad_mode == "forward"` guard) and, through
+   `output`, the HDF5 snapshots, with no message.
+
+Fix (no change otherwise; the guard in `io_write` is gone because `runtime` now refuses the case):
+
+- `setup` (hyperbolic and Chorin) calls `_check_ad_options` first: `ad_mode=AdMode.reverse` with
+  `on_write` or `output` set raises `ValueError` (naming the options set), before `_writer()`
+  opens the HDF5 file.  `R.runtime` itself raises for reverse with `on_write`.
+- `_setup` records `_built_ad_mode`; `run` raises `ValueError` when `ad_mode` differs ("ad_mode is
+  read once, at setup. Set ad_mode before setup").
+
+Test `tests/symsolver/test_ad_traps.py` (6 cases, 1-D SME(0) dam break, 20 cells, CPU, ~90 s mostly
+compile): fails 4 of 6 on the old code; mode change in both directions, reverse with `on_write` /
+`output`, set-before-setup `jax.grad` equals the jvp, forward `on_write` unchanged.  Bitwise:
+final `(Q, Qaux)` and the reverse gradient hash identically before / after (forward, reverse,
+forward with `on_write`).  Gate 2: forward vs central FD 9e-10 ... 4e-7, reverse vs jvp <= 1e-14
+(J = 2.5325231268e+01, 6.0680499168e-01).  QR suite: 27 passed, 3 skipped by design (no thesis
+checkout in the worktree; two solver cards need the jax / amrex backends).
+
+Still silent, not changed (outside the request): `checkpoint=` (restart file) in reverse mode
+skips `on_save` the same way; `ad_checkpoints` changed after `setup` is likewise ignored.

@@ -70,7 +70,9 @@ The march is differentiable end to end: through the time loop, with respect to t
 Each mode supports only its own direction: `jax.grad` through the forward loop raises
 (`Reverse-mode differentiation does not work for lax.while_loop`), `jax.jvp` through the reverse
 loop raises (`can't apply forward-mode autodiff (jvp) to a custom_vjp function`).  Reverse mode
-needs equinox: `pip install -e "library/zoomy_jax[ad]"`.
+needs equinox: `pip install -e "library/zoomy_jax[ad]"`.  The mode is read once, at `setup`:
+`run` raises `ValueError` when `ad_mode` was changed afterwards (set it before `setup`), and
+`setup` raises for `AdMode.reverse` with `on_write` or `output` (snapshots are forward mode only).
 
 `run(Q, Qaux, parameters=p, time0=t0)` takes the parameter vector and the start time as traced
 arguments; `initial_aux(Q, Qaux, p)` rebuilds the aux state of `Q` inside the differentiated
