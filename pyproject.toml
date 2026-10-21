@@ -69,10 +69,10 @@ server = [
 # Example: pip install zoomy_core[dev]
 
 [project.urls]
-Homepage = "https://github.com/mbd-rwth/Zoomy"
-Documentation = "https://mbd-rwth.github.io/Zoomy"
-Source = "https://github.com/mbd-rwth/Zoomy"
-Issues = "https://github.com/mbd-rwth/Zoomy/issues"
+Homepage = "https://github.com/ZoomyLab/Zoomy"
+Documentation = "https://zoomylab.github.io/Zoomy"
+Source = "https://github.com/ZoomyLab/Zoomy"
+Issues = "https://github.com/ZoomyLab/Zoomy/issues"
 
 
 [tool.pytest.ini_options]
