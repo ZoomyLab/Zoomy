@@ -1,16 +1,12 @@
 # Using the GUI
 
-```{warning}
-Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), not the symbolic solvers; see the [user guide](guide/index.md).
-```
-
 The Zoomy GUI is a static web application — no install, no server.
 
 ::::{grid} 2
 :gutter: 3
 
 :::{grid-item-card} Open the GUI
-:link: gui/index.html
+:link: ../gui/index.html
 :link-type: url
 Launch the Zoomy GUI in your browser.
 :::
@@ -21,7 +17,7 @@ tabs — is hidden until you edit code). First load is a large download (the she
 is heavy) and the in-browser kernel warms `zoomy-core` in the background — give
 it a moment.
 
-![The Zoomy GUI: the selected model card open on its governing equations.](images/gui.png)
+![The Zoomy GUI: the selected model card open on its governing equations.](../images/gui.png)
 
 ## What it is
 
@@ -63,20 +59,6 @@ show(fig)                                 # a matplotlib figure
 A local `display = lambda *a: None` shim is the failure mode to avoid: it
 silently swallows the figure while the run still looks successful.
 
-## How it's built
-
-Eclipse Theia's **`browser-only`** target builds the whole IDE frontend to
-**static files** — no Node backend, no plugin host. A small **native Theia
-extension** (`zoomy-theia-ext`) registers everything the standard way: the
-card GUI view, a native notebook + in-browser Pyodide `NotebookKernel`, and a
-DOM output surface for text, matplotlib and rich `describe()` output. The kernel
-reuses the Zoomy GUI "brain" (`zoomy_cli`) for the card catalog, case
-composition, param extraction and backend submission.
-
-The goal is **one GUI, three targets** — the same code on the **web** (this
-backend-less build), as a **VS Code / Theia extension** (local), and as a
-**Theia Electron app** (desktop), changing only the host and one stylesheet.
-
 ## Connecting your own backend
 
 The page is served over HTTPS, but browsers exempt `http://localhost` from
@@ -85,6 +67,4 @@ mixed-content blocking, so a `zoomy-server` container on **your own machine**
 connect. For a backend on another machine, forward it to localhost
 (`ssh -L 8080:localhost:8080 …`) or expose it over HTTPS (e.g. Tailscale Serve).
 
-Source: `library/zoomy_gui/` — a `@theia/cli` browser-only app plus the
-`zoomy-theia-ext/` native extension and the `gui/` brain. CI builds it and
-serves it at `/gui/`.
+How the GUI is built: [developer guide](../developer/gui.md).

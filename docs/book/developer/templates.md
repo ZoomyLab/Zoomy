@@ -1,4 +1,4 @@
-# Templates and printers
+# Architecture: templates and printers
 
 ## A template is a Python function
 

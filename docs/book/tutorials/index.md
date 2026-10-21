@@ -186,23 +186,3 @@ Executable notebooks from `tutorials/`.  Click tags in the panel or type them in
 <section class="zt-group" style="--zt-h:355"><div class="zt-gh">backend</div><div class="zt-chips"><button type="button" class="zt-chip" data-tag="backend:numpy" title="backend: numpy" aria-pressed="false">numpy <span class="zt-n">4</span></button><button type="button" class="zt-chip" data-tag="backend:jax" title="backend: jax" aria-pressed="false">jax <span class="zt-n">3</span></button><button type="button" class="zt-chip" data-tag="backend:amrex" title="backend: amrex" aria-pressed="false">amrex <span class="zt-n">2</span></button></div></section>
 :::::
 ::::::
-
-## Adding a notebook
-
-Put the notebook under `tutorials/` and give it this notebook metadata, then run `python docs/scripts/generate_tutorial_index.py` (CI does):
-
-```json
-"zoomy": {"title": "...", "summary": "<one line>", "tags": ["type:tutorial", "dimension:1d", "physics:viscous"]}
-```
-
-Tags are `category:value`; an unknown tag or a missing `type` fails the build.  A notebook may carry several values of one category (except `type`).
-
-- `type:` tutorial / use-case (required)
-- `dimension:` 1d / 2d / 3d
-- `physics:` viscous / inviscid / hydrostatic / non-hydrostatic / compressible / incompressible / free-surface
-- `component:` model / system-model / numerical-system-model / solver / printer / mesh
-- `method:` fv / lsq / mood / imex / chorin
-- `feature:` ad / mpi / gpu / coupling / function-hook
-- `backend:` numpy / jax / foam / amrex
-
-`requires:` cpu / gpu / mpi / container is no filter.  It tells the test harness what the notebook needs (default `requires:cpu`): `pytest tests/tutorials -m tutorial` executes every notebook that needs only the CPU and reports the others as skipped.

@@ -3,7 +3,7 @@
 ```{note}
 FEniCSx has its own driver, `DolfinxHyperbolicSolver` (`library/zoomy_fenicsx/dolfinx_solver.py`),
 which does not print the symbolic solver templates of the [user guide](../guide/solvers.md); the
-[test matrix](../testing/symsolver.md) does not run it.
+[test matrix](../developer/tests.md) does not run it.
 ```
 
 `zoomy_fenicsx` drives [FEniCSx](https://fenicsproject.org/) — the next-gen

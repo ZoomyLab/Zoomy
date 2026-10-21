@@ -100,3 +100,11 @@ def test_page_is_built_from_the_metadata(tmp_path):
     assert 'class="zt-empty" hidden' in page and "zt-select" not in page
     assert ":link: ipynb/a/one" in page and ":link-type: doc" in page
     assert 'data-tags="type:use-case dimension:2d physics:viscous requires:cpu"' in page
+
+
+def test_howto_is_a_developer_page_and_not_on_the_index():
+    howto = index.render_howto()
+    assert howto.startswith("# Adding a tutorial") and '"zoomy": {"title"' in howto
+    for cat, values in index.FILTERS.items():
+        assert f"- `{cat}:` " + " / ".join(values) in howto
+    assert "Adding a" not in index.render([])

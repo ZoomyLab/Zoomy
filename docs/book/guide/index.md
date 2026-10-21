@@ -16,7 +16,9 @@ BCs                (flux, source, ...)     Riemann solver, kernels  per time ste
 | [SystemModel](system-model.md) | nothing, usually: it is derived; inspect it, set initial conditions |
 | [NumericalSystemModel](numerical-system-model.md) | reconstruction order and limiter, Riemann solver |
 | [Solvers and options](solvers.md) | hyperbolic or Chorin, CFL / `dt`, time order, MOOD, IMEX, pressure solver |
-| [Backends](backends.md) | where it runs: CPU, MPI, GPU |
+| [Backends](../backends/index.md) | where it runs: CPU, MPI, GPU; one page per backend |
+| [Tutorials and use cases](../tutorials/index.md) | executable notebooks, filtered by tag |
+| [GUI](gui.md) | compose and run a case in the browser |
 
 The NSM is backend-neutral: the same object is handed to every backend, and the
-[test matrix](../testing/symsolver.md) checks that the backends agree.
+[test matrix](../developer/tests.md) checks that the backends agree.  Install first: [Install](../installation.md).

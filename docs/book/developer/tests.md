@@ -15,7 +15,7 @@ run the tests  ──▶  results saved under tests/results/symsolver/  ──�
 | render | `python docs/scripts/generate_symsolver_results.py` (part of the docs build) | `docs/_generated/symsolver_*.md` |
 
 Commit the files under `tests/results/symsolver/`; the docs build reads only
-those.  How to add a case: [Extending](../developer/extending.md).
+those.  How to add a case: [Extending](extending.md).
 
 ## Cross-backend matrix
 

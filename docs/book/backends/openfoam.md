@@ -69,7 +69,7 @@ Environment: `ZOOMY_OF_SIF` (the image, default `~/of_build/zoomy_openfoam.sif`)
 ## End-to-end example: shallow water dam break
 
 The case is `docs/book/examples/dambreak.py` of the [NumPy page](numpy.md).  From
-`docs/book/examples/`, after `source env.sh`:
+`docs/book/examples/`:
 
 ```{literalinclude} ../examples/foam_dambreak.py
 :language: python
@@ -131,8 +131,8 @@ the characteristic ghost (`CoupledFace.characteristic`), see the [JAX page](jax.
 
 ## Install
 
-Requires OpenFOAM 13 (openfoam.org) and, for coupling, preCICE 3: the `zoomy_openfoam` image of the
-[Installation](../installation.md) ships both.
+Requires OpenFOAM 13 (openfoam.org) and, for coupling, preCICE 3: the `zoomy_openfoam`
+[container](../containers.md) ships both.
 
 **Repository**: [`library/zoomy_foam`](https://github.com/ZoomyLab/zoomy-foam)  
 **API reference**: {doc}`zoomy_foam <../api/_autodoc2/zoomy_foam/zoomy_foam>`.

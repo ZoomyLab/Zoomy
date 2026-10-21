@@ -9,7 +9,7 @@ runs weekly. The results below cover three groups:
 
 ## Summary
 
-```{include} ../_generated/test_report_summary.md
+```{include} ../../_generated/test_report_summary.md
 ```
 
 A ⚠️ marks a suite with failures. A dash means that suite produced no report in
@@ -32,7 +32,7 @@ Embedded **pytest-html** reports. Scroll horizontally on narrow viewports.
    </style>
 ```
 
-```{include} ../_generated/test_report_embeds.md
+```{include} ../../_generated/test_report_embeds.md
 ```
 
 ---

@@ -7,7 +7,7 @@ runs it on the mesh's uniform Cartesian grid and reads the result back.
 
 **Highlights**
 - The same arithmetic as JAX: AMReX agrees with it to round-off on the shared cases of the
-  [test matrix](../testing/symsolver.md).
+  [test matrix](../developer/tests.md).
 - Adaptive mesh refinement (`amr=dict(...)`), with refluxing, on one `dt` for all levels.
 - MPI (`ranks=N`) and GPU (`gpu=True`, one GPU per rank).
 - preCICE coupling (`couple=dict(...)`).
@@ -47,7 +47,7 @@ the run).  Inside the AMReX image the driver builds and runs natively.
 ## End-to-end example: shallow water dam break
 
 The case is `docs/book/examples/dambreak.py` of the [NumPy page](numpy.md).  From
-`docs/book/examples/`, after `source env.sh`:
+`docs/book/examples/`:
 
 ```{literalinclude} ../examples/amrex_dambreak.py
 :language: python
@@ -89,7 +89,7 @@ cells per level at the end: [128, 24]
   machine.
 
 **Install**: AMReX is independent of the Conda/Mamba Zoomy environment; the supported path is the
-`zoomy_amrex` container (see [Installation](../installation.md)).
+`zoomy_amrex` [container](../containers.md).
 
 **Repository**: [`library/zoomy_amrex`](https://github.com/ZoomyLab/zoomy-amrex)  
 **API reference**: {doc}`zoomy_amrex <../api/_autodoc2/zoomy_amrex/zoomy_amrex>`.

@@ -11,8 +11,8 @@ differentiation), OpenFOAM and AMReX (C++, MPI, AMReX on GPUs), with preCICE
 coupling.  A cross-backend test matrix checks that every backend passes the
 same tests.
 
-Start with the [quick start](guide/quickstart.md), the
-[user guide](guide/index.md) or the [test results](testing/symsolver.md).
+Start with [Install](installation.md), the [quick start](guide/quickstart.md) or the
+[user guide](guide/index.md); to change Zoomy, see the [developer guide](developer/index.md).
 
 
 
@@ -43,7 +43,7 @@ Sketch your own irrigation system, open the gate and fill the gardens — a shal
 :::
 
 :::{grid-item-card} Tests and timings
-:link: testing/symsolver
+:link: developer/tests
 :link-type: doc
 ![Testing](images/tests.png)
 The cross-backend test matrix and the solver timings, generated from saved results.

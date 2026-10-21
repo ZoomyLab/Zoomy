@@ -141,7 +141,7 @@ t = 0.007812, cells = 360, h in [0.01500, 0.34276]
 | `output`, `on_write` | `None` | HDF5 snapshots; a callback per write |
 
 Backend-specific settings (ranks, GPU, AMR, containers): [Backends](backends.md).
-What each option is tested by: the [test matrix](../testing/symsolver.md).
+What each option is tested by: the [test matrix](../developer/tests.md).
 
 API: {doc}`zoomy_core.symsolver <../api/_autodoc2/zoomy_core/zoomy_core.symsolver>`,
 {doc}`zoomy_jax.symsolver <../api/_autodoc2/zoomy_jax/zoomy_jax.symsolver>`.

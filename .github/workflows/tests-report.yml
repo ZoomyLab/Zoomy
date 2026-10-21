@@ -16,12 +16,12 @@ name: Smart Tests
 # it (so reports match the commit), and writes to
 #   artifacts/test-reports/<tier>/<group>/<unit>/<timestamp>/{report.html,junit.xml}
 # The bundle job reshapes those into test-reports-{small,large}-bundle, which
-# Render Webpage downloads to build docs/book/ci-reports.md.
+# Render Webpage downloads to build docs/book/developer/ci-reports.md.
 #
 # amrex's library suite is a STANDALONE pytest project (its tests/ is a package
 # doing `from tests.conftest import ...`) that collides with the superproject's
 # `tests` package from the repo root — so it runs via --chdir into its own
-# rootdir. See docs/book/ci-reports.md "Architecture".
+# rootdir. See docs/book/developer/ci-reports.md "Architecture".
 #
 # Interpreter differs per image: core/jax are conda/slim (`python`, no PEP 668);
 # amrex/foam are Ubuntu system python (`python3`, --break-system-packages).

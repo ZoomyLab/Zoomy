@@ -18,5 +18,5 @@ Choose the interface that fits your workflow:
 
 Neither needs an installation to get started: the GUI runs the NumPy solver
 entirely in the browser. Other backends are reached by connecting to a
-[backend container](installation.md#prebuilt-containers), which both interfaces
+[backend container](containers.md), which both interfaces
 talk to over the same HTTP API.

@@ -36,7 +36,7 @@ cd - && MATRIX_STORE=docs/dev/symbolic_solver/matrix/store \
 ```
 
 `--from-store` rewrites `tests/results/symsolver/matrix_latest.json`;
-commit it, and the [results page](../testing/symsolver.md) follows on the
+commit it, and the [results page](tests.md) follows on the
 next docs build.
 
 ## A timing case

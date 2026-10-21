@@ -1,10 +1,9 @@
 # Quick start
 
-The C1 case of the [test matrix](../testing/symsolver.md): shallow water
+The C1 case of the [test matrix](../developer/tests.md): shallow water
 (`SME(level=0)`) on $[0, 10]^2$ with walls, at rest with a Gaussian hump in the
 depth, second order, until $t = 2.5$.  The scripts are in
-`docs/book/examples/`; run them from there after `source env.sh` (it puts this
-checkout's libraries on `PYTHONPATH`).
+[`docs/book/examples/`](https://github.com/ZoomyLab/Zoomy/tree/main/docs/book/examples); run them from that folder.
 
 ## The case
 
@@ -56,7 +55,7 @@ the build.
 
 Outputs above: library commits core 09d1584, jax 5fd4252, foam e17026f,
 amrex ce3f72a; containers OpenFOAM 13 and AMReX as in
-[Installation](../installation.md).
+[Containers](../containers.md).
 
 ## Next
 

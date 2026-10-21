@@ -1,252 +1,61 @@
-# Installation
+# Install
 
-Pick the lightest path that covers what you need:
+Zoomy needs Python 3.11 or later.  This installs the NumPy and JAX backends from the published
+packages; no clone is needed.
 
-| You want to… | Use |
-| --- | --- |
-| try the symbolic layer + NumPy solver, run the tutorials | [pip](#pip-numpy) |
-| run in a browser, install nothing | the [GUI](#gui-setup) or the <a href="jupyter-lite/_output/lab/index.html?path=pyodide.ipynb">Pyodide notebook</a> |
-| run one backend (JAX, AMReX, OpenFOAM…) | a [prebuilt container](#prebuilt-containers) |
-| develop Zoomy itself | [clone with submodules](#git-clone-with-submodules) + [conda](#conda--mamba--micromamba) |
-| follow a QR code in the thesis | a browser — see [Reproducing the thesis](#reproducing-the-thesis) |
+```{warning}
+Not published yet: `zoomy-jax` is not on PyPI, and the PyPI `zoomy-core` (0.2.15) predates the
+solver API these docs describe.  Until both are released, use a [container](containers.md) or the
+[developer installation](developer/installation.md).
+```
 
-## Pip (NumPy)
-
-Symbolic layer, model families and the reference NumPy solver (Python 3.11 or later): what
-the NumPy [tutorials](tutorials/index.md) run on.
+With micromamba (conda and mamba work the same):
 
 ```bash
-python3 -m venv .venv                  # Debian / Ubuntu: needs the python3-venv package
+micromamba create -n zoomy -c conda-forge python=3.12 jupyterlab
+micromamba activate zoomy
+pip install zoomy-core zoomy-jax zoomy-plotting
+```
+
+With plain pip:
+
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
-pip install "zoomy_core>=0.2.15" zoomy-plotting jupyterlab
+pip install zoomy-core zoomy-jax zoomy-plotting jupyterlab
 ```
 
-Then open a tutorial notebook from the repository's `tutorials/` (listed on the
-[tutorials page](tutorials/index.md)) in `jupyter lab`.  Releases before 0.2.15 predate the
-symbolic solvers (`zoomy_core.symsolver`).
+JAX on Windows runs on the CPU (PyPI wheels); a GPU needs Linux or WSL2.
 
-To work on the code instead, install from a clone (`zoomy_plotting` lives in the
-superrepo, not in a submodule):
+## Run
+
+JupyterLab with a tutorial notebook (more on the [tutorials page](tutorials/index.md)):
 
 ```bash
-git clone https://github.com/ZoomyLab/Zoomy.git
-cd Zoomy
-git submodule update --init library/zoomy_core
-pip install -e library/zoomy_core -e library/zoomy_plotting
+curl -LO \
+  https://raw.githubusercontent.com/ZoomyLab/Zoomy/main/tutorials/swe/simple_numpy.ipynb
+jupyter lab simple_numpy.ipynb
 ```
 
-The JAX backend is installed from the repository (`pip install -e library/zoomy_jax`, see
-[Conda](#conda--mamba--micromamba)) or used through the `zoomy_jax` container; the compiled
-backends (AMReX, OpenFOAM, PETSc/DMPlex, Firedrake) are far easier via containers.
-
-## Prebuilt containers
-
-CI publishes every backend to GHCR on each container change — public, anonymous
-pull. **Apptainer** users pull the ORAS-pushed SIF; **Docker** users pull the
-image.
+The GUI runs in the [browser](browser.md); to solve on your own machine, start the solver server
+and connect it (GUI, "Connect backend", `http://localhost:8080`):
 
 ```bash
-# Apptainer (recommended on HPC — no daemon, no root)
-apptainer pull zoomy_numpy.sif oras://ghcr.io/zoomylab/zoomy_numpy_sif:latest
-apptainer run zoomy_numpy.sif 8080          # solver API on :8080
-
-# Docker
-docker pull ghcr.io/zoomylab/zoomy_numpy:latest
-docker run --rm -p 8080:8080 ghcr.io/zoomylab/zoomy_numpy:latest
+pip install zoomy-server
+zoomy-server --adapter jax --port 8080
 ```
 
-Substitute any name from the table below.
-
-### What ships
-
-| Container | Backend tag | Docker | Apptainer SIF | Notes |
-| --- | --- | :---: | :---: | --- |
-| `zoomy_numpy` | `numpy` | ✅ | ✅ | reference solver; smallest image |
-| `zoomy_jax` | `jax` | ✅ | ✅ | one image for CPU and GPU (`--nv`): JAX's CUDA 12 plugin + NVIDIA's CUDA libraries |
-| `zoomy_amrex` | `amrex` | ✅ | ✅ | block-structured AMR; one image for CPU and GPU (`--nv`): CUDA 12.6 compiler in the image |
-| `zoomy_dmplex` | `dmplex` | ✅ | ✅ | builds PETSc from source |
-| `zoomy_firedrake` | `firedrake` | ✅ | ✅ | |
-| `zoomy_openfoam` | `foam` | ✅ | ✅ | OpenFOAM 13 + preCICE 3 |
-| `zoomy_dune` | — | ✅ | ✅ | DUNE-FEM 2.12 + ALUGrid + fem-dg; UFL weak forms, unstructured AMR |
-| `zoomy_postprocess` | `postprocess` | ✅ | ✅ | plotting / HDF5 tooling |
-| `zoomy_jax_dev`, `zoomy_firedrake_dev` | — | ✅ | — | heavy base layers the two above build on |
-
-```{note}
-`zoomy_core`, `zoomy_amrex_dummy` and `zoomy_fenicsx_dummy` are also published
-but are **CI placeholders**: they install `zoomy_core` from PyPI and carry no
-backend toolchain. Do not use them to run simulations. `containers/zoomy_mesh`,
-`containers/basilisk` and `containers/zoomy_telemac` are experimental, are not
-built by CI, and have no published image.
-```
-
-### Three modes per image
-
-The same image serves three roles, chosen by the first argument:
-
-```bash
-apptainer run IMG [port]     # 1. solver API on :8080  (the GUI's "Connect" target)
-apptainer run IMG jupyter    # 2. JupyterLab on :8888 with the backend's kernel
-apptainer run IMG shell      # 3. interactive dev shell
-```
-
-Apptainer shares the host network namespace, so `:8080` / `:8888` are reachable
-at `localhost` with no port publishing.
-
-### GPUs
-
-`zoomy_jax` and `zoomy_amrex` are the same images on a laptop and on a GPU node: without a
-GPU they run on the CPU as before, with the host's NVIDIA driver brought in they use the
-GPU. Only the driver comes from the host:
-
-```bash
-apptainer exec --nv zoomy_jax.sif python run.py                 # JAX picks the GPU
-apptainer exec zoomy_jax.sif python run.py                      # the same image on the CPU
-docker run --rm --gpus all ghcr.io/zoomylab/zoomy_jax:latest    # Docker: NVIDIA container toolkit
-```
-
-JAX uses the GPU whenever one is visible (`JAX_PLATFORMS=cpu` keeps it on the CPU); ranks on
-GPUs: `mpiexec -n 2 python -m zoomy_jax.gpurank run.py`. AMReX compiles the generated solver
-for the CPU, or with CUDA when the run asks for it (`gpu=True`, see
-[Backends](guide/backends.md)). The CUDA libraries make the images larger: the SIFs are 4.3 GB
-(`zoomy_jax`, was 1.4 GB) and 1.6 GB (`zoomy_amrex`, was 0.7 GB).
-
-Use an image as a notebook kernel:
-
-```bash
-apptainer run --bind $PWD:/workspace containers/zoomy_jax/zoomy_jax.sif jupyter
-# open the printed http://127.0.0.1:8888/lab , or in VS Code:
-# "Jupyter: Connect to Existing Server" -> that URL
-```
-
-The server starts without a token (research use on your own machine); set
-`ZOOMY_JUPYTER_TOKEN=<secret>` in the environment to require one.
-
-`import zoomy_core, zoomy_jax` just work; `$ZOOMY_ROOT=/workspace` is the served
-root, so bind your repo there.
-
-### Building locally instead
-
-```bash
-# from the repository root, so the %files sources resolve
-apptainer build --fakeroot containers/<name>/<name>.sif containers/<name>/<name>.def
-```
-
-Recipes live in `containers/<name>/`; the Docker and Apptainer recipes for a
-given backend are kept in sync.
-
-## Git clone with submodules
-
-Zoomy pins exact commits per submodule for reproducible checkouts.
-
-```bash
-git clone --recurse-submodules https://github.com/ZoomyLab/Zoomy.git
-cd Zoomy
-```
-
-Already cloned without submodules:
-
-```bash
-git submodule sync --recursive
-git submodule update --init --recursive
-```
-
-Only what you need:
-
-```bash
-git submodule update --init library/zoomy_core library/zoomy_jax meshes
-```
-
-Move everything to the latest upstream `main`:
-
-```bash
-git submodule update --remote --merge --recursive
-```
-
-`git pull` does not advance submodules — use `git pull --recurse-submodules`.
-The sub-repositories are listed under
-[ZoomyLab](https://github.com/ZoomyLab) on GitHub. They are public and are
-cloned anonymously over HTTPS. To push over SSH from such a checkout, add once:
-
-```bash
-git config --global url."git@github.com:".pushInsteadOf https://github.com/
-```
-
-## Conda / Mamba / Micromamba
-
-After cloning:
-
-```bash
-# core (NumPy + GMSH), plus the plotting and pre/post-processing packages
-conda env create -f install/Zoomy.yml
-conda activate zoomy
-pip install -e library/zoomy_core -e library/zoomy_plotting -e library/zoomy_prepost
-
-# add JAX (not on PyPI — installed from the clone)
-conda env update -f install/zoomy_jax.yml
-pip install -e library/zoomy_jax
-```
-
-`zoomy_plotting` (figures and animations from HDF5/VTK output) and
-`zoomy_prepost` (case pre/post-processing) live in the superrepo, not in a
-submodule, and need no packages beyond `install/Zoomy.yml`. Every thesis case
-imports them, and every container ships them.
-
-Other environment files in `install/`: `zoomy_fenicsx.yml`, `zoomy_game.yml`,
-`minimal.yml`, `jupyter-lite.yml`, `pyodide.yml`. These files are the
-authoritative dependency list.
-
-## Devcontainer (VS Code)
-
-Open the repository with the *Dev Containers* extension; it offers **Zoomy +
-JAX** and **Zoomy + Firedrake + AMR** (plus a standalone variant of the
-latter). Requires Docker (Linux containers on Windows).
-
-## Backend-specific setup
-
-- **AMReX** — the container is the supported path. To build against a local
-  AMReX instead, see
-  [amrex-codes.github.io/amrex](https://amrex-codes.github.io/amrex/docs_html/Introduction.html).
-- **OpenFOAM** — OpenFOAM 13 (openfoam.org) and preCICE 3;
-  `install/setup_precice.sh`. The `zoomy_openfoam` container already has both.
-- **preCICE** — `install/setup_precice.sh`, example configs in `tools/precice_configs/`.
-- **PETSc** (for `zoomy_dmplex`) — `install/install-petsc.sh`,
-  `install/activate-petsc.sh`.
-
-## GUI setup
-
-There is nothing to set up: the <a href="gui/index.html">GUI</a> is a static web
-application and runs entirely in the browser, including the NumPy solver on an
-in-browser Pyodide kernel. Every other backend (JAX, AMReX, OpenFOAM, DMPlex)
-is a solver container from the [table above](#what-ships) that you run on your
-own machine and connect to the GUI — see
-[Connecting your own backend](user-guide-gui.md#connecting-your-own-backend):
-
-```bash
-apptainer run zoomy_jax.sif 8080      # then GUI -> "Connect backend" -> http://localhost:8080
-```
+AMReX, OpenFOAM and GPU images: [Containers](containers.md).
 
 ## Reproducing the thesis
 
-Every QR code in the thesis opens in a browser and needs no installation:
-the animations are GIF viewers, the interactive examples are GUI sessions that
-run on the in-browser NumPy solver (bingham, derivation, system model, code
-printer), and the code in the intro margin is this page.
-
-The simulations behind the chapters used the following backends; the
-one-liners above install each of them.
+Every QR code in the thesis opens in a [browser](browser.md): the animations are GIF viewers, the
+interactive examples are GUI sessions on the in-browser NumPy solver.  The simulations behind the
+chapters used:
 
 | Thesis chapters | Backend | Install |
 | --- | --- | --- |
-| verification (SWASHES smooth, Ritter, friction), curved channel 2-D reference | JAX | [conda](#conda--mamba--micromamba) or `zoomy_jax` container |
+| verification (SWASHES smooth, Ritter, friction), curved channel 2-D reference | JAX | this page, or the `zoomy_jax` [container](containers.md) |
 | Malpasset dam break, strong scaling | AMReX (JAX for the comparison) | `zoomy_amrex` container |
 | SME↔SME and SME↔VOF coupling, hydropower spin-up | OpenFOAM 13 + preCICE 3 | `zoomy_openfoam` SIF (`export ZOOMY_OPENFOAM_SIF=/path/to/zoomy_openfoam.sif`) |
-| VAM bump, Bingham roll waves, width-averaged curved channel, GUI examples | NumPy | `pip install zoomy_core` or the GUI |
-
-## Environment variables
-
-```bash
-export ZOOMY_DIR=/path/to/Zoomy
-export JAX_ENABLE_X64=True
-export PETSC_DIR=/path/to/petsc
-export PETSC_ARCH=<arch-used-for-compiling-petsc>
-```
+| VAM bump, Bingham roll waves, width-averaged curved channel, GUI examples | NumPy | this page, or the GUI |

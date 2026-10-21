@@ -35,7 +35,7 @@ t = 0.500, cells = 300, h in [1.00000, 2.00000]
 max |h_jax - h_numpy| = 2.9e-10
 ```
 
-The scripts are in `docs/book/examples/`; run them from there after `source env.sh`.  The
+The scripts are in `docs/book/examples/`; run them from there.  The
 2-D case of the [Quick start](../guide/quickstart.md) runs the same way
 (`SymbolicHyperbolicSolverJax(time_end=2.5, cfl=0.9)`).
 
@@ -70,7 +70,7 @@ The march is differentiable end to end: through the time loop, with respect to t
 Each mode supports only its own direction: `jax.grad` through the forward loop raises
 (`Reverse-mode differentiation does not work for lax.while_loop`), `jax.jvp` through the reverse
 loop raises (`can't apply forward-mode autodiff (jvp) to a custom_vjp function`).  Reverse mode
-needs equinox: `pip install -e "library/zoomy_jax[ad]"`.  The mode is read once, at `setup`:
+needs equinox: `pip install "zoomy-jax[ad]"`.  The mode is read once, at `setup`:
 `run` raises `ValueError` when `ad_mode` was changed afterwards (set it before `setup`), and
 `setup` raises for `AdMode.reverse` with `on_write` or `output` (snapshots are forward mode only).
 
@@ -154,13 +154,7 @@ two.  New work should not start there.
   solver carries no numerical knobs of the scheme.
 - Set `jax_enable_x64` (or import `zoomy_jax` first) before comparing with other backends.
 
-**Install**: `zoomy_jax` is not on PyPI; it is installed from the clone or used through the
-`zoomy_jax` container (see [Installation](../installation.md)):
-
-```bash
-pip install zoomy_core
-pip install -e library/zoomy_jax
-```
+**Install**: [Install](../installation.md), or the `zoomy_jax` [container](../containers.md).
 
 **Repository**: [`library/zoomy_jax`](https://github.com/ZoomyLab/zoomy-jax)
 **API reference**: {doc}`zoomy_jax.symsolver <../api/_autodoc2/zoomy_jax/zoomy_jax.symsolver>`.

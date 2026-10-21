@@ -7,7 +7,7 @@ Legacy: written for the previous solvers (`zoomy_core.fvm`, `zoomy_jax.fvm`), no
 ```{warning}
 **Work in progress.** The folder layout and workflow descriptions below have
 drifted from the tree. The parts that are current are the **marker model** and
-the **CI tiering**, both summarised on [CI Test Reports](ci-reports.md).
+the **CI tiering**, both summarised on [CI Test Reports](developer/ci-reports.md).
 ```
 
 ## Purpose

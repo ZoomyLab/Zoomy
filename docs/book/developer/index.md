@@ -1,11 +1,18 @@
 # Developer guide
 
-How the symbolic solvers are built, and where to change them.
+For those who change Zoomy: how the symbolic solvers are built, where to change them, and how it is
+tested.  To use Zoomy, see the [user guide](../guide/index.md).
 
 | page | content |
 |---|---|
-| [Templates and printers](templates.md) | a solver written once as a sympy graph, printed per backend; the layout of the runtimes |
+| [Developer installation](installation.md) | clone with submodules, editable installs, local images |
+| [Architecture](templates.md) | a solver written once as a sympy graph, printed per backend; the layout of the runtimes |
 | [Extending](extending.md) | add a backend operation, a test-matrix case, a timing case, a backend |
+| [Adding a tutorial](tutorials.md) | the notebook metadata and the tag vocabulary |
+| [Tests and timings](tests.md) | the cross-backend matrix and the solver timings |
+| [CI reports](ci-reports.md) | the test suites per push and per week |
+| [GUI](gui.md) | how the browser GUI is built and deployed |
+| [Writing the docs](docs.md) | Markdown only, and how the site is built |
 
 Design notes (not part of the book; they record decisions and measurements):
 
@@ -21,8 +28,3 @@ Design notes (not part of the book; they record decisions and measurements):
 
 The scripts under `docs/dev/symbolic_solver/gates/` are the acceptance gates
 the matrix wraps; they are scratch, not library tests.
-
-## Writing and building the docs
-
-- **Markdown (MyST), never reStructuredText**: pages are `.md`, and so are the docstrings. The API reference ([sphinx-autodoc2](https://sphinx-autodoc2.readthedocs.io)) reads them as MyST: backticks for code, `[text](url)` for links, `` ```{note} `` for admonitions; `Args:` / `Returns:` / `References:` sections stay readable (`docs/book/_ext/zoomy_docstrings.py`). Old rST markup in docstrings is rewritten by `python docs/scripts/docstrings_rst_to_md.py PATH` (a dry run unless `--write`).
-- **The site is built by CI from `main`** (`.github/workflows/render-webpage.yml`, in the image of `docs/Dockerfile.docs`): the scripts of `docs/scripts/` write the report and API pages, then `jupyter-book build docs/book`. **Never commit built or generated output** (`_build`, `api/_autodoc2`, `docs/_generated`); preview in that image, do not push a local build.

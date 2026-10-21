@@ -17,7 +17,7 @@ Switching backend is a change of solver import, not a change of model.
 A hyperbolic solver (`SymbolicHyperbolic...`) marches balance laws; a Chorin solver
 (`SymbolicChorin...`) adds the pressure projection of a pressure-split model (`VAM`).
 All of them take the settings of the table `Options` in [Solvers and options](../guide/solvers.md).
-The [test matrix](../testing/symsolver.md) runs the same cases on every backend that prints the
+The [test matrix](../developer/tests.md) runs the same cases on every backend that prints the
 templates (convergence orders, exact solutions, conservation, symmetry, parallel = serial,
 GPU = CPU), so a disagreement between two backends is a bug in one of them.
 
@@ -42,5 +42,5 @@ Firedrake has its own driver and does not print the symbolic templates.
   surface** → OpenFOAM via preCICE.
 
 The compiled backends run in containers; the container path is the supported one, see
-[Installation](../installation.md). What differs between the backends in settings and in how
+[Containers](../containers.md). What differs between the backends in settings and in how
 they are called is on [Backends](../guide/backends.md).

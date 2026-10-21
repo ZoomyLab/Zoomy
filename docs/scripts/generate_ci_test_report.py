@@ -10,7 +10,7 @@ Reads the Smart Tests artifacts laid out as::
     unit  : a backend (core/jax/amrex/foam) or a submodule (prepost/server) or
             a notebook backend.
 
-and produces three things consumed by ``docs/book/ci-reports.md``:
+and produces three things consumed by ``docs/book/developer/ci-reports.md``:
 
 * ``docs/_generated/test_report_summary.md`` — grouped pass/fail summary tables.
 * ``docs/_generated/test_report_embeds.md``  — the per-unit pytest-html iframes.
@@ -174,7 +174,7 @@ def _write_embeds() -> None:
             lines += [f"#### {unit_label}", ""]
             for tier, tier_label in TIERS:
                 _copy_report(tier, group, unit)
-                src = f"_static/pytest-report-{tier}-{group}-{unit}.html"
+                src = f"../_static/pytest-report-{tier}-{group}-{unit}.html"
                 lines += [
                     f"*{tier_label}*",
                     "",

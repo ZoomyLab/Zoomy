@@ -3,7 +3,7 @@
 ```{note}
 Firedrake has its own driver, `FiredrakeHyperbolicSolver` (`zoomy_firedrake.firedrake_solver`), which
 takes the `SystemModel` of the symbolic layer but does not print the symbolic solver templates of
-the [user guide](../guide/solvers.md); the [test matrix](../testing/symsolver.md) does not run it.
+the [user guide](../guide/solvers.md); the [test matrix](../developer/tests.md) does not run it.
 ```
 
 `zoomy_firedrake` drives [Firedrake](https://www.firedrakeproject.org/) (a

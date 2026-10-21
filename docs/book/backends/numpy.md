@@ -62,7 +62,7 @@ runs the `dimension=2` model on a 1-D mesh; the state is then `[b, h, q_0]`.  Th
 :language: python
 ```
 
-Run it from `docs/book/examples/` after `source env.sh`:
+Run it from [`docs/book/examples/`](https://github.com/ZoomyLab/Zoomy/tree/main/docs/book/examples):
 
 ```{literalinclude} ../examples/numpy_dambreak.py
 :language: python

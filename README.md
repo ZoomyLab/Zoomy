@@ -19,11 +19,9 @@ See the [Zoomy documentation](https://zoomylab.github.io/Zoomy/) for the user gu
 
 - **Try it now in your browser** — interactive GUI at [zoomylab.github.io/Zoomy/gui](https://zoomylab.github.io/Zoomy/gui/).
 - **Try a notebook in your browser** — open the [shallow-water Pyodide tour](https://zoomylab.github.io/Zoomy/jupyter-lite/_output/lab/index.html?path=pyodide.ipynb) in JupyterLite (walks `Model` → `SystemModel` → `NumericalSystemModel` → C++ codegen → solve & plot, all running in the browser).
-- **Pip install the core**:
-  ```bash
-  pip install zoomy_core
-  ```
-- **Everything else** (full repo clone, submodules, Apptainer / Docker, devcontainer, Conda/Mamba, backend-specific setup, development workflow) — see [Documentation → Installation](https://zoomylab.github.io/Zoomy/installation.html).
+- **Install** the published packages (NumPy and JAX backends): [Get started → Install](https://zoomylab.github.io/Zoomy/installation.html).
+- **Containers** (Docker / Apptainer, CPU and GPU, AMReX, OpenFOAM): [Get started → Containers](https://zoomylab.github.io/Zoomy/containers.html).
+- **Develop Zoomy** (clone with submodules, editable installs, local images): [Developer guide → Developer installation](https://zoomylab.github.io/Zoomy/developer/installation.html).
 
 ## Backends
 
@@ -41,7 +39,7 @@ Note: Many backends are in an very early development status. If you are interest
 
 ## Testing
 
-CI test reports for each backend are published with the docs site: see [CI Reports](https://zoomylab.github.io/Zoomy/ci-reports.html).
+CI test reports for each backend are published with the docs site: see [CI Reports](https://zoomylab.github.io/Zoomy/developer/ci-reports.html).
 
 ## License
 

@@ -1,7 +1,7 @@
-# Backends
+# Backend comparison
 
 Every backend runs the same templates on the same NSM; the
-[test matrix](../testing/symsolver.md) holds them to the same checks.
+[test matrix](../developer/tests.md) holds them to the same checks.
 
 | | NumPy | JAX | foam | AMReX |
 |---|---|---|---|---|

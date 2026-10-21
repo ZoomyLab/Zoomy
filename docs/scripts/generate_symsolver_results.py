@@ -14,7 +14,7 @@ Inputs (``tests/results/symsolver/``):
 
 Outputs: ``docs/_generated/symsolver_matrix.md`` and
 ``docs/_generated/symsolver_timings.md``, included by
-``docs/book/testing/symsolver.md``.  The render step needs only the standard
+``docs/book/developer/tests.md``.  The render step needs only the standard
 library, so the docs build runs without a store and without the solvers.
 """
 from __future__ import annotations
