@@ -856,6 +856,7 @@ class NumericalSystemModel(SystemModel):
             Kurganov, Petrova 2007, https://doi.org/10.4310/CMS.2007.v5.n1.a6
         """
         from zoomy_core.systemmodel.operations import (
+            bound_wave_speed,
             desingularize_hinv,
             gate_eigenvalues_dry,
             guard_eigenvalue_powers,
@@ -879,12 +880,17 @@ class NumericalSystemModel(SystemModel):
         # neither the KP reciprocal nor the dry CFL gate.
         depth = (self._is_transport_system()
                  and self.roles.depth is not None)
+        gated = False
         if depth:
             ops.extend(self._depth_regularization_operations(
                 desingularize_hinv, regularize_depth_aux,
                 regularize_depth_direct))
-            ops.extend(self._eigenvalue_guard_operations(
-                guard_eigenvalue_powers, gate_eigenvalues_dry))
+            guards = self._eigenvalue_guard_operations(
+                guard_eigenvalue_powers, gate_eigenvalues_dry)
+            ops.extend(guards)
+            gated = any(op.name == "gate_eigenvalues_dry" for op in guards)
+        if self._is_transport_system() and self.eigenvalues is None and not gated:
+            ops.append(bound_wave_speed())      # no closed form and no gate: the bound
         return ops
 
     def _depth_regularization_operations(self, legacy, aux, direct) -> list:

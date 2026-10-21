@@ -166,9 +166,9 @@ def test_resolve_opaque_leaves_external_kernels_as_calls():
     the call is there whether or not the model has a closed-form spectrum.
     It USED to be the λ-only ``eigenvalues`` kernel via VAM's Rusanov wave
     speed, but that is no longer external to anything: the wave speed is now
-    ``SystemModel.spectral_radius_bound``, a closed-form expression with no
-    eigensolve in it — which is the whole point of that change, so testing the
-    property here needs a kernel that is still genuinely external."""
+    the Gelfand bound ``gelfand_bound`` of A_n (ANALYSIS 48, 61), with no
+    eigensolve in it, so testing the property here needs a kernel that is still
+    genuinely external."""
     from zoomy_core.model.models.vam import VAM
     from zoomy_core.fvm.riemann_solvers import NonconservativeRoe
 

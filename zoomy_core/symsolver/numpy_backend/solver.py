@@ -17,7 +17,7 @@ from zoomy_core.mesh.geometry_xp import build_topology
 from zoomy_core.numerics import NumericalSystemModel
 from zoomy_core.misc.options import OptionParam
 from zoomy_core.solver.constants import elliptic_constants
-from zoomy_core.symsolver import PyPrinter, default_wave_speed
+from zoomy_core.symsolver import PyPrinter
 from zoomy_core.symsolver.numpy_backend import runtime as R
 from zoomy_core.symsolver.numpy_backend.kernels import NumpyKernels
 from zoomy_core.symsolver.numpy_backend.parallel import MpiLinearSolver
@@ -93,7 +93,6 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
             systems=[sub for sub, _ in (systems or {}).values()])
         X = np.asarray(mesh.vertex_coordinates)[:mesh.dimension]
         self.mesh, geom = R.geometry_of(self.topo, X)
-        default_wave_speed(nsm)
         self.rt = NumpyKernels(nsm)
         order = int(nsm.reconstruction.order)
         self.mood_active = bool(self.mood and order >= 2 and nsm.call.admissible is not None)
@@ -296,7 +295,7 @@ class SymbolicChorinSolverNumpy(SymbolicHyperbolicSolverNumpy, ChorinSettings):
             nsm = (sm if isinstance(sm, NumericalSystemModel)
                    else NumericalSystemModel.from_system_model(sm))
             nsm._symbolic_name = name
-            systems[name] = (nsm, NumpyKernels(default_wave_speed(nsm)))
+            systems[name] = (nsm, NumpyKernels(nsm))
         pred._symbolic_name = "pred"
         self.press, self.corr = systems["press"][0], systems["corr"][0]
         from zoomy_core.mesh import distributed

@@ -9,32 +9,15 @@ import param
 import sympy as sp
 
 from zoomy_core.misc.misc import ZArray, Zstruct
-from zoomy_core.misc.options import typed
 from zoomy_core.model.basefunction import SymbolicRegistrar
 from zoomy_core.model.kernel_functions import (
     conditional,
 )
 from zoomy_core.systemmodel.system_model import (
-    SystemModel, _perron_radius_bound, SpectralRadius)
+    SystemModel, gelfand, spectral_method, speed_matrix, wave_speed_bound)
 from zoomy_core.transformation.to_numpy import (
     NumpyRuntimeModel, NumpyRuntimeSymbolic,
 )
-
-
-def _spectral_core(M):
-    """Indices left after repeatedly dropping a state whose row or column of the square
-    symbolic matrix `M` is structurally zero: the matrix is then block triangular with a
-    zero block, so the kept block has the same spectral radius (`b`, VAM's pressure rows).
-    """
-    keep = list(range(len(M)))
-    dropped = True
-    while dropped:
-        dropped = False
-        for i in list(keep):
-            if all(M[i][j] == 0 for j in keep) or all(M[j][i] == 0 for j in keep):
-                keep.remove(i)
-                dropped = True
-    return keep or [0]
 
 
 def _bed_column(model):
@@ -469,9 +452,10 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
 
     def local_max_abs_eigenvalue(self, Q=None, Qaux=None, p=None, n=None):
         """Spectral radius at `(Q, Qaux, p, n)`: `Max(|lambda_i|)` over the model's
-        closed-form eigenvalues, else per `spectral_radius_method` an `eig`, the Gelfand
-        upper bound (the symbolic solvers' default) or the Perron bound. It sets the
-        Rusanov / HLL dissipation and the CFL step.
+        closed-form eigenvalues, else the Gelfand upper bound of `A_n` in the face's normal
+        frame (`wave_speed_bound`; rotation invariant), or with `SpectralRadius.eig` the max
+        modulus of its numerical eigenvalues. It sets the Rusanov / HLL dissipation and the
+        CFL step.
 
         References:
             Horn, Johnson 2012, https://doi.org/10.1017/CBO9781139020411
@@ -479,20 +463,11 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         if Q is None:
             return self.local_max_eigenvalue_definition()
         if self.model.eigenvalues is None:
-            # No closed form.  DEFAULT is the exact numerical spectrum, because
-            # this quantity sets the Rusanov / LF / HLL DISSIPATION as well as
-            # the CFL, and an upper bound is extra numerical diffusion there
-            # (see SystemModel.use_spectral_radius_bound for the measured cost
-            # on the Ritter dry dam break).  The cheap bound is opt-in.  The
-            # symbolic solvers set `gelfand` (zoomy_core.symsolver.WAVE_SPEED).
-            method = self._spectral_method()
-            if method == "bound":
-                return self._spectral_radius_bound(Q, self._wave_speed_aux(Q, Qaux), p, n)
-            if method == "gelfand":
-                return self._gelfand(self._speed_matrix(Q, Qaux, p, n))
-            src = list(sp.flatten(self._model_eval(
-                "numerical_eigenvalues", Q, self._wave_speed_aux(Q, Qaux), p, n)))
-            return sp.Max(*[sp.Abs(lam) for lam in src], evaluate=False)
+            if spectral_method(self.model) == "eig":
+                src = list(sp.flatten(self._model_eval(
+                    "numerical_eigenvalues", Q, self._wave_speed_aux(Q, Qaux), p, n)))
+                return sp.Max(*[sp.Abs(lam) for lam in src], evaluate=False)
+            return wave_speed_bound(self.model, self._lab_speed_matrix(Q, Qaux, p, n), list(n))
         src = list(sp.flatten(self._model_eval("eigenvalues", Q, Qaux, p, n)))
         # ``evaluate=False``: ``Max`` over a wave spectrum is a runtime
         # reduction, never a symbolic simplification target.  Letting sympy
@@ -504,57 +479,13 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         # associative → bit-identical numerics).
         return sp.Max(*[sp.Abs(lam) for lam in src], evaluate=False)
 
-    def _spectral_method(self):
-        """The `SpectralRadius` of a model without a closed-form spectrum."""
-        if getattr(self.model, "use_spectral_radius_bound", SystemModel.use_spectral_radius_bound):
-            return SpectralRadius.bound
-        return SpectralRadius(typed(
-            SpectralRadius, getattr(self.model, "spectral_radius_method",
-                                    SystemModel.spectral_radius_method),
-            "spectral_radius_method"))
-
-    def _speed_matrix(self, Q, Qaux, p, n, normal_frame=False):
-        """`A_n = sum_d A[:, :, d] n_d` at `(Q, Qaux)` (the wave-speed aux), restricted to the
-        rows and columns that carry its spectrum (`_spectral_core`), as a list of rows; with
-        `normal_frame` in the face's (normal, tangential) frame (`_normal_frame`).
-        """
+    def _lab_speed_matrix(self, Q, Qaux, p, n):
+        """`A_n = sum_d A[:, :, d] n_d` at `(Q, Qaux)` with the wave-speed aux
+        (`_wave_speed_aux`), as a list of rows in the lab frame."""
         A = self._model_eval("quasilinear_matrix", Q, self._wave_speed_aux(Q, Qaux), p)
         nrm = list(n)
-        M = [[sum(A[i, j, d] * nrm[d] for d in range(len(nrm)))
-              for j in range(self.n_variables)] for i in range(self.n_variables)]
-        if normal_frame:
-            M = self._normal_frame(M, nrm)
-        keep = _spectral_core(M)
-        return [[M[i][j] for j in keep] for i in keep]
-
-    def _normal_frame(self, M, nrm):
-        """`T M T^T`, `T` rotating each horizontal vector `(q_x, q_y)` of the state to `(q.n, q.t)`,
-        `t = (-n_y, n_x)`: a similarity (same spectrum), in which a wall's reflected state has a
-        signed permutation of the inner state's matrix, so the bounds of the two are mirror images
-        and a wall's HLL mass flux vanishes.  2 horizontal directions; else `M`.
-        """
-        from zoomy_core.model.boundary_conditions import derive_momentum_field_indices
-        try:
-            groups = derive_momentum_field_indices(self.model)
-        except RuntimeError:
-            return M
-        if len(nrm) != 2 or any(len(g) != 2 for g in groups):
-            return M
-        T = sp.eye(len(M))
-        for i, j in groups:
-            T[i, i], T[i, j], T[j, i], T[j, j] = nrm[0], nrm[1], -nrm[1], nrm[0]
-        R = T * sp.Matrix(M) * T.T
-        return [[R[i, j] for j in range(len(M))] for i in range(len(M))]
-
-    def _gelfand(self, M):
-        """`gelfand_bound` of the square matrix `M` (list of rows): an upper bound of rho(M)."""
-        from zoomy_core.model.kernel_functions import gelfand_bound
-        return gelfand_bound(
-            sp.Integer(getattr(self.model, "spectral_squarings",
-                               SystemModel.spectral_squarings)),
-            sp.Float(getattr(self.model, "spectral_cw_offset",
-                             SystemModel.spectral_cw_offset)),
-            *[x for row in M for x in row])
+        return [[sum(A[i, j, d] * nrm[d] for d in range(len(nrm)))
+                 for j in range(self.n_variables)] for i in range(self.n_variables)]
 
     def _gelfand_extremes(self, qL, qR, auxL, auxR, p, n):
         """`(s_L, s_R)` with `s_L <= min Re lambda` and `s_R >= max Re lambda` over the
@@ -573,10 +504,10 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         for sign in (1, -1):                     # bound(A + a I), bound(a I - A), both states
             per_state = []
             for q, aux in ((qL, auxL), (qR, auxR)):
-                M = self._speed_matrix(q, aux, p, n, normal_frame=True)
-                per_state.append(self._gelfand(
-                    [[sign * x + (a if i == j else 0) for j, x in enumerate(row)]
-                     for i, row in enumerate(M)]))
+                M = speed_matrix(self.model, self._lab_speed_matrix(q, aux, p, n), list(n))
+                per_state.append(gelfand(self.model, [
+                    [sign * x + (a if i == j else 0) for j, x in enumerate(row)]
+                    for i, row in enumerate(M)]))
             shifted.append(sp.Max(*per_state, evaluate=False))
         sR = sp.Min(shifted[0] - a, a, evaluate=False)
         sL = sp.Max(a - shifted[1], -a, evaluate=False)
@@ -595,20 +526,6 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
         out = list(Qaux)
         out[hinv.index] = wave_speed_inverse_depth(h.access(Q, Qaux))
         return out
-
-    def _spectral_radius_bound(self, Q, Qaux, p, n):
-        """The model's spectral radius bound at the numerics' state symbols, built from
-        the substituted quasilinear matrix so its unevaluated reductions survive.
-        """
-        A = self._model_eval("quasilinear_matrix", Q, Qaux, p)
-        nrm = list(n)
-        dim = len(nrm)
-        M = [[sp.Abs(sum(A[i, j, d] * nrm[d] for d in range(dim)))
-              for j in range(self.n_variables)]
-             for i in range(self.n_variables)]
-        return _perron_radius_bound(
-            M, getattr(self.model, "spectral_bound_iterations",
-                       SystemModel.spectral_bound_iterations))
 
     def _model_eval(self, operator_name, Q, Qaux, p, n=None):
         """Evaluate the SystemModel operator `operator_name` (`flux`,
@@ -966,16 +883,16 @@ class HLL(Numerics):
     def wave_speed_bounds(self, qL, qR, auxL, auxR, p, n):
         """Davis estimates, the min / max over the spectrum of both face states; without a
         closed-form spectrum bounds of them from the Gelfand bound (`_gelfand_extremes`), and
-        the Lax-Friedrichs pair for the `bound` method.
+        the Lax-Friedrichs pair with `SpectralRadius.eig`.
 
         References:
             Toro 2009, https://doi.org/10.1007/b79761
             Davis 1988, https://doi.org/10.1137/0909030
         """
         if self.model.eigenvalues is None:
-            if self._spectral_method() == "gelfand":
-                return self._gelfand_extremes(qL, qR, auxL, auxR, p, n)
-            return super().wave_speed_bounds(qL, qR, auxL, auxR, p, n)
+            if spectral_method(self.model) == "eig":
+                return super().wave_speed_bounds(qL, qR, auxL, auxR, p, n)
+            return self._gelfand_extremes(qL, qR, auxL, auxR, p, n)
         eig = list(sp.flatten(self._model_eval("eigenvalues", qL, auxL, p, n)))
         eig += list(sp.flatten(self._model_eval("eigenvalues", qR, auxR, p, n)))
         # ``evaluate=False`` — Davis wave-speed bounds are a runtime min/max over

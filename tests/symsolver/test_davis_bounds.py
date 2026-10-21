@@ -14,7 +14,6 @@ from zoomy_core.model.boundary_conditions import BoundaryConditions, FromModel
 from zoomy_core.model.models import SME
 from zoomy_core.model.models.closures import Newtonian, StressFree
 from zoomy_core.numerics import NumericalSystemModel, PositiveNonconservativeHLL
-from zoomy_core.symsolver import default_wave_speed
 from zoomy_core.symsolver.numpy_backend import SymbolicHyperbolicSolverNumpy
 from zoomy_core.systemmodel.system_model import SystemModel
 
@@ -32,7 +31,7 @@ def _sme(level, n_tags=("left", "right")):
 def test_davis_pair_brackets_the_spectrum(level):
     """The production pair of SME(level) 1-D (no closed form) on random wet / thin states:
     s_L <= min eig, s_R >= max eig (eig of the same matrix), and narrower than (-a, a)."""
-    nsm = default_wave_speed(NumericalSystemModel.from_system_model(_sme(level)))
+    nsm = NumericalSystemModel.from_system_model(_sme(level))
     assert nsm.eigenvalues is None
     num = HLL(nsm.sm)
     Q, A, P, N = (list(num.variables), list(num.aux_variables), list(num.parameters),
@@ -89,7 +88,7 @@ def test_wall_pair_is_symmetric_at_an_oblique_wall():
     outside (a wall), s_L = -s_R to round-off (the shifted matrices are bounded in the face's
     normal frame), so the HLL mass flux through the wall vanishes."""
     sm = SystemModel.from_model(SME(level=1, dimension=3, closures=[Newtonian(), StressFree()]))
-    nsm = default_wave_speed(NumericalSystemModel.from_system_model(sm))
+    nsm = NumericalSystemModel.from_system_model(sm)
     num = HLL(nsm.sm)
     Q, A, P, N = (list(num.variables), list(num.aux_variables), list(num.parameters),
                   list(num.normal))

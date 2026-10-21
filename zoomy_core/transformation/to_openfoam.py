@@ -134,8 +134,8 @@ class FoamSystemModelPrinter(GenericCppBase):
         `quasilinear_matrix`.  If False, emit a zero placeholder — the
         solver computes eigenvalues numerically itself.  Either way this
         slot is NOT the wave speed: that is
-        `Numerics::local_max_abs_eigenvalue`, which takes the closed-form
-        `spectral_radius_bound` and never an eigensolve.
+        `Numerics::local_max_abs_eigenvalue`, which takes the closed form or
+        the Gelfand bound `wave_speed_bound`, never an eigensolve.
     """
 
     _output_subdir = ".foam_interface"
@@ -389,7 +389,7 @@ class FoamSystemModelPrinter(GenericCppBase):
         # to the NUMERICAL spectrum, which is what "a real spectrum, no closed
         # form" means everywhere else in the stack.  It is not the wave-speed
         # path (that is ``Numerics::local_max_abs_eigenvalue``, which takes
-        # ``spectral_radius_bound`` and never an eigensolve) and no foam solver
+        # the Gelfand bound ``wave_speed_bound``, never an eigensolve) and no foam solver
         # reads ``Model::eigenvalues`` today, so this puts no decomposition on
         # any hot path — it just stops the printer lying by omission.
         if self.analytical_eigenvalues:

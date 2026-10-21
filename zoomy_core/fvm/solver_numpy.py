@@ -590,7 +590,7 @@ class HyperbolicSolver(Solver):
         # evaluation over all cells + one stacked np.linalg.eigvals over
         # all face-side matrices, two orders of magnitude cheaper than a
         # per-face Python loop.  This is the dt path and it stays EXACT; the
-        # flux dissipation takes the cheap ``spectral_radius_bound`` instead
+        # flux dissipation takes the Gelfand bound ``wave_speed_bound`` instead
         # (``riemann_solvers.local_max_abs_eigenvalue``), because that one is
         # evaluated per face inside emitted C where an eigensolve is not
         # batchable.
