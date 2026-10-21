@@ -67,6 +67,7 @@ sphinx:
       - tutorial-filter.css
     html_js_files:
       - tutorial-filter.js
+      - notebook-download.js
     autodoc2_packages:
       - path: ../../library/zoomy_core/zoomy_core
         module: zoomy_core

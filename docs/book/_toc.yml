@@ -14,6 +14,9 @@ parts:
     chapters:
       - file: guide/architecture
       - file: guide/model
+        sections:
+          - file: guide/models/sme
+          - file: guide/models/mlvam
       - file: guide/system-model
       - file: guide/numerical-system-model
       - file: guide/solvers

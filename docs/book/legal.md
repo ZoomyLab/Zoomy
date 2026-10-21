@@ -3,8 +3,8 @@
 ## Responsible for the content
 
 Ingo Steldermann  
-Ringstr. 103  
-52078 Aachen  
+Schinkelstr. 2a  
+52068 Aachen  
 E-Mail: steldermann@mbd.rwth-aachen.de
 
 ## Disclaimer
@@ -42,4 +42,3 @@ E-Mail: steldermann@mbd.rwth-aachen.de
 
 If you contact us by e-mail, your request and related personal data are processed to handle your request. Legal retention obligations remain unaffected.
 
-Source (adapted): <https://www.e-recht24.de>
