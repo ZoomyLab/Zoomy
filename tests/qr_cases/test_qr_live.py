@@ -91,18 +91,15 @@ def _get_fresh(url, check):
     return body
 
 
-def _commit(path=None):
-    """The checkout's commit (`path`: the gitlink of that submodule)."""
-    if path is None:
-        return subprocess.check_output(["git", "-C", str(Q.ROOT), "rev-parse", "HEAD"], text=True).strip()
-    return subprocess.check_output(["git", "-C", str(Q.ROOT), "ls-tree", "HEAD", path],
-                                   text=True).split()[2]
+def _commit():
+    """The checkout's commit: zoomy_core and zoomy_plotting are folders of this repository."""
+    return subprocess.check_output(["git", "-C", str(Q.ROOT), "rev-parse", "HEAD"], text=True).strip()
 
 
 @pytest.mark.qr_deploy
 def test_gui_wheels_live():
     """gui/gui/wheels/index.json names wheels of this commit, served with their sha256."""
-    want = {"zoomy-core": _commit("library/zoomy_core"), "zoomy-plotting": _commit()}
+    want = {"zoomy-core": _commit(), "zoomy-plotting": _commit()}
 
     def current(body):
         try:
