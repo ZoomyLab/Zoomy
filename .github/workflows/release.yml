@@ -1,0 +1,184 @@
+name: Release
+
+# Publishes to PyPI every package whose pyproject version PyPI does not hold yet:
+# zoomy-core, zoomy-jax, zoomy-plotting, zoomy-prepost, zoomy-server. Bump a version
+# in a pyproject (for core and jax, bump the submodule pointer) and push to main.
+# plan: which versions are new. build: sdist and wheel of all five, twine check, a smoke
+# test of the wheels in a fresh venv. publish: PyPI trusted publishing, no token anywhere.
+#
+# One-time PyPI setup per project (zoomy-jax and zoomy-prepost as pending publishers):
+# owner ZoomyLab, repository Zoomy, workflow release.yml, environment pypi. Only
+# zoomy-prepost uses the environment pypi-prepost, because a pending publisher
+# configuration (repository, workflow, environment) fits one project name.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - "library/zoomy_core"
+      - "library/zoomy_jax"
+      - "library/zoomy_plotting/pyproject.toml"
+      - "library/zoomy_prepost/pyproject.toml"
+      - "library/zoomy_server/pyproject.toml"
+      - ".github/workflows/release.yml"
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Plan (which versions are new)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      new: ${{ steps.plan.outputs.new }}
+      any: ${{ steps.plan.outputs.any }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Submodules that are packages
+        run: git submodule update --init library/zoomy_core library/zoomy_jax
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Compare every version with PyPI
+        id: plan
+        run: |
+          python - <<'PY'
+          import json, os, re, sys, time, tomllib, urllib.error, urllib.request
+
+          plan = []
+          for d in ("zoomy_core", "zoomy_jax", "zoomy_plotting", "zoomy_prepost", "zoomy_server"):
+              with open(f"library/{d}/pyproject.toml", "rb") as f:
+                  meta = tomllib.load(f)["project"]
+              name = re.sub(r"[-_.]+", "-", meta["name"]).lower()
+              version = meta["version"]
+              url = f"https://pypi.org/pypi/{name}/{version}/json"
+              for attempt in range(4):
+                  try:
+                      urllib.request.urlopen(url, timeout=30)
+                      new = False
+                      break
+                  except urllib.error.HTTPError as e:
+                      if e.code == 404:
+                          new = True
+                          break
+                      err = e
+                  except urllib.error.URLError as e:
+                      err = e
+                  time.sleep(5 * (attempt + 1))
+              else:
+                  sys.exit(f"cannot query {url}: {err}")
+              env = "pypi-prepost" if name == "zoomy-prepost" else "pypi"
+              plan.append({"dir": d, "name": name, "version": version, "new": new, "environment": env})
+              print(f"{name:16s} {version:8s} {'NEW' if new else 'on PyPI'}")
+
+          out = [
+              "plan=" + json.dumps(plan),
+              "new=" + json.dumps([p for p in plan if p["new"]]),
+              "any=" + ("true" if any(p["new"] for p in plan) else "false"),
+          ]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("\n".join(out) + "\n")
+          if not any(p["new"] for p in plan):
+              print("nothing to release")
+          PY
+
+  build:
+    name: Build and smoke test
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PLAN: ${{ needs.plan.outputs.plan }}
+      PYTHONNOUSERSITE: "1"
+      JAX_PLATFORMS: cpu
+      OMP_NUM_THREADS: "2"
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Submodules that are packages
+        run: git submodule update --init library/zoomy_core library/zoomy_jax
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Build every package, keep the new ones for PyPI
+        run: |
+          python -m pip install --upgrade pip build twine
+          mkdir -p build wheels dist
+          python - <<'PY'
+          import json, os, pathlib, shutil, subprocess, sys
+
+          for p in json.loads(os.environ["PLAN"]):
+              out = pathlib.Path("build") / p["dir"]
+              keep = pathlib.Path("dist") / p["dir"]
+              subprocess.run([sys.executable, "-m", "build", "--outdir", str(out), f"library/{p['dir']}"],
+                             check=True)
+              for f in sorted(out.iterdir()):
+                  if f.suffix == ".whl":
+                      shutil.copy(f, "wheels")
+                  if p["new"]:
+                      keep.mkdir(exist_ok=True)
+                      shutil.copy(f, keep)
+          PY
+          ls -l wheels dist
+
+      - name: twine check
+        run: twine check dist/*/*
+
+      - name: Smoke test in a fresh venv
+        run: |
+          python -m venv smoke-venv
+          smoke-venv/bin/python -m pip install --upgrade pip
+          # explicit wheel files, so a version PyPI already holds (zoomy-plotting) is still
+          # tested from this build, the dependencies come from PyPI
+          smoke-venv/bin/python -m pip install --find-links wheels wheels/*.whl
+          smoke-venv/bin/python -m pip check
+          mkdir -p "$RUNNER_TEMP/smoke"
+          cd "$RUNNER_TEMP/smoke"
+          "$GITHUB_WORKSPACE/smoke-venv/bin/zoomy-server" --help
+          "$GITHUB_WORKSPACE/smoke-venv/bin/zoomy-convert" --help
+          "$GITHUB_WORKSPACE/smoke-venv/bin/zoomy-plot" --help
+          "$GITHUB_WORKSPACE/smoke-venv/bin/python" "$GITHUB_WORKSPACE/tests/release/smoke.py"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish ${{ matrix.name }}
+    needs: [plan, build]
+    if: needs.plan.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # one upload at a time, in dependency order (the order of the plan), a failure stops the rest
+    strategy:
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.new) }}
+    environment: ${{ matrix.environment }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/${{ matrix.dir }}/
