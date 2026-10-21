@@ -23,6 +23,7 @@ from zoomy_core.numerics import NumericalSystemModel
 from zoomy_core.symsolver import PyPrinter
 from zoomy_core.misc.options import OptionParam
 from zoomy_core.solver.constants import elliptic_constants
+from zoomy_core.symsolver.hooks import check_functions
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings, LinearSolver
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate, check_overlap
 from zoomy_core.symsolver.strategies.hyperbolic import CoupledFace, HyperbolicTemplate
@@ -152,7 +153,8 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         self.mesh = R.Geometry(*map(jnp.asarray, R.geometry_of(
             self.topo, np.asarray(mesh.vertex_coordinates)[:mesh.dimension])))
         self.mesh_j = dataclasses.replace(self.mesh_j, lsq_gradQ=self.mesh.lsq_gradQ)
-        self.rt = JaxRuntime.from_nsm(nsm)
+        check_functions(self.functions, [nsm, *(sub for sub, _ in (systems or {}).values())])
+        self.rt = JaxRuntime.from_nsm(nsm, self.functions)
         order = int(nsm.reconstruction.order)
         self.mood_active = bool(self.mood and order >= 2
                                 and nsm.call.admissible is not None)
@@ -446,7 +448,7 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
             nsm = (sm if isinstance(sm, NumericalSystemModel)
                    else NumericalSystemModel.from_system_model(sm))
             nsm._symbolic_name = name
-            systems[name] = (nsm, JaxRuntime.from_nsm(nsm))
+            systems[name] = (nsm, JaxRuntime.from_nsm(nsm, self.functions))
         pred._symbolic_name = "pred"
         self.press, self.corr = systems["press"][0], systems["corr"][0]
         from zoomy_core.mesh import distributed
