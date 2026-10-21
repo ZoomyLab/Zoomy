@@ -12,6 +12,7 @@ on:
       - "tests/tutorials/**"
       - "docs/scripts/generate_tutorial_index.py"
       - "library/zoomy_core"
+      - "library/zoomy_jax"
       - "library/zoomy_plotting/**"
       - ".github/workflows/tutorials.yml"
   pull_request:
@@ -20,6 +21,7 @@ on:
       - "tests/tutorials/**"
       - "docs/scripts/generate_tutorial_index.py"
       - "library/zoomy_core"
+      - "library/zoomy_jax"
       - "library/zoomy_plotting/**"
       - ".github/workflows/tutorials.yml"
   workflow_dispatch:
@@ -44,18 +46,21 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Submodule the notebooks use
-        run: git submodule update --init library/zoomy_core
+        run: git submodule update --init library/zoomy_core library/zoomy_jax
 
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: library/zoomy_core/pyproject.toml
+          cache-dependency-path: |
+            library/zoomy_core/pyproject.toml
+            library/zoomy_jax/pyproject.toml
 
       - name: Install
         run: |
-          python -m pip install -e "library/zoomy_core[full]" -e library/zoomy_plotting \
-            pytest nbclient nbformat ipykernel
+          sudo apt-get update -qq && sudo apt-get install -y -qq libglu1-mesa libxcursor1 libxinerama1 libxft2 > /dev/null
+          python -m pip install -e "library/zoomy_core[full]" -e library/zoomy_jax -e library/zoomy_plotting \
+            gmsh pytest nbclient nbformat ipykernel
 
       - name: Metadata of every notebook
         run: python docs/scripts/generate_tutorial_index.py
