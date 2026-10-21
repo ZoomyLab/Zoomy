@@ -47,6 +47,11 @@ on:
         default: ""
         type: string
 
+# A newer push cancels the older run: one deploy at a time, and the live QR checks never see a newer site.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
   build-docs:
     runs-on: ubuntu-latest
@@ -272,10 +277,6 @@ jobs:
   deploy-docs:
     needs: build-docs
     runs-on: ubuntu-latest
-    # Two pushes in quick succession: deploys run one after the other (Pages refuses a second one in flight).
-    concurrency:
-      group: pages-deploy
-      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
