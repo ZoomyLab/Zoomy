@@ -34,7 +34,10 @@ class SME(BaseModel):
     plus the bed `b`), derived symbolically by Galerkin projection.
 
     Lifted to a SystemModel by `SystemModel.from_model`; stress closures are injected through
-    `closures`.
+    `closures`.  The stress is truncated by order from the non-dimensional balance laws
+    (`scaling`), by default in the regime `Fr, De = O(1)` at the orders (0, 0): the hydrostatic
+    balance with the vertical shear.  `Stress.full` keeps the hand rule (the whole tensor
+    without the eps^2 `rho nu d_e d_e w`, consistent for De <= O(eps), ANALYSIS 49, 63).
 
     References:
         Kowalski & Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
@@ -62,11 +65,10 @@ class SME(BaseModel):
         "`Stress.shallow` the vertical shear only, `Stress.full` the whole Newtonian tensor "
         "(Marche 2007 eq. (3.5))."))
     scaling = param.Parameter(default=None, doc=(
-        "A `ShallowScaling` (derivation.nondim): derive the stress truncation by order from "
-        "the non-dimensional balance laws (`FreeSurfaceNonDim` -> `ShallowScaling` -> "
-        "`InsertClosure` -> `Dimensionalize`) instead of the hand rules (`moment_scaling`, the "
-        "hydrostatic inertia drop, `apply_full_tensor`); it then decides `stress`.  None "
-        "(default): the hand rules."))
+        "A `ShallowScaling` (derivation.nondim): the regime and orders of the stress "
+        "truncation by order of the non-dimensional balance laws (`FreeSurfaceNonDim` -> "
+        "`ShallowScaling` -> `InsertClosure` -> `Dimensionalize`); it then decides `stress`.  "
+        "None (default): `default_scaling()`."))
     closures = param.List(default=[], doc=(
         "List of composable stress Closure pieces (closures.py), e.g. "
         "[Newtonian(), NavierSlip(), StressFree()]. An empty list leaves "
@@ -79,6 +81,14 @@ class SME(BaseModel):
         "Number of vertical samples N_z of the trapezoid Galerkin reduction "
         "in ``project_from_3d``; set it to the VOF column height the coupling "
         "supplies."))
+
+    def default_scaling(self):
+        """The truncation without a `scaling` setting: regime `Fr, De = O(1)`, orders (0, 0);
+        `None` (the hand rule) with `Stress.full`."""
+        from zoomy_core.model.derivation.nondim import ShallowScaling
+        if Stress(self.stress) == Stress.full:
+            return None
+        return ShallowScaling(horizontal=0, vertical=0)
 
     def derive_model(self):
         """Build the declarative SME model (h-equation, projected horizontal momenta, closures)
@@ -130,24 +140,27 @@ class SME(BaseModel):
         # 1 — full system, assembled from balance blueprints (equations.py).
         # Mass registers the horizontal velocity(ies) + w; Momentum (full stress
         # tensor) registers p (state) + the stresses (closure) with the
-        # incline body force −g·e_x; moment_scaling applies the stress setting:
-        # Stress.shallow (default, byte-identical to K&T) drops the in-plane stresses and the
-        # vertical-row stress; Stress.full keeps the whole tensor, which the bulk closure
-        # (Newtonian) fills in physical coordinates (apply_full_tensor) and the projection
-        # routes into conservative diffusion (package_viscous, §9b).
+        # incline body force −g·e_x.  The truncation by order (default_scaling: Fr, De = O(1),
+        # orders (0, 0), byte-identical to K&T) drops the in-plane stresses, the vertical-row
+        # stress and the vertical inertia; Stress.full (hand rule, moment_scaling) keeps the
+        # whole tensor, which the bulk closure (Newtonian) fills in physical coordinates
+        # (apply_full_tensor) and the projection routes into conservative diffusion
+        # (package_viscous, §9b).
         m.declare_state(h)
         m.add_equation("bottom", d.t(b))
         m.add_equation(Mass(m))
         mom = Momentum(m); m.add_equation(mom)
-        if self.scaling is not None:
+        scaling = self.scaling if self.scaling is not None else self.default_scaling()
+        if scaling is not None:
             # the truncation by order of the non-dimensional balance laws (scaling.py)
             from zoomy_core.model.models.scaling import ordered_truncation, Pressure
-            rec = ordered_truncation(m, mom, self.closures or [], self.scaling,
+            rec = ordered_truncation(m, mom, self.closures or [], scaling,
                                      heights=[h, b], free_surface=b + h,
                                      pressure=Pressure.total, mass="mass",
                                      requested=self.stress)
             tensor = rec.tensor if rec.vertical_stress else None
         else:
+            # Stress.full without a scaling: the hand rule (open decision, ANALYSIS 63)
             moment_scaling(m, mom, self.stress)
             tensor = apply_full_tensor(self.closures or [], m, mom)
         full_stress = m.stress == Stress.full
@@ -178,10 +191,10 @@ class SME(BaseModel):
         tzz = None
         if tensor is not None:
             tzz = tensor["zz"]
-        if self.scaling is None:
+        if scaling is None:
             mz.apply(zdrop)
         elif mz.expr.has(*zdrop):
-            raise ValueError(f"SME is hydrostatic: {self.scaling!r} keeps the vertical inertia "
+            raise ValueError(f"SME is hydrostatic: {scaling!r} keeps the vertical inertia "
                              f"({mz.expr}); use a vertical order that drops it")
         mz.apply(IntegrateZ(z, z, b + h, method="analytical"))
         # Free-surface pressure BC.  Default p(η)=0 (atmospheric).  A SURFACE

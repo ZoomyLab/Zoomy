@@ -40,10 +40,13 @@ class VerticalTraction(Option):
     #: each layer its own trace (the pointwise projection; single-valued for continuous profiles)
     one_sided = "one_sided"
     #: one interface value of the two traces by the `InterfaceFlux(quantity=
-    #: InterfaceQuantity.stress)` closure of the horizontal traction (mean by default,
+    #: InterfaceQuantity.stress)` closure of the horizontal traction (the mean by default,
     #: `UpwindInterface` by the sign of G), like the u* transfer: the vertical traction is
-    #: single-valued and the w rows telescope over the layers
+    #: single-valued and the w rows telescope over the layers (the default)
     shared = "shared"
+    #: one interface value `vertical_traction_function(below, above)` of the two traces (sympy
+    #: expressions of the layer below and above), e.g. `lambda a, b: (a + b) / 2`
+    function = "function"
 
 
 class MLVAM(BaseModel):
@@ -68,9 +71,14 @@ class MLVAM(BaseModel):
     stress = OptionParam(Stress, default=Stress.shallow, doc=(
         "How much of the bulk closure's stress the model keeps (`moment_scaling`): "
         "`Stress.shallow` the vertical shear only, `Stress.full` the whole Newtonian tensor."))
-    vertical_traction = OptionParam(VerticalTraction, default=VerticalTraction.one_sided, doc=(
-        "The w rows' trace of tau_ez at an internal interface (`Stress.full` only): "
-        "`one_sided` each layer's own, `shared` the stress InterfaceFlux value of both."))
+    vertical_traction = OptionParam(VerticalTraction, default=VerticalTraction.shared, doc=(
+        "The w rows' trace of tau_ez at an internal interface (with `Stress.full`; "
+        "`Stress.shallow` keeps no tau_ez there): `shared` (default) the stress InterfaceFlux "
+        "value of both, the mean unless an `UpwindInterface(quantity=stress)` closure is given; "
+        "`one_sided` each layer's own; `function` `vertical_traction_function(below, above)`."))
+    vertical_traction_function = param.Callable(default=None, doc=(
+        "With `vertical_traction=VerticalTraction.function`: the interface value of the two "
+        "one-sided traces, a callable `(below, above) -> value` on sympy expressions."))
     closures = param.List(default=[], doc=(
         "Composable Closure pieces (closures.py): stress AND the interface "
         "transfer scheme (MeanInterface/UpwindInterface). Default interface "
@@ -131,10 +139,15 @@ class MLVAM(BaseModel):
         # runs (modes k ≥ 1) and by package_viscous (mode 0); b is a state so topography
         # couplings stay live.
         full_stress = Stress(self.stress) == Stress.full
-        shared_vertical = VerticalTraction(self.vertical_traction) == VerticalTraction.shared
-        if shared_vertical and not full_stress:
-            raise ValueError("vertical_traction=VerticalTraction.shared needs stress=Stress.full "
-                             "(with Stress.shallow the w rows carry no tau_ez)")
+        vtrac = VerticalTraction(self.vertical_traction)
+        trace_fn = self.vertical_traction_function
+        if (vtrac == VerticalTraction.function) != (trace_fn is not None):
+            raise ValueError("vertical_traction=VerticalTraction.function and "
+                             "vertical_traction_function=(below, above) -> value go together")
+        if trace_fn is not None and not full_stress:
+            raise ValueError("vertical_traction_function needs stress=Stress.full (with "
+                             "Stress.shallow the w rows carry no tau_ez)")
+        shared_vertical = full_stress and vtrac != VerticalTraction.one_sided
 
         # inner (per-layer) basis object: the per-layer modal reconstruction,
         # top-mode closures and interface traces all go through it, so the
@@ -541,7 +554,8 @@ class MLVAM(BaseModel):
                 below, above = _layer_state(a, 1), _layer_state(a + 1, 0)
                 fb, fa = _vshear(below), _vshear(above)
                 slope = below.interface_slopes
-                star = sum(scheme.expression(fb[e], fa[e], G_sol[Gf[a]]) * slope[e]
+                star = sum((trace_fn(fb[e], fa[e]) if trace_fn is not None
+                            else scheme.expression(fb[e], fa[e], G_sol[Gf[a]])) * slope[e]
                            for e in range(len(horiz)))
                 for ell, side, f in ((a, 1, fb), (a + 1, 0, fa)):
                     w_tr[(ell, side)] = sp.expand(

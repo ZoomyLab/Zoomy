@@ -1,16 +1,17 @@
 """The non-dimensional scaling pipeline (`derivation/nondim.py`, `models/scaling.py`): the
-Buckingham-Pi check, the closure consistency check, the order-based truncation, and the pin that
-the moment models derived through it (`scaling=`) equal the hand-truncated ones byte for byte
-(rendered SystemModels), each in the regime whose orders the hand rules correspond to:
+Buckingham-Pi check, the closure consistency check, the order-based truncation, and the moment
+models' default truncations, which it now derives (ANALYSIS 49, 63):
 
 * SME, ML-SME (`Stress.shallow`): thesis regime `Fr, De = O(1)`, orders (horizontal 0,
-  vertical 0).
-* SME, ML-SME `Stress.full`: Marche 2007 eq. (5.1) `1/Re = eps nu_0`, i.e. `De = O(eps)`,
-  orders (1, 1) (also `De = O(eps^2)`, orders (0, 0): Marche (3.2) -> (3.5) with `Re = O(1)`).
-* VAM (`Stress.shallow`): `1/De = O(eps)` with the slip `k_l = O(eps^2)`, orders (1, 2).
-* VAM `Stress.full`: `De = O(1)`, orders (2, 2).
+  vertical 0) -- byte-identical to the former hand rules (goldens m01-m06, m08, m10).
+* ML-SME `Stress.full`: `De = O(1)`, orders (2, 2) (= Marche 2007 eq. (5.1) `De = O(eps)`,
+  orders (1, 1)).  SME `Stress.full` keeps the hand rule, the consistent truncation at
+  `De = O(eps)` (orders (1, 1)), not at `De = O(1)`.
+* VAM: `Fr, De = O(1)`, orders (0, 2), `Stress.full` (2, 2): the vertical row keeps
+  `-nu d_x d_z u`.  `VAMWeakViscosity`: `1/De = O(eps)`, `k_l = O(eps^2)`, orders (1, 2), the
+  thesis VAM (goldens m11-m13, S02, N02, P01 unchanged).
 
-Design: docs/dev/symbolic_solver/research/nondimensional_scaling.md; ANALYSIS 49.
+Design: docs/dev/symbolic_solver/research/nondimensional_scaling.md; ANALYSIS 49, 63.
 """
 import contextlib
 import warnings
@@ -38,12 +39,15 @@ def _orders(h, v, **regime):
 
 
 def _cases():
-    from zoomy_core.model.models import SME, VAM
+    """`{name: (model, the same model with an explicit scaling)}`: the defaults are the stated
+    regimes, and the alternative regimes that give the same truncation."""
+    from zoomy_core.model.models import SME, VAM, VAMWeakViscosity
     from zoomy_core.model.models.ml_sme import MLSME
     from zoomy_core.model.models.equations import Stress
     from zoomy_core.model.models.closures import Newtonian, ManningFriction, StressFree
     std = goldenlib._std_closures
     swe = lambda: [Newtonian(), ManningFriction(), StressFree()]
+    weak = dict(De=-1, k_l=2, C_n=1)
     small = {
         "sme1_shallow": (lambda: SME(level=1, closures=std()),
                          lambda: SME(level=1, closures=std(), scaling=_orders(0, 0))),
@@ -51,41 +55,31 @@ def _cases():
                           lambda: SME(level=0, closures=swe(), scaling=_orders(0, 0))),
         "sme1_full_marche": (lambda: SME(level=1, stress=Stress.full, closures=std()),
                              lambda: SME(level=1, closures=std(), scaling=_orders(1, 1, De=1))),
-        "vam1_shallow": (lambda: VAM(level=1, closures=std()),
-                         lambda: VAM(level=1, closures=std(),
-                                     scaling=_orders(1, 2, De=-1, k_l=2))),
+        "vam1": (lambda: VAM(level=1, closures=std()),
+                 lambda: VAM(level=1, closures=std(), scaling=_orders(0, 2))),
+        "vam1_weak": (lambda: VAMWeakViscosity(level=1, closures=std()),
+                      lambda: VAM(level=1, closures=std(), scaling=_orders(1, 2, **weak))),
         "vam1_full": (lambda: VAM(level=1, stress=Stress.full, closures=std()),
-                      lambda: VAM(level=1, closures=std(), scaling=_orders(2, 2))),
+                      lambda: VAM(level=1, closures=std(), scaling=_orders(1, 2, De=1))),
         "mlsme_m10": (lambda: MLSME(n_layers=2, level=1, closures=std()),
                       lambda: MLSME(n_layers=2, level=1, closures=std(), scaling=_orders(0, 0))),
     }
     large = {
-        "sme0_shallow": (lambda: SME(level=0, closures=std()),
-                         lambda: SME(level=0, closures=std(), scaling=_orders(0, 0))),
-        "sme2_shallow": (lambda: SME(level=2, closures=std()),
-                         lambda: SME(level=2, closures=std(), scaling=_orders(0, 0))),
-        "sme1_2d_shallow": (lambda: SME(level=1, dimension=3, closures=std()),
-                            lambda: SME(level=1, dimension=3, closures=std(),
-                                        scaling=_orders(0, 0))),
-        "swe2d_manning": (lambda: SME(level=0, dimension=3, closures=swe()),
-                          lambda: SME(level=0, dimension=3, closures=swe(),
-                                      scaling=_orders(0, 0))),
         "sme2_full_marche": (lambda: SME(level=2, stress=Stress.full, closures=std()),
                              lambda: SME(level=2, closures=std(), scaling=_orders(1, 1, De=1))),
         "sme1_full_re1": (lambda: SME(level=1, stress=Stress.full, closures=std()),
                           lambda: SME(level=1, closures=std(), scaling=_orders(0, 0, De=2))),
-        "vam2_shallow": (lambda: VAM(level=2, closures=std()),
-                         lambda: VAM(level=2, closures=std(),
-                                     scaling=_orders(1, 2, De=-1, k_l=2))),
-        "vam1_2d_shallow": (lambda: VAM(level=1, dimension=3, closures=std()),
-                            lambda: VAM(level=1, dimension=3, closures=std(),
-                                        scaling=_orders(1, 2, De=-1, k_l=2))),
+        "vam2_weak": (lambda: VAMWeakViscosity(level=2, closures=std()),
+                      lambda: VAM(level=2, closures=std(), scaling=_orders(1, 2, **weak))),
+        "vam1_2d_weak": (lambda: VAMWeakViscosity(level=1, dimension=3, closures=std()),
+                         lambda: VAM(level=1, dimension=3, closures=std(),
+                                     scaling=_orders(1, 2, **weak))),
         "vam2_full": (lambda: VAM(level=2, stress=Stress.full, closures=std()),
-                      lambda: VAM(level=2, closures=std(), scaling=_orders(2, 2))),
-        "mlsme_l1_full_marche": (lambda: MLSME(n_layers=2, level=1, stress=Stress.full,
-                                               closures=std()),
-                                 lambda: MLSME(n_layers=2, level=1, closures=std(),
-                                               scaling=_orders(1, 1, De=1))),
+                      lambda: VAM(level=2, closures=std(), scaling=_orders(1, 2, De=1))),
+        "mlsme_l1_full": (lambda: MLSME(n_layers=2, level=1, stress=Stress.full,
+                                        closures=std()),
+                          lambda: MLSME(n_layers=2, level=1, closures=std(),
+                                        scaling=_orders(1, 1, De=1))),
     }
     return small, large
 
@@ -94,18 +88,55 @@ _SMALL, _LARGE = (sorted(c) for c in _cases())
 
 
 @pytest.mark.parametrize("name", _SMALL)
-def test_pipeline_equals_hand_rules(name):
-    """The model derived through the pipeline renders byte-identically to the hand rules."""
-    hand, pipe = _cases()[0][name]
-    assert _sm(pipe) == _sm(hand)
+def test_default_is_the_stated_regime(name):
+    """The model's default truncation renders byte-identically to the stated regime."""
+    default, explicit = _cases()[0][name]
+    assert _sm(default) == _sm(explicit)
 
 
 @pytest.mark.large
 @pytest.mark.parametrize("name", _LARGE)
-def test_pipeline_equals_hand_rules_large(name):
-    """As `test_pipeline_equals_hand_rules`, the larger / 2-D derivations."""
-    hand, pipe = _cases()[1][name]
-    assert _sm(pipe) == _sm(hand)
+def test_default_is_the_stated_regime_large(name):
+    """As `test_default_is_the_stated_regime`, the larger / 2-D derivations."""
+    default, explicit = _cases()[1][name]
+    assert _sm(default) == _sm(explicit)
+
+
+def test_vam_minus_weak_viscosity():
+    """VAM(1) at De = O(1) differs from VAMWeakViscosity(1) by the vertical row's
+    `-nu d_x d_z u` only: B[r_0, h] = 4 nu q_1 / h^2, B[r_0, q_1] = -2 nu / h."""
+    from zoomy_core.model.models import VAM, VAMWeakViscosity
+    std = goldenlib._std_closures
+    a = _sm(lambda: VAM(level=1, closures=std())).splitlines()
+    b = _sm(lambda: VAMWeakViscosity(level=1, closures=std())).splitlines()
+    assert sorted(set(b) - set(a)) == []
+    assert sorted(set(a) - set(b)) == [
+        "nonconservative_matrix[4,1,0] = Mul(Integer(4), Pow(Symbol('h'), Integer(-2)), "
+        "Symbol('nu'), Symbol('q_1'))",
+        "nonconservative_matrix[4,3,0] = Mul(Integer(-1), Integer(2), Pow(Symbol('h'), "
+        "Integer(-1)), Symbol('nu'))"]
+
+
+def test_shear_only_closure_needs_the_weak_regime():
+    """A bulk closure that gives only the vertical shear (Elder) cannot close the vertical
+    row's stress that VAM keeps at De = O(1): refused, naming VAMWeakViscosity, which takes it
+    (as SME does); a bed closure without scaling groups (RoughWall) is recorded unchecked."""
+    from zoomy_core.model.derivation.nondim import ScalingError
+    from zoomy_core.model.models import VAM, VAMWeakViscosity
+    from zoomy_core.model.models.closures import ElderViscosity, RoughWall, StressFree
+    cl = lambda: [ElderViscosity(friction=RoughWall()), RoughWall(), StressFree()]
+    with pytest.raises(ScalingError, match="VAMWeakViscosity"):
+        VAM(level=1, closures=cl()).derivation
+    m = VAMWeakViscosity(level=1, closures=cl()).derivation
+    assert "unchecked (no scaling groups): RoughWall" in str(m.history)
+
+
+def test_weak_viscosity_refuses_full_stress():
+    from zoomy_core.model.models import VAMWeakViscosity
+    from zoomy_core.model.models.equations import Stress
+    with pytest.raises(ValueError, match="Stress.full"):
+        VAMWeakViscosity(level=1, stress=Stress.full,
+                         closures=goldenlib._std_closures()).derivation
 
 
 def test_pi_check_names_the_problem():
