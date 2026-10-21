@@ -21,13 +21,7 @@ parts:
       # through the cards of this page.
       - file: tutorials/index
       - file: guide/gui
-      - file: backends/index
-        sections:
-          - file: guide/backends
-          - file: backends/numpy
-          - file: backends/jax
-          - file: backends/amrex
-          - file: backends/openfoam
+      - file: guide/backends
   - caption: Developer guide
     chapters:
       - file: developer/index

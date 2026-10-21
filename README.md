@@ -25,14 +25,10 @@ See the [Zoomy documentation](https://zoomylab.github.io/Zoomy/) for the user gu
 
 ## Backends
 
-Zoomy's symbolic layer compiles to several solver backends. Each one has its own page in the documentation:
+Zoomy's symbolic layer compiles to several solver backends. NumPy, JAX, AMReX and OpenFOAM share one page in the documentation: [Solver backends](https://zoomylab.github.io/Zoomy/guide/backends.html). The prototypes have their own:
 
-- [NumPy](https://zoomylab.github.io/Zoomy/backends/numpy.html)
-- [JAX](https://zoomylab.github.io/Zoomy/backends/jax.html)
 - [Firedrake](https://zoomylab.github.io/Zoomy/backends/firedrake.html)
 - [PETSc DMPlex](https://zoomylab.github.io/Zoomy/backends/dmplex.html)
-- [AMReX](https://zoomylab.github.io/Zoomy/backends/amrex.html)
-- [OpenFOAM](https://zoomylab.github.io/Zoomy/backends/openfoam.html)
 - [FEniCSx](https://zoomylab.github.io/Zoomy/backends/fenicsx.html)
 
 Note: Many backends are in an very early development status. If you are interested in a particular solver and you find no information, please contact us.
