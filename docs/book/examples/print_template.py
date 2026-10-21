@@ -3,12 +3,11 @@
 import sympy as sp
 
 from bump import bump
-from zoomy_core.symsolver import PyPrinter, default_wave_speed
+from zoomy_core.symsolver import PyPrinter
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
 from zoomy_foam.symsolver import SymbolicHyperbolicSolverFoam
 
 mesh, nsm = bump(order=1, nx=8)
-nsm = default_wave_speed(nsm)
 template = HyperbolicTemplate(nsm, cfl=0.9, dimension=2)
 
 Q, Qaux, p, time, time_end, m = sp.symbols("Q Qaux p time time_end mesh")

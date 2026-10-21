@@ -252,11 +252,7 @@ def part_orders(kinds):
 def run_box(theta, backend, nx=16, steps=40, dt=2e-3):
     """O2 (no limiter) SME(0) run of a hump in the walled box rotated by `theta`; returns
     (h, q in the box frame) per cell in the cells' order."""
-    from zoomy_core.systemmodel.system_model import SpectralRadius
-    nsm = nsm_for(2, order=2)
-    # numerical eigenvalues: the default bound (Gelfand + Collatz-Wielandt on |A_n|) depends
-    # on the basis of the momentum, so it is not rotation invariant
-    nsm.spectral_radius_method = SpectralRadius.eig
+    nsm = nsm_for(2, order=2)      # the default wave speed: the bound of A_n in the face frame
     mesh = ensure_lsq_mesh(box_mesh(nx, theta=theta, origin=(0.0, 0.0)), nsm)
     Rm = rotation(theta)
     cc = np.asarray(mesh.cell_centers)[:2, :int(mesh.n_inner_cells)]

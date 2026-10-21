@@ -507,8 +507,11 @@ def gate_checks(add, b, g, J):
                         + " / ".join(f"{x:.2e}" for x in m[f"p{p}_ghost_{where}_d{k}"])
                         + ("" if gated else "; information: degree-3 interior fits on polar "
                            "quads (10 samples) do not converge, walls or not"))
-    d0, d1 = g("C38", "box_r0"), g("C38", f"box_r{OBLIQUE['theta']:g}")
-    if d0 is not None and d1 is not None:                 # C38: rotated = axis-aligned
+
+    def c38_rotation(b, suf, what):                       # C38: rotated = axis-aligned
+        d0, d1 = g("C38", f"box_r0{suf}"), g("C38", f"box_r{OBLIQUE['theta']:g}{suf}")
+        if d0 is None or d1 is None:
+            return
         th = np.radians(OBLIQUE["theta"])
         R = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
         n0, n1 = names(d0), names(d1)
@@ -518,9 +521,14 @@ def gate_checks(add, b, g, J):
         v = max(float(np.abs(h1 - h0).max() / np.abs(h0).max()),
                 float(np.abs(q1 - q0).max() / np.abs(q0).max()))
         add("C38", f"box rotated {OBLIQUE['theta']:g} deg = axis-aligned (max rel, h and the "
-            "rotated q)", b, "serial", v, ("<=", 1e-11, "tolerance (round-off over 40 steps)"), "")
+            f"rotated q){'' if not suf else ', ' + what}", b, "serial", v,
+            ("<=", 1e-11, "tolerance (round-off over 40 steps)"), "")
+    for suf, what in (("", "dt 2e-3"), ("_faces", "adaptive dt, faces rule"),
+                      ("_cells", "adaptive dt, cells rule")):
+        c38_rotation(b, suf, what)
     if b not in ("jax", "numpy"):
-        for k in ("box_r0", f"box_r{OBLIQUE['theta']:g}"):
+        for k in (f"box_r{t:g}{suf}" for t in (0.0, OBLIQUE["theta"])
+                  for suf in ("", "_faces", "_cells")):
             d, j = g("C38", k), J("C38", k)
             if d is not None and j is not None:
                 add("C38", f"{k} max rel vs JAX", b, "serial", relmax(d, j), RO,

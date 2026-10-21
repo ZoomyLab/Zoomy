@@ -12,7 +12,6 @@ from pathlib import Path
 import numpy as np
 from zoomy_core.numerics import Limiter
 from zoomy_core.symsolver.settings import Imex, LinearSolver, Projection
-from zoomy_core.systemmodel.system_model import SpectralRadius
 
 GATES = Path(__file__).resolve().parent.parent / "gates"
 
@@ -27,10 +26,6 @@ def _ad_solver(kind, ad_mode, comm):
         from cases import vam_wave, wave_q0
         import jax.numpy as jnp
         mesh, (pred, press, corr) = vam_wave(1, 30)
-        # the Gelfand bound, not eig: the eig tangent at a defective dominant
-        # eigenvalue is ~1e15 (the VAM wave here hits one); the CPU's exact tie
-        # cancels it, the GPU's split tie does not (NaN; ANALYSIS 44)
-        pred.spectral_radius_method, pred._call = SpectralRadius.gelfand, None
         s = SymbolicChorinSolverJax(time_end=0.05, pressure_linear_solver=LinearSolver.gmres, **kw)
         Q, A = s.setup(mesh, pred, press, corr)
         names = [str(v) for v in s.nsm.state]
@@ -38,7 +33,6 @@ def _ad_solver(kind, ad_mode, comm):
         return s, Q, s.initial_aux(Q, A)
     mesh, nsm = C.bump_2d(2, nx=12, flow=(0.1, 0.05))
     nsm.sm.parameter_values.n = 0.5 if kind == "imex" else 0.03
-    nsm.spectral_radius_method, nsm._call = SpectralRadius.eig, None   # as cases.prepare
     s = SymbolicHyperbolicSolverJax(time_end=0.2, imex=Imex.lie if kind == "imex" else False, **kw)
     Q, A = s.setup(mesh, nsm)
     return s, Q, A
@@ -83,7 +77,6 @@ def ad3d(variant, part):
     from zoomy_jax.symsolver.solver import AdMode, SymbolicHyperbolicSolverJax
     order, dt = {"o1_dt": (1, 5e-3), "o1_adaptive": (1, None), "o2_dt": (2, 5e-3)}[variant]
     mesh, nsm = pulse(order, 10, 0.4)
-    nsm.spectral_radius_method, nsm._call = SpectralRadius.eig, None
     s = SymbolicHyperbolicSolverJax(time_end=0.1, cfl=0.45, dt=dt, ad_checkpoints=16,
                                     ad_mode=AdMode.forward if part == "fwd" else AdMode.reverse)
     Q0, A0 = s.setup(mesh, nsm)
@@ -268,7 +261,6 @@ def time_order(backend, part, to, work):
         T, ks = WAVE_T, (0, 1, 2, 4)
         dts = [WAVE_DT0 / 2 ** k for k in ks]
     if backend not in ("jax", "numpy"):
-        nsm.spectral_radius_method, nsm._call = SpectralRadius.eig, None   # as cases.prepare
         mesh = ensure_lsq_mesh(mesh, nsm)
         names = [str(s) for s in nsm.state]
         xc = np.asarray(mesh.cell_centers)[:, :int(mesh.n_inner_cells)]

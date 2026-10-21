@@ -14,7 +14,8 @@ from zoomy_core.model.models.closures import ManningFriction, NavierSlip, Newton
 from zoomy_core.model.models.equations import Stress
 from zoomy_core.numerics import (Limiter, NumericalSystemModel, ReconstructedVariables,
                                  ReconstructionSpec)
-from zoomy_core.symsolver.settings import Imex, LinearSolver, PressureSolve, Projection
+from zoomy_core.symsolver.settings import (CflWaveSpeed, Imex, LinearSolver, PressureSolve,
+                                         Projection)
 from zoomy_core.symsolver.strategies.chorin import predictor_nsm
 from zoomy_core.systemmodel.system_model import SystemModel
 
@@ -710,12 +711,10 @@ def oblique_box(theta):
     """Gate 50's walled box (10 x 4, nx 16 x 8 quads) rotated by ``theta`` degrees about the
     origin: SME(0), ``Wall`` on every side, O2 without limiter, LSQ degree 2 (the
     reconstruction gradient takes the boundary closure: the momentum in the walls' normal
-    frames), numerical eigenvalues as the wave speed (the default bound on |A_n| depends on
-    the momentum's basis, so it is not rotation invariant)."""
+    frames), the default wave speed (the Gelfand bound of A_n in each face's normal frame:
+    rotation invariant, ANALYSIS 61)."""
     import gate57_oblique_walls as G57
-    from zoomy_core.systemmodel.system_model import SpectralRadius
     nsm = G57.nsm_for(2, order=2)
-    nsm.spectral_radius_method = SpectralRadius.eig
     mesh = G57.box_mesh(OBLIQUE["nx"], theta=np.radians(theta), origin=(0.0, 0.0))
     return ensure_lsq_mesh(mesh, nsm), nsm
 
@@ -738,6 +737,11 @@ def _c38():
     O = OBLIQUE
     return ([Run(f"box_r{t:g}", partial(oblique_box, t), O["steps"] * O["dt"], dt=O["dt"],
                  q0=partial(oblique_q0, t), backends=JF) for t in (0.0, O["theta"])]
+            # adaptive steps (ANALYSIS 61): the CFL step from the faces' / the cells' speeds
+            + [Run(f"box_r{t:g}_{ws.value}", partial(oblique_box, t), O["steps"] * O["dt"],
+                   cfl=0.45, q0=partial(oblique_q0, t), solver=dict(cfl_wave_speed=ws),
+                   backends=JF) for ws in (CflWaveSpeed.faces, CflWaveSpeed.cells)
+               for t in (0.0, O["theta"])]
             + [Run(f"orders_{k}", None, 0.0, custom=lambda b, c, w, k=k: oblique_orders(k, b),
                    backends=("jax",)) for k in ("rbox-quad", "rbox-tri", "annulus")])
 

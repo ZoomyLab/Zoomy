@@ -57,10 +57,8 @@ def metadata():
         spec = importlib.util.find_spec(name)
         libs[name] = _commit(Path(spec.origin).parent) if spec and spec.origin else None
     libs["superrepo"] = _commit(timing_paths.ROOT)
-    try:
-        from zoomy_core.symsolver import WAVE_SPEED as wave
-    except ImportError:
-        wave = None
+    from zoomy_core.systemmodel.system_model import SystemModel
+    wave = str(SystemModel.spectral_radius_method)   # the default without a closed form
     cpus = os.sched_getaffinity(0)
     return dict(host=socket.gethostname(), cpu=cpu, gpu=", ".join(sorted(set(gpus))) or None,
                 n_gpus=len(gpus), cores_pinned=len(cpus), cpus=_cpulist(cpus), libs=libs,

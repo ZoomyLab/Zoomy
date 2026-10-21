@@ -80,7 +80,7 @@ rebuilt from the jsonl after each append (file lock, safe for concurrent pytest 
 ```
 schema 1 | date (UTC) | host | cpu (lscpu) | gpu (nvidia-smi), n_gpus | cores_pinned, cpus ("80" or "80-95")
 libs {zoomy_core, zoomy_jax, zoomy_foam, zoomy_amrex, superrepo: short commit, "+dirty" if modified}
-wave_speed (zoomy_core.symsolver.WAVE_SPEED) | case, backend, config | device (JAX: cpu / gpu), detail (Chorin: pressure=pyamg|amgx)
+wave_speed (`SystemModel.spectral_radius_method`; before ANALYSIS 61 `zoomy_core.symsolver.WAVE_SPEED`) | case, backend, config | device (JAX: cpu / gpu), detail (Chorin: pressure=pyamg|amgx)
 cells, steps, dt, reps | march_s [3 s] | min_s, median_s | ms_step, us_cell_step (of min_s)
 setup_s, compile_s | status ("ok" | "FAIL: ..." | "error: ...") | diff {metric, value, tol, source, ok} or null
 ```
