@@ -1,18 +1,89 @@
-/* Dropdown filter of the tutorials overview (tutorial-filter.js). */
-.zt-filter { display: flex; flex-wrap: wrap; gap: .6rem 1.2rem; align-items: flex-end; margin: 1rem 0; }
-.zt-field { display: flex; flex-direction: column; gap: .15rem; margin: 0; }
-.zt-cat { font-size: .75rem; font-weight: 600; text-transform: uppercase; opacity: .7; }
-.zt-select {
-  min-width: 8.5rem; padding: .2rem .4rem; font-size: .9rem; color: inherit;
-  border: 1px solid var(--pst-color-border, #ccc); border-radius: .3rem; background: transparent;
+/* Tag filter of the tutorials overview (tutorial-filter.js).  Colours: one hue per category
+   (--zt-h, set by the generator); text, borders and surfaces come from the book theme. */
+.zt-layout {
+  display: grid; grid-template-columns: minmax(0, 1fr) 15rem; column-gap: 1.5rem;
+  grid-template-areas: "bar bar" "main panel"; align-items: start; margin: 1rem 0;
 }
-.zt-select option { color: initial; }
+.zt-layout:not(.zt-ready) .zt-bar, .zt-layout:not(.zt-ready) .zt-panel { visibility: hidden; }
+.zt-bar { grid-area: bar; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .8rem; margin-bottom: 1rem; }
+.zt-main { grid-area: main; min-width: 0; }
+.zt-panel {
+  grid-area: panel; position: sticky; top: 4.5rem; max-height: calc(100vh - 5.5rem); overflow-y: auto;
+  padding: .7rem .8rem; border: 1px solid var(--pst-color-border, #ccc); border-radius: .5rem;
+  background: var(--pst-color-surface, transparent);
+}
+.zt-group + .zt-group { margin-top: .7rem; }
+.zt-gh {
+  font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin-bottom: .25rem;
+  color: hsl(var(--zt-h) 55% 38%);
+}
+html[data-theme="dark"] .zt-gh { color: hsl(var(--zt-h) 60% 70%); }
+.zt-chips { display: flex; flex-wrap: wrap; gap: .3rem; }
+
+/* chips, pills, card tags: tinted in the category hue; a selected chip is solid */
+.zt-chip, .zt-pill, .zt-tag {
+  display: inline-flex; align-items: center; gap: .3rem; font-size: .8rem; line-height: 1.4;
+  padding: .05rem .55rem; border-radius: 1rem; color: var(--pst-color-text-base, inherit);
+  border: 1px solid hsl(var(--zt-h, 0) 55% 50% / .55); background: hsl(var(--zt-h, 0) 70% 50% / .13);
+}
+.zt-tag { display: inline-block; font-size: .72rem; padding: 0 .45rem; margin: .1rem .1rem 0 0; }
+.zt-tag:not([style]) { --zt-h: 0; border-color: var(--pst-color-border, #ccc); background: var(--pst-color-surface, #f0f0f0); }
+.zt-chip { font-family: inherit; cursor: pointer; }
+.zt-chip:hover:not(:disabled) { background: hsl(var(--zt-h) 70% 50% / .28); }
+.zt-chip:disabled { opacity: .38; cursor: default; }
+.zt-chip.zt-on { background: hsl(var(--zt-h) 55% 38%); border-color: hsl(var(--zt-h) 55% 38%); color: #fff; font-weight: 600; }
+html[data-theme="dark"] .zt-chip.zt-on { background: hsl(var(--zt-h) 50% 42%); border-color: hsl(var(--zt-h) 55% 62%); }
+.zt-chip:focus-visible, .zt-clear:focus-visible, .zt-pill button:focus-visible {
+  outline: 2px solid var(--pst-color-primary, #0a58ca); outline-offset: 1px;
+}
+.zt-n { font-size: .72rem; opacity: .75; font-variant-numeric: tabular-nums; }
+.zt-chip.zt-on .zt-n { opacity: .9; }
+
+/* the field: pills + input in one box, the suggestion list below it */
+.zt-box {
+  position: relative; flex: 1 1 22rem; display: flex; flex-wrap: wrap; align-items: center; gap: .3rem;
+  padding: .25rem .5rem; border: 1px solid var(--pst-color-border, #ccc); border-radius: .4rem;
+  background: var(--pst-color-background, transparent);
+}
+.zt-box:focus-within { border-color: var(--pst-color-primary, #0a58ca); box-shadow: 0 0 0 2px hsl(210 80% 50% / .25); }
+.zt-pills { display: contents; }
+.zt-pill button {
+  border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 .1rem;
+}
+.zt-text {
+  flex: 1 1 9rem; min-width: 8rem; border: 0; outline: 0; background: transparent; color: inherit;
+  font: inherit; padding: .2rem 0;
+}
+.zt-text.zt-bad { color: #c62828; }
+html[data-theme="dark"] .zt-text.zt-bad { color: #ff8a80; }
+.zt-suggest {
+  position: absolute; left: 0; right: 0; top: 100%; z-index: 30; margin: .2rem 0 0; padding: .2rem; list-style: none;
+  max-height: 16rem; overflow-y: auto; border: 1px solid var(--pst-color-border, #ccc); border-radius: .4rem;
+  background: var(--pst-color-on-background, var(--pst-color-background, #fff)); box-shadow: 0 4px 14px rgb(0 0 0 / .2);
+}
+.zt-opt { display: flex; align-items: center; gap: .4rem; padding: .2rem .5rem; border-radius: .3rem; cursor: pointer; margin: 0; }
+.zt-opt b { font-weight: 600; }
+.zt-opt .zt-n { margin-left: auto; }
+.zt-opt.zt-zero { opacity: .5; }
+.zt-opt:hover, .zt-opt.zt-act { background: hsl(var(--zt-h) 70% 50% / .2); }
+.zt-dot { width: .6rem; height: .6rem; border-radius: 50%; flex: none; background: hsl(var(--zt-h) 60% 48%); }
 .zt-clear {
   border: 1px solid var(--pst-color-border, #ccc); border-radius: .3rem; background: transparent;
-  color: inherit; padding: .2rem .8rem; font-size: .9rem; cursor: pointer;
+  color: inherit; padding: .25rem .8rem; font-size: .9rem; cursor: pointer;
 }
-.zt-tag {
-  display: inline-block; font-size: .75rem; padding: 0 .4rem; margin: .1rem .1rem 0 0;
-  border-radius: .6rem; background: var(--pst-color-surface, #f0f0f0);
-}
+.zt-clear:hover { background: var(--pst-color-surface, #f0f0f0); }
+.zt-status { font-size: .85rem; opacity: .7; }
+.zt-empty { font-style: italic; margin: 1rem 0; }
+.zt-empty[hidden] { display: none; }
 .sd-col[hidden] { display: none !important; }
+.zt-card code { white-space: normal; overflow-wrap: anywhere; }   /* long notebook paths stay inside the card */
+
+/* narrow screens: field, then the tag panel, then the grid */
+@media (max-width: 800px) {
+  .zt-layout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "bar" "panel" "main"; }
+  .zt-panel { position: static; max-height: none; margin-bottom: 1.2rem; }
+  .zt-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; }
+  .zt-group + .zt-group { margin-top: .5rem; }
+  .zt-gh { flex: 0 0 100%; margin: 0; }
+  .zt-text { font-size: 16px; }
+}
