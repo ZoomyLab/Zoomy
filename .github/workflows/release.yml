@@ -2,7 +2,7 @@ name: Release
 
 # Publishes to PyPI every package whose pyproject version PyPI does not hold yet:
 # zoomy-core, zoomy-jax, zoomy-plotting, zoomy-prepost, zoomy-server. Bump a version
-# in a pyproject (for core and jax, bump the submodule pointer) and run this workflow.
+# in a pyproject (for core and jax, bump the submodule pointer) and push to main.
 # plan: which versions are new. build: sdist and wheel of all five, twine check, a smoke
 # test of the wheels in a fresh venv. publish: PyPI trusted publishing, no token anywhere.
 #
@@ -13,16 +13,15 @@ name: Release
 
 on:
   workflow_dispatch:
-  # enable once the PyPI trusted publishers exist
-  # push:
-  #   branches: [ main ]
-  #   paths:
-  #     - "library/zoomy_core"
-  #     - "library/zoomy_jax"
-  #     - "library/zoomy_plotting/pyproject.toml"
-  #     - "library/zoomy_prepost/pyproject.toml"
-  #     - "library/zoomy_server/pyproject.toml"
-  #     - ".github/workflows/release.yml"
+  push:
+    branches: [ main ]
+    paths:
+      - "library/zoomy_core"
+      - "library/zoomy_jax"
+      - "library/zoomy_plotting/pyproject.toml"
+      - "library/zoomy_prepost/pyproject.toml"
+      - "library/zoomy_server/pyproject.toml"
+      - ".github/workflows/release.yml"
 
 concurrency:
   group: release
