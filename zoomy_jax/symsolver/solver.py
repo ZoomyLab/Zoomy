@@ -20,7 +20,7 @@ import sympy as sp
 from zoomy_core.mesh import ensure_lsq_mesh
 from zoomy_core.mesh.geometry_xp import build_topology
 from zoomy_core.numerics import NumericalSystemModel
-from zoomy_core.symsolver import PyPrinter, default_wave_speed
+from zoomy_core.symsolver import PyPrinter
 from zoomy_core.misc.options import OptionParam
 from zoomy_core.solver.constants import elliptic_constants
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings, LinearSolver
@@ -138,7 +138,6 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         self.mesh = R.Geometry(*map(jnp.asarray, R.geometry_of(
             self.topo, np.asarray(mesh.vertex_coordinates)[:mesh.dimension])))
         self.mesh_j = dataclasses.replace(self.mesh_j, lsq_gradQ=self.mesh.lsq_gradQ)
-        default_wave_speed(nsm)
         self.rt = JaxRuntime.from_nsm(nsm)
         order = int(nsm.reconstruction.order)
         self.mood_active = bool(self.mood and order >= 2
@@ -200,7 +199,7 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
             model = NumericalSystemModel.from_system_model(model)
         model._symbolic_name = "interface"
         model._call = None                                 # rebuild the table under the name
-        return default_wave_speed(model)
+        return model
 
     def _config(self):
         """The configuration of the solver template."""
@@ -426,7 +425,7 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
             nsm = (sm if isinstance(sm, NumericalSystemModel)
                    else NumericalSystemModel.from_system_model(sm))
             nsm._symbolic_name = name
-            systems[name] = (nsm, JaxRuntime.from_nsm(default_wave_speed(nsm)))
+            systems[name] = (nsm, JaxRuntime.from_nsm(nsm))
         pred._symbolic_name = "pred"
         self.press, self.corr = systems["press"][0], systems["corr"][0]
         from zoomy_core.mesh import distributed
