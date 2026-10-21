@@ -56,8 +56,10 @@ def build(kind, level, dim, upwind=False):
         clos.append(UpwindInterface(quantity=InterfaceQuantity.stress))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
+        # the pointwise per-layer reference is the one-sided trace (the default is shared, 63)
+        vt = dict(vertical_traction=VerticalTraction.one_sided) if kind == "mlvam" else {}
         sm = SystemModel.from_model(M(n_layers=NL, level=level, dimension=dim,
-                                      stress=Stress.full, closures=clos))
+                                      stress=Stress.full, closures=clos, **vt))
     return sm, len(sm.unclassified_terms)
 
 

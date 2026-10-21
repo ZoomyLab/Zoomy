@@ -3048,3 +3048,127 @@ used other predictor numerics (Perron wave speed, its stencils; steffler.md, cau
 Open (not a closure defect of this case): free slip on a curved wall is `d u_t/dn = kappa u_t`
 (zero shear), the vector closure imposes `d(t.q)/dn = 0` (the flat-wall form): O(h kappa) at the
 walls, the order of the 4.5e-5 above.
+
+## 63. VAM's default truncation is the order-consistent one; `VAMWeakViscosity`; SME / ML-SME on the pipeline; ML-VAM shared interface traction (2026-10-21, dev/vam-default)
+
+User decisions (on ANALYSIS 49 and 45j): VAM is truncated by order in the thesis regime
+`Fr, De = O(1)` by default; the thesis results (the hand rule = the weak-viscosity limit
+`1/De = O(eps)`, `k_l = O(eps^2)`) stay reproducible through a separate class defined by the
+pipeline, not by the hand code path, which goes; SME / ML-SME switch too if no result changes;
+ML-VAM's interface trace of tau_ez is the mean of the two traces by default.
+
+**What changed** (zoomy_core `dev/vam-default`).
+
+- `VAM.default_scaling()`: `ShallowScaling(horizontal=0, vertical=2)` in the default regime
+  (`Fr, De = O(1)`, `e_x = O(eps)`, NavierSlip `k_l = O(eps)`), with `Stress.full` (2, 2).
+  `scaling=None` (the default) means this; an explicit `ShallowScaling` still overrides it.  The
+  hand path (`moment_scaling` + `apply_full_tensor` in `VAM.derive_model`) is deleted: VAM always
+  runs `ordered_truncation`.
+- `VAMWeakViscosity(VAM)`: `default_scaling()` = orders (1, 2) in `Regime(De=-1, k_l=2, C_n=1)`:
+  `1/De = O(eps)`, the bed drag at the order of the shear (NavierSlip `k_l = O(eps^2)` as in 49;
+  Manning `C_n = O(eps)`: at `C_n = O(1)` the consistency check refuses ManningFriction, its
+  traction `C_n De u|u|` being O(eps^-1) against the shear scale; at `C_n = O(eps^2)` the drag is
+  dropped as beyond the order).  `Stress.full` is refused (`ValueError`: nothing more survives at
+  these orders; use `VAM(stress=Stress.full)`).  Exported from `zoomy_core.model.models`.
+- `InsertClosure` takes (i) a bulk closure without a `tensor` (it gives only the vertical shear:
+  Elder, Bingham, k-epsilon, the thesis' calibrated eddy viscosities): nothing is substituted
+  before the projection, it closes the horizontal rows' `tau_dz` afterwards as before, and the
+  order must keep no other stress component, else `ScalingError` naming the closure and
+  suggesting `VAMWeakViscosity` / SME (`ClosureRecord.shear_only`); (ii) bed / surface closures
+  without scaling information (`dimensions`, `scaling_groups`: `RoughWall`, `WallFunctionBed`,
+  `StressFree`): their traction enters after the projection as before, without the consistency
+  check; `ClosureRecord.unchecked` and the derivation history name them.  Before, both raised,
+  which kept SME / VAM with Elder, Bingham or RoughWall off the pipeline.
+- `SME.default_scaling()`: orders (0, 0) at `Fr, De = O(1)` for `Stress.shallow`; `None` (the
+  hand rule) for `Stress.full` (open, below).  `MLSME.default_scaling()`: (0, 0), `Stress.full`
+  (2, 2); ML-SME's hand path deleted.
+- ML-VAM: `vertical_traction` default `VerticalTraction.shared` (the stress `InterfaceFlux`
+  value of the two traces: the mean, or `UpwindInterface(quantity=stress)` if listed); with
+  `Stress.shallow` the w rows carry no tau_ez, so `shared` and `one_sided` are the same model
+  (no longer a `ValueError`).  New `VerticalTraction.function` with
+  `vertical_traction_function=(below, above) -> value` (sympy expressions of the two one-sided
+  traces; ~10 lines in `ml_vam.py`); `function` without the callable, the callable without
+  `function`, or a callable with `Stress.shallow` raise.  Cache keys: a two-argument callable is
+  keyed by its effect on two probe symbols (`cache_keys._canonical`; before: its bytecode, blind
+  to constants).
+- `CACHE_VERSION` v10 (a v9 `VAM` entry holds the hand rule under the same spec key); prebuilt
+  cache rebuilt.
+
+**Deleted.**  VAM's `moment_scaling` / `apply_full_tensor` branch and its `scaling is None`
+switch; ML-SME's `moment_scaling` / `apply_full_tensor` branch and its `pipeline` / `with_pi`
+switches.  The functions stay: SME `Stress.full`, ML-VAM, ML-VAM-WD, KESME, QRKESME and Sigma3D
+still call them (none of these is on the pipeline).
+
+**VAM(1) rows that differ** (`dimension=2`, `[Newtonian(), NavierSlip(), StressFree()]`, state
+`[b, h, q_0, q_1, r_0, r_1, P_0, P_1]`; goldens m12 = `VAMWeakViscosity`, m17 = `VAM`; rendered
+SystemModels, everything else byte-identical):
+
+```
+VAM only (VAMWeakViscosity's r_0 row has no non-conservative entry):
+nonconservative_matrix[4,1,0] = Mul(Integer(4), Pow(Symbol('h'), Integer(-2)), Symbol('nu'), Symbol('q_1'))
+nonconservative_matrix[4,3,0] = Mul(Integer(-1), Integer(2), Pow(Symbol('h'), Integer(-1)), Symbol('nu'))
+```
+
+i.e. B[r_0, h] = 4 nu q_1 / h^2, B[r_0, q_1] = -2 nu / h (VAMWeakViscosity minus VAM:
+-4 nu q_1 / h^2, 2 nu / h, as in 49): the depth average of `-d_x tau_xz / rho = -nu d_x d_z u`
+with `d_z u = 2 q_1 / h^2` for the linear profile.  The r_1 row is unchanged
+(`<phi_1, d_x d_z u> = 0` at level 1).  Test `test_vam_minus_weak_viscosity`.
+
+**Byte-identity of the switches** (rendered SystemModels, no cache; main vs dev/vam-default): every
+config identical.
+
+| model | configs |
+|---|---|
+| `VAMWeakViscosity` = former `VAM` | levels 0, 1, 2 with `[Newtonian, NavierSlip, StressFree]`; `[Newtonian, StressFree]` 1-D and 2-D; Newtonian + Manning; Elder(friction=RoughWall) + RoughWall; NavierSlip only (unclosed bulk); unclosed; goldens m11, m12, m13, S02, N02, P01 unchanged; the thesis Steffler `make_model(model="vam")`, levels 1, 2, bulk elder / elder_live / elder_fix / ghamry / newtonian / none x bed chezy / navier, + nu_h: all rows identical (one `bc_kernel` line reads `Float(1.0)*n0` or `n0` depending on the build order within one process, with either library) |
+| SME (pipeline (0, 0)) = hand rule | levels 0, 1, 2; 2-D; SWE + Manning; ElderSME; Elder(friction) + RoughWall; Bingham (quadrature 8); Newtonian + RoughWall; NavierSlip only; unclosed; `Stress.full` (hand, unchanged); goldens m01-m08 |
+| ML-SME (pipeline) = hand rule | 2 layers level 1 (mean / upwind), 3 layers level 0, 2 layers level 0 2-D, the thesis Bingham plug layer (`level=[2, 0]`, quadrature 12), `Stress.full` level 1; golden m10 |
+
+**Refusals that are new.**  `VAM` with a shear-only bulk closure (Elder, calibrated): the
+vertical row keeps `d_x tau_xz`, which the closure cannot give -> `ScalingError` naming
+`VAMWeakViscosity`.  `VAMWeakViscosity(stress=Stress.full)` -> `ValueError`.  The default VAM
+without a bulk closure (unclosed, NavierSlip only) keeps the unclosed `d_x tau_xz` modes in its
+w rows (an open system as before, with more open terms).
+
+**SME `Stress.full`: options (not changed).**  The hand rule is the consistent truncation for
+`De <= O(eps)` (Marche 2007 (5.1); byte-identical to the pipeline at orders (1, 1),
+`Regime(De=1)`, test `sme1_full_marche`), not for the thesis regime.
+(a) Keep the result, move it onto the pipeline: `default_scaling()` = (1, 1) at `Regime(De=1)`
+for `Stress.full`; byte-identical, deletes SME's last hand path (`moment_scaling`,
+`apply_full_tensor`, the hydrostatic `zdrop`); `Stress.full` then reads "Marche's regime".
+(b) The thesis regime: keeping the in-plane stress at `De = O(1)` needs horizontal order 2;
+(2, 2) keeps the eps^2 vertical inertia (refused by the hydrostatic SME), (2, 0) drops the
+vertical stress and tau_zz: SME(0) gains Marche's `2 nu grad(h div u)`
+(`diffusion_matrix[q_0, q_0, x, x] = 2 nu`, `[q_0, h, x, x] = -2 nu q_0 / h`, a source term, 49).
+C26, C32 (`u_t = nu u_yy`, "no factor 2"), C34 and C36 are built on `SME(stress=Stress.full)`
+and would move.
+(c) (a) plus a separate class for (b) (as `VAMWeakViscosity` for VAM), or (b) as the default and
+a separate class for the present one.
+
+**Thesis** (`mig/vam-default`, worktree `~/git/wt-thvamdefault`): every non-legacy case script and
+notebook under `cases/`, `notebooks/` that builds or subclasses VAM uses `VAMWeakViscosity`
+(Python NAME tokens only; strings, comments, chapters untouched; jupytext pairs both; the GUI case
+cells' `class_path` and `cases/vam/bump/make_cases.py`), so every thesis number keeps the hand
+rule; at nu = 0 (most VAM cases) both classes give the same numbers.
+
+**Zoomy cases.**  Matrix, gates, docs examples: `VAM` (nu = 0 everywhere but C37's
+`Stress.full`, which is unchanged); the GUI's VAM card (nu = 0.1, a demo) takes the new default.
+gate48 iterates `(one_sided, shared)` explicitly.  Matrix: `MATRIX_ONLY=<regex>` restricts a
+command to the matching run keys.
+
+**Checks.**  zoomy_core 505 passed (default tier); large tier: m05_sme_2d fails on main as well
+(eigenvalues None vs the stored closed form), unrelated.  zoomy_jax: only timing gates fail
+(ahs26_small, ritter_dry, bc_runtime, lake_at_rest; a different subset on each run, on main and on
+the branch, under load).  QR: 27 passed, 3 skipped (2 by design: jax / amrex solver cards in Pyodide;
+the manifest test: no thesis checkout in the worktree).  Matrix (private store, rerun of the VAM /
+Chorin rows; stopped by scope after C31 numpy / jax): C8 (all runs; numpy, jax, foam, amrex;
+serial + mpi2), C10 (all, serial), C15 chorin (jax serial + mpi2), C16 vam_* (numpy, jax), C31
+vam_* (numpy, jax): 0 FAIL; changed rows only at the pressure-tolerance level (e.g. C8 vam AMReX
+vs JAX 1.8e-11 -> 4.6e-11, foam L1 1.1e-11 -> 2.9e-11; nu = 0 in these cases, so only the CSE /
+operation order of the kernels moved).  Not rerun: C16 / C31 foam + amrex, C35 c8_*, C37 vam_*,
+mpi4 / gpu configs (main reruns the matrix after the merge).  gate 48: MLSME 0 / 1, MLVAM 0 / 1
+all 0 (its per-layer reference is the one-sided trace, now pinned explicitly).
+
+**Open.**  ML-VAM is not on the pipeline: with `Stress.shallow` its w rows keep the hand rule,
+so ML-VAM(1 layer) reduces to `VAMWeakViscosity`, not to the new `VAM` (gate 48's reductions use
+`Stress.full`, unchanged).  Wiring ML-VAM (per-layer `ordered_truncation`, as ML-SME) would make
+the VAM family consistent.  SME `Stress.full` above.  No `VAMWeakViscosity` GUI model card.
