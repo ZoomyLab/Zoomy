@@ -6,9 +6,10 @@ permissions:
   pages: write      # Required to deploy to GitHub Pages
   id-token: write   # Required to deploy to GitHub Pages
 
+# Deploys on push to develop (and still main). Not on pull requests: ci.yml tests those.
 on:
   push:
-    branches: [ main, master ]
+    branches: [ develop, main, master ]
     paths:
       - "docs/**"
       - "library/zoomy_gui/**"

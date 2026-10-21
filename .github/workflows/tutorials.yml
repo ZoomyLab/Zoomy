@@ -3,32 +3,11 @@ name: Tutorials
 # Every notebook under tutorials/ that needs only the CPU is executed (tests/tutorials/README.md);
 # a notebook with `requires:gpu|mpi|container` is collected and reported as skipped. The
 # metadata of every notebook is validated first, by the generator of the tutorials page.
+# Started by ci.yml (tutorials, core, jax or plotting changed) and weekly.yml, or by hand.
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - "tutorials/**"
-      - "tests/tutorials/**"
-      - "docs/scripts/generate_tutorial_index.py"
-      - "library/zoomy_core/**"
-      - "library/zoomy_jax/**"
-      - "library/zoomy_plotting/**"
-      - ".github/workflows/tutorials.yml"
-  pull_request:
-    paths:
-      - "tutorials/**"
-      - "tests/tutorials/**"
-      - "docs/scripts/generate_tutorial_index.py"
-      - "library/zoomy_core/**"
-      - "library/zoomy_jax/**"
-      - "library/zoomy_plotting/**"
-      - ".github/workflows/tutorials.yml"
+  workflow_call:
   workflow_dispatch:
-
-concurrency:
-  group: tutorials-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read

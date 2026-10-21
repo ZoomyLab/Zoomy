@@ -4,21 +4,27 @@ permissions:
   contents: read
   packages: write
 
+# Push to main builds the images whose recipe folder or install spec changed. A library change
+# does not rebuild by itself: ci.yml tests it in dev mode against the published images, and
+# weekly.yml rebuilds everything. By hand or from weekly.yml: `container` names images, empty rebuilds all.
 on:
   push:
     branches: [main]
     paths:
       - "containers/**"
       - "install/**"
-      # Every library change, in-tree package or submodule pointer: `library/**` also matches
-      # a GITLINK (the bare path `library/zoomy_amrex`, no trailing slash), which
-      # `library/<sub>/**` never does. The hand-kept list went stale: a zoomy_server fix,
-      # and zoomy_amrex / zoomy_plotting were never in it (the zoomy_amrex bumps 793f2432,
-      # 9863124e, 9dd4420f, 4c3fcd27 started no build). The detect step below selects the
-      # images whose recipe bakes the changed package (none: a no-op run).
-      - "library/**"
-      - ".github/workflows/build-containers.yml"
-      - ".github/workflows/dockers.txt"
+  workflow_call:
+    inputs:
+      container:
+        description: "Build specific containers (folder names under containers/, space- or comma-separated)"
+        type: string
+        required: false
+        default: ""
+      all:
+        description: "Rebuild every container in dockers.txt, whatever changed"
+        type: boolean
+        required: false
+        default: false
   workflow_dispatch:
     inputs:
       container:
@@ -61,6 +67,10 @@ jobs:
           submodules: recursive
 
       - id: detect
+        env:
+          CONTAINER: ${{ inputs.container }}
+          EVENT: ${{ github.event_name }}
+          REBUILD_ALL: ${{ inputs.all }}
         run: |
           set -eo pipefail
           ALL=$(echo '${{ needs.load-dockers.outputs.list }}' | jq -r '.[]')
@@ -71,10 +81,10 @@ jobs:
             [[ " ${RAW[*]} " == *" $x "* ]] || RAW+=("$x")
           }
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.container }}" ]; then
-            for c in $(echo "${{ github.event.inputs.container }}" | tr ',' ' '); do add_raw "$c"; done
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Manual dispatch without specific container: rebuild all
+          if [ -n "$CONTAINER" ]; then
+            for c in $(echo "$CONTAINER" | tr ',' ' '); do add_raw "$c"; done
+          elif [ "$EVENT" = "workflow_dispatch" ] || [ "$REBUILD_ALL" = "true" ]; then
+            # Manual dispatch without specific container, or the weekly call: rebuild all
             for c in $ALL; do add_raw "$c"; done
           else
             base="${{ github.event.before }}"
