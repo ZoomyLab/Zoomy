@@ -1590,8 +1590,11 @@ def _overlap_coupling(cfg, rt, mesh_np, partition=None):
 
 def hoisted_jit(fn):
     """`jax.jit(fn)` with the constants `fn` captures (the mesh index arrays) passed as
-    arguments, so compile time and program size stay independent of the mesh.
+    arguments, so compile time and program size stay independent of the mesh.  Its compile goes
+    through the persistent compilation cache also when the program has host callbacks
+    (`compile_cache`; with `jax_compilation_cache_dir` set).
     """
+    from zoomy_jax.symsolver.compile_cache import callback_cache
     cache = {}
 
     def run(*args):
@@ -1604,7 +1607,9 @@ def hoisted_jit(fn):
             body = jax.jit(lambda cs, *xs: jax.core.eval_jaxpr(closed.jaxpr, cs, *xs))
             cache[key] = (body, consts, jax.tree_util.tree_structure(out))
         body, consts, out_tree = cache[key]
-        return jax.tree_util.tree_unflatten(out_tree, body(consts, *flat))
+        with callback_cache():                 # the first call compiles (or loads) the program
+            out = body(consts, *flat)
+        return jax.tree_util.tree_unflatten(out_tree, out)
     return run
 
 
