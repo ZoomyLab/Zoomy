@@ -108,8 +108,9 @@ jobs:
       - name: Backend e2e
         if: steps.on.outputs.run == '1'
         run: |
+          # exit 5 = nothing selected (a backend without QR sessions in QR-only mode): not a failure
           E2E_WORK="$RUNNER_TEMP/e2e" python -m pytest tests/backend_e2e -m backend_e2e \
-            -k "$E2E_SELECT" -rA --tb=short -p no:cacheprovider
+            -k "$E2E_SELECT" -rA --tb=short -p no:cacheprovider || [ $? -eq 5 ]
 
       - uses: actions/upload-artifact@v4
         if: ${{ always() && steps.on.outputs.run == '1' }}
