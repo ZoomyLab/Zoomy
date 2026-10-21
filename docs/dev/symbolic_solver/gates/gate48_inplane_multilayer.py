@@ -217,7 +217,7 @@ def check_vertical(level, dim):
     X = (x,) if dim == 2 else (x, y)
     nd = len(X)
     sms = {}
-    for vt in VerticalTraction:
+    for vt in (VerticalTraction.one_sided, VerticalTraction.shared):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             sms[vt] = SystemModel.from_model(MLVAM(
@@ -240,7 +240,7 @@ def check_vertical(level, dim):
     zero = lambda e: sp.simplify(sp.expand(sp.sympify(e).doit())) == 0
     out = [(f"{vt.value}: w rows = reference",
             all(zero(ops[vt][r] - ref[r] - (corr[r] if vt is VerticalTraction.shared else 0))
-                for r in corr)) for vt in VerticalTraction]
+                for r in corr)) for vt in (VerticalTraction.one_sided, VerticalTraction.shared)]
     out.append(("horizontal rows: shared = one_sided",
                 all(zero(ops[VerticalTraction.shared][r] - ops[VerticalTraction.one_sided][r])
                     for r in ops[VerticalTraction.shared] if r.startswith("q"))))
@@ -261,7 +261,7 @@ def check_vertical(level, dim):
                 - f[1][e].subs(zeta, 1) * sp.diff(eta, X[e]) + f[0][e].subs(zeta, 0) * sp.diff(b, X[e])
                 for e in range(nd)) / rho)
     jump = sum((fb[e] - fa[e]) * gz[e] for e in range(nd)) / rho
-    s0 = {vt: ops[vt]["r_1_0"] + ops[vt]["r_2_0"] for vt in VerticalTraction}
+    s0 = {vt: ops[vt]["r_1_0"] + ops[vt]["r_2_0"] for vt in (VerticalTraction.one_sided, VerticalTraction.shared)}
     out.append(("mode-0 layer sum: shared telescopes", zero(s0[VerticalTraction.shared] - tele)))
     out.append(("mode-0 layer sum: one_sided = telescoped - [f].grad z_1 / rho",
                 zero(s0[VerticalTraction.one_sided] - tele + jump)))

@@ -81,6 +81,7 @@ python deliverable.py                           # store -> matrix.png
 BACKEND `jax foam amrex numpy`; CASE `C1`..`C38`; CONFIG `serial` (default)
 `mpi2 mpi4 gpu1 gpu2` (`gpu2` = gpu-mpi: 2 ranks, a GPU each).  A run in the
 store is skipped (`--force` reruns), so a command that times out resumes.
+`MATRIX_ONLY=<regex>` restricts a command to the runs whose key matches (e.g. `vam`).
 A run that raises `NotImplementedError` is stored as **unsupported**, any
 other exception as a **FAIL**; a backend without the config or the case is
 **n/a**.  Stored per run: `t, Q, Q0, xc, vol, names, wall, lib` (the library

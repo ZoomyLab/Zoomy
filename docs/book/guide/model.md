@@ -12,12 +12,13 @@ model = SME(level=0, dimension=3, closures=[...], boundary_conditions=...)
 
 | choice | options (default) |
 |---|---|
-| family (`zoomy_core.model.models`) | `SME` (shallow moments; `level=0` is shallow water), `VAM` (non-hydrostatic moments, pressure modes `P_i`), `MLSWE` / `MLSME` / `MLVAM` (multilayer), `KESME`, `QRKESME`, `ElderSME` |
+| family (`zoomy_core.model.models`) | `SME` (shallow moments; `level=0` is shallow water), `VAM` (non-hydrostatic moments, pressure modes `P_i`), `VAMWeakViscosity` (`VAM` in the weak-viscosity limit, the thesis VAM), `MLSWE` / `MLSME` / `MLVAM` (multilayer), `KESME`, `QRKESME`, `ElderSME` |
 | `level` | number of velocity moments above the depth average (`SME`: 2) |
 | `dimension` | spatial dimension including the vertical: 2 = (x, z), 3 = (x, y, z) |
 | `closures` | stress pieces, one per stress component: `Newtonian`, `NavierSlip`, `StressFree`, `ManningFriction`, `RoughWall`, `Bingham`, `KEpsilonViscosity`, ... (`[]`: unclosed) |
 | `boundary_conditions` | per mesh tag (below) |
 | `small_slope` | `True`: the small-slope frame (the standard shallow model) |
+| `stress`, `scaling` | which stress terms the model keeps: truncated by order from the non-dimensional balance laws, `scaling=ShallowScaling(horizontal, vertical, regime=Regime(...))`; default the regime `Fr, De = O(1)` (`SME` / `MLSME` orders (0, 0), `VAM` (0, 2): its vertical row keeps `-nu d_x d_z u`; `VAMWeakViscosity`: `1/De = O(eps)`, orders (1, 2)); `stress=Stress.full` keeps the in-plane stress |
 
 Boundary conditions (`zoomy_core.model.boundary_conditions`), each on one mesh
 tag, collected in `BoundaryConditions([...])` or passed as a list:
