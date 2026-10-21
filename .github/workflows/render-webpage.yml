@@ -112,7 +112,7 @@ jobs:
             -w /workspace \
             -e PYTHONPATH=/workspace/library/zoomy_core:/workspace/library/zoomy_jax:/workspace/library/zoomy_foam:/workspace/library/zoomy_amrex \
             "$DOCS_IMAGE" \
-            bash -lc "python docs/scripts/generate_symsolver_results.py && python docs/scripts/generate_tutorial_index.py && python docs/scripts/collect_references.py --check && python docs/scripts/generate_apidoc.py && jupyter-book build docs/book"
+            bash -lc "python docs/scripts/generate_symsolver_results.py && python docs/scripts/generate_tutorial_index.py && python docs/scripts/generate_model_pages.py && python docs/scripts/collect_references.py --check && python docs/scripts/generate_apidoc.py && jupyter-book build docs/book"
 
       # NOTE: mesh cards are an AUTHORED registry now (cards/meshes/default.json,
       # hand-curated). CI no longer downloads release .msh files or regenerates

@@ -91,6 +91,7 @@ FIXES: dict[str, dict[str, str | None]] = {
     "10.4208/cicp.oa-2017-0263": {"year": "2019"},
     "10.1051/m2an/2010036": {"year": "2011"},
     "10.1002/fld.1880": {"year": "2009"},
+    "10.1007/s10915-018-0849-9": {"year": "2019"},
     # chapter of a series volume, not a book; the title starts with the chapter number
     "10.1137/1.9781611971057.ch4": {
         "@type": "incollection", "title": "Algebraic multigrid",
