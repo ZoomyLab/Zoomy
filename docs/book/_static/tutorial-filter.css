@@ -76,7 +76,7 @@ html[data-theme="dark"] .zt-text.zt-bad { color: #ff8a80; }
 .zt-empty { font-style: italic; margin: 1rem 0; }
 .zt-empty[hidden] { display: none; }
 .sd-col[hidden] { display: none !important; }
-.zt-card code { white-space: normal; overflow-wrap: anywhere; }   /* long notebook paths stay inside the card */
+.zt-card code, .zt-card code .pre { white-space: normal; overflow-wrap: anywhere; word-break: break-all; }   /* Sphinx sets span.pre to nowrap: long notebook paths wrap inside the card */
 
 /* narrow screens: field, then the tag panel, then the grid */
 @media (max-width: 800px) {

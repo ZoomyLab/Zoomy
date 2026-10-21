@@ -6,7 +6,7 @@ execute:
   execute_notebooks: "off"
 
 only_build_toc_files: false
-exclude_patterns: [examples/work_*, _build]
+exclude_patterns: [_build]
 
 repository:
   url: https://github.com/ZoomyLab/Zoomy
@@ -62,6 +62,7 @@ sphinx:
     nb_scroll_outputs: true
     html_css_files:
       - notebook-output-scroll.css
+      - notebook-download.css
       - cards.css
       - tutorial-filter.css
     html_js_files:
@@ -96,7 +97,7 @@ sphinx:
       - toc.excluded
       - toc.not_included
     html_theme_options:
-      use_download_button: false
+      use_download_button: true
       navigation_depth: 4
       show_nav_level: 2
       extra_footer: '<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;width:100%;"><div><a href="/Zoomy/about.html">About</a> · <a href="/Zoomy/legal.html">Legal notice and data protection</a></div><a href="https://www.mbd.rwth-aachen.de/" target="_blank" rel="noopener" title="MBD - RWTH Aachen University"><img src="/Zoomy/_static/logo_mbd_footer.png" alt="MBD - RWTH Aachen University" style="height:44px;width:auto;vertical-align:middle;"></a></div>'

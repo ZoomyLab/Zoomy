@@ -24,3 +24,4 @@ reconstruction, time steps) are in `zoomy_core/symsolver/discretization/`.
 `PyPrinter` emits Python for NumPy and JAX, `CxxPrinter` emits C++ for OpenFOAM and AMReX
 (`zoomy_core/symsolver/backend_cxx.py` prints the host program both C++ runtimes compile).
 A change to a template changes every backend.  A backend decides only how a block is computed.
+[Code printer: AMReX](../tutorials/ipynb/components/printer_amrex.ipynb) prints a template as C++.
