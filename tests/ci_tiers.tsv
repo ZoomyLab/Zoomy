@@ -127,7 +127,6 @@ large	library/zoomy_jax/tests/runtime/test_lifted_shared_face.py::test_sme1_sme2
 large	library/zoomy_jax/tests/runtime/test_shore_lake_at_rest.py::test_pit_lake_stays_at_rest_jax[0.05]	47 s
 large	library/zoomy_jax/tests/runtime/test_shore_lake_at_rest.py::test_pit_lake_stays_at_rest_jax[0.0]	76 s
 large	library/zoomy_jax/tests/runtime/test_symsolver_end_time_landing.py::test_lands_like_numpy	18 s
-large	library/zoomy_jax/tests/runtime/test_symsolver_periodic_pressure_amg.py::test_periodic_assembled_pressure_equals_gmres	68 s
 large	library/zoomy_jax/tests/runtime/test_symsolver_periodic_seam.py::test_seam_shift_constant_dt[1-2]	18 s
 large	library/zoomy_jax/tests/spmd/test_spmd_lsq_muscl.py::test_inter_partition_face_consistency	92 s
 large	library/zoomy_jax/tests/spmd/test_spmd_lsq_muscl.py::test_spmd_matches_replicated_single_device	87 s
@@ -306,6 +305,7 @@ broken	library/zoomy_jax/tests/regression/test_swashes_smooth_order2.py::test_sw
 broken	library/zoomy_jax/tests/regression/test_thacker_2d_eoc.py::test_thacker_planar_o2_eoc_mass_positivity	zoomy_core.model.derivation.nondim.DimensionError: ManningFriction traction xz: not dimensionally homogeneous, C_n*De*L**(1/3)*epsilon**(1/3) keeps ['L']
 broken	library/zoomy_jax/tests/regression/test_thacker_2d_eoc.py::test_thacker_radial_o2_eoc_mass_positivity	zoomy_core.model.derivation.nondim.DimensionError: ManningFriction traction xz: not dimensionally homogeneous, C_n*De*L**(1/3)*epsilon**(1/3) keeps ['L']
 broken	library/zoomy_jax/tests/regression/test_vam_order2.py::test_vam_second_order	AssertionError: VAM observed order 0.299 — not 2nd. See the per-row breakdown above: if the P_* rows carry negative rates while h/q/r are positive, this is the stagnating unpreconditioned pressure sol
+broken	library/zoomy_jax/tests/runtime/test_symsolver_periodic_pressure_amg.py::test_periodic_assembled_pressure_equals_gmres	ModuleNotFoundError: No module named 'mpi4py' (not installed on the hosted runner)
 broken	library/zoomy_plotting/zoomy_plotting/tests/test_foam_readers.py::test_read_of_states_raw_frames	AssertionError (array mismatch)
 broken	library/zoomy_plotting/zoomy_plotting/tests/test_foam_readers.py::test_read_vof_raw_alpha_and_stations	AssertionError (array mismatch)
 broken	library/zoomy_plotting/zoomy_plotting/tests/test_foam_readers.py::test_read_zoomyfoam_lifts_through_model	assert (1, 20, 8) == (2, 20, 8)

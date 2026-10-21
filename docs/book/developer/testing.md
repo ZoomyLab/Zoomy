@@ -34,7 +34,7 @@ A change also runs what depends on it.
 | `broken` | fails today, `reason=` is the first error line | none |
 | `benchmark` | timing regression | manual |
 
-An unmarked test is in the push tier. `large`, `legacy` and `broken` are set by test id in `tests/ci_tiers.tsv`, one line per test, so no test file carries them. A fixed test loses its line.
+An unmarked test is in the push tier. `large`, `legacy` and `broken` are set by test id in `tests/ci_tiers.tsv`, one line per test, so no test file carries them. A fixed test loses its line. Where `CI` is set, the wall-time gates inside the jax tests print and do not judge, because a hosted runner is not the machine that recorded them.
 
 ## How to run
 

@@ -3,7 +3,7 @@
     pytest                       # compare
     pytest --overwrite-results   # rewrite the references it touches
 """
-import json, pathlib, numpy as np
+import json, os, pathlib, numpy as np
 
 DIR = pathlib.Path(__file__).parent / "refs"
 DIAG = DIR / "diagnostics"
@@ -57,10 +57,14 @@ def check(name, overwrite=False, **arrays):
 
 def check_time(name, seconds, overwrite=False):
     """Fail if more than `SLOWER_OK` slower than the recorded time (plus `JIT_SLACK` for a
-    reference below `JIT_FLOOR`); lower the record if faster."""
+    reference below `JIT_FLOOR`); lower the record if faster.  Where `CI` is set (GitHub does) the
+    time is printed and not judged: a hosted runner is not the machine the records come from, and
+    timing regressions belong to the manual tier."""
     db = json.loads(TIMES.read_text()) if TIMES.exists() else {}
     ref = db.get(name)
     print(f"[time] {name}: {seconds:.2f} s (ref {ref})")
+    if os.environ.get("CI") and not overwrite:
+        return
     if overwrite or ref is None or seconds < ref:
         db[name] = round(seconds, 3)
         DIR.mkdir(exist_ok=True)
