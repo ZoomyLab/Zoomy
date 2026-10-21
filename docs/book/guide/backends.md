@@ -13,6 +13,10 @@ Each backend has a hyperbolic solver for balance laws and a Chorin solver for pr
 ([Solvers and options](solvers.md)): `SymbolicHyperbolicSolver<Backend>` and
 `SymbolicChorinSolver<Backend>`, with `<Backend>` one of `Numpy`, `Jax`, `Amrex`, `Foam`.
 
+Code printing: NumPy and JAX run the template printed as Python, AMReX and OpenFOAM as C++, see
+{doc}`Code printer: AMReX <../tutorials/ipynb/components/printer_amrex>` and
+[Templates and backends](../developer/templates.md).
+
 ## NumPy
 
 `zoomy_core.symsolver.numpy_backend`, part of `zoomy-core` and the solver of the in-browser GUI.

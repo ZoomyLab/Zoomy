@@ -1,18 +1,16 @@
-# Tests
+# Testing
 
 [![QR cases](https://github.com/ZoomyLab/Zoomy/actions/workflows/qr-cases.yml/badge.svg?branch=main)](https://github.com/ZoomyLab/Zoomy/actions/workflows/qr-cases.yml)
 [![Backend e2e](https://github.com/ZoomyLab/Zoomy/actions/workflows/backend-e2e.yml/badge.svg?branch=main)](https://github.com/ZoomyLab/Zoomy/actions/workflows/backend-e2e.yml)
 [![Tutorials](https://github.com/ZoomyLab/Zoomy/actions/workflows/tutorials.yml/badge.svg?branch=main)](https://github.com/ZoomyLab/Zoomy/actions/workflows/tutorials.yml)
 [![Containers](https://github.com/ZoomyLab/Zoomy/actions/workflows/build-containers.yml/badge.svg?branch=main)](https://github.com/ZoomyLab/Zoomy/actions/workflows/build-containers.yml)
 
-## Cross-backend matrix
+## How to run
 
-```{include} ../../_generated/symsolver_matrix.md
-```
-
-## Timings
-
-```{include} ../../_generated/symsolver_timings.md
+```bash
+pytest                                # small tests of tests/ and library/*/tests
+pytest tests/tutorials -m tutorial    # notebooks that need only the CPU
+pytest tests/symsolver -m benchmark   # timings
 ```
 
 ## Where tests live
