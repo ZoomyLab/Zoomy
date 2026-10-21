@@ -729,13 +729,20 @@ class ClosureRecord:
         vertical_stress: the vertical row keeps a stress component.
         dropped: names of the closures whose every contribution is beyond the order.
         orders: `{(closure, component): eps order of its scaled stress}` (the consistency check).
+        shear_only: name of a bulk closure that gives only the vertical shear (no `tensor`);
+            it closes the horizontal rows' own `tau_dz` after the projection, as in the unclosed
+            case, and is allowed only when no row keeps another stress component.
+        unchecked: names of the bed / surface closures without scaling information
+            (`dimensions`, `scaling_groups`): their traction enters after the projection as
+            before, without the consistency check.
     """
 
     def __init__(self):
         """Empty record."""
         self.tensor, self.shear, self.orders = {}, {}, {}
         self.inplane = self.vertical_stress = False
-        self.dropped = []
+        self.dropped, self.unchecked = [], []
+        self.shear_only = None
 
 
 class InsertClosure(Operation):
@@ -753,6 +760,12 @@ class InsertClosure(Operation):
     horizontal shear `tau_dz` of the horizontal rows, which stays a closure variable: the
     projection integrates `d_z tau_dz` by parts and its traces carry the bed / surface traction.
     For it, the bulk closure's terms that the row's order keeps are recorded (`ClosureRecord`).
+
+    A bulk closure without a tensor (it gives only the vertical shear: Elder, Bingham, an eddy
+    viscosity) is not inserted; it closes the horizontal rows' `tau_dz` after the projection, and
+    the order must keep no other stress component (else `ScalingError`).  Bed / surface closures
+    without scaling information (`dimensions`, `scaling_groups`, e.g. `RoughWall`) enter after the
+    projection unchecked; the record and the log name them.
 
     Args:
         closures: the model's closure list.
@@ -817,11 +830,12 @@ class InsertClosure(Operation):
         st.model_parameters = {getattr(m.parameters, n) for n in m.parameters.keys()}
         bulk = [c for c in self.closures if getattr(c, "closes", None) == "bulk"]
         tensor_hat = {}
-        if bulk:
+        if bulk and not hasattr(bulk[0], "tensor"):
+            # the vertical shear alone (eddy viscosity, Bingham, ...): nothing to substitute
+            # before the projection; checked against the kept stress components below
+            rec.shear_only = type(bulk[0]).__name__
+        elif bulk:
             c = bulk[0]
-            if not hasattr(c, "tensor"):
-                raise ScalingError(f"{type(c).__name__} gives only the vertical shear, no stress "
-                                   "tensor in physical coordinates: InsertClosure cannot scale it")
             c.register(m)
             T = c.tensor(m, uvel, w, list(horiz))
             shear = c.expression(_state())                   # rho nu d_z u: the closure's scale
@@ -848,6 +862,9 @@ class InsertClosure(Operation):
         traction_hat = []
         for c in self.closures:
             if getattr(c, "closes", None) not in ("bottom", "surface"):
+                continue
+            if not (hasattr(c, "dimensions") or hasattr(c, "scaling_groups")):
+                rec.unchecked.append(type(c).__name__)
                 continue
             c.register(m)
             dims = getattr(c, "dimensions", lambda: {})()
@@ -906,9 +923,19 @@ class InsertClosure(Operation):
             new_expr = expr.xreplace(targets).xreplace(sub)
             eq.expr = st.normalize(sp.expand(new_expr), name)
         rec.dropped = [type(c).__name__ for c, ok in kept_by.items() if not ok]
+        if rec.shear_only and (rec.inplane or rec.vertical_stress):
+            raise ScalingError(
+                f"{rec.shear_only} gives only the vertical shear (no stress tensor in physical "
+                "coordinates), but the order keeps "
+                + ("the in-plane stress" if rec.inplane else "a stress in the vertical row")
+                + f" ({st.regime}); it fits a regime that keeps only the horizontal rows' "
+                "vertical shear (e.g. VAMWeakViscosity, SME)")
         st.log.append((self.name, "closure " + ", ".join(type(c).__name__ for c in self.closures)
                        + " in the scaled frame; component orders "
-                       + ", ".join(f"{a}.{b}: {o}" for (a, b), o in rec.orders.items())))
+                       + ", ".join(f"{a}.{b}: {o}" for (a, b), o in rec.orders.items())
+                       + (f"; vertical shear only: {rec.shear_only}" if rec.shear_only else "")
+                       + (f"; unchecked (no scaling groups): {', '.join(rec.unchecked)}"
+                          if rec.unchecked else "")))
         return m
 
     @staticmethod

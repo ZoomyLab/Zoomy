@@ -35,7 +35,9 @@ class MLSME(BaseModel):
     """Multilayer SME with `n_layers` layers that move with the free surface, each a moment
     column of order `level`. The interface transfer velocity is upwinded or averaged through
     the `closures` (`UpwindInterface` / `MeanInterface`); the kinematic `w` terms stay
-    untouched.
+    untouched.  Each layer's stress is truncated by order from the non-dimensional balance
+    laws (`scaling`), by default in the regime `Fr, De = O(1)` at the orders (0, 0),
+    `Stress.full` (2, 2) (ANALYSIS 49, 63).
 
     References:
         Kowalski & Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
@@ -57,9 +59,9 @@ class MLSME(BaseModel):
         "How much of the bulk closure's stress the model keeps (`moment_scaling`): "
         "`Stress.shallow` the vertical shear only, `Stress.full` the whole Newtonian tensor."))
     scaling = param.Parameter(default=None, doc=(
-        "A `ShallowScaling` (derivation.nondim): derive each layer's stress truncation by order "
-        "from the non-dimensional balance laws instead of `moment_scaling` / "
-        "`apply_full_tensor`; it then decides `stress`.  None (default): the hand rules."))
+        "A `ShallowScaling` (derivation.nondim): the regime and orders of each layer's stress "
+        "truncation by order of the non-dimensional balance laws; it then decides `stress`.  "
+        "None (default): `default_scaling()`."))
     closures = param.List(default=[], doc=(
         "Composable Closure pieces (closures.py): stress (Newtonian/RoughWall/…) "
         "AND the interface transfer scheme (MeanInterface/UpwindInterface).  "
@@ -72,6 +74,13 @@ class MLSME(BaseModel):
         "FIXED per-layer vertical sample count for the Integral-FREE "
         "``project_from_3d`` Galerkin reduction (trapezoid, O(N_z^-2)); see "
         "SME.project_nz.  Each layer reduces its own sub-column to moments."))
+
+    def default_scaling(self):
+        """The truncation without a `scaling` setting: regime `Fr, De = O(1)`, orders (0, 0),
+        with `Stress.full` (2, 2) (the layer rows carry no vertical inertia)."""
+        from zoomy_core.model.derivation.nondim import ShallowScaling
+        k = 2 if Stress(self.stress) == Stress.full else 0
+        return ShallowScaling(horizontal=k, vertical=k)
 
     def derive_model(self):
         """Derive each layer as an SME column, close the interface mass fluxes `G` from the
@@ -131,19 +140,17 @@ class MLSME(BaseModel):
 
         from types import SimpleNamespace
         from zoomy_core.model.models.equations import (
-            Mass, small_slope_scaling, moment_scaling, package_viscous, gravity_components)
+            Mass, small_slope_scaling, package_viscous, gravity_components)
         from zoomy_core.model.models.material import ClosureState
-        from zoomy_core.model.models.closures import (apply_layer_stress_closures,
-                                                      apply_full_tensor)
+        from zoomy_core.model.models.closures import apply_layer_stress_closures
+        from zoomy_core.model.models.scaling import ordered_truncation, Pressure
         from zoomy_core.model.operations import Integrate as IntegrateZ
 
-        # stress scaling (moment_scaling): Stress.shallow (default, byte-identical) keeps the
-        # vertical shear only; Stress.full keeps the whole tensor of the bulk closure
-        # (Newtonian), routed to conservative diffusion by package_viscous.
-        full_stress = Stress(self.stress) == Stress.full
-        vertical_stress = full_stress
-        pipeline = self.scaling is not None
-        with_pi = full_stress or pipeline       # the viscous pressure Pi and its vertical row
+        # the stress truncation by order of the non-dimensional layer balance (scaling.py):
+        # the bulk closure's tensor (Newtonian) wherever the order keeps more than the vertical
+        # shear, routed to conservative diffusion by package_viscous; the viscous pressure Pi
+        # and its vertical row carry the vertical stress
+        scaling = self.scaling if self.scaling is not None else self.default_scaling()
         outcome = {}                            # the pipeline's decision (same in every layer)
         Pi_top = {ell: sp.Function(f"Pitop_{ell}", real=True)(t, *horiz) for ell in range(1, N + 1)}
 
@@ -191,33 +198,25 @@ class MLSME(BaseModel):
                     f"momentum_{CN[xd]}",
                     d.t(uvel[i]) + adv + d.z(uvel[i] * w)
                     + gl * DERIV[xd](b + H) - d.z(tau[xd]) / rl - g_h[xd] + hterm
-                    + (DERIV[xd](Pi) / rl if with_pi else 0))
+                    + DERIV[xd](Pi) / rl)
                 blue.rows.append(getattr(ml, f"momentum_{CN[xd]}"))
                 blue.shallow_terms.append((blue.rows[-1], hterm))
-            if with_pi:
-                # vertical balance at the stress order (Marche 2007, (3.5)): d_z Pi = sum_e d_e
-                # tau_ez, integrated from z to the layer top, where Pi = Pi_top (the integral
-                # over the layers above, resolved at the assembly)
-                blue.vertical_term = -sum(DERIV[xe](tau[xe]) for xe in horiz) / rl
-                ml.add_equation("momentum_z", d.z(Pi) / rl + blue.vertical_term)
-                blue.vertical = ml.momentum_z
-                for c in (self.closures or []):
-                    c.register(ml)
-            if pipeline:
-                # the truncation by order of the non-dimensional layer balance (scaling.py);
-                # Pi is the non-hydrostatic part of -sigma_zz
-                from zoomy_core.model.models.scaling import ordered_truncation, Pressure
-                blue.p = Pi
-                rec = ordered_truncation(ml, blue, self.closures or [], self.scaling,
-                                         heights=[*hl, b], pressure=Pressure.nonhydrostatic,
-                                         mass="mass", requested=self.stress)
-                outcome.update(full=ml.stress == Stress.full, vertical=rec.vertical_stress)
-                layer_full, layer_vert = outcome["full"], outcome["vertical"]
-            else:
-                moment_scaling(ml, blue, self.stress)
-                apply_full_tensor(self.closures or [], ml, blue)
-                layer_full = layer_vert = full_stress
-            if with_pi and layer_vert:
+            # vertical balance at the stress order (Marche 2007, (3.5)): d_z Pi = sum_e d_e
+            # tau_ez, integrated from z to the layer top, where Pi = Pi_top (the integral
+            # over the layers above, resolved at the assembly)
+            blue.vertical_term = -sum(DERIV[xe](tau[xe]) for xe in horiz) / rl
+            ml.add_equation("momentum_z", d.z(Pi) / rl + blue.vertical_term)
+            blue.vertical = ml.momentum_z
+            for c in (self.closures or []):
+                c.register(ml)
+            # Pi is the non-hydrostatic part of -sigma_zz
+            blue.p = Pi
+            rec = ordered_truncation(ml, blue, self.closures or [], scaling,
+                                     heights=[*hl, b], pressure=Pressure.nonhydrostatic,
+                                     mass="mass", requested=self.stress)
+            outcome.update(full=ml.stress == Stress.full, vertical=rec.vertical_stress)
+            layer_full, layer_vert = outcome["full"], outcome["vertical"]
+            if layer_vert:
                 mz = ml.momentum_z
                 mz.apply(IntegrateZ(z, z, z_top, method="analytical"))
                 mz.apply({Pi.subs(z, z_top): Pi_top[ell]})
@@ -225,7 +224,7 @@ class MLSME(BaseModel):
                 for mn in MOM:
                     getattr(ml, mn).apply(psol)
                 mz.remove()
-            elif with_pi:
+            else:
                 # no stress in any vertical row: d_z Pi = 0 with Pi = 0 at the surface, Pi = 0
                 mz = ml.momentum_z
                 if sp.simplify(mz.expr - d.z(Pi) / rl) != 0:
@@ -443,8 +442,7 @@ class MLSME(BaseModel):
             prof["w"] = ProfileField(_assembled(layer_eqs[ell][2]), zeta)
             return ClosureState(prof, params=m.parameters, h=h_ell, x=x, zeta=zeta, at=side,
                                 horiz=list(horiz), base=b + sum(l_all[:ell - 1]) * ht)
-        if pipeline:
-            full_stress, vertical_stress = outcome["full"], outcome["vertical"]
+        full_stress, vertical_stress = outcome["full"], outcome["vertical"]
         stress = Stress.full if full_stress else Stress.shallow
         iface_tr, Pi_sub, dt_grad = {}, {}, {}
         if full_stress:
