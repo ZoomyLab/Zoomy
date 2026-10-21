@@ -44,6 +44,7 @@ import sympy as sp
 
 from zoomy_core.fvm.riemann_solvers import Numerics
 from zoomy_core.numerics import NumericalSystemModel
+from zoomy_core.symsolver.hooks import HOOKS_KEY, Hooks
 from zoomy_core.transformation.vectorize import uniform_rank
 
 
@@ -163,6 +164,10 @@ def _lambdify_array(arr: sp.Array, arg_lists: Sequence[Sequence[sp.Symbol]],
     counts = [len(group) for group in arg_lists]
     flat_args = [sym for group in arg_lists for sym in group]
     flat_expr = list(arr) if shape else []
+    hooks = module.get(HOOKS_KEY)
+    if hooks is not None and flat_expr:
+        flat_expr = [hooks.lower(e) for e in flat_expr]
+        module = {**module, **hooks.module}
 
     if not flat_expr:
         # Empty array — return a constant zero-shape function.
@@ -250,13 +255,14 @@ class JaxRuntime:
     """
 
     @classmethod
-    def from_nsm(cls, nsm) -> "JaxRuntime":
-        """Auto-promote a Model / SystemModel to NSM and wrap."""
+    def from_nsm(cls, nsm, functions=None) -> "JaxRuntime":
+        """Auto-promote a Model / SystemModel to NSM and wrap; `functions`: the hooks
+        (`zoomy_core.symsolver.hooks`)."""
         if not isinstance(nsm, NumericalSystemModel):
             nsm = NumericalSystemModel.from_system_model(nsm)
-        return cls(nsm)
+        return cls(nsm, functions)
 
-    def __init__(self, nsm: NumericalSystemModel):
+    def __init__(self, nsm: NumericalSystemModel, functions=None):
         if not isinstance(nsm, NumericalSystemModel):
             raise TypeError(
                 f"JaxRuntime expects a NumericalSystemModel, got {type(nsm)}.  "
@@ -285,6 +291,9 @@ class JaxRuntime:
         # JAX module dict — local copy so per-instance ``max_wavespeed``
         # injection doesn't leak across runtimes.
         self.module = _jax_module_base()
+        if functions:     # hook derivatives by JAX AD of the user callable
+            self.module[HOOKS_KEY] = Hooks(
+                functions, grad=lambda f, i: jax.grad(f, argnums=i))
 
         # Per-cell operators on the SystemModel.
         self._build_cell_operators()
