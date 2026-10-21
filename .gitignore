@@ -140,3 +140,6 @@ thesis
 
 # written by tutorials/amrex/minimal.ipynb
 tutorials/amrex/dambreak_amrex/
+
+# setuptools build trees of the in-tree packages
+library/*/build/
