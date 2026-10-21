@@ -18,6 +18,7 @@ from zoomy_core.numerics import NumericalSystemModel
 from zoomy_core.misc.options import OptionParam
 from zoomy_core.solver.constants import elliptic_constants
 from zoomy_core.symsolver import PyPrinter
+from zoomy_core.symsolver.hooks import check_functions
 from zoomy_core.symsolver.numpy_backend import runtime as R
 from zoomy_core.symsolver.numpy_backend.kernels import NumpyKernels
 from zoomy_core.symsolver.numpy_backend.parallel import MpiLinearSolver
@@ -93,7 +94,8 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
             systems=[sub for sub, _ in (systems or {}).values()])
         X = np.asarray(mesh.vertex_coordinates)[:mesh.dimension]
         self.mesh, geom = R.geometry_of(self.topo, X)
-        self.rt = NumpyKernels(nsm)
+        check_functions(self.functions, [nsm, *(sub for sub, _ in (systems or {}).values())])
+        self.rt = NumpyKernels(nsm, self.functions)
         order = int(nsm.reconstruction.order)
         self.mood_active = bool(self.mood and order >= 2 and nsm.call.admissible is not None)
         on_save, on_load = self._restart()
@@ -112,6 +114,8 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
                 "IMEX with derivative-dependent sources needs the global (Newton-GMRES) "
                 "source solve; only the cell-local one exists")
         name, self.source = self._print()
+        for rt in (self.rt, *(k for _, k in (systems or {}).values())):
+            rt.refuse(self.source)
         self._fn = R.build(self.source, name, self.module)
         Q = np.asarray(Q, dtype=float)
         return Q, self.initial_aux(Q, np.asarray(Qaux, dtype=float))
@@ -295,7 +299,7 @@ class SymbolicChorinSolverNumpy(SymbolicHyperbolicSolverNumpy, ChorinSettings):
             nsm = (sm if isinstance(sm, NumericalSystemModel)
                    else NumericalSystemModel.from_system_model(sm))
             nsm._symbolic_name = name
-            systems[name] = (nsm, NumpyKernels(nsm))
+            systems[name] = (nsm, NumpyKernels(nsm, self.functions))
         pred._symbolic_name = "pred"
         self.press, self.corr = systems["press"][0], systems["corr"][0]
         from zoomy_core.mesh import distributed

@@ -8,6 +8,7 @@ import numpy as np
 import sympy as sp
 
 from zoomy_core.fvm.userfunctions import numpy_module
+from zoomy_core.symsolver.hooks import HOOKS_KEY, HookError, Hooks, refuse_used
 
 #: column operators stored as `(n, 1)`: the trailing 1 is dropped (as `JaxRuntime`)
 _SQUEEZE = ("source", "source_explicit", "update_variables", "update_aux_variables")
@@ -47,6 +48,10 @@ class Lowered:
         self.flat, self.shape = _array(definition)
         self.counts = [len(g) for g in groups]
         args = [s for g in groups for s in g]
+        hooks = module.get(HOOKS_KEY)
+        if hooks is not None:
+            self.flat = [hooks.lower(e) for e in self.flat]
+            module = {**module, **hooks.module}
         self.fn = sp.lambdify(args, self.flat, modules=[module, "numpy"], cse=True)
 
     def __call__(self, *values):
@@ -166,16 +171,30 @@ class Face:
         return (out[0], out[1], out[2, 0]) if self.speed else out
 
 
+class _Refused:
+    """A kernel whose hook derivative NumPy cannot print: raises when called."""
+
+    def __init__(self, name, error):
+        self.name, self.error = name, error
+
+    def __call__(self, *args, **kwargs):
+        raise HookError(f"operator {self.name!r}: {self.error}")
+
+
 class NumpyKernels:
     """Every kernel of `nsm.call` as a numpy callable, by slot name (`None` where empty);
     `aux_derivatives` is set by the runtime (the derivative-aux spec).
     """
 
-    def __init__(self, nsm):
-        """Lambdify the call table of `nsm` (a NumericalSystemModel)."""
+    def __init__(self, nsm, functions=None):
+        """Lambdify the call table of `nsm` (a NumericalSystemModel) with the hooks
+        `functions`; a kernel with a hook derivative NumPy cannot print is refused (`refuse`)."""
         self.nsm, self.sm = nsm, nsm.sm
         self.n_state = int(self.sm.n_state)
         module = numpy_module()
+        if functions:
+            module[HOOKS_KEY] = Hooks(functions)
+        self.refused = {}
         call = nsm.call
         for name in call.keys():
             kc = call[name]
@@ -183,14 +202,22 @@ class NumpyKernels:
                 setattr(self, name, None)
                 continue
             f = kc.functions[kc.name]
-            if "idx" in f.args.keys():
-                k = Indexed(f, self.n_state, module)
-            elif "q_minus" in f.args.keys():
-                k = Face(f, module)
-            else:
-                k = Slot(f, self.sm, module, name in _SQUEEZE)
+            try:
+                if "idx" in f.args.keys():
+                    k = Indexed(f, self.n_state, module)
+                elif "q_minus" in f.args.keys():
+                    k = Face(f, module)
+                else:
+                    k = Slot(f, self.sm, module, name in _SQUEEZE)
+            except HookError as e:
+                self.refused[name] = e
+                k = _Refused(name, e)
             setattr(self, name, k)
         self.aux_derivatives = None
+
+    def refuse(self, source):
+        """Raise the `HookError` of a refused kernel the printed `source` calls."""
+        refuse_used(self.refused, getattr(self.nsm, "_symbolic_name", None) or "nsm", source)
 
     @property
     def parameters(self):

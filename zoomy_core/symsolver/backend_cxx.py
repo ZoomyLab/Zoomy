@@ -16,6 +16,7 @@ from zoomy_core.symsolver.discretization import reconstruction as R
 from zoomy_core.symsolver.discretization.residual import (
     implicit_step, post_step, residual, stage_aux)
 from zoomy_core.symsolver.discretization.time import IMEX_RK, SSP_RK, Imex
+from zoomy_core.symsolver.hooks import refuse_hooks
 from zoomy_core.symsolver.settings import ChorinSettings, HyperbolicSettings
 from zoomy_core.symsolver.strategies.chorin import ChorinTemplate, check_overlap
 from zoomy_core.symsolver.strategies.hyperbolic import HyperbolicTemplate
@@ -67,9 +68,16 @@ class CxxBackend(HyperbolicSettings):
         return [("nsm", nsm)]
 
     def _prepare(self, mesh, model):
-        """The NumericalSystemModel that `run` marches (the template's NSM)."""
-        return (model if isinstance(model, NumericalSystemModel)
-                else NumericalSystemModel.from_system_model(model))
+        """The NumericalSystemModel that `run` marches (the template's NSM); a function hook
+        raises (`hooks.refuse_hooks`)."""
+        nsm = (model if isinstance(model, NumericalSystemModel)
+               else NumericalSystemModel.from_system_model(model))
+        refuse_hooks([nsm], self._backend_name(), self.functions)
+        return nsm
+
+    def _backend_name(self):
+        """The backend's package name (`zoomy_foam`, `zoomy_amrex`)."""
+        return type(self).__module__.split(".")[0]
 
     def _mood(self, nsm):
         """Whether MOOD is on: `mood`, order >= 2 and the model declares
@@ -163,6 +171,7 @@ class CxxChorinBackend(CxxBackend, ChorinSettings):
                    else NumericalSystemModel.from_system_model(sm))
             nsm._symbolic_name = name
             out.append(nsm)
+        refuse_hooks(out, self._backend_name(), self.functions)
         pred, self.press, self.corr = out
         self._nc = int(mesh.n_inner_cells)
         return pred

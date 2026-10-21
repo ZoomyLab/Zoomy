@@ -425,11 +425,12 @@ def _resolve_boundary_traces(nsm) -> None:
     vertical_is_projected = _vert is not None and not any(
         str(s) == str(_vert) for s in _space)
 
+    from zoomy_core.symsolver.hooks import hook_names   # a hook derivative: the backends lower it
     for attr in _OPERATOR_ATTRS + ("quasilinear_matrix",):
         arr = getattr(nsm, attr, None)
         for e in _op_flat(arr):
             e = sp.sympify(e)
-            if e.atoms(sp.Subs):
+            if any(not hook_names(t.expr) for t in e.atoms(sp.Subs)):
                 raise ValueError(
                     f"REQ-130: unresolved Subs boundary trace survives in "
                     f"operator {attr!r}: {e} — a bed/surface trace could not be "

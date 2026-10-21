@@ -2082,7 +2082,7 @@ class SystemModel:
                         sp.sympify(entry).atoms(sp.core.function.AppliedUndef),
                         key=sp.default_sort_key):
                     name = atom.func.__name__
-                    if name in state_names:
+                    if name in state_names or getattr(atom.func, "_is_hook", False):
                         continue
                     function_atoms.setdefault(name, []).append(atom)
 

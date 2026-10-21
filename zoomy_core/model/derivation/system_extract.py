@@ -96,7 +96,7 @@ def _collect_fields(expr, param_names):
                     or sp.Function not in getattr(func, "__bases__", ())
                     or func.__dict__.get("eval") is not None):
                 continue
-        if getattr(atom.func, "_is_basis_head", False):
+        if getattr(atom.func, "_is_basis_head", False) or getattr(atom.func, "_is_hook", False):
             continue
         if atom.func.__name__ in param_names:
             continue

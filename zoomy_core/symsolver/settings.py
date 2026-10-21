@@ -8,6 +8,7 @@ import param
 from zoomy_core.misc.options import Configurable, Option, OptionParam
 from zoomy_core.solver.constants import ELLIPTIC_RTOL
 from zoomy_core.symsolver.discretization.time import CflWaveSpeed, Imex  # noqa: F401
+from zoomy_core.symsolver.hooks import FunctionsParam
 from zoomy_core.symsolver.strategies.chorin import Projection
 
 
@@ -76,6 +77,10 @@ class HyperbolicSettings(Configurable):
     implicit_maxiter = param.Integer(default=6, bounds=(1, None))
     gmres_tol = param.Number(default=1e-7, bounds=(0, None))
     gmres_maxiter = param.Integer(default=30, bounds=(1, None))
+    functions = FunctionsParam(default=None, allow_None=True,
+                               doc="Implementations of the opaque functions the operators call "
+                                   "(`sp.Function(name)`): name -> callable of the backend's "
+                                   "arrays, `sp.Lambda` or `HookFunction` (NumPy, JAX).")
 
 
 class ChorinSettings(HyperbolicSettings):

@@ -772,7 +772,7 @@ class Model:
         from sympy.core.function import AppliedUndef
 
         if isinstance(atom, AppliedUndef):
-            return True
+            return not getattr(atom.func, "_is_hook", False)     # a hook: opaque, no field
         func = getattr(atom, "func", None)
         if func is None or not isinstance(func, sp.FunctionClass):
             return False
