@@ -5,7 +5,6 @@ __all__ = [
     "zoomy_core",
     "zoomy_amrex",
     "zoomy_cli",
-    "zoomy_client",
     "zoomy_dmplex",
     "zoomy_fenicsx",
     "zoomy_firedrake",
@@ -15,7 +14,6 @@ __all__ = [
     "zoomy_js",
     "zoomy_mesh",
     "zoomy_server",
-    "zoomy_tests",
     "firedrake_animate",
 ]
 
