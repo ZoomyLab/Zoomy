@@ -21,7 +21,6 @@ what: [Backends](guide/backends.md).
 | `zoomy_openfoam` | OpenFOAM with preCICE |
 | `zoomy_dmplex` | DMPlex |
 | `zoomy_firedrake` | Firedrake |
-| `zoomy_dune` | DUNE |
 | `zoomy_postprocess` | plotting and HDF5 |
 
 ## Run
