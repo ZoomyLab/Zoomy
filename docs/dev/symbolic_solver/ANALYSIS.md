@@ -3353,3 +3353,44 @@ main vs main on gpu1 not rerun).  Wall per run, cache loaded: C8 serial 52-75 s 
 gpu1 110 -> 38 s, C10 56-133 s -> 27-90 s.  XLA:CPU logs `cpu_aot_loader` feature warnings
 (+prefer-no-gather / scatter) when it loads cached CPU programs (jax's own entries too).
 Not run (wrap-up): zoomy_core / zoomy_jax suites, QR suite.
+
+## 67. Function hooks: user functions inside a model's operators (2026-10-21, dev/function-hooks)
+
+A model's operators may call `hook("name")` (`zoomy_core.symsolver.hooks`): an opaque SymPy function
+(`_is_hook`, real) that the derivation keeps opaque (never promoted to an aux field:
+`expose_aux_atoms`, `Model._is_field_application`, `system_extract._collect_fields` skip it).  The
+shared setting `HyperbolicSettings.functions` (name -> callable / `sp.Lambda` / `HookFunction`;
+names identifiers, values callables) implements it.  Gradients enter as the existing
+derivative-aux symbols.  Typical use: a closure trained elsewhere (fixed weights).
+
+- **NumPy** (`numpy_backend/kernels.py`): the hooks join the lambdify module; **JAX**
+  (`jax_runtime._lambdify_array`, the one lambdify site incl. `runtime._numerics_face`): the same,
+  per cell under `vmap`.  Setup checks names both ways (`check_functions`: a hook without a
+  function, a function no operator calls; "did you mean").
+- **Derivatives.**  Wherever the pipeline differentiates an operator (source Jacobians, eager in
+  the SystemModel; the quasilinear matrix and closed-form eigenvalues of a hook flux) a hook gives
+  `Derivative(f(..), a_i)` / `Subs(Derivative(..))` (now allowed past the REQ-130 trace guard when
+  it is a hook's).  `Hooks.lower` prints it per `HookFunction.derivative`:
+  `HookDerivative.zero` -> 0; user partials (a list, one per argument, or one callable returning
+  all) -> called like the function (first derivatives only); `HookDerivative.auto` (default for a
+  plain callable) -> a `sp.Lambda` is inlined and SymPy differentiates it (every Python backend), a
+  callable is differentiated by `jax.grad` (nested per order) on JAX, refused on NumPy: the kernel
+  becomes a stub and setup raises `HookError` if the printed program calls it (`nsm.<slot>`), so an
+  unused Jacobian kernel costs nothing.  The template's IMEX (`Root`) differentiates the residual
+  itself (JAX AD, NumPy FD), so explicit / `Imex.lie` / `Imex.ssp2` need no declared derivative;
+  `SourceTreatment.linearized` prints dS/dQ and does.
+- **foam / AMReX** (`CxxBackend._prepare`, `CxxChorinBackend._prepare`): `functions` set, or a
+  hook in any kernel of the systems -> `NotImplementedError` naming the function, the operators
+  that call it and "supported on numpy, jax", before printing.
+- **Default unchanged.**  Without `functions` no hook code runs (no scan: it costs 5 s on SME level
+  4).  Printed programs of C1 and C14 (o1, o2; NumPy, JAX, foam and AMReX host programs) and the
+  NumPy kernel sources: sha256 identical on main and the branch.
+
+Tests (`zoomy_jax/tests/symsolver/test_function_hooks.py`, 14, 30 s): 1-D SWE, Manning as
+`manning(h, hu)`, 50 cells, t 0.5.  Hook vs built-in Manning, NumPy and JAX: explicit 0, `Imex.lie`
+<= 3.6e-16, `Imex.ssp2` 0 (the friction moves Q by > 1e-4).  `SourceTreatment.linearized`: user
+partials (both forms), `sp.Lambda` = built-in <= 3.3e-16 on both, JAX `auto` = user partials
+<= 1e-13, `zero` runs and differs by 6.0e-7 (the dropped friction Jacobian), NumPy `auto` of a
+callable raises at setup.  Hook flux (`pflux(h, hu)` = the momentum flux) on JAX, dam break o1 / o2:
+1.1e-15 / 2.1e-15 (eigenvalues by `jax.grad` of the hook).  foam and AMReX `run` raise.  Tutorial
+`docs/book/tutorials/hooks/function_hook.ipynb` (JAX function, assert hook = built-in).
