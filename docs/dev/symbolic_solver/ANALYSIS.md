@@ -3048,3 +3048,92 @@ used other predictor numerics (Perron wave speed, its stencils; steffler.md, cau
 Open (not a closure defect of this case): free slip on a curved wall is `d u_t/dn = kappa u_t`
 (zero shear), the vector closure imposes `d(t.q)/dn = 0` (the flat-wall form): O(h kappa) at the
 walls, the order of the 4.5e-5 above.
+
+## 65. JAX start-up: what the 270-300 s compile and the 115-140 s setup are; the cache with host callbacks; xreplace in the Riemann build (2026-10-21, dev/jax-compile)
+
+Reproduction: `cases/jax_compile_time.py` (setup split, the march's trace / lowering / XLA compile,
+its size, its callbacks, cache hits; `BREAKDOWN=` equations per kernel, `PROFILE=1` cProfile).
+Cases: C1 `o2_n40` (hyperbolic), C8 `vam` (VAM(1) Chorin), ANALYSIS 59's Escalante bump (ML-VAM(2)
+level 1, 14 states, 60 cells, hr, O2 + MOOD, SSP-RK2, dt 1e-3, `on_write`).  `taskset -c 24-31`,
+GPU 1 (L40S), jax / jaxlib 0.9.2, float64.
+
+**The march program** (before; one program per run, the `lax.while_loop` of the template):
+
+| case | device | trace | lower | XLA compile | jaxpr eqns | StableHLO ops | HLO after opt. | callbacks |
+|---|---|---|---|---|---|---|---|---|
+| C1 o2_n40 | CPU | 2.6 s | 0.6 s | 2.7 s | 12.1k | 10.7k | 9.9k | 1 |
+| C8 vam | CPU | 2.4 s | 0.7 s | 6.8 s | 23.6k | 20.8k | 30.4k | 2 |
+| C8 vam | GPU | 2.2 s | 0.7 s | 51.8 s | 23.6k | 20.8k | 27.9k | 2 |
+| Escalante | CPU | 13.0 s | 3.6 s | 33.6 s | 113.6k | 75.0k | 191k | 12 |
+| Escalante | GPU | 12.5 s | 3.6 s | 300-303 s | 113.7k | 75.8k | 163k | 10 |
+| Escalante, legacy `run_jit_steps` (thesis 40c26762) | GPU | 7.6 s | 1.9 s | 228 s | | | 88k | |
+| same, legacy | CPU | 12.3 s | 2.7 s | 44-54 s | | | 127k | |
+
+- **Expected for its size.**  The GPU compile is ~1.8 ms per optimised HLO instruction (C8 and the
+  Escalante march alike; the CPU ~0.18 ms), and the legacy solver, with 54 % of the instructions,
+  compiled in 228 s.  XLA's split (`TF_CPP_VMODULE=gpu_compiler,nvptx_compiler,hlo_pass_pipeline`):
+  Escalante HLO passes 241 s, of them **`priority-fusion` 220 s** (superlinear: C8 15 of 18 s),
+  IR emission 24 s, LLVM -> PTX 7-8 s, ptxas 9 s; legacy: priority-fusion 148 s.  The fusion pass is
+  serial: `--xla_gpu_force_compilation_parallelism=8` 215 s.  Changing fusion (other passes,
+  limits) changes the kernels, so not the results bitwise; not done.
+- **What the program is.**  55 % of the Escalante equations are the lambdified sympy kernels (already
+  CSE'd), inlined at each call site: `numerical_cell_edge_source` 26.9k (6 calls: 2 SSP-RK stages x
+  {O2 predictor, MOOD's O1 re-step, ...}), the face kernel `numerical_face_sides(_speed)` 22.4k
+  (6 calls), the pressure / corrector slot operators 17.9k; the LSQ derivative aux ~10k, the limiter
+  ~5k, the eigensolve ~2.5k.  Not constants: hoisted_jit passes 1991 arrays (155 kB) as arguments,
+  XLA constant folding is off (section 20), geometry is an input (section 26).  The way to a
+  smaller program is the template's: one kernel call per stage for O2 and the MOOD fallback (one
+  batch over both face-state sets) and the stages as a loop instead of unrolled; each halves the
+  kernel copies.  Not done here (template, all backends).
+- **Host callbacks block the persistent cache: confirmed, all kinds.**  In jax 0.9.2 every Python
+  callback (`jax.debug.callback` ordered or not, `io_callback`, `pure_callback`) lowers to an
+  `xla_ffi_python_{cpu,gpu}_callback` custom call and registers its callable with the compile;
+  `compiler._cache_write` writes nothing for an executable with any ("uses host callbacks").  The
+  march has: `check.cfl` (in a `cond`), `check.march` (ordered; whenever a CPU device exists, so
+  in every run), `io.write` (`on_write`, `output`), `io.save_state` / `io.load_state`, the linear
+  solves' accept gate (in a `cond`), host linear solvers (PyAMG / hypre `pure_callback`), preCICE
+  (`io_callback`).  The cache key is the same in two processes (C1: identical); all small
+  programs of the setup do hit (C1 147 of 148, C8 195 of 196).
+- **Setup.**  Escalante 117-140 s, of which `Numerics._model_eval` 99 s: `sympy.subs` of the
+  model operators (quasilinear matrix, numerical eigenvalues, NCP matrix) at the face states, 155
+  calls (56 distinct).  C8: 20 of 31 s.
+
+**Fixes.**
+
+1. zoomy_core `riemann_solvers._substitute`: `_model_eval` substitutes through `xreplace` when
+   that builds the same tree as `subs`: every key a `Symbol`, no value containing a moved key
+   (sequential `subs` would substitute into it), no `Derivative`, `Subs`, integral / sum, `cot`,
+   `AccumBounds` (whose `_eval_subs` differs from a rebuild); an immutable array through its flat
+   entries (its own `has` compares arrays elementwise).  Else `subs` as before.  Checked call by
+   call against `subs` (sympy `==`, entry by entry): C1 o2_n40, C8 vam / vam_tri / per, C10
+   s2_t2_n30: 609 calls, 0 differences; 3.0 s against 95.7 s.
+2. zoomy_jax `symsolver/compile_cache.py`: inside `callback_cache()` (the first call of
+   `hoisted_jit`, i.e. every march compile) an executable with host callbacks is written to
+   `jax_compilation_cache_dir` under jax's own cache key (`zoomy-cb-<key>`, atomic write) and a hit
+   is loaded with `backend.deserialize_executable(..., host_callbacks=)`, the callables of the
+   present lowering (the custom calls name them by index, the same order for the same module).  It
+   wraps `jax._src.compiler.compile_or_get_cached` (checked signature; any failure: jax's own
+   compile); active only with a cache directory set (`JAX_COMPILATION_CACHE_DIR`), opt-out
+   `ZOOMY_JAX_CALLBACK_CACHE=0`.  Test `tests/symsolver/test_compile_cache.py` (ordered and
+   in-`cond` callbacks fire after a load, result bitwise).
+
+**Before / after** (Escalante to t = 0.1, GPU 1; `JAX_COMPILATION_CACHE_DIR` set):
+
+| | setup | trace + lower | XLA compile | run (100 steps incl. compile) |
+|---|---|---|---|---|
+| main | 117-120 s | 16 s | 300-303 s | 320-323 s |
+| fix, first run (cache written) | 20.7 s | 16 s | 303 s | 323 s |
+| fix, next runs (cache hit) | 12.5 s | 9.6 s | 12.5 s (load) | 24.2 s |
+
+The final state of the cache-hit run equals the compiling run's bitwise; frames written by
+`on_write` the same.  Two separate GPU compiles of the same program differ by 3.8e-15 (rel; GPU
+atomics / autotuning), so GPU runs are compared to round-off, CPU runs bitwise.  C1 CPU: compile
+3.4 s -> 0.31 s, final state bitwise.
+
+**Acceptance** (private store, jax serial + gpu1, vs main's code run the same day): C1 (6 runs),
+C8 (6), C10 (9) serial **bitwise**, with the cache written (run 1) and loaded (run 2); gpu1 C1
+o2_n40 1.4e-13 / 5.6e-14, C8 vam 1.4e-11 / 7.6e-12 (rel; GPU round-off, section 59's 1e-9 tolerance;
+main vs main on gpu1 not rerun).  Wall per run, cache loaded: C8 serial 52-75 s -> 29-44 s, C8
+gpu1 110 -> 38 s, C10 56-133 s -> 27-90 s.  XLA:CPU logs `cpu_aot_loader` feature warnings
+(+prefer-no-gather / scatter) when it loads cached CPU programs (jax's own entries too).
+Not run (wrap-up): zoomy_core / zoomy_jax suites, QR suite.
