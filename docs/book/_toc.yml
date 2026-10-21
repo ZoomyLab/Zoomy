@@ -35,6 +35,7 @@ parts:
         sections:
           - file: developer/installation
           - file: developer/templates
+          - file: developer/template_vs_backends
           - file: developer/extending
           - file: developer/tutorials
           - file: developer/tests
