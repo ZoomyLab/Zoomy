@@ -20,7 +20,7 @@ The matrix is `docs/dev/symbolic_solver/matrix/` (README there).
 
 1. `cases.py`: a builder returning `(mesh, nsm)` (Chorin:
    `(mesh, (pred, press, corr))`) and an entry `"Cnn": (title, [Run(...)])`
-   in `CASES`; `Run` fixes `t_end`, `cfl`, `dt`, `mood`, `imex`,
+   in `CASES`.  `Run` fixes `t_end`, `cfl`, `dt`, `mood`, `imex`,
    `time_order`, the configs and the backends.
 2. `matrix.py`: the checks in `measure()`, each
    `add(case, check, backend, config, value, threshold, note)` with a
