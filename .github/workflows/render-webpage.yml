@@ -27,8 +27,8 @@ on:
       - "library/zoomy_js/**"
       # The API reference is written from the docstrings of these libraries, so a
       # submodule bump (a bare gitlink change, see zoomy_gui above) re-renders it.
-      - "library/zoomy_core"
-      - "library/zoomy_jax"
+      - "library/zoomy_core/**"
+      - "library/zoomy_jax/**"
       - "library/zoomy_foam"
       - "library/zoomy_amrex"
       # Served as a wheel the GUI's workers install (gui/gui/wheels/).

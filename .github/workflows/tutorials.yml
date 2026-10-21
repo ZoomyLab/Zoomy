@@ -11,8 +11,8 @@ on:
       - "tutorials/**"
       - "tests/tutorials/**"
       - "docs/scripts/generate_tutorial_index.py"
-      - "library/zoomy_core"
-      - "library/zoomy_jax"
+      - "library/zoomy_core/**"
+      - "library/zoomy_jax/**"
       - "library/zoomy_plotting/**"
       - ".github/workflows/tutorials.yml"
   pull_request:
@@ -20,8 +20,8 @@ on:
       - "tutorials/**"
       - "tests/tutorials/**"
       - "docs/scripts/generate_tutorial_index.py"
-      - "library/zoomy_core"
-      - "library/zoomy_jax"
+      - "library/zoomy_core/**"
+      - "library/zoomy_jax/**"
       - "library/zoomy_plotting/**"
       - ".github/workflows/tutorials.yml"
   workflow_dispatch:
@@ -44,9 +44,6 @@ jobs:
       OMP_NUM_THREADS: "2"
     steps:
       - uses: actions/checkout@v5
-
-      - name: Submodule the notebooks use
-        run: git submodule update --init library/zoomy_core library/zoomy_jax
 
       - uses: actions/setup-python@v6
         with:

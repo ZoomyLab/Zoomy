@@ -2,7 +2,7 @@ name: Release
 
 # Publishes to PyPI every package whose pyproject version PyPI does not hold yet:
 # zoomy-core, zoomy-jax, zoomy-plotting, zoomy-prepost, zoomy-server. Bump a version
-# in a pyproject (for core and jax, bump the submodule pointer) and push to main.
+# in a pyproject and push to main.
 # plan: which versions are new. build: sdist and wheel of all five, twine check, a smoke
 # test of the wheels in a fresh venv. publish: PyPI trusted publishing, no token anywhere.
 #
@@ -16,8 +16,8 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "library/zoomy_core"
-      - "library/zoomy_jax"
+      - "library/zoomy_core/pyproject.toml"
+      - "library/zoomy_jax/pyproject.toml"
       - "library/zoomy_plotting/pyproject.toml"
       - "library/zoomy_prepost/pyproject.toml"
       - "library/zoomy_server/pyproject.toml"
@@ -42,8 +42,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Submodules that are packages
-        run: git submodule update --init library/zoomy_core library/zoomy_jax
 
       - uses: actions/setup-python@v6
         with:
@@ -107,8 +105,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Submodules that are packages
-        run: git submodule update --init library/zoomy_core library/zoomy_jax
 
       - uses: actions/setup-python@v6
         with:

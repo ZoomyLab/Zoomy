@@ -65,7 +65,7 @@ jobs:
 
       - name: Submodules the tests use
         if: steps.on.outputs.run == '1'
-        run: git submodule update --init library/zoomy_core library/zoomy_jax library/zoomy_foam library/zoomy_amrex library/zoomy_gui
+        run: git submodule update --init library/zoomy_foam library/zoomy_amrex library/zoomy_gui
 
       - uses: actions/setup-python@v6
         if: steps.on.outputs.run == '1'
