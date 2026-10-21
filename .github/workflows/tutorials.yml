@@ -59,7 +59,7 @@ jobs:
       - name: Install
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq libglu1-mesa libxcursor1 libxinerama1 libxft2 > /dev/null
-          python -m pip install -e "library/zoomy_core[full]" -e library/zoomy_jax -e library/zoomy_plotting \
+          python -m pip install -e "library/zoomy_core[full]" -e "library/zoomy_jax[ad]" -e library/zoomy_plotting \
             gmsh pytest nbclient nbformat ipykernel
 
       - name: Metadata of every notebook
