@@ -21,8 +21,8 @@ source .venv/bin/activate
 pip install "zoomy_core>=0.2.15" zoomy-plotting jupyterlab
 ```
 
-Then open a tutorial notebook from the repository's `tutorials/` (e.g.
-`tutorials/swe/simple_numpy.ipynb`) in `jupyter lab`.  Releases before 0.2.15 predate the
+Then open a tutorial notebook from the repository's `tutorials/` (listed on the
+[tutorials page](tutorials/index.md)) in `jupyter lab`.  Releases before 0.2.15 predate the
 symbolic solvers (`zoomy_core.symsolver`).
 
 To work on the code instead, install from a clone (`zoomy_plotting` lives in the

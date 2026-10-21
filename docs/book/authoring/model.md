@@ -205,7 +205,7 @@ class MyRiverSME(SME):
 
 Writing your own `Closure` is the other extension point — declare what it
 `closes` and what it `requires`, then supply `expression` (bulk) or `traction`
-(boundary). See the [advanced SWE tutorial](../tutorials/swe.md).
+(boundary). See the [tutorials](../tutorials/index.md).
 
 For genuinely new structure, override `derive_model()` and build the derivation
 with the operations below. `SME.derive_model` in

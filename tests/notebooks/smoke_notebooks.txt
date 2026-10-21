@@ -1,20 +1,8 @@
 # Notebooks executed by the weekly notebook job
 # (.github/workflows/notebooks.yml --execute-smoke).
 #
-# Each of these runs on plain zoomy_core (NumPy) with no external binary, no
-# data submodule and no compiler. They are executed end to end, so a broken
-# model, closure or solver surfaces here before it reaches the site. The file
-# was previously empty, so the weekly job resolved zero notebooks and passed
-# vacuously while a stale SWASHES traceback sat on the live docs.
-#
-# NOT listed, and why:
-#   tutorials/amrex/minimal.ipynb — it is PUBLISHED (see PUBLISHED_TUTORIALS in
-#   docs/scripts/generate_ci_test_report.py) but it is no longer runnable here:
-#   it imports zoomy_amrex, which builds the printed C++ solver in the
-#   zoomy_amrex Apptainer image and runs it there. Executing it needs apptainer
-#   and that image, not a bare runner. It ships with its stored outputs instead;
-#   re-run it when the model, the solver template or the AMReX driver changes.
+# The tutorials themselves are executed by tests/tutorials (every tutorials/**/*.ipynb
+# whose metadata.zoomy `requires` is only cpu; see tests/tutorials/README.md), so this list
+# only keeps the JupyterLite notebook, which that job runs through check_notebooks.py.
 
-tutorials/swe/simple_numpy.ipynb
-tutorials/sme/moments_2d.ipynb
 tutorials/pyodide/pyodide.ipynb

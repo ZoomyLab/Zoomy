@@ -5,7 +5,7 @@ runs weekly. The results below cover three groups:
 
 - **Zoomy** — the superproject's own `tests/`, run per backend.
 - **Library** — each `library/zoomy_*` submodule's own `tests/`.
-- **Notebooks** — the published tutorial notebooks, executed end to end.
+- **Notebooks** — the `tutorials/` notebooks that need only the CPU, executed end to end.
 
 ## Summary
 
@@ -57,9 +57,8 @@ jupyter-book build docs/book
 `artifacts/test-reports/<tier>/<group>/<unit>/**` and writes the summary
 (`docs/_generated/test_report_summary.md`), the embeds
 (`docs/_generated/test_report_embeds.md`), the per-unit
-`docs/book/_static/pytest-report-<tier>-<group>-<unit>.html`, and mirrors the
-published tutorials into `docs/book/tutorials/ipynb/`. A stub is written wherever
-a run produced no `report.html`.
+`docs/book/_static/pytest-report-<tier>-<group>-<unit>.html`. A stub is written
+wherever a run produced no `report.html`.
 
 ### Adding or changing tests
 
@@ -72,10 +71,12 @@ Markers are mostly **automatic** — the root `conftest.py` applies them:
 - `library/zoomy_<stack>/tests` is collected only when `import zoomy_<stack>`
   resolves, so each container runs exactly the suites it can.
 
-A **tutorial notebook** joins the Notebooks group by being added to
-`tests/notebooks/test_tutorials.py::PUBLISHED` (path + the backend marker it
-needs) and to `PUBLISHED_TUTORIALS` in the docs generator — it is then executed
-as a `@pytest.mark.notebook` test and mirrored onto the site.
+A **tutorial notebook** joins the Notebooks group by existing: every
+`tutorials/**/*.ipynb` is one test of `tests/tutorials/test_notebooks.py`
+(`@pytest.mark.tutorial`), and its `metadata.zoomy` makes the card and the book page
+(`python docs/scripts/generate_tutorial_index.py`). A notebook that needs more than the CPU
+(`requires:gpu|mpi|container`) is collected and skipped, with the reason in the report;
+see `tests/tutorials/README.md`.
 
 ### Docs-only changes
 
@@ -93,7 +94,7 @@ the checked-out tree `pip install -e`'d over them, so reports match the commit):
 |---|---|---|
 | Zoomy | superproject `tests/`, filtered per backend | core / jax / amrex / foam images |
 | Library | each `library/zoomy_*/tests/` | its own backend image (`prepost`/`server` in the core image) |
-| Notebooks | `tests/notebooks/` (`@pytest.mark.notebook`) | core (+ amrex) images |
+| Notebooks | `tests/tutorials/` (`@pytest.mark.tutorial`) | core image |
 
 **Two tiers.**
 

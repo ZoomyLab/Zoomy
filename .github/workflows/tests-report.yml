@@ -4,8 +4,8 @@ name: Smart Tests
 #   zoomy      — the superproject `tests/`, run per backend.
 #   library    — each library/zoomy_*/tests, run in its backend container
 #                (prepost/server are pure-Python → the core image).
-#   notebooks  — tests/notebooks/ (@pytest.mark.notebook), published tutorials
-#                executed end to end, per backend they need.
+#   notebooks  — tests/tutorials/ (@pytest.mark.tutorial): every tutorials/ notebook
+#                that needs only the CPU, executed end to end.
 #
 # Two tiers:
 #   small  — every push and PR. A REAL GATE: a failing test fails the job.
@@ -117,15 +117,11 @@ jobs:
               paths: "library/zoomy_server/tests", chdir: "",
               small: "small and not regression",
               large: "large or benchmark or regression" }
-          # ---- notebooks: published tutorials, per backend (small only) ----
+          # ---- notebooks: tutorials/ notebooks that need only the CPU (small only) ----
           - { group: notebooks, unit: core, image: zoomy_core, py: python, pipflags: "",
               installs: "-e library/zoomy_core -e library/zoomy_plotting pytest-html jupytext nbclient nbformat ipykernel",
-              paths: "tests/notebooks", chdir: "",
-              small: "notebook and core", large: "" }
-          - { group: notebooks, unit: amrex, image: zoomy_amrex, py: python3, pipflags: "--break-system-packages",
-              installs: "-e library/zoomy_core -e library/zoomy_amrex pytest-html jupytext nbclient nbformat ipykernel",
-              paths: "tests/notebooks", chdir: "",
-              small: "notebook and amrex", large: "" }
+              paths: "tests/tutorials", chdir: "",
+              small: "tutorial", large: "" }
     steps:
       - uses: actions/checkout@v5
         with:

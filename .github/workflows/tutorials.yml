@@ -1,0 +1,64 @@
+name: Tutorials
+
+# Every notebook under tutorials/ that needs only the CPU is executed (tests/tutorials/README.md);
+# a notebook with `requires:gpu|mpi|container` is collected and reported as skipped. The
+# metadata of every notebook is validated first, by the generator of the tutorials page.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "tutorials/**"
+      - "tests/tutorials/**"
+      - "docs/scripts/generate_tutorial_index.py"
+      - "library/zoomy_core"
+      - "library/zoomy_plotting/**"
+      - ".github/workflows/tutorials.yml"
+  pull_request:
+    paths:
+      - "tutorials/**"
+      - "tests/tutorials/**"
+      - "docs/scripts/generate_tutorial_index.py"
+      - "library/zoomy_core"
+      - "library/zoomy_plotting/**"
+      - ".github/workflows/tutorials.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: tutorials-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tutorials:
+    name: Tutorial notebooks (CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONNOUSERSITE: "1"
+      JAX_PLATFORMS: cpu
+      OMP_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Submodule the notebooks use
+        run: git submodule update --init library/zoomy_core
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: library/zoomy_core/pyproject.toml
+
+      - name: Install
+        run: |
+          python -m pip install -e "library/zoomy_core[full]" -e library/zoomy_plotting \
+            pytest nbclient nbformat ipykernel
+
+      - name: Metadata of every notebook
+        run: python docs/scripts/generate_tutorial_index.py
+
+      - name: Execute the CPU notebooks
+        run: python -m pytest tests/tutorials -m tutorial -rs --tb=short -p no:cacheprovider

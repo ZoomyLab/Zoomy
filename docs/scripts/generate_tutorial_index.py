@@ -1,138 +1,263 @@
-"""Tutorial notebooks -> docs/book/tutorials/index.md (a tag-filterable card grid).
+"""Tutorial notebooks -> docs/book/tutorials/index.md (a card grid with one dropdown per category).
 
     python docs/scripts/generate_tutorial_index.py
 
-Every ``tutorials/**/*.ipynb`` with ``metadata.zoomy`` becomes a card::
+Every ``tutorials/**/*.ipynb`` carries ``metadata.zoomy``::
 
-    "zoomy": {"title": "...", "summary": "...",
-              "tags": ["backend:jax", "model:swe", ...],
-              "status": "legacy"}            # optional: built on the old solvers
+    "zoomy": {"title": "...", "summary": "<one line>",
+              "tags": ["type:tutorial", "dimension:1d", "physics:viscous", ...]}
 
-Tags are ``category:value`` from :data:`TAGS`; an unknown tag is an error.  The
-cards carry their tags in ``data-tags``; ``_static/tutorial-filter.js`` filters
-them by the tag chips (OR within a category, AND across categories).  A
-notebook in ``generate_ci_test_report.PUBLISHED_TUTORIALS`` links to its page
-in the book, one under ``tutorials/pyodide/`` to the JupyterLite deployment.
+Tags are ``category:value`` from :data:`TAGS`.  An unknown category or value, a
+notebook without metadata, or a notebook without exactly one ``type`` is a build
+error.  The filter categories (:data:`FILTERS`) become one dropdown each (default
+"any"); ``_static/tutorial-filter.js`` shows a card when it carries the selected
+tag of every dropdown that is not "any".  ``requires`` (:data:`HARNESS`) is read by
+the test harness only (``tests/tutorials``: a notebook that needs more than ``cpu``
+is collected and skipped) and is not a filter; it defaults to ``requires:cpu``.
+
+The book renders every notebook that has a card: it is copied to
+``docs/book/tutorials/ipynb/`` (git-ignored, regenerated here) and reached through
+its card, not through ``_toc.yml`` (an orphan page).  A notebook under ``tutorials/pyodide/`` is
+the JupyterLite deployment's content: its card links there instead.
 """
 from __future__ import annotations
 
+import difflib
 import html
 import json
+import shutil
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "tutorials"
-OUT = ROOT / "docs" / "book" / "tutorials" / "index.md"
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from generate_ci_test_report import PUBLISHED_TUTORIALS  # noqa: E402
+BOOK = ROOT / "docs" / "book" / "tutorials"
+OUT = BOOK / "index.md"
 
-TAGS = {
-    "component": ("model", "system-model", "numerical-system-model", "solver"),
-    "model": ("swe", "sme", "vam", "euler"),
-    "task": ("analysis", "simulation", "ad", "coupling"),
-    "backend": ("jax", "foam", "amrex", "numpy"),
+# One dropdown per category; the order is the order on the page and on a card.
+FILTERS = {
+    "type": ("tutorial", "use-case"),
+    "dimension": ("1d", "2d", "3d"),
+    "physics": ("viscous", "inviscid", "hydrostatic", "non-hydrostatic",
+                "compressible", "incompressible", "free-surface"),
+    "component": ("model", "system-model", "numerical-system-model", "solver",
+                  "printer", "mesh"),
     "method": ("fv", "lsq", "mood", "imex", "chorin"),
+    "feature": ("ad", "mpi", "gpu", "coupling"),
+    "backend": ("numpy", "jax", "foam", "amrex"),
 }
-STATUS = ("current", "legacy")
+# Metadata for the test harness, not a filter.
+HARNESS = {"requires": ("cpu", "gpu", "mpi", "container")}
+TAGS = {**FILTERS, **HARNESS}
+REQUIRED = ("type",)        # exactly one value
+DEFAULTS = {"requires": ("cpu",)}
+KEYS = ("title", "summary", "tags")
 
 
-def load():
-    cards, errors = [], []
-    for nb in sorted(SRC.rglob("*.ipynb")):
-        if ".ipynb_checkpoints" in nb.parts:
+@dataclass
+class Notebook:
+    """One notebook under ``tutorials/`` with its parsed ``metadata.zoomy``."""
+
+    rel: str                                    # path under tutorials/, posix
+    title: str = ""
+    summary: str = ""
+    tags: tuple = ()                            # effective: defaults applied, TAGS order
+    errors: list = field(default_factory=list)
+
+    @property
+    def requires(self):
+        return tuple(t.split(":", 1)[1] for t in self.tags if t.startswith("requires:"))
+
+    @property
+    def kind(self):
+        return next((t.split(":", 1)[1] for t in self.tags if t.startswith("type:")), "")
+
+    @property
+    def runs_on_cpu(self):
+        return set(self.requires) <= {"cpu"}
+
+
+def _hint(word, options):
+    near = difflib.get_close_matches(word, options, n=1)
+    return f"; did you mean {near[0]!r}?" if near else f"; one of: {', '.join(options)}"
+
+
+def parse(rel, meta):
+    """Validate ``metadata.zoomy`` of one notebook; problems land in ``errors``."""
+    nb = Notebook(rel)
+    err = nb.errors
+    if not isinstance(meta, dict):
+        err.append(f"{rel}: no metadata.zoomy (title, summary, tags)")
+        return nb
+    for key in meta:
+        if key not in KEYS:
+            err.append(f"{rel}: unknown metadata.zoomy key {key!r}{_hint(key, KEYS)}")
+    for key in ("title", "summary"):
+        value = meta.get(key)
+        if not isinstance(value, str) or not value.strip():
+            err.append(f"{rel}: metadata.zoomy has no {key!r} text")
+        elif "\n" in value.strip():
+            err.append(f"{rel}: metadata.zoomy {key!r} is one line")
+        else:
+            setattr(nb, key, value.strip())
+    tags = meta.get("tags")
+    if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
+        err.append(f"{rel}: metadata.zoomy 'tags' is a list of 'category:value' strings")
+        tags = []
+    have = set()
+    for tag in tags:
+        cat, _, val = tag.partition(":")
+        if cat not in TAGS:
+            err.append(f"{rel}: unknown tag {tag!r}: category {cat!r}{_hint(cat, tuple(TAGS))}")
+        elif val not in TAGS[cat]:
+            err.append(f"{rel}: unknown tag {tag!r}{_hint(val, TAGS[cat])}")
+        else:
+            have.add(tag)
+    for cat in REQUIRED:
+        n = sum(t.startswith(cat + ":") for t in have)
+        if n != 1:
+            err.append(f"{rel}: needs exactly one {cat}: tag ({' | '.join(TAGS[cat])}), has {n}")
+    for cat, values in DEFAULTS.items():
+        if not any(t.startswith(cat + ":") for t in have):
+            have.update(f"{cat}:{v}" for v in values)
+    order = [f"{cat}:{v}" for cat, values in TAGS.items() for v in values]
+    nb.tags = tuple(t for t in order if t in have)
+    return nb
+
+
+def scan(src=SRC):
+    """Every notebook below ``src``, parsed (errors are kept on the notebooks)."""
+    found = []
+    for path in sorted(Path(src).rglob("*.ipynb")):
+        if ".ipynb_checkpoints" in path.parts:
             continue
-        meta = json.loads(nb.read_text()).get("metadata", {}).get("zoomy")
-        rel = nb.relative_to(SRC).as_posix()
-        if meta is None:
+        rel = path.relative_to(src).as_posix()
+        try:
+            meta = json.loads(path.read_text()).get("metadata", {}).get("zoomy")
+        except ValueError as exc:
+            nb = Notebook(rel)
+            nb.errors.append(f"{rel}: not a notebook ({exc})")
+            found.append(nb)
             continue
-        for key in ("title", "summary", "tags"):
-            if key not in meta:
-                errors.append(f"{rel}: metadata.zoomy has no {key!r}")
-        for tag in meta.get("tags", []):
-            cat, _, val = tag.partition(":")
-            if val not in TAGS.get(cat, ()):
-                errors.append(f"{rel}: unknown tag {tag!r}")
-        if meta.get("status", "current") not in STATUS:
-            errors.append(f"{rel}: status {meta['status']!r} not in {STATUS}")
-        cards.append((rel, meta))
+        found.append(parse(rel, meta))
+    return found
+
+
+def load(src=SRC, book=BOOK):
+    """The notebooks of the index; any problem stops the build."""
+    notebooks = scan(src)
+    errors = [e for nb in notebooks for e in nb.errors]
+    mirror_dir = Path(book) / "ipynb"
+    for stray in sorted(Path(book).rglob("*.ipynb")):
+        if mirror_dir not in stray.parents:
+            errors.append(f"{stray}: notebooks live under tutorials/ "
+                          "(docs/book/tutorials/ipynb/ is generated)")
     if errors:
         raise SystemExit("tutorial metadata:\n  " + "\n  ".join(errors))
-    return cards
+    notebooks.sort(key=lambda nb: (FILTERS["type"].index(nb.kind), nb.title.lower(), nb.rel))
+    return notebooks
+
+
+def mirror(notebooks, src=SRC, book=BOOK):
+    """Copy the notebooks the book renders into ``docs/book/tutorials/ipynb/``.
+
+    The copies are ``orphan`` pages (notebook metadata ``orphan``, which myst-nb turns into
+    front matter): built, reached through their card, in no toctree and without the
+    "document isn't included in any toctree" warning.
+    """
+    dest = Path(book) / "ipynb"
+    if dest.exists():
+        shutil.rmtree(dest)
+    for nb in notebooks:
+        if not nb.rel.startswith("pyodide/"):
+            target = dest / nb.rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            data = json.loads((Path(src) / nb.rel).read_text())
+            data.setdefault("metadata", {})["orphan"] = True
+            target.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n")
 
 
 def link(rel):
-    if rel in PUBLISHED_TUTORIALS:
-        return f"ipynb/{rel[:-len('.ipynb')]}", "doc"
     if rel.startswith("pyodide/"):
         return f"../jupyter-lite/_output/lab/index.html?path={rel.split('/', 1)[1]}", "url"
-    return None, None
+    return f"ipynb/{rel[:-len('.ipynb')]}", "doc"
 
 
-def render(cards):
-    used = {t for _, m in cards for t in m["tags"]}
+def _filter_html(notebooks):
+    out = ['<div class="zt-filter">']
+    for cat, values in FILTERS.items():
+        out.append(f'<label class="zt-field"><span class="zt-cat">{cat}</span>'
+                   f'<select class="zt-select" data-cat="{cat}">')
+        out.append('<option value="">any</option>')
+        for v in values:
+            n = sum(f"{cat}:{v}" in nb.tags for nb in notebooks)
+            out.append(f'<option value="{cat}:{v}"' + ("" if n else " disabled") +
+                       f">{v} ({n})</option>")
+        out.append("</select></label>")
+    out += ['<button type="button" class="zt-clear">reset</button>', "</div>"]
+    return out
+
+
+def render(notebooks):
     lines = [
-        "# Tutorials",
+        "# Tutorials and use cases",
         "",
         "<!-- generated by docs/scripts/generate_tutorial_index.py from the "
         "notebooks' metadata.zoomy; do not edit -->",
         "",
-        "Notebooks under `tutorials/`.  Click tags to filter: tags of one category "
-        "widen the selection, tags of different categories narrow it.",
+        "Executable notebooks from `tutorials/`.  Each menu filters one category: a "
+        "notebook is shown when it carries the chosen tag of every menu that is not set "
+        "to *any*.",
         "",
     ]
-    if all(m.get("status") == "legacy" for _, m in cards):
-        lines += ["```{note}",
-                  "Every notebook here is **legacy**: it runs the previous NumPy / AMReX "
-                  "drivers, not the symbolic solvers.  For the current path start with "
-                  "the [quick start](../guide/quickstart.md).",
-                  "```", ""]
-    chips = ['<div class="zt-filter">']
-    for cat, values in TAGS.items():
-        vals = [v for v in values if f"{cat}:{v}" in used]
-        if not vals:
-            continue
-        chips.append(f'<div class="zt-group"><span class="zt-cat">{cat}</span>')
-        for v in vals:
-            n = sum(f"{cat}:{v}" in m["tags"] for _, m in cards)
-            chips.append(f'<button type="button" class="zt-chip" data-tag="{cat}:{v}">'
-                         f'{v} <span class="zt-n">{n}</span></button>')
-        chips.append("</div>")
-    chips += ['<button type="button" class="zt-clear">clear</button>', "</div>"]
-    lines += chips + ["", "::::{grid} 1 2 2 2", ":gutter: 3", ""]
-    for rel, m in cards:
-        target, kind = link(rel)
-        tags = " ".join(m["tags"])
-        legacy = m.get("status") == "legacy"
-        lines += [f":::{{grid-item-card}} {m['title']}",
-                  ":class-card: zt-card" + (" zt-legacy" if legacy else "")]
-        if target:
-            lines += [f":link: {target}", f":link-type: {kind}"]
-        lines += ["",
-                  f'<span class="zt-data" data-tags="{html.escape(tags)}"></span>{m["summary"]}',
+    lines += _filter_html(notebooks) + [""]
+    if notebooks:
+        lines += ["::::{grid} 1 2 2 2", ":gutter: 3", ""]
+    for nb in notebooks:
+        target, kind = link(nb.rel)
+        shown = [t for t in nb.tags if t.split(":", 1)[0] in FILTERS or t != "requires:cpu"]
+        lines += [f":::{{grid-item-card}} {nb.title}",
+                  ":class-card: zt-card",
+                  f":link: {target}", f":link-type: {kind}", "",
+                  f'<span class="zt-data" data-tags="{html.escape(" ".join(nb.tags))}"></span>'
+                  f"{nb.summary}",
                   "",
-                  f"`tutorials/{rel}`" + (" · **legacy**" if legacy else ""),
+                  f"`tutorials/{nb.rel}`",
                   "+++",
-                  " ".join(f'<span class="zt-tag">{html.escape(t)}</span>' for t in m["tags"]),
+                  " ".join(f'<span class="zt-tag">{html.escape(t)}</span>' for t in shown),
                   ":::", ""]
-    lines += ["::::", "",
-              '<p class="zt-empty" hidden>No notebook has every selected tag.</p>', "",
+    if notebooks:
+        lines += ["::::", ""]
+    else:
+        lines += ["*No notebooks are published yet.*", ""]
+    lines += ['<p class="zt-empty" hidden>No notebook carries every selected tag.</p>', "",
               "## Adding a notebook", "",
-              "Put the notebook under `tutorials/`, add `metadata.zoomy` "
-              "(`title`, `summary`, `tags`, optional `\"status\": \"legacy\"`) and run "
-              "`python docs/scripts/generate_tutorial_index.py`.  Tag categories:", ""]
-    lines += [f"- `{cat}:` " + " / ".join(values) for cat, values in TAGS.items()]
-    lines += ["", "To publish the rendered notebook in the book, add it to `PUBLISHED_TUTORIALS` "
-              "in `docs/scripts/generate_ci_test_report.py` and to `_toc.yml`."]
-    return "\n".join(lines) + "\n"
+              "Put the notebook under `tutorials/` and give it this notebook metadata, then run "
+              "`python docs/scripts/generate_tutorial_index.py` (CI does):", "",
+              "```json",
+              '"zoomy": {"title": "...", "summary": "<one line>", '
+              '"tags": ["type:tutorial", "dimension:1d", "physics:viscous"]}',
+              "```", "",
+              "Tags are `category:value`; an unknown tag or a missing `type` fails the build.  "
+              "A notebook may carry several values of one category (except `type`).", ""]
+    for cat, values in FILTERS.items():
+        lines.append(f"- `{cat}:` " + " / ".join(values) + (" (required)" if cat in REQUIRED else ""))
+    lines += ["",
+              "`requires:` " + " / ".join(HARNESS["requires"]) + " is no filter.  It tells the "
+              "test harness what the notebook needs (default `requires:cpu`): "
+              "`pytest tests/tutorials -m tutorial` executes every notebook that needs only "
+              "the CPU and reports the others as skipped.", ""]
+    return "\n".join(lines)
 
 
 def main():
-    cards = load()
+    notebooks = load()
+    mirror(notebooks)
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(render(cards))
-    print(f"wrote {OUT} ({len(cards)} notebooks)")
+    OUT.write_text(render(notebooks))
+    print(f"wrote {OUT.relative_to(ROOT)} ({len(notebooks)} notebooks)")
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

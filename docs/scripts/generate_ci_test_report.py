@@ -37,8 +37,6 @@ SUMMARY_FILE = OUT_DIR / "test_report_summary.md"
 EMBEDS_FILE = OUT_DIR / "test_report_embeds.md"
 BOOK_STATIC = ROOT / "docs" / "book" / "_static"
 REPORTS_ROOT = ROOT / "artifacts" / "test-reports"
-TUTORIALS_SRC = ROOT / "tutorials"
-TUTORIALS_MIRROR = ROOT / "docs" / "book" / "tutorials" / "ipynb"
 
 TIERS: tuple[tuple[str, str], ...] = (
     ("small", "Small (every push)"),
@@ -62,9 +60,8 @@ GROUPS: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
         ("prepost", "zoomy_prepost"),
         ("server", "zoomy_server"),
     )),
-    ("notebooks", "Notebooks — published tutorials, executed", (
+    ("notebooks", "Notebooks — tutorials and use cases, executed (CPU)", (
         ("core", "Core notebooks"),
-        ("amrex", "AMReX notebooks"),
     )),
 )
 
@@ -193,35 +190,7 @@ def _write_embeds() -> None:
     EMBEDS_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-# --------------------------------------------------------------------------- #
-# Tutorial notebook mirror (published set → book tree)
-# --------------------------------------------------------------------------- #
-# Keep in sync with tests/notebooks/test_tutorials.py::PUBLISHED — the same set
-# is executed there (Notebooks report section) and mirrored onto the site.
-PUBLISHED_TUTORIALS: tuple[str, ...] = (
-    "swe/simple_numpy.ipynb",
-    "sme/moments_2d.ipynb",
-    "amrex/minimal.ipynb",
-)
-
-
-def _sync_tutorial_notebooks() -> None:
-    if not TUTORIALS_SRC.is_dir():
-        return
-    if TUTORIALS_MIRROR.exists():
-        shutil.rmtree(TUTORIALS_MIRROR)
-    for rel in PUBLISHED_TUTORIALS:
-        src = TUTORIALS_SRC / rel
-        if not src.is_file():
-            print(f"  WARNING: published tutorial missing: {src}")
-            continue
-        dest = TUTORIALS_MIRROR / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dest)
-
-
 def main() -> int:
-    _sync_tutorial_notebooks()
     _write_embeds()      # also copies/stubs every _static report
     _write_summary()
     return 0

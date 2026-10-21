@@ -17,18 +17,25 @@ commit message maps by prefix:
 
     tutorials/sme/simple.ipynb  ->  tutorials_unpublished/sme/simple.ipynb
 
+## `legacy/`
+
+`legacy/{swe,sme,amrex}/` hold the three notebooks the tutorials page used to
+publish (`swe/simple_numpy`, `sme/moments_2d`, `amrex/minimal`), moved out
+2026-10-21 so that the page starts clean for the new set.  They import the
+symbolic solvers (`zoomy_core.symsolver`); `swe` and `sme` executed on that
+day, `amrex` needs the AMReX container.  Restore one with `git mv` back to
+`tutorials/<area>/`, plus the metadata below.
+
 ## Reviving one
 
 The bar is the same as for any published notebook:
 
 1. It executes top to bottom with no errors, on `zoomy_core` alone where
-   possible — no external binary, no data submodule, no machine-specific path.
+   possible (otherwise tag `requires:` accordingly) — no external binary, no
+   data submodule, no machine-specific path.
 2. It asserts something real (a conservation law, a convergence rate, an
    analytical solution), not just "it ran".
-3. Add it to **both** `PUBLISHED_TUTORIALS` in
-   `docs/scripts/generate_ci_test_report.py` and
-   `tests/notebooks/smoke_notebooks.txt` — these two lists must agree, and the
-   second is what CI executes weekly.
-4. Add it to `docs/book/_toc.yml`.
-
-See `tutorials/sme/moments_2d.ipynb` for the current house style.
+3. Move it to `tutorials/` and give it `metadata.zoomy` (`title`, `summary`,
+   `tags` with exactly one `type:`; see the vocabulary on the tutorials page
+   or `docs/scripts/generate_tutorial_index.py`).  Nothing else: the index,
+   the card, the book page and the test (`tests/tutorials`) follow from it.

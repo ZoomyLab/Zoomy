@@ -28,9 +28,16 @@ bibtex_bibfiles:
   - references/literature.bib
 
 # Docstrings are Markdown: `:param x:` field lists in them are MyST fieldlists.
-# (JB appends these to its default MyST extensions.)
+# Jupyter Book 1 REPLACES its default extension list with this one (it does not append),
+# so the defaults are listed again: `colon_fence` is what the `:::{grid}` card pages
+# (home, tutorials) are written in; without it they render as literal text.
 parse:
   myst_enable_extensions:
+    - colon_fence
+    - dollarmath
+    - linkify
+    - substitution
+    - tasklist
     - fieldlist
 
 sphinx:
