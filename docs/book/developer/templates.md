@@ -23,45 +23,8 @@ reconstruction, time steps) are in `zoomy_core/symsolver/discretization/`.
 
 `PyPrinter` emits Python for JAX, `CxxPrinter` C++ for foam and AMReX
 (`zoomy_core/symsolver/backend_cxx.py` prints the host program `Solver.H`
-both C++ runtimes compile).  `docs/book/examples/print_template.py` prints
-the first-order C1 march both ways:
-
-```{literalinclude} ../examples/print_template.py
-:language: python
-```
-
-```text
-Python: 24 lines; C++: 61 lines
-
-def hyperbolic(Q, Qaux, p, time, time_end, mesh, tok):
-    def f1(time_2, Q_2, Qaux_2, n_write, tok_2):
-        return (time_2 < time_end)
-    x2 = face_inradius(mesh)
-    def f3(time_3, Q_3, Qaux_3, n_write_2, tok_3):
-        WL, WR = cell_traces(Q_3, mesh)
-        QR = boundary_traces(nsm.boundary_conditions, Q_3, WL, WR, Qaux_3, p, time_3, mesh)
-        AL, AR = face_aux(Qaux_3, mesh)
-        Wm, Wp, S = faces(nsm.numerical_face_sides_speed, WL, QR, AL, AR, p, mesh)
-        dt = reduce_min(0.9*x2/S)
-        x14 = minimum(dt, 5.0)
-        dt_2 = minimum(x14, -time_3 + time_end)
-        time_4 = time_3 + dt_2
-        x15 = divergence(Wm, Wp, mesh)
-...
-
-    auto x2 = face_inradius(mesh);
-    auto f3 = [&](auto time_3, auto Q_3, auto Qaux_3, auto n_write_2, auto tok_3) {
-        auto x4 = cell_traces(Q_3, mesh);
-        auto WL = std::get<0>(x4);
-        auto WR = std::get<1>(x4);
-        auto QR = boundary_traces(nsm.boundary_conditions, Q_3, WL, WR, Qaux_3, p, time_3, mesh);
-        auto x5 = face_aux(Qaux_3, mesh);
-        auto AL = std::get<0>(x5);
-        auto AR = std::get<1>(x5);
-        auto x6 = faces<3>(nsm.numerical_face_sides_speed, WL, QR, AL, AR, p, mesh);
-        auto Wm = std::get<0>(x6);
-        auto Wp = std::get<1>(x6);
-```
+both C++ runtimes compile).  [Code printer: AMReX](../tutorials/ipynb/components/printer_amrex.ipynb)
+prints a template as C++ and reads it.
 
 The schemes therefore cannot drift apart between backends: a change to a
 template changes every backend; a backend only decides how a block is

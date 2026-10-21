@@ -55,42 +55,16 @@ NumPy adds:
 
 Shallow water is `SME(level=0)`: the level-0 member of the shallow-moment hierarchy, derived by
 the same operators as every other level, with no hand-written system anywhere.  A 1-D case
-runs the `dimension=2` model on a 1-D mesh; the state is then `[b, h, q_0]`.  The case is
-`docs/book/examples/dambreak.py`, shared by the backend pages:
-
-```{literalinclude} ../examples/dambreak.py
-:language: python
-```
-
-Run it from [`docs/book/examples/`](https://github.com/ZoomyLab/Zoomy/tree/main/docs/book/examples):
-
-```{literalinclude} ../examples/numpy_dambreak.py
-:language: python
-```
-
-```text
-t = 0.500, cells = 300, h in [1.00000, 2.00000], mass = 15.000000
-```
-
-About 5 s.  At $t = 0.5$ the waves have not reached the open ends, so the extremes are the
-initial depths and the mass is that of the initial state, $2\cdot5 + 1\cdot5$.
+runs the `dimension=2` model on a 1-D mesh; the state is then `[b, h, q_0]`.  The notebooks [Shallow water in 1-D](../tutorials/ipynb/swe/simple_numpy.ipynb) and
+[End to end: 1-D dam break](../tutorials/ipynb/components/end_to_end.ipynb) run it.
 
 ## Chorin projection: `VAM`
 
 `SymbolicChorinSolverNumpy` takes the three systems of the model's pressure split: the predictor
 NSM on the full state (`predictor_nsm` pads it and builds the numerics of the predictor), the
 pressure system and the corrector.  The VAM(1) channel of
-[Solvers and options](../guide/solvers.md) (matrix case C8), on NumPy:
-
-```{literalinclude} ../examples/chorin_vam_numpy.py
-:language: python
-```
-
-```text
-t = 0.007812, cells = 360, h in [0.01500, 0.34276]
-```
-
-About 15 s; the JAX solver of `chorin_vam.py` prints the same extremes.
+[Solvers and options](../guide/solvers.md) (matrix case C8), on NumPy and JAX:
+[Chorin projection: a VAM channel](../tutorials/ipynb/vam/chorin_channel.ipynb).
 
 ## Authoring checklist: what the solver expects
 

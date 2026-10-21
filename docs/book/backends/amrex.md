@@ -46,20 +46,8 @@ the run).  Inside the AMReX image the driver builds and runs natively.
 
 ## End-to-end example: shallow water dam break
 
-The case is `docs/book/examples/dambreak.py` of the [NumPy page](numpy.md).  From
-`docs/book/examples/`:
-
-```{literalinclude} ../examples/amrex_dambreak.py
-:language: python
-```
-
-```text
-t = 0.500, cells = 300, h in [1.00000, 2.00000]
-max |h_amrex - h_numpy| = 6.11e-10
-```
-
-The first run compiles AMReX itself (about a minute); later runs reuse the build.  The
-difference to NumPy is that of the two runtimes' round-off through the second-order limiter.
+[AMReX: from symbolic model to generated C++](../tutorials/ipynb/amrex/minimal.ipynb) builds and runs
+a 1-D dam break.
 
 ## Adaptive mesh refinement
 
@@ -70,14 +58,7 @@ its cell counts must be divisible by `blocking_factor`.  `Q` comes back on level
 averaged down); the states of every level are in `solver.levels` and `solver.log` has the cells per
 level.  Restarts and checkpoints are not available with AMR or preCICE.
 
-```{literalinclude} ../examples/amrex_amr.py
-:language: python
-```
-
-```text
-t = 0.500, h in [1.00000, 2.00000], mass = 15.000000
-cells per level at the end: [128, 24]
-```
+[AMReX: adaptive mesh refinement](../tutorials/ipynb/amrex/amr.ipynb) runs a dam break with one level.
 
 ## Authoring checklist
 

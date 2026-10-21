@@ -24,20 +24,7 @@ Only the runtime differs between NumPy and JAX; the arithmetic is the template's
 ## Running
 
 `import zoomy_jax` switches JAX to double precision (`ZOOMY_JAX_ENABLE_X64=0` keeps float32).
-The dam break of the [NumPy page](numpy.md), on JAX and on NumPy, from one NSM:
-
-```{literalinclude} ../examples/jax_dambreak.py
-:language: python
-```
-
-```text
-t = 0.500, cells = 300, h in [1.00000, 2.00000]
-max |h_jax - h_numpy| = 2.9e-10
-```
-
-The scripts are in `docs/book/examples/`; run them from there.  The
-2-D case of the [Quick start](../guide/quickstart.md) runs the same way
-(`SymbolicHyperbolicSolverJax(time_end=2.5, cfl=0.9)`).
+One NSM on JAX and on NumPy: [Quick start: a 2-D bump on NumPy and JAX](../tutorials/ipynb/swe/bump_2d.ipynb).
 
 ## Settings
 
@@ -77,19 +64,11 @@ needs equinox: `pip install "zoomy-jax[ad]"`.  The mode is read once, at `setup`
 `run(Q, Qaux, parameters=p, time0=t0)` takes the parameter vector and the start time as traced
 arguments; `initial_aux(Q, Qaux, p)` rebuilds the aux state of `Q` inside the differentiated
 path, so a derivative with respect to the initial state includes `dQaux0/dQ0`.  The example
-differentiates $J = \sum_i h_i^2 |V_i|$ at $t = 0.2$ with respect to Manning's $n$, forward,
-reverse and by central differences:
+differentiates a scalar of the final state with respect to Manning's $n$, forward, reverse and by
+central differences: [Forward-mode AD](../tutorials/ipynb/ad/forward_ad.ipynb) and
+[Reverse-mode AD](../tutorials/ipynb/ad/reverse_ad.ipynb).
 
-```{literalinclude} ../examples/jax_ad.py
-:language: python
-```
-
-```text
-parameters ['g', 'rho', 'nu', 'lambda_s', 'e_x', 'n']
-dJ/dn: forward 2.29098896e-03, reverse 2.29098896e-03, central difference 2.29098873e-03
-```
-
-About 1 minute on 8 CPU cores, most of it compiling the two loops.  A constant `dt` freezes the
+A constant `dt` freezes the
 time grid; with `cfl` the derivative also contains $\partial\,\mathrm{d}t/\partial(\text{input})$.
 Limiters that switch branches (`minmod`) make the discrete map piecewise smooth: AD returns the
 derivative of the active branch and finite differences can cross branches, so use
@@ -104,18 +83,8 @@ derivative of the active branch and finite differences can cross branches, so us
 model's pressure split (`predictor_nsm` builds the predictor's numerics); the pressure solve
 options (`pressure_solve`, `projection`, `pressure_linear_solver`, `pressure_tol`) are in
 [Solvers and options](../guide/solvers.md).  The VAM(1) channel (matrix case C8):
-
-```{literalinclude} ../examples/chorin_vam.py
-:language: python
-```
-
-```text
-state ['b', 'h', 'q_x_0', 'q_x_1', 'q_y_0', 'q_y_1', 'r_0', 'r_1', 'P_0', 'P_1']
-t = 0.007812, cells = 360, h in [0.01500, 0.34276]
-```
-
-About 70 s on 8 CPU cores.  The step is differentiable like the hyperbolic one
-(`ad_mode=AdMode.reverse`).
+[Chorin projection: a VAM channel](../tutorials/ipynb/vam/chorin_channel.ipynb).  The step is
+differentiable like the hyperbolic one (`ad_mode=AdMode.reverse`).
 
 ## preCICE
 

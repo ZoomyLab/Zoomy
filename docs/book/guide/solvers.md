@@ -122,14 +122,9 @@ Not with preCICE coupling or AMReX AMR (`NotImplementedError`).
 | `pressure_linear_solver` (NumPy, JAX) | `LinearSolver.auto` | `pyamg` on CPU, `amgx` on GPU (JAX) when installed, else matrix-free `gmres` |
 | `linear_solver` (foam, AMReX) | `LinearSolver.hypre` | hypre FlexGMRES + BoomerAMG on the operator assembled by colouring and scaled by its inverse cell blocks; foam `schur_gamg` (GMRES, OpenFOAM's GAMG on the Schur complement) or `gmres`; AMReX `gmres` |
 
-`docs/book/examples/chorin_vam.py` runs VAM(1) in a channel (matrix case C8):
-the model's `chorin_split`, the predictor's numerics, 8 steps of
-`dt` $= 2^{-10}$:
-
-```text
-state ['b', 'h', 'q_x_0', 'q_x_1', 'q_y_0', 'q_y_1', 'r_0', 'r_1', 'P_0', 'P_1']
-t = 0.007812, cells = 360, h in [0.01500, 0.34276]
-```
+[Chorin projection: a VAM channel](../tutorials/ipynb/vam/chorin_channel.ipynb) runs VAM(1) in a
+channel (matrix case C8): the model's `chorin_split`, the predictor's numerics, 8 steps of
+`dt` $= 2^{-10}$.
 
 ## JAX only
 

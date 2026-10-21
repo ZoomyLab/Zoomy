@@ -11,7 +11,7 @@ BCs                (flux, source, ...)     Riemann solver, kernels  per time ste
 
 | page | what you choose there |
 |---|---|
-| [Quick start](quickstart.md) | one case, run on JAX, foam and AMReX |
+| [Quick start](quickstart.md) | one case, run on NumPy and JAX |
 | [Model](model.md) | model family, closures, boundary conditions |
 | [SystemModel](system-model.md) | nothing, usually: it is derived; inspect it, set initial conditions |
 | [NumericalSystemModel](numerical-system-model.md) | reconstruction order and limiter, Riemann solver |

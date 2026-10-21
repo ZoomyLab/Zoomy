@@ -25,22 +25,7 @@ initial conditions.  The solvers read the slots; they never inspect the model.
 Spatial derivatives the operators need are registered as aux variables
 (`dhdx`, ...) and filled by the solver with least-squares gradients.
 
-The C1 bump of the [quick start](quickstart.md), inspected
-(`docs/book/examples/inspect_bump.py`):
-
-```text
-state       ['b', 'h', 'q_x_0', 'q_y_0']
-aux_state   ['dq_x0dx', 'dhdx', 'dq_y0dy', 'dhdy', 'dbdx', 'dbdy', 'hinv']
-parameters  {'g': 9.81, 'rho': 1.0, 'nu': 0.0, 'lambda_s': 0.0, 'e_x': 0.0, 'n': 0.0}
-flux                       shape (4, 2), nonzero 4
-hydrostatic_pressure       shape (4, 2), nonzero 4
-nonconservative_matrix     shape (4, 4, 2), nonzero 4
-source                     shape (4, 1), nonzero 4
-source_explicit            None
-diffusion_matrix           None
-diffusion_matrix_explicit  None
-eigenvalues                None
-```
+The slots of a model are printed by `sm.describe()`: [Model and SystemModel](../tutorials/ipynb/components/model_system_model.ipynb).
 
 | you set | how |
 |---|---|

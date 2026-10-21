@@ -1,0 +1,14 @@
+/* Download button (sphinx-book-theme): shown on notebook pages only, as a visible
+ * ".ipynb" button instead of the icon dropdown with its PDF entry. */
+.dropdown-download-buttons:not(:has(a[href$=".ipynb"])) { display: none; }
+.dropdown-download-buttons:has(a[href$=".ipynb"]) > .dropdown-toggle { display: none; }
+.dropdown-download-buttons:has(a[href$=".ipynb"]) > .dropdown-menu {
+  display: block; position: static; transform: none; min-width: 0; margin: 0; padding: 0;
+  border: 0; background: transparent; box-shadow: none;
+}
+.dropdown-download-buttons li:has(.btn-download-pdf-button) { display: none !important; }
+.dropdown-download-buttons .btn-download-source-button {
+  display: inline-flex; align-items: center; gap: .4rem; padding: .25rem .7rem;
+  border: 1px solid var(--pst-color-border, #ccc); border-radius: .3rem; white-space: nowrap;
+}
+.dropdown-download-buttons .btn-download-source-button .btn__text-container::before { content: "Download "; }

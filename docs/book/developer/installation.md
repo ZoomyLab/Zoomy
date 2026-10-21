@@ -66,12 +66,6 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e library/zoomy_core -e library/zoomy_plotting
 ```
 
-The scripts of the book (`docs/book/examples/`) run against the libraries of the checkout after
-
-```bash
-source docs/book/examples/env.sh      # PYTHONPATH of the checkout, CPU JAX, double precision
-```
-
 Environment variables:
 
 ```bash

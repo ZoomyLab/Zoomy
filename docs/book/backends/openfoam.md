@@ -68,20 +68,8 @@ Environment: `ZOOMY_OF_SIF` (the image, default `~/of_build/zoomy_openfoam.sif`)
 
 ## End-to-end example: shallow water dam break
 
-The case is `docs/book/examples/dambreak.py` of the [NumPy page](numpy.md).  From
-`docs/book/examples/`:
-
-```{literalinclude} ../examples/foam_dambreak.py
-:language: python
-```
-
-```text
-t = 0.500, cells = 300, h in [1.00000, 2.00000]
-max |h_foam - h_numpy| = 1.73e-09
-```
-
-The first run builds `symFoam` (cached afterwards).  The 2-D case of the
-[Quick start](../guide/quickstart.md) runs on foam the same way.
+[OpenFOAM: the same model, printed as C++](../tutorials/ipynb/foam/minimal.ipynb) builds and runs a
+1-D dam break and compares it with NumPy.
 
 ## preCICE coupling
 
