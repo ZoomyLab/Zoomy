@@ -12,7 +12,7 @@ Switching backend is a change of solver import, not a change of model.
 | JAX | `zoomy_jax.symsolver.solver` | `SymbolicHyperbolicSolverJax`, `SymbolicChorinSolverJax` | the Python process; CPU, GPU, MPI | [JAX](jax.md) |
 | AMReX | `zoomy_amrex.symsolver` | `SymbolicHyperbolicSolverAmrex`, `SymbolicChorinSolverAmrex` | apptainer image; block-structured AMR | [AMReX](amrex.md) |
 | OpenFOAM | `zoomy_foam.symsolver` | `SymbolicHyperbolicSolverFoam`, `SymbolicChorinSolverFoam` | apptainer image; unstructured meshes, preCICE | [OpenFOAM](openfoam.md) |
-| Firedrake | `zoomy_firedrake` | `FiredrakeHyperbolicSolver` | Firedrake install; finite element | |
+| Firedrake | `zoomy_firedrake` | `FiredrakeHyperbolicSolver` | Firedrake install; finite element | [Firedrake](firedrake.md) |
 
 A hyperbolic solver (`SymbolicHyperbolic...`) marches balance laws; a Chorin solver
 (`SymbolicChorin...`) adds the pressure projection of a pressure-split model (`VAM`).
@@ -28,7 +28,8 @@ printer, so they cannot drift apart.
 
 ```{note}
 **PETSc/DMPlex** and **FEniCSx** are early prototypes: the packages are
-skeletons with no test coverage and only placeholder CI containers.
+skeletons with no test coverage and only placeholder CI containers, so their
+pages sit under *Work in progress*. Do not plan work against them yet.
 Firedrake has its own driver and does not print the symbolic templates.
 ```
 
