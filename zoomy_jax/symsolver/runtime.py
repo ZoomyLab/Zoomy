@@ -113,6 +113,8 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
     Returns:
         dict name -> callable
     """
+    if ad_mode == "reverse" and on_write is not None:
+        raise ValueError("ad_mode=AdMode.reverse: on_write is not called (forward mode only)")
     sm = rt.sm
     check_derivative_aux([nsm, *(sub for sub, _ in (systems or {}).values())],
                          ("state", "function"), "jax")
@@ -1090,7 +1092,7 @@ def runtime(nsm, rt, mesh_np, mesh_j, topo, *, ad_mode=AdMode.forward, checkpoin
 
     def io_write(tok, time, Q, Qaux):
         """Forward mode: write a snapshot through `on_write`; returns the next order token."""
-        if on_write is not None and ad_mode == "forward":
+        if on_write is not None:
             jax.debug.callback(on_write, time, Q, Qaux, ordered=True)
         return (tok + 1,)
 

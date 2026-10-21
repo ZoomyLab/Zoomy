@@ -78,6 +78,19 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
             from zoomy_jax.symsolver.parallel import bind_device
             bind_device(self.comm)
 
+    def _check_ad_options(self):
+        """`AdMode.reverse` runs a checkpointed loop without host callbacks: `on_write` and the
+        HDF5 `output` would be skipped silently, so the combination is refused.
+        """
+        if self.ad_mode != AdMode.reverse:
+            return
+        set_ = [n for n, v in (("on_write", self.on_write), ("output", self.output)) if v]
+        if set_:
+            raise ValueError(
+                f"ad_mode=AdMode.reverse writes no snapshots, but {' and '.join(set_)} is set: "
+                "on_write and output work in forward mode only.  Unset them for the "
+                "differentiated run, or use AdMode.forward.")
+
     def setup(self, mesh, model):
         """Lift `model` to an NSM if needed, then build the solver on `mesh`.
 
@@ -88,6 +101,7 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
             initial `(Q, Qaux)` (distributed: the local piece)
         """
         self._bind()
+        self._check_ad_options()
         nsm = (model if isinstance(model, NumericalSystemModel)
                else NumericalSystemModel.from_system_model(model))
         return self._setup(mesh, nsm)
@@ -143,6 +157,7 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         self.mood_active = bool(self.mood and order >= 2
                                 and nsm.call.admissible is not None)
         on_save, on_load = self._restart()
+        self._built_ad_mode = self.ad_mode            # the program is built for this mode only
         self.interface = self._interface(nsm)
         couple = (self.couple if self.interface is None
                   else dict(self.couple, interface=self.interface))
@@ -330,6 +345,11 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         returns `(time, Q, Qaux)`.  `parameters` and the vertex coordinates `X`
         `(dim, n_vertices)` may be traced for AD.
         """
+        if self.ad_mode != self._built_ad_mode:
+            raise ValueError(
+                f"ad_mode is {self.ad_mode} but setup built the program for "
+                f"{self._built_ad_mode}: ad_mode is read once, at setup.  Set ad_mode before "
+                "setup (a new solver, or assign it and call setup again).")
         p = self.parameters if parameters is None else parameters
         time0 = self.time_start if time0 is None else time0
         tok = jnp.int64(0)
@@ -401,6 +421,7 @@ class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):
         settings, then `_setup`; returns the initial `(Q, Qaux)`.
         """
         self._bind()
+        self._check_ad_options()
         if self.couple and self.couple.get("overlap") is None:
             raise ValueError("Chorin with preCICE coupling: couple=dict(adapter=, tag=, "
                              "overlap=layers), the mesh reaching `layers` cell rings across "
