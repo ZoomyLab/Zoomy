@@ -31,6 +31,7 @@ dependencies = [
   # JAX ecosystem (CPU build; the GPU build is the optional extra `cuda`)
   "jax>=0.7.0",
   "h5py",                    # HDF5 output / mesh input (fvm/solver_jax.py, misc/io.py)
+  "equinox>=0.13",           # reverse-mode AD: checkpointed time loop (ad_mode=AdMode.reverse)
 
   # the pure-Python core: models, symbolic derivation, mesh, NumPy solvers
   "zoomy-core>=0.2.17",
@@ -40,17 +41,14 @@ dependencies = [
 # Example: pip install "zoomy-jax[cuda]"
 cuda = ["jax[cuda12]>=0.7.0"]
 server = ["zoomy-server"]
-# Reverse-mode AD through the adaptive time loop (HyperbolicSolver
-# ad_mode="reverse" uses equinox.internal.while_loop(kind="checkpointed")).
-ad = ["equinox>=0.13"]
 # Learned multigrid / GNN preconditioner experiments (zoomy_jax.gnn_blueprint).
 gnn = ["equinox>=0.13", "optax", "jraph"]
 
 [project.urls]
-Homepage = "https://github.com/mbd-rwth/Zoomy"
-Documentation = "https://mbd-rwth.github.io/Zoomy"
-Source = "https://github.com/mbd-rwth/Zoomy"
-Issues = "https://github.com/mbd-rwth/Zoomy/issues"
+Homepage = "https://github.com/ZoomyLab/Zoomy"
+Documentation = "https://zoomylab.github.io/Zoomy"
+Source = "https://github.com/ZoomyLab/Zoomy"
+Issues = "https://github.com/ZoomyLab/Zoomy/issues"
 
 
 [tool.setuptools.packages.find]

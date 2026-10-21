@@ -443,7 +443,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
             "``jax.grad`` / ``jax.vjp``; the loop keeps ``ad_checkpoints`` "
             "copies of the loop state and recomputes the steps between them "
             "on the backward pass.  Reverse-only: ``jvp`` through this loop is "
-            "not supported.  Needs the ``ad`` extra (equinox).")
+            "not supported.  Needs equinox.")
     ad_checkpoints = param.Integer(default=64, bounds=(1, None),
         doc="Number of loop-state checkpoints kept by the reverse-mode "
             "(``ad_mode='reverse'``) time loop.  Memory is "
@@ -2121,8 +2121,7 @@ class HyperbolicSolver(HyperbolicSolverNumpy):
                 raise ImportError(
                     "ad_mode='reverse' needs equinox (its checkpointed "
                     "while_loop makes the adaptive time loop reverse-"
-                    "differentiable).  Install the 'ad' extra: "
-                    "pip install 'zoomy_jax[ad]'.") from exc
+                    "differentiable).  pip install equinox.") from exc
 
             def _while_loop(cond, body, init):
                 return eqxi.while_loop(cond, body, init, kind="checkpointed",
