@@ -19,10 +19,9 @@ JAX:
 
 ```bash
 pip install zoomy-jax
-curl -LO \
-  https://raw.githubusercontent.com/ZoomyLab/Zoomy/main/tutorials/swe/bump_2d.ipynb
-jupyter lab bump_2d.ipynb
 ```
+
+First JAX notebook: {doc}`2-D bump, NumPy and JAX <tutorials/ipynb/swe/bump_2d>`.
 
 JAX on an NVIDIA GPU:
 
