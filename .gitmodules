@@ -1,7 +1,3 @@
-[submodule "library/zoomy_core"]
-	path = library/zoomy_core
-	url = https://github.com/ZoomyLab/zoomy-core.git
-	branch = main
 [submodule "library/zoomy_amrex"]
 	path = library/zoomy_amrex
 	url = https://github.com/ZoomyLab/zoomy-amrex.git
@@ -13,10 +9,6 @@
 [submodule "library/zoomy_firedrake"]
 	path = library/zoomy_firedrake
 	url = https://github.com/ZoomyLab/zoomy-firedrake.git
-	branch = main
-[submodule "library/zoomy_jax"]
-	path = library/zoomy_jax
-	url = https://github.com/ZoomyLab/zoomy-jax.git
 	branch = main
 [submodule "library/zoomy_foam"]
 	path = library/zoomy_foam
