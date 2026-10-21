@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "zoomy_jax"
+name = "zoomy-jax"
 version = "0.1.0"
 description = "JAX solver backend for the Zoomy simulation framework."
 readme = "README.md"
@@ -16,34 +16,49 @@ authors = [
 keywords = ["jax", "simulation", "zoomy", "shallow flow", "physics", "autodiff"]
 
 classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
   "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
   "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Physics",
 ]
 
 
 dependencies = [
-  # JAX ecosystem
+  # JAX ecosystem (CPU build; the GPU build is the optional extra `cuda`)
   "jax>=0.7.0",
+  "h5py",                    # HDF5 output / mesh input (fvm/solver_jax.py, misc/io.py)
 
-  # depends on zoomy_core (local or PyPI)
-  "zoomy_core>=0.1.14",
+  # the pure-Python core: models, symbolic derivation, mesh, NumPy solvers
+  "zoomy-core>=0.2.17",
 ]
 
 [project.optional-dependencies]
+# Example: pip install "zoomy-jax[cuda]"
+cuda = ["jax[cuda12]>=0.7.0"]
 server = ["zoomy-server"]
 # Reverse-mode AD through the adaptive time loop (HyperbolicSolver
 # ad_mode="reverse" uses equinox.internal.while_loop(kind="checkpointed")).
 ad = ["equinox>=0.13"]
+# Learned multigrid / GNN preconditioner experiments (zoomy_jax.gnn_blueprint).
+gnn = ["equinox>=0.13", "optax", "jraph"]
 
 [project.urls]
 Homepage = "https://github.com/mbd-rwth/Zoomy"
+Documentation = "https://mbd-rwth.github.io/Zoomy"
 Source = "https://github.com/mbd-rwth/Zoomy"
 Issues = "https://github.com/mbd-rwth/Zoomy/issues"
 
 
 [tool.setuptools.packages.find]
 include = ["zoomy_jax*"]
+
+[tool.setuptools.package-data]
+zoomy_jax = ["LICENSE", "README.md"]
+"zoomy_jax.gnn_blueprint" = ["*.sh", "README.md"]
 
 # Standalone runs (rootdir = zoomy_jax, where the superrepo pytest.ini and
 # root conftest are invisible).  Marker names follow the SUPERREPO
