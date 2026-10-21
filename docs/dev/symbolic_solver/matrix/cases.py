@@ -144,6 +144,33 @@ def lake_swe(order, riemann, nx=24):
     return LSQMesh.create_2d(domain=(0, 10, 0, 10), nx=nx, ny=nx), nsm
 
 
+#: C5 on plain SWE (closed-form eigenvalues): the radial dam break onto an exactly dry bed with
+#: the hydrostatic-reconstruction HLL fluxes (ANALYSIS 64: a dry-dry face's speed was -0 on
+#: NumPy / foam, a CFL step of -inf, t = NaN)
+DRY_SWE = ("PositiveHLL", "PositiveNonconservativeHLL")
+
+
+def dry_swe(order, riemann, nx=48):
+    """C5's radial dry dam break (h 2 for r < 0.15 about (0.5, 0.5), 0 outside, b = 0, walls)
+    on the hand-written ``SWE``, ``riemann`` by name; order 2: minmod (+ MOOD in the run)."""
+    import zoomy_core.numerics as N
+    from zoomy_core.model.models.swe import SWE
+    tags = ("left", "right", "bottom", "top")
+    sm = SystemModel.from_model(SWE(dimension=2, boundary_conditions=BC.BoundaryConditions(
+        [BC.FromModel(tag=t, definition="wall") for t in tags])))
+    names = [str(s) for s in sm.state]
+
+    def ic(x):
+        q = np.zeros(len(names))
+        q[names.index("h")] = 2.0 if np.hypot(x[0] - 0.5, x[1] - 0.5) < 0.15 else 0.0
+        return q
+    sm.initial_conditions = IC.UserFunction(function=ic)
+    nsm = NumericalSystemModel.from_system_model(
+        sm, riemann=getattr(N, riemann),
+        reconstruction=ReconstructionSpec(order=order, limiter=Limiter.minmod))
+    return LSQMesh.create_2d(domain=(0, 1, 0, 1), nx=nx, ny=nx), nsm
+
+
 # ── C4: quasi-1-D channel over a bump, steady Bernoulli flow ───────────────
 G = 9.81
 CHANNEL = dict(sub=dict(q=4.42, h_out=2.0, t_end=3.0),      # subcritical
@@ -938,9 +965,12 @@ CASES = {
                   backends=("jax",), perturb=PERTURB)
               for v in CHANNEL for o in (1, 2) for n in C4_N]),
     "C5": ("radial dry dam break, O2 eta + MOOD; with the front detector (front_tol): the dam "
-           "break and Thacker's paraboloid bowl, Venkatakrishnan",
+           "break and Thacker's paraboloid bowl, Venkatakrishnan; plain SWE with PositiveHLL / "
+           "PositiveNonconservativeHLL, O1 / O2 + MOOD",
            [Run("n48", partial(C.dry_dambreak_2d, nx=48), 0.02, cfl=0.45, mood=True,
-                configs=ALL5)] + _c5_front()),
+                configs=ALL5)] + _c5_front()
+           + [Run(f"swe_{f}_o{o}", partial(dry_swe, o, f), 0.02, cfl=0.45, mood=o == 2,
+                  backends=JFA) for f in DRY_SWE for o in (1, 2)]),
     "C8": ("VAM(1) Chorin channel (gate 21): linear / Newton / time_order 2 / triangles", _c8()),
     "C10": ("VAM(1) Chorin convergence: smooth wave over the bump",
             [Run(f"s{o}_t{to}_n{n}", partial(vam_wave, o, n), WAVE["t_end"], chorin=True,

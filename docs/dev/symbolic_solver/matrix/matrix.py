@@ -940,6 +940,19 @@ def measure():
             add("C5", f"{'L1' if b == 'foam' else 'max'} rel vs JAX", b, "serial",
                 fn(g("C5", "n48"), J("C5", "n48")), th, "")
         front_checks(add, b, g, J)
+        from cases import DRY_SWE
+        for f in DRY_SWE:                       # C5 plain SWE, HLL onto the dry bed
+            for o in (1, 2):
+                key, what = f"swe_{f}_o{o}", f"SWE {f} O{o}"
+                d, j = g("C5", key), J("C5", key)
+                if d is not None:
+                    add("C5", f"{what} h_min", b, "serial", float(h(d).min()),
+                        (">=", 0.0, "theory (positivity)"), "")
+                    add("C5", f"{what} t_end reached (|t - 0.02|)", b, "serial",
+                        abs(float(d["t"]) - 0.02), RO, "a dry-dry face's speed -0 gave "
+                        "t = NaN (ANALYSIS 64)")
+                if b not in ("jax", "numpy") and ok(d, j):
+                    add("C5", f"{what} max rel vs JAX", b, "serial", relmax(d, j), RO, "")
         for k in ("vam", "vam_newton", "vam_t2", "vam_tri", "per"):    # C8
             d, j = g("C8", k), J("C8", k)
             if b not in ("jax", "numpy") and ok(d, j):

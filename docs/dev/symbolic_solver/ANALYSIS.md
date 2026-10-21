@@ -3048,3 +3048,53 @@ used other predictor numerics (Perron wave speed, its stencils; steffler.md, cau
 Open (not a closure defect of this case): free slip on a curved wall is `d u_t/dn = kappa u_t`
 (zero shear), the vector closure imposes `d(t.q)/dn = 0` (the flat-wall form): O(h kappa) at the
 walls, the order of the 4.5e-5 above.
+
+## 64. HLL NaN on a dry bed (thesis `speed`, step 5): a dry-dry face's speed was -0 (2026-10-21, dev/hll-dry-nan)
+
+Report (thesis `cases/speed`, `migration_status/step5.md`): `PositiveNonconservativeHLL` (`hr`) on the
+circular dam break onto an exactly dry bed (SWE 2-D, closed-form eigenvalues) gave t = NaN on NumPy
+and foam (phases 1-2, o1 and o2 + MOOD), finite on JAX and AMReX.  The step-5 port ran on zoomy_core
+9308483 (2026-10-14).
+
+- **Reproduction** (speed's `run.py` copied, 8 x 8 or 32 x 32, t 0.01, NumPy, `np.seterr(invalid=
+  "raise")`): the first invalid operation is `dt*(source - divergence)` in the march (`0 * inf`);
+  one line earlier the printed CFL step `dt = reduce_min(cfl r_f / S)` is `-inf`: `S`, the
+  `numerical_face_sides_speed` row of `HLL.face_wave_speed`, is `-0.0` at a dry-dry face, `1/-0 =
+  -inf`, time `-inf`.  The HLL flux's `1/(s_R+ - s_L- + 1e-14)` guard is not involved.
+- **Cause.**  `face_wave_speed = Max(-Min(s_L, 0), Max(s_R, 0))`.  Dry-dry: `s_L = s_R = 0`, so
+  `-Min(s_L, 0) = -0.0`, `Max(s_R, 0) = +0.0`; sympy stores the arguments as `(Max(s_R, 0),
+  -Min(s_L, 0))`, i.e. the face speed is `max(+0, -0)`, and the tie of signed zeros is resolved per
+  backend by the callee its printer emits:
+
+  | backend | printed max | tie rule | `max(+0, -0)` | 1/S, dt |
+  |---|---|---|---|---|
+  | NumPy (lambdify) | `numpy.maximum` | second argument | -0 | -inf, NaN |
+  | foam (kernel lane) | `Foam::max` = `(s1 > s2) ? s1 : s2` | second | -0 | -inf, NaN |
+  | AMReX (kernel lane) | `amrex::max` = `std::max` = `(a < b) ? b : a` | first | +0 | +inf, finite |
+  | JAX | `jnp.maximum` (XLA max: -0 < +0) | +0 | +0 | +inf, finite |
+
+  foam matches NumPy because `Foam::max` and `numpy.maximum` share the tie rule, AMReX and JAX
+  differ for two different reasons.  Not a `where` evaluating both branches, not `std::max`
+  swallowing a NaN: the values are equal and only the sign bit differs.
+- **Fix (already on main).**  `HLL.face_wave_speed` returns `Abs(Max(...))` (core e82751e, section
+  52c, merged with dev/numerics-robust 7d086ff, 2026-10-14 after 9308483): `|.|` is `+0` on every
+  backend, the speed is `max(|s_L|, |s_R|) >= 0` by definition, so it falls out of the scheme (no
+  clamping, no tuning).  The step-5 port predates it.  Today's main (core fe048d8): speed n 32 t 0.1
+  o1 / o2 + MOOD, `hr`, PASS on all four; numpy vs jax / amrex / foam max rel 2.5e-16 / 3.3e-16 /
+  2.2e-16 (o1), 2.3e-14 / 2.4e-14 / 2.5e-14 (o2); mass 1.5e-16.  On main a step of -inf no longer
+  passes silently either: the march stops (`time_4 > time_3` false) and `check_march` raises.
+- **This branch: regression only** (core 04a953b) (the face speed is the wave-speed code of dev/wavespeed-frame; no
+  library change here).  `tests/symsolver/test_hll_dry_face.py`: the NumPy-printed face speed of
+  `PositiveHLL` / `PositiveNonconservativeHLL` at a dry-dry face is `+0` (signbit) for five normals,
+  and the SWE 2-D dry dam break (8 x 8, o1, both fluxes) reaches t_end finite under
+  `np.errstate(invalid="raise")` with mass to 1e-12; all 4 fail on 9308483 (-0.0, `FloatingPointError:
+  invalid value encountered in multiply`), pass on main.  Matrix: C5 gains the plain-SWE dry dam break
+  `swe_{PositiveHLL, PositiveNonconservativeHLL}_o{1,2}` (C5's geometry, nx 48, t 0.02, CFL 0.45,
+  O2 + MOOD; `cases.dry_swe`) on the four backends: h_min >= 0, t_end reached, AMReX / foam = JAX to
+  round-off, numpy = JAX and C6 mass via the generic checks.  C3 + C5 serial, four backends
+  (private store): 123 PASS, 0 FAIL; new rows: t_end exact everywhere, h_min 0, AMReX / foam vs JAX
+  9.6e-16 / 2.7e-15 (O1), 8.0e-14 / 8.8e-14 (O2 + MOOD), both fluxes; C6 C5 mass 1.5e-13 (all four).
+- **Note** (not changed): the kernel lanes still differ in their `max` tie rule (AMReX first, NumPy /
+  foam / the solver lane's `maximum` second), so any printed expression whose value can be a signed
+  zero that is then divided by is backend-dependent; an `Abs` (or a sum `x + 0.0`) at the source is the
+  portable form.
