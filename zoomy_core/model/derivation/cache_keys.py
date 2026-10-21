@@ -22,7 +22,10 @@ def derivation_cache_enabled() -> bool:
 
 # Bump when the derivation pipeline changes in a way that invalidates every
 # cached entry (new op semantics, changed extraction, etc.).
-CACHE_VERSION = "v9"   # v9: cid 209 — SystemModel gained the ``eigenvalues_cfl``
+CACHE_VERSION = "v10"  # v10: VAM's default truncation is the order-consistent one (Fr, De =
+#                              O(1): the w rows keep -nu d_x d_z u); a v9 VAM entry holds the
+#                              hand rule (now VAMWeakViscosity) under the same spec key.
+#                        v9: cid 209 — SystemModel gained the ``eigenvalues_cfl``
 #                              field (the dt-only spectrum; gate_eigenvalues_dry
 #                              writes it instead of overwriting ``eigenvalues``).
 #                              The SM cache PICKLES SystemModel instances and its

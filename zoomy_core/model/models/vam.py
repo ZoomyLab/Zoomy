@@ -37,6 +37,13 @@ class VAM(BaseModel):
     The pressure modes are Lagrange multipliers of the divergence constraints; the predictor
     keeps the SWE hyperbolic structure.
 
+    The stress is truncated by order from the non-dimensional balance laws (`scaling`), by
+    default in the regime `Fr, De = O(1)` (thesis eq. (fr-de)) at the orders (horizontal 0,
+    vertical 2), `Stress.full` (2, 2): the vertical row keeps the depth-averaged
+    `-d_x tau_xz / rho = -nu d_x d_z u` (eps^2 / De, the order of the vertical inertia VAM
+    keeps).  `VAMWeakViscosity` is the weak-viscosity limit `1/De = O(eps)`, which drops it
+    (ANALYSIS 49, 63).
+
     References:
         Escalante et al. 2024, https://doi.org/10.1016/j.jcp.2024.112882
     """
@@ -52,9 +59,9 @@ class VAM(BaseModel):
         "How much of the bulk closure's stress the model keeps (`moment_scaling`): "
         "`Stress.shallow` the vertical shear only, `Stress.full` the whole Newtonian tensor."))
     scaling = param.Parameter(default=None, doc=(
-        "A `ShallowScaling` (derivation.nondim): derive the stress truncation by order from "
-        "the non-dimensional balance laws instead of `moment_scaling` / `apply_full_tensor`; "
-        "it then decides `stress`.  None (default): the hand rules."))
+        "A `ShallowScaling` (derivation.nondim): the regime and orders of the stress "
+        "truncation by order of the non-dimensional balance laws; it then decides `stress`.  "
+        "None (default): the model's `default_scaling()`."))
     closures = param.List(default=[], doc=(
         "Composable stress Closure pieces (closures.py).  Empty leaves tau_xz "
         "UNCLOSED (modal moments stay free)."))
@@ -62,6 +69,13 @@ class VAM(BaseModel):
         "Resolve the opaque boundary frame to its n→ẑ limit (drop O(slope) "
         "traction corrections) — the shallow form.  False keeps the slope-aware "
         "tractions."))
+
+    def default_scaling(self):
+        """The truncation without a `scaling` setting: regime `Fr, De = O(1)`, orders
+        (horizontal 0, vertical 2), with `Stress.full` (2, 2)."""
+        from zoomy_core.model.derivation.nondim import ShallowScaling
+        full = Stress(self.stress) == Stress.full
+        return ShallowScaling(horizontal=2 if full else 0, vertical=2)
 
     def derive_model(self):
         """Build the declarative VAM model (sigma-map, projected mass, horizontal and vertical
@@ -73,10 +87,11 @@ class VAM(BaseModel):
         if user_vals is not None and hasattr(user_vals, "items"):
             values.update({k: float(v) for k, v in user_vals.items()})
         from zoomy_core.model.models.equations import (
-            Mass, MomentumNonHydrostatic, moment_scaling, small_slope_scaling,
-            slope_aware_scaling, package_viscous)
+            Mass, MomentumNonHydrostatic, small_slope_scaling, slope_aware_scaling,
+            package_viscous)
         from zoomy_core.model.models.material import ClosureState
-        from zoomy_core.model.models.closures import apply_stress_closures, apply_full_tensor
+        from zoomy_core.model.models.closures import apply_stress_closures
+        from zoomy_core.model.models.scaling import ordered_truncation, Pressure
 
         # dimension setup (see SME): dim=2 → 1 horizontal (q_i,r_i,P_i,
         # byte-identical Escalante); dim=3 → 2 horizontal (q_x_i,q_y_i).  The
@@ -115,25 +130,19 @@ class VAM(BaseModel):
         m.add_equation("kbc_top", _kbc(b + h))
         m.add_equation("kbc_bot", _kbc(b))
 
-        # 1b — stress scaling: Stress.shallow (default, byte-identical Escalante) keeps the
-        # vertical shear only; Stress.full keeps the whole tensor (the w rows get d_e tau_ez),
-        # filled by the bulk closure (Newtonian) on the 3-D velocity BEFORE the σ-map and routed
-        # to conservative diffusion by package_viscous after the ω̃/regroup/curvature machinery
-        # (§6e).  The pressure unknown is -sigma_zz minus the hydrostatic part, zero at the
+        # 1b — the stress truncation by order of the non-dimensional balance laws
+        # (scaling.py): the bulk closure's tensor (Newtonian) is filled on the 3-D velocity
+        # BEFORE the σ-map wherever the order keeps more than the horizontal rows' vertical
+        # shear (the w rows' d_e tau_ez, with Stress.full the in-plane stress), routed to
+        # conservative diffusion by package_viscous after the ω̃/regroup/curvature machinery
+        # (§6e).  The pressure unknown p is -sigma_zz minus the hydrostatic part, zero at the
         # surface (MomentumNonHydrostatic).
-        if self.scaling is not None:
-            # the truncation by order of the non-dimensional balance laws (scaling.py); the
-            # pressure p is already the non-hydrostatic part
-            from zoomy_core.model.models.scaling import ordered_truncation, Pressure
-            rec = ordered_truncation(m, momblue, self.closures or [], self.scaling,
-                                     heights=[h, b], free_surface=b + h,
-                                     pressure=Pressure.nonhydrostatic, mass="mass",
-                                     requested=self.stress)
-            vertical_stress = rec.vertical_stress
-        else:
-            moment_scaling(m, momblue, self.stress)
-            apply_full_tensor(self.closures or [], m, momblue)
-            vertical_stress = m.stress == Stress.full
+        scaling = self.scaling if self.scaling is not None else self.default_scaling()
+        rec = ordered_truncation(m, momblue, self.closures or [], scaling,
+                                 heights=[h, b], free_surface=b + h,
+                                 pressure=Pressure.nonhydrostatic, mass="mass",
+                                 requested=self.stress)
+        vertical_stress = rec.vertical_stress
         full_stress = m.stress == Stress.full
 
         # 2 — σ-map:  z = b + h ζ
@@ -488,3 +497,23 @@ class VAM(BaseModel):
             dt = sp.Symbol("dt", positive=True)
         P_syms = [s for s in sm.state if str(s).startswith("P_")]
         return split_for_pressure_structural(sm, P_syms, dt)
+
+
+class VAMWeakViscosity(VAM):
+    """`VAM` in the weak-viscosity limit `1/De = O(eps)` with the slip `k_l = O(eps^2)`, orders
+    (horizontal 1, vertical 2): the vertical row keeps no stress (it is eps^3), the horizontal
+    rows the vertical shear.  The VAM of the thesis results (its reductions table: VAM is
+    `1/De -> 0`); at nu = 0 its numbers are `VAM`'s.  Takes bulk closures that give only the
+    vertical shear (Elder, calibrated eddy viscosities), which `VAM` refuses.  `Stress.full`
+    keeps nothing more at these orders and is refused (ANALYSIS 49, 63).
+    """
+
+    def default_scaling(self):
+        """Regime `1/De = O(eps)`, the bed drag at the order of the
+        shear (`k_l = O(eps^2)`, Manning `C_n = O(eps)`), orders
+        (horizontal 1, vertical 2)."""
+        from zoomy_core.model.derivation.nondim import ShallowScaling, Regime
+        if Stress(self.stress) == Stress.full:
+            raise ValueError("VAMWeakViscosity keeps only the vertical shear (the in-plane "
+                             "stress is eps^3 at 1/De = O(eps)); use VAM(stress=Stress.full)")
+        return ShallowScaling(horizontal=1, vertical=2, regime=Regime(De=-1, k_l=2, C_n=1))

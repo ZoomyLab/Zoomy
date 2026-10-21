@@ -561,18 +561,21 @@ def build_m10_mlsme():
         "MLSME(n_layers=2, level=1, dimension=2)")
 
 
+# m11-m13, S02, N02, P01 pin the VAM of the thesis results, `VAMWeakViscosity` (1/De = O(eps)):
+# their files are the hand-truncated VAM's, unchanged (titles kept), ANALYSIS 63.  m17 pins
+# the default `VAM` (Fr, De = O(1)).
 def build_m11_vam_1d():
-    from zoomy_core.model.models import VAM
+    from zoomy_core.model.models import VAMWeakViscosity
     return _simple_model_golden(
-        lambda: VAM(level=1, dimension=2),
+        lambda: VAMWeakViscosity(level=1, dimension=2),
         "VAM(level=1, dimension=2) — 8x8 square DAE (unclosed tau)",
         unclosed=True)
 
 
 def vam_escalante_model():
     """The Escalante-bump configuration — base model for S02/N02/P01."""
-    from zoomy_core.model.models import VAM
-    return VAM(level=1, dimension=2, closures=_std_closures())
+    from zoomy_core.model.models import VAMWeakViscosity
+    return VAMWeakViscosity(level=1, dimension=2, closures=_std_closures())
 
 
 def build_m12_vam_escalante():
@@ -583,9 +586,9 @@ def build_m12_vam_escalante():
 
 
 def build_m13_vam_2d():
-    from zoomy_core.model.models import VAM
+    from zoomy_core.model.models import VAMWeakViscosity
     return _simple_model_golden(
-        lambda: VAM(level=1, dimension=3, closures=_std_closures()),
+        lambda: VAMWeakViscosity(level=1, dimension=3, closures=_std_closures()),
         "VAM(level=1, dimension=3) — P-modes couple all q_x/q_y/r rows")
 
 
@@ -596,6 +599,14 @@ def build_m14_vam_inplane():
         lambda: VAM(level=1, dimension=2, stress=Stress.full, closures=_std_closures()),
         "VAM(level=1, dimension=2, stress=Stress.full) (REQ-176(4): retain "
         "form + live nu*q*db/dx topography couplings)")
+
+
+def build_m17_vam_order_consistent():
+    from zoomy_core.model.models import VAM
+    return _simple_model_golden(
+        lambda: VAM(level=1, dimension=2, closures=_std_closures()),
+        "VAM(level=1, dimension=2), default truncation Fr, De = O(1), orders (0, 2): the "
+        "vertical row keeps -nu d_x d_z u (ANALYSIS 63)")
 
 
 def build_m15_mlvam():
@@ -1011,6 +1022,7 @@ GOLDENS = {
     "m11_vam_1d":          (build_m11_vam_1d, "model", "t2-small"),
     "m13_vam_2d":          (build_m13_vam_2d, "model", "t2-large"),
     "m14_vam_inplane":     (build_m14_vam_inplane, "model", "t2-small"),
+    "m17_vam_order_consistent": (build_m17_vam_order_consistent, "model", "t2-small"),
     "m15_mlvam":           (build_m15_mlvam, "model", "t2-small"),
     "m16_sigma3d":         (build_m16_sigma3d, "model", "t2-small"),
     # systemmodel goldens
