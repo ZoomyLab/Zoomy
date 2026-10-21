@@ -37,7 +37,7 @@ cd - && MATRIX_STORE=docs/dev/symbolic_solver/matrix/store \
 ```
 
 `--from-store` rewrites `tests/results/symsolver/matrix_latest.json`.
-Commit it and the [tests page](tests.md) follows on the next docs build.
+Commit it and the [Verification](verification.md) page follows on the next docs build.
 
 ## A timing case
 
@@ -50,7 +50,7 @@ against JAX).  `pytest tests/symsolver -m benchmark` appends a record to
 ## A backend
 
 A runtime (the blocks), a kernel printer and a driver as in
-[Architecture](templates.md), then one adapter class in
+[Templates and backends](templates.md), then one adapter class in
 `docs/dev/symbolic_solver/matrix/backends.py` (`configs`, `launch`, `run`).
 The backend is accepted when every matrix row passes for it.  The checks know
 nothing about the backend.

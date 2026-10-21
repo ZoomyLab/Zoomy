@@ -29,7 +29,7 @@ Zoomy's symbolic layer compiles to several solver backends. NumPy, JAX, AMReX an
 
 ## Testing
 
-The test matrix, the timings and the CI status are on the [Tests](https://zoomylab.github.io/Zoomy/developer/tests.html) page of the documentation.
+The test matrix, the timings and the CI status are on the [Testing](https://zoomylab.github.io/Zoomy/developer/testing.html) page of the documentation.
 
 ## License
 
