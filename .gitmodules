@@ -36,4 +36,4 @@
 	branch = main
 [submodule "library/zoomy_dune"]
 	path = library/zoomy_dune
-	url = https://github.com/IngoSteldermann/zoomy-dune-fem.git
+	url = https://github.com/ZoomyLab/zoomy-dune-fem.git
