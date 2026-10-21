@@ -70,6 +70,7 @@ CACHE_VERSION = "v10"  # v10: VAM's default truncation is the order-consistent o
 _COSMETIC_FIELDS = frozenset({"name", "description", "log_level", "_model"})
 
 _PROBE = sp.Symbol("__cache_probe__")
+_PROBE2 = sp.Symbol("__cache_probe2__")
 
 
 def _canonical(value) -> str:
@@ -98,6 +99,10 @@ def _canonical(value) -> str:
     if callable(value) and not isinstance(value, sp.Basic):
         try:
             return f"fn({sp.srepr(sp.sympify(value(_PROBE)))})"
+        except Exception:
+            pass
+        try:                    # a two-argument rule, e.g. an interface value (below, above)
+            return f"fn2({sp.srepr(sp.sympify(value(_PROBE, _PROBE2)))})"
         except Exception:
             # last resort: the bytecode (stable for an unchanged source lambda)
             code = getattr(value, "__code__", None)
