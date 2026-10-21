@@ -109,6 +109,18 @@ def pytest_ignore_collect(collection_path, config):
     return None if found else True
 
 
+def pytest_configure(config):
+    """CI tiers: `large` / `legacy` / `broken` by test id (tests/ci_tiers.py, tests/ci_tiers.tsv)."""
+    import importlib.util
+    import pathlib
+    path = pathlib.Path(__file__).resolve().parents[0] / "tests" / "ci_tiers.py"
+    if path.is_file() and not config.pluginmanager.has_plugin("zoomy_ci_tiers"):
+        spec = importlib.util.spec_from_file_location("zoomy_ci_tiers", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        config.pluginmanager.register(module, "zoomy_ci_tiers")
+
+
 def _registered_markers(config):
     names = set()
     for line in config.getini("markers"):

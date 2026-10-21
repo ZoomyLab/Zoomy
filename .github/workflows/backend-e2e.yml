@@ -3,18 +3,29 @@ name: Backend e2e
 # tests/backend_e2e/README.md: the GUI sessions / solver cards through the backend containers'
 # zoomy-server over the GUI's HTTP protocol, and a matrix subset inside the containers. The
 # CPU images come from GHCR (docker, no apptainer); dev mode mounts this commit's library/
-# into them. Push to main: the thesis-QR sessions (numpy, jax, amrex). Manual: any selection.
+# into them. ci.yml calls it with the thesis-QR sessions of numpy, jax and amrex (openfoam
+# too when zoomy_foam changed), weekly.yml with every backend and every session. By hand: any selection.
 # The foam / AMReX matrix reference runs on the host through apptainer: not here (skipped).
 
 on:
-  push:
-    branches: [ main ]
-    paths:
-      - "library/**"
-      - "containers/**"
-      - "tests/backend_e2e/**"
-      - "tests/qr_cases/**"
-      - ".github/workflows/backend-e2e.yml"
+  workflow_call:
+    inputs:
+      mode:
+        description: "dev (this commit's library mounted) | published (the images as they are)"
+        type: string
+        default: "dev"
+      backends:
+        description: "comma list of numpy, jax, amrex, openfoam"
+        type: string
+        default: "numpy,jax,amrex"
+      qr_only:
+        description: "only the sessions a thesis QR code opens (1) or everything (0)"
+        type: string
+        default: "1"
+      select:
+        description: "pytest -k expression (empty: all)"
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       mode:
@@ -29,10 +40,6 @@ on:
       select:
         description: "pytest -k expression (empty: all)"
         default: ""
-
-concurrency:
-  group: backend-e2e-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -51,14 +58,16 @@ jobs:
       E2E_RUNTIME: docker
       E2E_BACKENDS: ${{ matrix.backend }}
       E2E_MODE: ${{ inputs.mode || 'dev' }}
-      E2E_QR_ONLY: ${{ github.event_name == 'push' && '1' || inputs.qr_only }}
+      E2E_QR_ONLY: ${{ inputs.qr_only }}
+      E2E_SELECT: ${{ inputs.select }}
       OMP_NUM_THREADS: "1"
     steps:
       - name: Selected?
         id: on
+        env:
+          SELECTED: ${{ inputs.backends }}
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then sel="numpy,jax,amrex"; else sel="${{ inputs.backends }}"; fi
-          case ",$sel," in *",${{ matrix.backend }},"*) echo "run=1" >> "$GITHUB_OUTPUT" ;; *) echo "run=0" >> "$GITHUB_OUTPUT" ;; esac
+          case ",$SELECTED," in *",${{ matrix.backend }},"*) echo "run=1" >> "$GITHUB_OUTPUT" ;; *) echo "run=0" >> "$GITHUB_OUTPUT" ;; esac
 
       - uses: actions/checkout@v5
         if: steps.on.outputs.run == '1'
@@ -100,7 +109,7 @@ jobs:
         if: steps.on.outputs.run == '1'
         run: |
           E2E_WORK="$RUNNER_TEMP/e2e" python -m pytest tests/backend_e2e -m backend_e2e \
-            -k "${{ inputs.select }}" -rA --tb=short -p no:cacheprovider
+            -k "$E2E_SELECT" -rA --tb=short -p no:cacheprovider
 
       - uses: actions/upload-artifact@v4
         if: ${{ always() && steps.on.outputs.run == '1' }}

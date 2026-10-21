@@ -308,8 +308,10 @@ round-off).
 
 `.github/workflows/backend-e2e.yml`: one job per backend on `ubuntu-latest`, docker images
 from GHCR (`E2E_RUNTIME=docker`), dev mode by default (this commit's `library/` mounted).
-Push to main: the QR-wired sessions of numpy, jax, amrex (`E2E_QR_ONLY=1`); manual dispatch:
-backends, mode, QR-only and a `-k` selection. The images fit a hosted runner (numpy / JAX /
+`ci.yml` calls it when core, jax, server, amrex, foam or `containers/` change: the QR-wired sessions of
+numpy, jax, amrex (`E2E_QR_ONLY=1`, openfoam too for a foam change). `weekly.yml` calls it after the
+container rebuild with every backend and every session. Manual dispatch: backends, mode, QR-only and a
+`-k` selection. The images fit a hosted runner (numpy / JAX /
 AMReX / OpenFOAM 0.25 / 1.34 / 0.75 / 1.12 GB compressed before the GPU-capable images; JAX
 and AMReX SIFs now 4.32 / 1.61 GB); the foam / AMReX matrix reference needs apptainer on the
 host and is skipped there; the GPU configs need a GPU and are skipped there. Not run yet: the

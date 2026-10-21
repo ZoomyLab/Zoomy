@@ -1,0 +1,344 @@
+name: CI
+
+# The push tier (docs/book/developer/testing.md). Only the components a change touches run, each in
+# at most a few minutes. `#notest` in the head commit message (push) or the pull request title
+# skips every job. `[skip ci]` is GitHub's own and skips the whole workflow. Branch rules require
+# the one check `ci-ok`, which passes when every job succeeded or was skipped.
+#
+# A component's tests are the pytest selection of component-tests.yml. Tutorials, QR cases and
+# the backend e2e are the workflows of the same names, called here. weekly.yml runs the rest.
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      core: ${{ steps.run.outputs.core }}
+      jax: ${{ steps.run.outputs.jax }}
+      server: ${{ steps.run.outputs.server }}
+      prepost: ${{ steps.run.outputs.prepost }}
+      plotting: ${{ steps.run.outputs.plotting }}
+      superrepo: ${{ steps.run.outputs.superrepo }}
+      tutorials: ${{ steps.run.outputs.tutorials }}
+      qr: ${{ steps.run.outputs.qr }}
+      e2e: ${{ steps.run.outputs.e2e }}
+      e2e_backends: ${{ steps.run.outputs.e2e_backends }}
+      gui: ${{ steps.run.outputs.gui }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # A push is compared with the commit before it, not with the default branch.
+      - name: Changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          base: ${{ github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000' && github.event.before || '' }}
+          filters: |
+            core:
+              - 'library/zoomy_core/**'
+            jax:
+              - 'library/zoomy_jax/**'
+            server:
+              - 'library/zoomy_server/**'
+            prepost:
+              - 'library/zoomy_prepost/**'
+            plotting:
+              - 'library/zoomy_plotting/**'
+            superrepo:
+              - 'tests/*'
+              - 'tests/!(tutorials|qr_cases|backend_e2e)/**'
+              - 'conftest.py'
+              - 'pytest.ini'
+            tutorials:
+              - 'tutorials/**'
+              - 'tests/tutorials/**'
+              - 'docs/scripts/generate_tutorial_index.py'
+            qr:
+              - 'tests/qr_cases/**'
+              - 'docs/scripts/build_gui_wheels.py'
+              - 'docs/scripts/build_gui_site.sh'
+            e2e:
+              - 'tests/backend_e2e/**'
+              - 'containers/**'
+            gui:
+              - 'library/zoomy_gui'
+              - 'library/zoomy_gui/**'
+              - 'library/zoomy_cli/**'
+              - 'library/zoomy_js/**'
+            foam:
+              - 'library/zoomy_foam'
+              - 'library/zoomy_foam/**'
+            amrex:
+              - 'library/zoomy_amrex'
+              - 'library/zoomy_amrex/**'
+            workflows:
+              - '.github/**'
+
+      - name: Components to run
+        id: run
+        env:
+          EVENT: ${{ github.event_name }}
+          MESSAGE: ${{ github.event_name == 'pull_request' && github.event.pull_request.title || github.event.head_commit.message }}
+          CORE: ${{ steps.filter.outputs.core }}
+          JAX: ${{ steps.filter.outputs.jax }}
+          SERVER: ${{ steps.filter.outputs.server }}
+          PREPOST: ${{ steps.filter.outputs.prepost }}
+          PLOTTING: ${{ steps.filter.outputs.plotting }}
+          SUPERREPO: ${{ steps.filter.outputs.superrepo }}
+          TUTORIALS: ${{ steps.filter.outputs.tutorials }}
+          QR: ${{ steps.filter.outputs.qr }}
+          E2E: ${{ steps.filter.outputs.e2e }}
+          GUI: ${{ steps.filter.outputs.gui }}
+          FOAM: ${{ steps.filter.outputs.foam }}
+          AMREX: ${{ steps.filter.outputs.amrex }}
+          WORKFLOWS: ${{ steps.filter.outputs.workflows }}
+        run: |
+          notest=false
+          case "$MESSAGE" in *'#notest'*) notest=true ;; esac
+          everything=false
+          if [ "$EVENT" = workflow_dispatch ] || [ "$WORKFLOWS" = true ]; then everything=true; fi
+          echo "notest=$notest everything=$everything"
+
+          # out NAME FLAG...: run NAME when a flag is true (a component or what it depends on)
+          out() {
+            local name=$1 v=false f; shift
+            if [ "$notest" = false ]; then
+              if [ "$everything" = true ]; then v=true; fi
+              for f in "$@"; do if [ "$f" = true ]; then v=true; fi; done
+            fi
+            echo "$name=$v"
+            echo "$name=$v" >> "$GITHUB_OUTPUT"
+          }
+          out core      "$CORE"
+          out jax       "$JAX" "$CORE"
+          out server    "$SERVER" "$CORE" "$PREPOST"
+          out prepost   "$PREPOST" "$CORE"
+          out plotting  "$PLOTTING" "$CORE"
+          out superrepo "$SUPERREPO" "$CORE" "$JAX"
+          out tutorials "$TUTORIALS" "$CORE" "$JAX" "$PLOTTING"
+          out qr        "$QR" "$CORE" "$JAX" "$PLOTTING" "$GUI"
+          out e2e       "$E2E" "$CORE" "$JAX" "$SERVER" "$AMREX" "$FOAM"
+          out gui       "$GUI"
+
+          backends=numpy,jax,amrex
+          if [ "$FOAM" = true ]; then backends=$backends,openfoam; fi
+          echo "e2e_backends=$backends" >> "$GITHUB_OUTPUT"
+
+  core:
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
+    uses: ./.github/workflows/component-tests.yml
+    with:
+      component: core
+      tier: push
+
+  jax:
+    needs: changes
+    if: needs.changes.outputs.jax == 'true'
+    uses: ./.github/workflows/component-tests.yml
+    with:
+      component: jax
+      tier: push
+
+  server:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    uses: ./.github/workflows/component-tests.yml
+    with:
+      component: server
+      tier: push
+
+  prepost:
+    needs: changes
+    if: needs.changes.outputs.prepost == 'true'
+    uses: ./.github/workflows/component-tests.yml
+    with:
+      component: prepost
+      tier: push
+
+  plotting:
+    needs: changes
+    if: needs.changes.outputs.plotting == 'true'
+    uses: ./.github/workflows/component-tests.yml
+    with:
+      component: plotting
+      tier: push
+
+  superrepo:
+    needs: changes
+    if: needs.changes.outputs.superrepo == 'true'
+    uses: ./.github/workflows/component-tests.yml
+    with:
+      component: superrepo
+      tier: push
+
+  tutorials:
+    needs: changes
+    if: needs.changes.outputs.tutorials == 'true'
+    uses: ./.github/workflows/tutorials.yml
+
+  qr:
+    needs: changes
+    if: needs.changes.outputs.qr == 'true'
+    uses: ./.github/workflows/qr-cases.yml
+
+  e2e:
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/backend-e2e.yml
+    with:
+      mode: dev
+      backends: ${{ needs.changes.outputs.e2e_backends }}
+      qr_only: "1"
+
+  # The GUI must talk to backends only through the ZoomyCLI facade. This job
+  # fails if a UI module regresses to any of:
+  #   - direct Pyodide Worker access  (_pyWorker, postMessage(cmd:...))
+  #   - the legacy ZoomyBackend helper (we deleted backend.js)
+  #   - inline fetch() calls against backend URLs
+  # Keeps the refactor honest when future PRs are tempted to "just
+  # use fetch() this one time".
+  #
+  # Scope moved with the GUI. It used to guard `library/zoomy_gui/app.js`, the
+  # hand-written GUI that Theia replaced in place (tag `pre-theia-gui-migration`
+  # is the last commit that had it). The equivalent surface is now the Theia
+  # extension's browser modules.
+  #
+  # `pyodide-runtime.ts` is EXEMPT: it is the sanctioned owner of the kernel
+  # worker, the facade itself, exactly as core.js was for the old app.js. The
+  # contract is that nothing ELSE boots or messages a worker.
+  gui:
+    name: GUI grep-gate
+    needs: changes
+    if: needs.changes.outputs.gui == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: GUI submodule
+        run: git submodule update --init library/zoomy_gui
+
+      - name: Forbidden symbols in the GUI's browser modules
+        run: |
+          set -e
+          SRC=library/zoomy_gui/zoomy-theia-ext/src
+          if [ ! -d "$SRC" ]; then
+            echo "::error ::$SRC is missing — the GUI moved again and this gate is now blind."
+            exit 1
+          fi
+          # Strip JS/TS comments before grepping. Preserves newlines so the
+          # grep -n line numbers still point at the original file. Handles
+          # /* ... */ blocks (multi-line, including continuation lines without
+          # a `*` prefix) and // line comments.
+          FAIL=0
+          FORBIDDEN=(
+            'ZoomyBackend'
+            '_pyWorker\.postMessage'
+            '_pyWorker\.addEventListener'
+            '_pyWorker\.terminate'
+            '\bpyCall\s*\('
+            'new Worker\('
+            'fetch\("https'
+          )
+          # pyodide-runtime.ts owns the kernel worker by design — skip it.
+          # NUL-delimited: a bare `for f in $(find ...)` splits on whitespace,
+          # so it breaks on any path with a space and depends on the shell's
+          # word-splitting rules.
+          mapfile -d '' FILES < <(find "$SRC" -name '*.ts' ! -name 'pyodide-runtime.ts' -print0 | sort -z)
+          echo "Scanning ${#FILES[@]} module(s)."
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "::error ::No .ts modules found under $SRC — this gate would pass vacuously."
+            exit 1
+          fi
+          for f in "${FILES[@]}"; do
+            python3 - "$f" <<'PY' > /tmp/nocomments.ts
+          import re, sys, pathlib
+          src = pathlib.Path(sys.argv[1]).read_text()
+          src = re.sub(r"/\*.*?\*/",
+                       lambda m: "\n" * m.group(0).count("\n"),
+                       src, flags=re.S)
+          src = re.sub(r"//[^\n]*", "", src)
+          print(src, end="")
+          PY
+            for pat in "${FORBIDDEN[@]}"; do
+              MATCHES=$(grep -nE "$pat" /tmp/nocomments.ts || true)
+              if [ -n "$MATCHES" ]; then
+                echo "::error ::Forbidden pattern /$pat/ found in $f:"
+                echo "$MATCHES"
+                FAIL=1
+              fi
+            done
+          done
+          if [ "$FAIL" -ne 0 ]; then
+            echo ""
+            echo "Migration contract: every backend interaction must go"
+            echo "through the CLI. See library/zoomy_cli/. If a module"
+            echo "genuinely needs the kernel, route it via pyodide-runtime.ts."
+            exit 1
+          fi
+          echo "OK: the GUI's browser modules are clean."
+
+      - name: backend.js must not return
+        run: |
+          if [ -f library/zoomy_gui/backend.js ]; then
+            echo "::error ::backend.js was re-added. Delete it — the CLI owns backend interactions now."
+            exit 1
+          fi
+          echo "OK: backend.js stays deleted."
+
+      - name: the retired GUI must not return
+        run: |
+          # index.html/app.js were the pre-Theia GUI. Re-adding either means two
+          # GUIs are live again, which is the state this migration removed.
+          for f in index.html app.js shallowflow.js param_widgets.js; do
+            if [ -f "library/zoomy_gui/$f" ]; then
+              echo "::error ::library/zoomy_gui/$f is back. The Theia GUI is the GUI; see tag pre-theia-gui-migration for the old one."
+              exit 1
+            fi
+          done
+          echo "OK: the retired GUI stays retired."
+
+      - name: Run routing (zoomy_cli card rules the GUI loads)
+        # The browser runs only numpy cards; a jax / amrex / foam card always goes to its backend.
+        run: node --test library/zoomy_cli/tests/test_card_routing.js
+
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [ changes, core, jax, server, prepost, plotting, superrepo, tutorials, qr, e2e, gui ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job succeeded or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do
+            case "$r" in
+              success|skipped) ;;
+              *) echo "::error::a job ended as '$r'"; exit 1 ;;
+            esac
+          done

@@ -41,6 +41,18 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "goldens"))
 
 
+def pytest_configure(config):
+    """CI tiers: `large` / `legacy` / `broken` by test id (tests/ci_tiers.py, tests/ci_tiers.tsv)."""
+    import importlib.util
+    import pathlib
+    path = pathlib.Path(__file__).resolve().parents[3] / "tests" / "ci_tiers.py"
+    if path.is_file() and not config.pluginmanager.has_plugin("zoomy_ci_tiers"):
+        spec = importlib.util.spec_from_file_location("zoomy_ci_tiers", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        config.pluginmanager.register(module, "zoomy_ci_tiers")
+
+
 def pytest_addoption(parser):
     group = parser.getgroup("zoomy test tiers")
     group.addoption(
@@ -79,8 +91,15 @@ def one_hyperbolic_step():
 
 
 def pytest_collection_modifyitems(config, items):
-    # An explicit -m expression owns selection; don't second-guess it.
-    if config.option.markexpr:
+    # An explicit -m expression owns selection, except that parked ``study`` code stays in no
+    # tier: it runs only when the expression names it (``-m study``).
+    markexpr = config.option.markexpr
+    if markexpr:
+        if "study" not in markexpr:
+            parked = [i for i in items if "study" in i.keywords]
+            if parked:
+                config.hook.pytest_deselected(items=parked)
+                items[:] = [i for i in items if "study" not in i.keywords]
         return
     run_large = config.getoption("--run-large")
     run_rederive = config.getoption("--run-rederive")

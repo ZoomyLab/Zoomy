@@ -1,0 +1,355 @@
+# CI tiers: pytest markers by test id, applied by tests/ci_tiers.py. Columns: tier, test id, note.
+# large   passing, single run over the push budget (note: seconds measured). Weekly tier only.
+# legacy  exercises code that is superseded (note: the legacy module). Weekly tier only.
+# broken  fails today (note: first error line). In no tier. Triage, then delete the line.
+# Ids are relative to the repository root. Parametrized ids are exact.
+large	library/zoomy_core/tests/fvm/test_interlevel_telescoping.py::test_fix_telescopes_h_and_q0_exactly[equal depths-low-left/high-right-1.0]	5 s
+large	library/zoomy_core/tests/fvm/test_solver_golden.py::test_solver_golden[x01_numpy_wb_solver]	5 s
+large	library/zoomy_core/tests/model/test_cache_correctness.py::test_rederive_cached_equals_fresh_srepr	9 s
+large	library/zoomy_core/tests/model/test_chorin_pressure_operator.py::test_pressure_operator_lazy_cached_and_nonbreaking	5 s
+large	library/zoomy_core/tests/model/test_chorin_pressure_operator.py::test_pressure_operator_ml_vam	19 s
+large	library/zoomy_core/tests/model/test_chorin_pressure_operator.py::test_pressure_operator_vam_1_2	6 s
+large	library/zoomy_core/tests/model/test_chorin_pressure_operator.py::test_pressure_operator_vam_1_3	11 s
+large	library/zoomy_core/tests/model/test_double_moment_sme.py::test_dm_full_matches_hand_rows	36 s
+large	library/zoomy_core/tests/model/test_double_moment_sme.py::test_dm_nu0_reduces_to_width_rows	4 s
+large	library/zoomy_core/tests/model/test_double_moment_sme.py::test_dm_ny0_reduces_to_reference_sme	34 s
+large	library/zoomy_core/tests/model/test_double_moment_sme.py::test_dm_pipeline_persists_across_sessions	35 s
+large	library/zoomy_core/tests/model/test_double_moment_sme.py::test_dm_pipeline_second_invocation_is_cache_hit	34 s
+large	library/zoomy_core/tests/model/test_mlvam_vertical_traction.py::test_function_trace_is_the_users_rule	67 s
+large	library/zoomy_core/tests/model/test_mlvam_vertical_traction.py::test_shared_trace_replaces_the_own_trace	44 s
+large	library/zoomy_core/tests/model/test_mlvam_vertical_traction.py::test_traction_choice_needs_the_full_stress	25 s
+large	library/zoomy_core/tests/model/test_model_goldens.py::test_model_golden[m02_swe_2d]	4 s
+large	library/zoomy_core/tests/model/test_model_goldens.py::test_model_golden[m07_sme_inplane]	5 s
+large	library/zoomy_core/tests/model/test_model_goldens.py::test_model_golden[m10_mlsme]	4 s
+large	library/zoomy_core/tests/model/test_model_goldens.py::test_model_golden[m11_vam_1d]	3 s
+large	library/zoomy_core/tests/model/test_model_goldens.py::test_model_golden[m12_vam_escalante]	4 s
+large	library/zoomy_core/tests/model/test_model_goldens.py::test_model_golden[m13_vam_2d]	9 s
+large	library/zoomy_core/tests/model/test_model_goldens.py::test_model_golden[m14_vam_inplane]	7 s
+large	library/zoomy_core/tests/model/test_model_goldens.py::test_model_golden[m15_mlvam]	12 s
+large	library/zoomy_core/tests/model/test_model_goldens.py::test_model_golden[m17_vam_order_consistent]	4 s
+large	library/zoomy_core/tests/model/test_model_references.py::test_inplane_h_column_matches_first_principles_projection	9 s
+large	library/zoomy_core/tests/model/test_model_references.py::test_mlswe_mean_interface_matches_hornschemeyer_eq8[3]	4 s
+large	library/zoomy_core/tests/model/test_model_references.py::test_sme_rows_match_kowalski_torrilhon[3]	5 s
+large	library/zoomy_core/tests/model/test_model_references.py::test_vam1_dynamic_rows_match_escalante_eq4	4 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_default_is_the_stated_regime[mlsme_m10]	9 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_default_is_the_stated_regime[sme1_full_marche]	9 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_default_is_the_stated_regime[sme1_shallow]	4 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_default_is_the_stated_regime[vam1]	9 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_default_is_the_stated_regime[vam1_full]	13 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_default_is_the_stated_regime[vam1_weak]	8 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_default_is_the_stated_regime_large[mlsme_l1_full]	33 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_default_is_the_stated_regime_large[sme1_full_re1]	9 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_default_is_the_stated_regime_large[sme2_full_marche]	15 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_default_is_the_stated_regime_large[vam1_2d_weak]	18 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_default_is_the_stated_regime_large[vam2_full]	28 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_default_is_the_stated_regime_large[vam2_weak]	17 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_shear_only_closure_needs_the_weak_regime	4 s
+large	library/zoomy_core/tests/model/test_nondim_pipeline.py::test_vam_minus_weak_viscosity	8 s
+large	library/zoomy_core/tests/model/test_project_roundtrip.py::test_physics_pins	7 s
+large	library/zoomy_core/tests/model/test_project_roundtrip.py::test_roundtrip_identity[model3-SME(1) 3-D]	5 s
+large	library/zoomy_core/tests/model/test_project_roundtrip.py::test_roundtrip_identity[model4-MLSME(2,2)]	6 s
+large	library/zoomy_core/tests/model/test_project_roundtrip.py::test_roundtrip_identity[model5-VAM(1)]	4 s
+large	library/zoomy_core/tests/model/test_project_roundtrip.py::test_roundtrip_identity[model6-MLVAM(2,1)]	12 s
+large	library/zoomy_core/tests/numerics/test_fluctuations_are_zero.py::test_conservative_solvers_never_build_a_fluctuation	7 s
+large	library/zoomy_core/tests/numerics/test_fluctuations_are_zero.py::test_nonconservative_solvers_do_build_one	4 s
+large	library/zoomy_core/tests/numerics/test_nsm_goldens.py::test_n02_time_canary	5 s
+large	library/zoomy_core/tests/numerics/test_nsm_goldens.py::test_nsm_golden[n01_swe2d_order2]	4 s
+large	library/zoomy_core/tests/numerics/test_nsm_goldens.py::test_nsm_golden[n02_vam_nsm]	6 s
+large	library/zoomy_core/tests/symsolver/test_davis_bounds.py::test_wall_pair_is_symmetric_at_an_oblique_wall	25 s
+large	library/zoomy_core/tests/symsolver/test_end_time_landing.py::test_chorin_constant_dt_lands_on_end_time	6 s
+large	library/zoomy_core/tests/symsolver/test_equilibrium_reconstruction.py::test_audusse_needs_a_hydrostatic_reconstruction	7 s
+large	library/zoomy_core/tests/symsolver/test_norm_derivative.py::test_operation_is_idempotent_and_leaves_other_slots	4 s
+large	library/zoomy_core/tests/symsolver/test_norm_derivative.py::test_point_implicit_manning_at_rest_numpy	5 s
+large	library/zoomy_core/tests/symsolver/test_norm_derivative.py::test_source_value_kept_and_jacobian_finite_at_rest[0]	9 s
+large	library/zoomy_core/tests/symsolver/test_norm_derivative.py::test_source_value_kept_and_jacobian_finite_at_rest[1]	13 s
+large	library/zoomy_core/tests/symsolver/test_numpy_backend.py::test_c1_bump_numpy_conserves_mass	5 s
+large	library/zoomy_core/tests/symsolver/test_numpy_backend.py::test_restart_is_bitwise	21 s
+large	library/zoomy_core/tests/symsolver/test_numpy_mpi.py::test_distributed_hyperbolic_equals_serial	24 s
+large	library/zoomy_core/tests/symsolver/test_numpy_mpi.py::test_distributed_linsolve_equals_serial	8 s
+large	library/zoomy_core/tests/symsolver/test_numpy_mpi.py::test_distributed_output_equals_serial	11 s
+large	library/zoomy_core/tests/symsolver/test_numpy_mpi.py::test_serial_backend_without_mpi4py	6 s
+large	library/zoomy_core/tests/symsolver/test_overlap_schwarz.py::test_schwarz_coupled_pair_is_the_single_domain	20 s
+large	library/zoomy_core/tests/symsolver/test_periodic_pressure_amg.py::test_operator_neighbors_hold_the_periodic_partner	8 s
+large	library/zoomy_core/tests/symsolver/test_periodic_pressure_amg.py::test_periodic_pyamg_equals_gmres[1]	20 s
+large	library/zoomy_core/tests/symsolver/test_periodic_pressure_amg.py::test_periodic_pyamg_equals_gmres[2]	33 s
+large	library/zoomy_core/tests/symsolver/test_periodic_seam.py::test_seam_shift_adaptive_dt[faces]	3 s
+large	library/zoomy_core/tests/symsolver/test_periodic_seam.py::test_seam_shift_constant_dt[1-0]	3 s
+large	library/zoomy_core/tests/symsolver/test_periodic_seam.py::test_seam_shift_constant_dt[1-1]	4 s
+large	library/zoomy_core/tests/symsolver/test_periodic_seam.py::test_seam_shift_constant_dt[2-0]	3 s
+large	library/zoomy_core/tests/symsolver/test_periodic_seam.py::test_seam_shift_constant_dt[2-1]	4 s
+large	library/zoomy_core/tests/symsolver/test_shore_lake_at_rest.py::test_pit_lake_stays_at_rest[minmod-0.5-0.0]	18 s
+large	library/zoomy_core/tests/symsolver/test_shore_lake_at_rest.py::test_pit_lake_stays_at_rest[venkatakrishnan-0.5-0.05]	19 s
+large	library/zoomy_core/tests/symsolver/test_shore_lake_at_rest.py::test_pit_lake_stays_at_rest[venkatakrishnan-0.5-0.0]	19 s
+large	library/zoomy_core/tests/symsolver/test_shore_lake_at_rest.py::test_pit_lake_stays_at_rest[venkatakrishnan-2.0-0.0]	19 s
+large	library/zoomy_core/tests/symsolver/test_shore_lake_at_rest.py::test_shore_rule_follows_the_free_surface_roles	9 s
+large	library/zoomy_core/tests/symsolver/test_thin_cell_cfl.py::test_thin_film_stays_positive_under_the_cells_rule	3 s
+large	library/zoomy_core/tests/symsolver/test_wave_speed_bound.py::test_faces_rule_order2_bounds_the_cells_own_speeds	6 s
+large	library/zoomy_core/tests/symsolver/test_well_balanced_fluxes.py::test_moment_coupling_dropped_raises[PositiveHLL]	5 s
+large	library/zoomy_core/tests/symsolver/test_well_balanced_fluxes.py::test_moving_flow_pressure_placement[2-PositiveHLL]	3 s
+large	library/zoomy_core/tests/systemmodel/test_classification_guard.py::test_describe_full_shows_clean_section	4 s
+large	library/zoomy_core/tests/systemmodel/test_classification_guard.py::test_healthy_families_fully_classified[MLSME(2,1)]	4 s
+large	library/zoomy_core/tests/systemmodel/test_classification_guard.py::test_healthy_families_fully_classified[MLVAM(1,1)]	4 s
+large	library/zoomy_core/tests/systemmodel/test_classification_guard.py::test_healthy_families_fully_classified[MLVAM(2,1)]	13 s
+large	library/zoomy_core/tests/systemmodel/test_classification_guard.py::test_healthy_families_fully_classified[VAM(1,2)]	4 s
+large	library/zoomy_core/tests/systemmodel/test_free_surface_row_map.py::test_depth_and_bed_rows_are_never_depth_scaled[SME(1) 2 horiz]	4 s
+large	library/zoomy_core/tests/systemmodel/test_free_surface_row_map.py::test_depth_and_bed_rows_are_never_depth_scaled[SME(2) 2 horiz]	9 s
+large	library/zoomy_core/tests/systemmodel/test_free_surface_row_map.py::test_depth_and_bed_rows_are_never_depth_scaled[VAM(1) 1 horiz]	4 s
+large	library/zoomy_core/tests/systemmodel/test_free_surface_row_map.py::test_discharge_rows_are_a_subset_of_the_depth_scaled_rows[SME(1) 2 horiz]	4 s
+large	library/zoomy_core/tests/systemmodel/test_free_surface_row_map.py::test_discharge_rows_are_a_subset_of_the_depth_scaled_rows[SME(2) 2 horiz]	9 s
+large	library/zoomy_core/tests/systemmodel/test_free_surface_row_map.py::test_discharge_rows_are_a_subset_of_the_depth_scaled_rows[VAM(1) 1 horiz]	4 s
+large	library/zoomy_core/tests/systemmodel/test_free_surface_row_map.py::test_multilayer_has_no_unique_discharge_row_and_says_so	4 s
+large	library/zoomy_core/tests/systemmodel/test_free_surface_row_map.py::test_row_map_matches_the_named_state[SME(1) 2 horiz]	4 s
+large	library/zoomy_core/tests/systemmodel/test_free_surface_row_map.py::test_row_map_matches_the_named_state[SME(2) 2 horiz]	9 s
+large	library/zoomy_core/tests/systemmodel/test_free_surface_row_map.py::test_row_map_matches_the_named_state[VAM(1) 1 horiz]	4 s
+large	library/zoomy_core/tests/systemmodel/test_free_surface_row_map.py::test_state_order_guess_and_the_map_disagree_above_four_rows	9 s
+large	library/zoomy_core/tests/systemmodel/test_regularize_fractional_powers.py::test_every_fractional_base_carries_eps2	9 s
+large	library/zoomy_core/tests/systemmodel/test_state_reconstruction_inverse.py::test_left_inverse[vam-level1]	4 s
+large	library/zoomy_core/tests/systemmodel/test_systemmodel_goldens.py::test_systemmodel_golden[s02_chorin_split_bump]	4 s
+large	library/zoomy_core/tests/systemmodel/test_systemmodel_goldens.py::test_systemmodel_golden[s03_chorin_split_mlvam]	19 s
+large	library/zoomy_core/tests/systemmodel/test_unclosed_closure_guard.py::test_allow_unclosed_returns_the_open_system_with_a_warning	23 s
+large	library/zoomy_core/tests/systemmodel/test_unclosed_closure_guard.py::test_mlvam_with_stress_closures_follows_through	12 s
+large	library/zoomy_core/tests/systemmodel/test_unclosed_closure_guard.py::test_mlvam_without_stress_closure_raises_naming_the_interfaces	11 s
+large	library/zoomy_core/tests/template_gates/test_gate_1a_core_lsq_closure.py::test_closure_tables_differentiable	38 s
+large	library/zoomy_core/tests/template_gates/test_gate_1a_core_lsq_closure.py::test_kinds_from_the_ghost_kernel	3 s
+large	library/zoomy_core/tests/template_gates/test_gate_1a_core_lsq_closure.py::test_kinds_in_the_normal_frame	3 s
+large	library/zoomy_core/tests/template_gates/test_gate_1a_core_lsq_closure.py::test_vector_closure_tables_differentiable	11 s
+large	library/zoomy_core/tests/template_gates/test_gate_1a_core_roles.py::test_free_surface_roles_declared[KESME]	7 s
+large	library/zoomy_core/tests/template_gates/test_gate_1a_core_roles.py::test_free_surface_roles_declared[MLSME]	4 s
+large	library/zoomy_core/tests/template_gates/test_gate_1a_core_roles.py::test_free_surface_roles_declared[MLVAM0]	6 s
+large	library/zoomy_core/tests/template_gates/test_gate_1a_core_roles.py::test_free_surface_roles_declared[SME1_2d]	8 s
+large	library/zoomy_core/tests/template_gates/test_gate_1a_core_roles.py::test_free_surface_roles_declared[VAM1]	6 s
+large	library/zoomy_core/tests/template_gates/test_gate_1a_core_roles.py::test_split_stages_inherit_roles	5 s
+large	library/zoomy_core/tests/transformation/test_printer_goldens.py::test_printer_golden[p01_foam_vam]	5 s
+large	library/zoomy_core/tests/transformation/test_resolve_opaque.py::test_numerical_flux_carries_no_wavespeed_row	7 s
+large	library/zoomy_core/tests/transformation/test_resolve_opaque.py::test_resolve_opaque_leaves_external_kernels_as_calls	8 s
+large	library/zoomy_jax/tests/runtime/test_lifted_shared_face.py::test_lifted_face_telescopes_and_truncates	33 s
+large	library/zoomy_jax/tests/runtime/test_lifted_shared_face.py::test_sme1_sme2_pair_conserves_mass	25 s
+large	library/zoomy_jax/tests/runtime/test_shore_lake_at_rest.py::test_pit_lake_stays_at_rest_jax[0.05]	47 s
+large	library/zoomy_jax/tests/runtime/test_shore_lake_at_rest.py::test_pit_lake_stays_at_rest_jax[0.0]	76 s
+large	library/zoomy_jax/tests/runtime/test_symsolver_end_time_landing.py::test_lands_like_numpy	18 s
+large	library/zoomy_jax/tests/runtime/test_symsolver_periodic_seam.py::test_seam_shift_constant_dt[1-2]	18 s
+large	library/zoomy_jax/tests/spmd/test_spmd_lsq_muscl.py::test_inter_partition_face_consistency	92 s
+large	library/zoomy_jax/tests/spmd/test_spmd_lsq_muscl.py::test_spmd_matches_replicated_single_device	87 s
+large	library/zoomy_jax/tests/symsolver/test_ad_traps.py::test_ad_mode_set_before_setup_differentiates	32 s
+large	library/zoomy_jax/tests/symsolver/test_ad_traps.py::test_forward_with_on_write_unchanged	19 s
+large	library/zoomy_jax/tests/symsolver/test_manning_at_rest.py::test_implicit_manning_at_rest[lie]	29 s
+large	library/zoomy_jax/tests/symsolver/test_manning_at_rest.py::test_implicit_manning_at_rest[ssp2]	18 s
+large	library/zoomy_jax/tests/symsolver/test_march_check.py::test_non_finite_state_raises[0.01]	16 s
+large	library/zoomy_jax/tests/symsolver/test_march_check.py::test_non_finite_state_raises[None]	20 s
+large	library/zoomy_jax/tests/template_gates/test_gate_1a_core_jax.py::test_geometry_jax_equals_numpy_and_grad_wrt_nodes[1d]	24 s
+large	library/zoomy_jax/tests/template_gates/test_gate_1a_core_jax.py::test_geometry_jax_equals_numpy_and_grad_wrt_nodes[2d]	43 s
+legacy	library/zoomy_amrex/tests/test_parity_numpy.py::test_amrex_numpy_parity[100]	test body [zoomy_core.fvm.solver_numpy]
+legacy	library/zoomy_amrex/tests/test_parity_numpy.py::test_amrex_numpy_parity[200]	test body [zoomy_core.fvm.solver_numpy]
+legacy	library/zoomy_core/tests/fvm/test_bc_runtime.py::test_characteristic_lake_at_rest	module-level import [zoomy_core.fvm.solver_chorin_vam_numpy]
+legacy	library/zoomy_core/tests/fvm/test_bc_runtime.py::test_characteristic_radiation_and_mass	module-level import [zoomy_core.fvm.solver_chorin_vam_numpy]
+legacy	library/zoomy_core/tests/fvm/test_bc_runtime.py::test_chorin_bc_consumption	module-level import [zoomy_core.fvm.solver_chorin_vam_numpy]
+legacy	library/zoomy_core/tests/fvm/test_bc_runtime.py::test_patch_passthrough_and_errors	module-level import [zoomy_core.fvm.solver_chorin_vam_numpy]
+legacy	library/zoomy_core/tests/fvm/test_bc_runtime.py::test_perfield_ghosts	module-level import [zoomy_core.fvm.solver_chorin_vam_numpy]
+legacy	library/zoomy_core/tests/fvm/test_bc_runtime.py::test_periodic_idempotent_and_wrap	module-level import [zoomy_core.fvm.solver_chorin_vam_numpy]
+legacy	library/zoomy_core/tests/fvm/test_bc_runtime.py::test_wall_is_normal_aware_2d	module-level import [zoomy_core.fvm.solver_chorin_vam_numpy]
+legacy	library/zoomy_core/tests/fvm/test_bc_runtime.py::test_wall_mass_twin	module-level import [zoomy_core.fvm.solver_chorin_vam_numpy]
+legacy	library/zoomy_core/tests/fvm/test_dae_aux_sizing.py::test_dae_aux_initial_conditions_get_the_full_width	module-level import [zoomy_core.fvm.solver_dae_numpy]
+legacy	library/zoomy_core/tests/fvm/test_dae_aux_sizing.py::test_dae_hinv_tracks_the_depth_across_a_step	module-level import [zoomy_core.fvm.solver_dae_numpy]
+legacy	library/zoomy_core/tests/fvm/test_dae_aux_sizing.py::test_dae_setup_aux_width_matches_runtime_kernels	module-level import [zoomy_core.fvm.solver_dae_numpy]
+legacy	library/zoomy_core/tests/fvm/test_imex_smoke.py::test_imex_smoke_default_and_global_source	module-level import [zoomy_core.fvm.solver_imex_numpy]
+legacy	library/zoomy_core/tests/fvm/test_mood_positivity.py::test_march_bit_equal_rederivation	module-level import [zoomy_core.fvm.solver_numpy]
+legacy	library/zoomy_core/tests/fvm/test_mood_positivity.py::test_routing_and_negative_control	module-level import [zoomy_core.fvm.solver_numpy]
+legacy	library/zoomy_core/tests/fvm/test_mood_positivity.py::test_twin_masked_o1_only	module-level import [zoomy_core.fvm.solver_numpy]
+legacy	library/zoomy_core/tests/model/test_mlvam_derivative_aux.py::test_every_derivative_aux_targets_a_state	module-level import [zoomy_core.fvm.solver_numpy]
+legacy	library/zoomy_core/tests/model/test_mlvam_derivative_aux.py::test_w_rows_read_the_finite_difference_of_l1_h	module-level import [zoomy_core.fvm.solver_numpy]
+legacy	library/zoomy_core/tests/model/test_source_drystate_semantics.py::test_friction_decays_to_analytic	test body [zoomy_core.fvm.solver_numpy]
+legacy	library/zoomy_core/tests/model/test_vam_smooth_limit.py::test_vam1_matches_sme1_in_long_wave_limit	module-level import [zoomy_core.fvm.solver_chorin_vam_numpy]
+legacy	library/zoomy_core/tests/model/test_vam_smooth_limit.py::test_vam1_sme1_long_wave_one_step_twin	module-level import [zoomy_core.fvm.solver_chorin_vam_numpy]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_authoring.py::test_d3_stage_times_temporal_order[scheme0-1]	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_authoring.py::test_d3_stage_times_temporal_order[scheme1-2]	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_authoring.py::test_d3_stage_times_temporal_order[scheme2-3]	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_authoring.py::test_output_interval_mode_and_chunked_restart	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_authoring.py::test_step_structure_d1_d3_d7	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_authoring.py::test_strang_split_keeps_per_operator_clocks	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_authoring.py::test_tableaus	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_authoring.py::test_template_equals_independent_reference_with_mood	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_c.py::test_c_printer_rechecks_call_signatures	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_c.py::test_emitted_hyperbolic_template_compiles_runs_and_matches_numpy	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_c.py::test_every_statement_toy_emits_valid_cpp	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_statements.py::test_build_time_checks	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_statements.py::test_every_statement_kind_numpy_host_equals_traced	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_statements.py::test_generated_source_is_readable_and_tracebacks_point_into_it	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_statements.py::test_guard_raises_with_values	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_statements.py::test_ifstatic_flags_and_hooks	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_statements.py::test_linsolve_kinds_agree_numpy[banded]	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_statements.py::test_linsolve_kinds_agree_numpy[dense]	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_statements.py::test_missing_body_is_reported	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_statements.py::test_root_and_linsolve_on_fail_guard	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/template_gates/test_gate_1a_ir_statements.py::test_show_prints_the_template	module-level import [zoomy_core.solver.template]
+legacy	library/zoomy_core/tests/transformation/test_runtime_kernel_contract.py::test_riemann_flux_values	test body [zoomy_core.fvm.solver_numpy]
+legacy	library/zoomy_core/tests/transformation/test_runtime_kernel_contract.py::test_runtime_binds_t_dt_x	test body [zoomy_core.fvm.solver_numpy]
+legacy	library/zoomy_jax/tests/fvm/test_periodic_bc_jax.py::test_periodic_advection_conserves_mass	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/regression/test_ahs26_multilayer.py::test_ahs26_multilayer	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/regression/test_boundary_order2.py::test_second_order_at_boundaries	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/regression/test_mms_friction_eoc_jax.py::test_mms_friction_source_reaches_o2	uses _run() calls march
+legacy	library/zoomy_jax/tests/regression/test_swashes_convergence.py::test_swashes_order[1-ritter_dry]	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/regression/test_swashes_convergence.py::test_swashes_order[1-stoker_wet]	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/regression/test_swashes_convergence.py::test_swashes_order[2-ritter_dry]	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/regression/test_swashes_convergence.py::test_swashes_order[2-stoker_wet]	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/regression/test_swashes_smooth_order2.py::test_swashes_bump_sub_is_second_order	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/regression/test_thacker_2d_eoc.py::test_thacker_planar_o2_eoc_mass_positivity	uses _eoc_case() calls _run
+legacy	library/zoomy_jax/tests/regression/test_thacker_2d_eoc.py::test_thacker_radial_o2_eoc_mass_positivity	uses _eoc_case() calls _run
+legacy	library/zoomy_jax/tests/regression/test_transient_mms_eoc_jax.py::test_transient_mms_reaches_design_order[1-0.9]	uses _l1_h() calls march
+legacy	library/zoomy_jax/tests/regression/test_transient_mms_eoc_jax.py::test_transient_mms_reaches_design_order[2-1.85]	uses _l1_h() calls march
+legacy	library/zoomy_jax/tests/regression/test_vam_bump_curves.py::test_vam_bump_curves	uses chorin_march() in cases.py [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/regression/test_vam_first_order.py::test_vam_first_order	uses _march() calls chorin_march
+legacy	library/zoomy_jax/tests/regression/test_vam_first_order.py::test_vam_first_order_small	uses _march() calls chorin_march
+legacy	library/zoomy_jax/tests/regression/test_vam_order2.py::test_vam_second_order	uses chorin_march() in cases.py [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/regression/test_wb_long_march.py::test_wb_drift_history	uses march_with_history() in cases.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_ad.py::test_ad_bernoulli_wb_dg_matches_fd	uses _bernoulli_solver() in test_ad.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_ad.py::test_ad_forward_reverse_and_field	uses setup() in test_ad.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_ad.py::test_ad_mode_switch_keeps_both_loops	uses setup() in test_ad.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_ad_chorin.py::test_ad_forward_reverse_fd	uses setup() in test_ad_chorin.py [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/runtime/test_ad_chorin.py::test_adaptive_law_matches_core_timestepping	uses setup() in test_ad_chorin.py [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/runtime/test_ad_chorin.py::test_run_simulation_matches_run_jit_steps	uses setup() in test_ad_chorin.py [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/runtime/test_ad_chorin.py::test_time0_continues_a_chunked_run	uses setup() in test_ad_chorin.py [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/runtime/test_ad_imex.py::test_ad_imex[global]	test body [zoomy_jax.fvm.solver_imex_jax]
+legacy	library/zoomy_jax/tests/runtime/test_ad_imex.py::test_ad_imex[local]	test body [zoomy_jax.fvm.solver_imex_jax]
+legacy	library/zoomy_jax/tests/runtime/test_ad_observer.py::test_observer_gauge_series	uses setup() in test_ad_observer.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_ad_observer.py::test_observer_running_max	uses setup() in test_ad_observer.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_ahs26_small.py::test_ahs26_small	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_bc_runtime.py::test_boundary_kinds[inflow]	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_bc_runtime.py::test_boundary_kinds[periodic]	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_bc_runtime.py::test_boundary_kinds[wall]	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_bc_runtime.py::test_boundary_o2_small	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_parity_numpy_jax.py::test_numpy_jax_parity	test body [zoomy_core.fvm.solver_numpy]
+legacy	library/zoomy_jax/tests/runtime/test_radial_dry_dambreak.py::test_radial_dry_dambreak_does_not_collapse_dt	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_radial_dry_dambreak.py::test_radial_dry_dambreak_keeps_the_dry_region_dry	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_radial_dry_dambreak.py::test_radial_dry_dambreak_stays_positive_and_conservative	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_swe_2d.py::test_swe_2d_pulse	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_swe_ritter_dry.py::test_ritter_dry	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_swe_ritter_dry.py::test_ritter_dry_o2_small	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_swe_stoker_wet.py::test_stoker_wet	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_swe_stoker_wet.py::test_stoker_wet_o2_small	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/runtime/test_vam_chorin_bump.py::test_vam_chorin_short	uses chorin_march() in cases.py [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/runtime/test_vam_chorin_bump.py::test_vam_smooth_small	uses chorin_march() in cases.py [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/runtime/test_wb_lake_at_rest.py::test_lake_at_rest_over_bump	uses march() in conftest.py [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/spmd/test_spmd_real_solver.py::test_distributed_gmres_solves_global_elliptic_system	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/spmd/test_spmd_real_solver.py::test_spmd_real_solver_1d_transparent[1]	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/spmd/test_spmd_real_solver.py::test_spmd_real_solver_1d_transparent[2]	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/spmd/test_spmd_real_solver.py::test_spmd_real_solver_2d_transparent[1]	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/spmd/test_spmd_real_solver.py::test_spmd_real_solver_2d_transparent[2]	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/spmd/test_spmd_sme0.py::test_spmd_sme0_bit_identity_order1	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/spmd/test_spmd_sme0.py::test_spmd_sme0_bit_identity_order2	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/spmd/test_spmd_sme0.py::test_spmd_sme0_parameters_passed_through_shard_map	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/symsolver/test_compile_cache.py::test_callback_program_round_trips	uses _make() calls march
+legacy	library/zoomy_jax/tests/symsolver/test_compile_cache.py::test_inactive_without_cache_dir	uses _make() calls march
+legacy	library/zoomy_jax/tests/template_gates/test_gate_1a_ir_jax.py::test_ad_jvp_fd_grad_through_select_guard_callback_root_linsolve	module-level import [zoomy_jax.template]
+legacy	library/zoomy_jax/tests/template_gates/test_gate_1a_ir_jax.py::test_every_statement_kind_numpy_fwd_rev	module-level import [zoomy_jax.template]
+legacy	library/zoomy_jax/tests/template_gates/test_gate_1a_ir_jax.py::test_guard_in_compiled_code_and_traceback_into_generated_file	module-level import [zoomy_jax.template]
+legacy	library/zoomy_jax/tests/template_gates/test_gate_1a_ir_jax.py::test_host_compiled_boundary_with_stateful_callback	module-level import [zoomy_jax.template]
+legacy	library/zoomy_jax/tests/template_gates/test_gate_1a_ir_jax.py::test_hyperbolic_template_backends_and_single_compile	module-level import [zoomy_jax.template]
+legacy	library/zoomy_jax/tests/template_gates/test_gate_1a_ir_jax.py::test_linsolve_kinds_nullspace_precond_and_root_jacobians	module-level import [zoomy_jax.template]
+legacy	library/zoomy_jax/tests/test_chorin_algebraic_aux_jax.py::test_chorin_recomputes_plain_symbol_aux_hinv	module-level import [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/test_dt_max_wave_free_jax_req190.py::test_explicit_dt_max_wins_over_nsm_jax	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/test_dt_max_wave_free_jax_req190.py::test_nsm_dt_max_clamps_wet_dt_jax	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/test_dt_max_wave_free_jax_req190.py::test_wave_free_steps_at_dt_max_jax	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/test_elliptic_bc_jax_req174.py::test_declared_dirichlet_is_seen_by_the_elliptic_stage	module-level import [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/test_elliptic_bc_jax_req174.py::test_no_declared_dirichlet_keeps_the_neumann_path	module-level import [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/test_elliptic_bc_jax_req174.py::test_pin_actually_changes_the_answer	module-level import [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/test_elliptic_bc_jax_req174.py::test_pin_is_exact_not_merely_close	module-level import [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/test_stage_list_jax_req173.py::test_stage_list_rejects_malformed_input	module-level import [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/test_stage_list_jax_req173.py::test_stages_accepts_bare_triples_not_only_namedtuples	module-level import [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/test_stage_list_jax_req173.py::test_stages_bind_by_kind_not_position	module-level import [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/test_stage_list_jax_req173.py::test_stages_construction_selects_the_same_submodels	module-level import [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	library/zoomy_jax/tests/test_swe_2d_jax.py::test_swe2d_o1_runs	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/test_swe_2d_jax.py::test_swe2d_o2_runs_and_propagates	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/test_swe_dambreak_jax.py::test_dambreak_o1_converges	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/test_swe_dambreak_jax.py::test_smooth_swe_o2_convergence	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/test_time_position_operators_jax_req185.py::test_rain_mass_matches_rate_times_T_rain_jax	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	library/zoomy_jax/tests/test_time_position_operators_jax_req185.py::test_source_binds_time_directly_jax	module-level import [zoomy_jax.fvm.solver_jax]
+legacy	tests/unit/zoomy_core/test_imex_aux_unification.py::test_mixin_delegates_to_canonical_when_no_derivative_specs	module-level import [zoomy_core.fvm.solver_numpy]
+legacy	tests/unit/zoomy_core/test_imex_aux_unification.py::test_mixin_delegates_when_derivative_specs_empty	module-level import [zoomy_core.fvm.solver_numpy]
+legacy	tests/unit/zoomy_core/test_imex_aux_unification.py::test_mixin_overlays_derivative_specs_on_top_of_canonical	module-level import [zoomy_core.fvm.solver_numpy]
+legacy	tests/unit/zoomy_core/test_imex_aux_unification.py::test_real_imex_solver_mro_uses_canonical_super	module-level import [zoomy_core.fvm.solver_numpy]
+legacy	tests/unit/zoomy_core/test_splitting_aux_refresh.py::test_fsf_splitting_inherits_the_refresh	module-level import [zoomy_core.fvm.solver_splitting_numpy]
+legacy	tests/unit/zoomy_core/test_splitting_aux_refresh.py::test_splitting_step_applies_update_q_and_update_qaux	module-level import [zoomy_core.fvm.solver_splitting_numpy]
+legacy	tests/unit/zoomy_jax/test_chorin_vam_jax.py::test_chorin_vam_jax_dambreak_over_bump	module-level import [zoomy_jax.fvm.solver_chorin_vam_jax]
+legacy	tests/unit/zoomy_jax/test_imex_jax_swe.py::test_imex_jax_solves_swe_end_to_end	module-level import [zoomy_jax.fvm.solver_imex_jax]
+broken	library/zoomy_amrex/tests/test_parity_numpy.py::test_amrex_numpy_parity[100]	ValueError: mesh boundary tags ['left', 'right'] have no boundary condition (BCs are given for ['East', 'West'])
+broken	library/zoomy_amrex/tests/test_parity_numpy.py::test_amrex_numpy_parity[200]	ValueError: mesh boundary tags ['left', 'right'] have no boundary condition (BCs are given for ['East', 'West'])
+broken	library/zoomy_amrex/tests/test_swe_2d.py::test_swe_2d_pulse	AssertionError: swe_2d.Q: max|diff| 8.077e-06
+broken	library/zoomy_amrex/tests/test_swe_ritter_dry.py::test_ritter_dry	AssertionError: ritter_dry.Q: max|diff| 6.002e-07
+broken	library/zoomy_amrex/tests/test_wb_lake_at_rest.py::test_lake_at_rest_over_bump	AssertionError: wb_lake: 82.77s vs 26.85s (+208%)
+broken	library/zoomy_core/tests/model/test_model_goldens.py::test_model_golden[m05_sme_2d]	AssertionError: golden 'm05_sme_2d' drifted (16 diff lines).
+broken	library/zoomy_foam/tests/test_capless_sme0_foam.py::test_capless_sme0_stoker_wet_marches	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 1 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_1.
+broken	library/zoomy_foam/tests/test_coupling.py::test_swe_precice_coupling_builds	AssertionError: swePreciceCoupling failed to build:
+broken	library/zoomy_foam/tests/test_parallel_ranks.py::test_two_rank_twin_small	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 1 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_1.
+broken	library/zoomy_foam/tests/test_swashes_convergence.py::test_swashes_order[1-ritter_dry]	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 1 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_1.
+broken	library/zoomy_foam/tests/test_swashes_convergence.py::test_swashes_order[1-stoker_wet]	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 1 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_1.
+broken	library/zoomy_foam/tests/test_swashes_convergence.py::test_swashes_order[2-ritter_dry]	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 1 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_1.
+broken	library/zoomy_foam/tests/test_swashes_convergence.py::test_swashes_order[2-stoker_wet]	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 1 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_1.
+broken	library/zoomy_foam/tests/test_swe_2d.py::test_swe_2d_pulse	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 2 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_u_1, \hat{\sigma}_v_1.
+broken	library/zoomy_foam/tests/test_swe_ritter_dry.py::test_ritter_dry	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 1 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_1.
+broken	library/zoomy_foam/tests/test_swe_ritter_dry.py::test_ritter_dry_o2_small	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 1 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_1.
+broken	library/zoomy_foam/tests/test_swe_stoker_wet.py::test_stoker_wet	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 1 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_1.
+broken	library/zoomy_foam/tests/test_swe_stoker_wet.py::test_stoker_wet_o2_small	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 1 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_1.
+broken	library/zoomy_foam/tests/test_userfunctions_contract.py::test_foam_implements_every_core_kernel	AssertionError: UserFunctions.H is missing core kernels: ['pick']. Every backend must supply all of them (REQ-168); add an Eigen-backed implementation, or an EXEMPT entry stating why foam cannot emit
+broken	library/zoomy_foam/tests/test_vam_chorin.py::test_vam_bump_long	zoomy_core.systemmodel.system_model.UnclosedClosureError: VAM: 3 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_0, \hat{\sigma}_1, \hat{\sigma}_2.
+broken	library/zoomy_foam/tests/test_vam_chorin.py::test_vam_chorin_short	zoomy_core.systemmodel.system_model.UnclosedClosureError: VAM: 3 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_0, \hat{\sigma}_1, \hat{\sigma}_2.
+broken	library/zoomy_foam/tests/test_wb_lake_at_rest.py::test_lake_at_rest_over_bump	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 1 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_1.
+broken	library/zoomy_foam/tests/test_wb_lake_at_rest.py::test_wb_drift_long_march	zoomy_core.systemmodel.system_model.UnclosedClosureError: SME: 1 DECLARED closure(s) reached the SystemModel unbound: \hat{\sigma}_1.
+broken	library/zoomy_jax/tests/fvm/test_eigvals_device.py::test_eigvals_device_batch_independent	bitwise batch independence fails on the newest jax from PyPI (XLA contraction order), passes on the pinned env
+broken	library/zoomy_jax/tests/regression/test_ahs26_multilayer.py::test_ahs26_multilayer	AssertionError: ahs26.Q: max|diff| 1.935e-05
+broken	library/zoomy_jax/tests/regression/test_boundary_order2.py::test_second_order_at_boundaries	AssertionError: boundary_order2.Qaux: max|diff| 9.858e-07
+broken	library/zoomy_jax/tests/regression/test_swashes_convergence.py::test_swashes_order[1-ritter_dry]	AssertionError: missing SWASHES analytic table thesis/cases/verification/swe_swashes/reference/ritter_dry.csv — regenerate it with `python
+broken	library/zoomy_jax/tests/regression/test_swashes_convergence.py::test_swashes_order[1-stoker_wet]	AssertionError: missing SWASHES analytic table thesis/cases/verification/swe_swashes/reference/stoker_wet.csv — regenerate it with `python
+broken	library/zoomy_jax/tests/regression/test_swashes_convergence.py::test_swashes_order[2-ritter_dry]	AssertionError: missing SWASHES analytic table thesis/cases/verification/swe_swashes/reference/ritter_dry.csv — regenerate it with `python
+broken	library/zoomy_jax/tests/regression/test_swashes_convergence.py::test_swashes_order[2-stoker_wet]	AssertionError: missing SWASHES analytic table thesis/cases/verification/swe_swashes/reference/stoker_wet.csv — regenerate it with `python
+broken	library/zoomy_jax/tests/regression/test_swashes_smooth_order2.py::test_swashes_bump_sub_is_second_order	AssertionError: missing SWASHES analytic table thesis/cases/verification/swe_swashes/reference/bump_sub.csv — regenerate it with `python r
+broken	library/zoomy_jax/tests/regression/test_thacker_2d_eoc.py::test_thacker_planar_o2_eoc_mass_positivity	zoomy_core.model.derivation.nondim.DimensionError: ManningFriction traction xz: not dimensionally homogeneous, C_n*De*L**(1/3)*epsilon**(1/3) keeps ['L']
+broken	library/zoomy_jax/tests/regression/test_thacker_2d_eoc.py::test_thacker_radial_o2_eoc_mass_positivity	zoomy_core.model.derivation.nondim.DimensionError: ManningFriction traction xz: not dimensionally homogeneous, C_n*De*L**(1/3)*epsilon**(1/3) keeps ['L']
+broken	library/zoomy_jax/tests/regression/test_vam_order2.py::test_vam_second_order	AssertionError: VAM observed order 0.299 — not 2nd. See the per-row breakdown above: if the P_* rows carry negative rates while h/q/r are positive, this is the stagnating unpreconditioned pressure sol
+broken	library/zoomy_jax/tests/runtime/test_symsolver_periodic_pressure_amg.py::test_periodic_assembled_pressure_equals_gmres	ModuleNotFoundError: No module named 'mpi4py' (not installed on the hosted runner)
+broken	library/zoomy_plotting/zoomy_plotting/tests/test_foam_readers.py::test_read_of_states_raw_frames	AssertionError (array mismatch)
+broken	library/zoomy_plotting/zoomy_plotting/tests/test_foam_readers.py::test_read_vof_raw_alpha_and_stations	AssertionError (array mismatch)
+broken	library/zoomy_plotting/zoomy_plotting/tests/test_foam_readers.py::test_read_zoomyfoam_lifts_through_model	assert (1, 20, 8) == (2, 20, 8)
+broken	library/zoomy_plotting/zoomy_plotting/tests/test_foam_readers.py::test_vof_raw_without_stations_returns_raw_only	AssertionError: assert {'alpha', 'lx...y', 't', 'x0'} == {'alpha', 'lx', 'ly', 't'}
+broken	library/zoomy_plotting/zoomy_plotting/tests/test_image_compare_panel.py::test_topo_panel_matches_reference	FileNotFoundError: [Errno 2] Unable to synchronously open file (unable to open file: name = 'library/zoomy_plotting/zoomy_plotting/tests/fixtures/series.h5', errno = 2, error message = 'No such file o
+broken	library/zoomy_plotting/zoomy_plotting/tests/test_interpolate_to_3d_sme1.py::test_lift3d_pins_moment_reconstruction	FileNotFoundError: [Errno 2] Unable to synchronously open file (unable to open file: name = 'library/zoomy_plotting/zoomy_plotting/tests/fixtures/sme1/simulation.h5', errno = 2, error message = 'No su
+broken	library/zoomy_plotting/zoomy_plotting/tests/test_interpolate_to_3d_sme1.py::test_lift3d_pvd_carries_store_times	FileNotFoundError: [Errno 2] Unable to synchronously open file (unable to open file: name = 'library/zoomy_plotting/zoomy_plotting/tests/fixtures/sme1/simulation.h5', errno = 2, error message = 'No su
+broken	library/zoomy_plotting/zoomy_plotting/tests/test_interpolate_to_3d_sme1.py::test_lift3d_writes_extruded_series	FileNotFoundError: [Errno 2] Unable to synchronously open file (unable to open file: name = 'library/zoomy_plotting/zoomy_plotting/tests/fixtures/sme1/simulation.h5', errno = 2, error message = 'No su
+broken	tests/unit/zoomy_core/test_basemodel_recent_features.py::test_model_parameter_parsing_and_defaults	AttributeError: '_DummyModel' object has no attribute or equation 'parameter_defaults_map'
+broken	tests/unit/zoomy_core/test_lsq_degree_auto.py::test_first_order_model_keeps_degree_one	zoomy_core.systemmodel.system_model.UnclosedClosureError: _FirstOrderHModel: 1 DECLARED closure(s) reached the SystemModel unbound: d_x_h.
+broken	tests/unit/zoomy_core/test_lsq_degree_auto.py::test_lsq_stencil_rebuilds_when_existing_degree_too_low	zoomy_core.systemmodel.system_model.UnclosedClosureError: _SecondOrderHModel: 1 DECLARED closure(s) reached the SystemModel unbound: d_xx_h.
+broken	tests/unit/zoomy_core/test_lsq_degree_auto.py::test_second_order_model_lifts_degree_to_two	zoomy_core.systemmodel.system_model.UnclosedClosureError: _SecondOrderHModel: 1 DECLARED closure(s) reached the SystemModel unbound: d_xx_h.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestBaseMeshFromMsh::test_counts_match[channel_hole]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_channel_hole.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestBaseMeshFromMsh::test_counts_match[square_quad]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_square_quad.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestBaseMeshFromMsh::test_counts_match[tetra3d]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_tetra3d.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestBaseMeshFromMsh::test_counts_match[triangle]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_triangle.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestBaseMeshFromMsh::test_h5_roundtrip[channel_hole]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_channel_hole.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestBaseMeshFromMsh::test_h5_roundtrip[square_quad]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_square_quad.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestBaseMeshFromMsh::test_h5_roundtrip[tetra3d]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_tetra3d.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestBaseMeshFromMsh::test_h5_roundtrip[triangle]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_triangle.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestFVMMeshGeometry::test_cell_inradius_match[channel_hole]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_channel_hole.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestFVMMeshGeometry::test_cell_inradius_match[square_quad]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_square_quad.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestFVMMeshGeometry::test_cell_inradius_match[tetra3d]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_tetra3d.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestFVMMeshGeometry::test_cell_inradius_match[triangle]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_triangle.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestFVMMeshGeometry::test_cell_volumes_match[channel_hole]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_channel_hole.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestFVMMeshGeometry::test_cell_volumes_match[square_quad]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_square_quad.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestFVMMeshGeometry::test_cell_volumes_match[tetra3d]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_tetra3d.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestFVMMeshGeometry::test_cell_volumes_match[triangle]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_triangle.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestFVMMeshGeometry::test_face_volumes_match[channel_hole]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_channel_hole.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestFVMMeshGeometry::test_face_volumes_match[square_quad]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_square_quad.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestFVMMeshGeometry::test_face_volumes_match[tetra3d]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_tetra3d.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestFVMMeshGeometry::test_face_volumes_match[triangle]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_triangle.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestLSQMeshGradient::test_1d_gradient	TypeError: LSQMesh.compute_derivatives() missing 1 required keyword-only argument: 'u_boundary_face'
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestLSQMeshGradient::test_linear_gradient_2d[channel_hole]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_channel_hole.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestLSQMeshGradient::test_linear_gradient_2d[square_quad]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_square_quad.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestLSQMeshGradient::test_linear_gradient_2d[triangle]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_triangle.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestLSQMeshGradient::test_linear_gradient_3d	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_tetra3d.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestSubVolumeMesh::test_subvolumes_match[channel_hole]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_channel_hole.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestSubVolumeMesh::test_subvolumes_match[square_quad]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_square_quad.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestSubVolumeMesh::test_subvolumes_match[tetra3d]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_tetra3d.msh not found.
+broken	tests/unit/zoomy_core/test_mesh_snapshot.py::TestSubVolumeMesh::test_subvolumes_match[triangle]	meshio._exceptions.ReadError: File tests/unit/zoomy_core/mesh_references/test_triangle.msh not found.
+broken	tests/unit/zoomy_core/test_splitting_aux_refresh.py::test_fsf_splitting_inherits_the_refresh	TypeError: test_fsf_splitting_inherits_the_refresh.<locals>.<lambda>() takes 5 positional arguments but 6 were given
+broken	tests/unit/zoomy_core/test_splitting_aux_refresh.py::test_splitting_step_applies_update_q_and_update_qaux	TypeError: test_splitting_step_applies_update_q_and_update_qaux.<locals>.fake_update_q() takes 5 positional arguments but 6 were given
+broken	tests/unit/zoomy_core/test_ufl_runtime_adapter.py::test_riemann_lowers_to_ufl[HLLC]	TypeError: SWE has no setting 'manning_n'
+broken	tests/unit/zoomy_core/test_ufl_runtime_adapter.py::test_riemann_lowers_to_ufl[HLL]	TypeError: SWE has no setting 'manning_n'
+broken	tests/unit/zoomy_core/test_ufl_runtime_adapter.py::test_riemann_lowers_to_ufl[Rusanov]	TypeError: SWE has no setting 'manning_n'
+broken	tests/unit/zoomy_core/test_ufl_runtime_adapter.py::test_systemmodel_diffusion_matrix_shape	TypeError: SWE has no setting 'manning_n'

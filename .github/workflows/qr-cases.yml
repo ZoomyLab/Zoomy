@@ -1,22 +1,17 @@
 name: QR cases
 
-# Every case the thesis links to by QR code runs on every push to main and every PR
-# (tests/qr_cases/README.md): the manifest is thesis/scripts/animations.yml, snapshot in
+# Every case the thesis links to by QR code runs (tests/qr_cases/README.md): the manifest is
+# thesis/scripts/animations.yml, snapshot in
 # tests/qr_cases/animations.yml. Each GUI session runs in CPython (no jax; then zoomy_jax
 # from the checkout for the one JAX session) and in headless Pyodide 0.29.3, the GUI
 # worker's. Both install the zoomy_core / zoomy_plotting wheels the deploy serves, built by
 # the same script (docs/scripts/build_gui_wheels.py). The deploy (render-webpage.yml) does
 # not wait for this workflow; it checks the live QR targets itself.
+# Started by ci.yml (core, jax, plotting, the GUI or the QR cases changed) and weekly.yml, or by hand.
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
+  workflow_call:
   workflow_dispatch:
-
-concurrency:
-  group: qr-cases-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read

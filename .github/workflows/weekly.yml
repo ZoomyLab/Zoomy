@@ -1,0 +1,81 @@
+name: Weekly
+
+# The weekly tier (docs/book/developer/testing.md): every test whose single run takes at most
+# 30 minutes, so `large` and `legacy` included, `broken` and `benchmark` not. Every backend end
+# to end, every container rebuilt. Sunday 22:00 UTC, or by hand.
+
+on:
+  schedule:
+    - cron: "0 22 * * 0"
+  workflow_dispatch:
+
+concurrency:
+  group: weekly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    uses: ./.github/workflows/component-tests.yml
+    with:
+      component: core
+      tier: weekly
+
+  jax:
+    uses: ./.github/workflows/component-tests.yml
+    with:
+      component: jax
+      tier: weekly
+
+  server:
+    uses: ./.github/workflows/component-tests.yml
+    with:
+      component: server
+      tier: weekly
+
+  prepost:
+    uses: ./.github/workflows/component-tests.yml
+    with:
+      component: prepost
+      tier: weekly
+
+  plotting:
+    uses: ./.github/workflows/component-tests.yml
+    with:
+      component: plotting
+      tier: weekly
+
+  superrepo:
+    uses: ./.github/workflows/component-tests.yml
+    with:
+      component: superrepo
+      tier: weekly
+
+  tutorials:
+    uses: ./.github/workflows/tutorials.yml
+
+  qr:
+    uses: ./.github/workflows/qr-cases.yml
+
+  containers:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-containers.yml
+    with:
+      all: true
+
+  # After the rebuild, so the images it pulls are the ones just published.
+  e2e:
+    needs: containers
+    if: ${{ !cancelled() }}
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/backend-e2e.yml
+    with:
+      mode: dev
+      backends: numpy,jax,amrex,openfoam
+      qr_only: "0"

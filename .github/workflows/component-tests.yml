@@ -1,0 +1,75 @@
+name: Component tests
+
+# The pytest selection of one component, installed on its own. Called by ci.yml (tier push) and
+# weekly.yml (tier weekly). docs/book/developer/testing.md says which markers mean what.
+#
+#   push    -m "not large and not legacy and not broken and not benchmark"  --timeout=300   job limit 8 min
+#   weekly  -m "not broken and not benchmark"                               --timeout=1800  job limit 2 h
+#
+# `-n 4` is the four vCPUs of the hosted runner. The weekly tier also sets ZOOMY_RUN_LARGE_TESTS
+# for the superrepo conftest, which skips `large` tests otherwise.
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        description: "core | jax | server | prepost | plotting | superrepo"
+        type: string
+        required: true
+      tier:
+        description: "push | weekly"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: ${{ inputs.component }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.tier == 'push' && 8 || 120 }}
+    env:
+      COMPONENT: ${{ inputs.component }}
+      MARKS: ${{ inputs.tier == 'push' && 'not large and not legacy and not broken and not benchmark' || 'not broken and not benchmark' }}
+      TEST_TIMEOUT: ${{ inputs.tier == 'push' && '300' || '1800' }}
+      ZOOMY_RUN_LARGE_TESTS: ${{ inputs.tier == 'weekly' && '1' || '' }}
+      PYTHONNOUSERSITE: "1"
+      JAX_PLATFORMS: cpu
+      OMP_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: library/*/pyproject.toml
+
+      - name: Install
+        run: |
+          case "$COMPONENT" in
+            core)      pkgs=(-e "library/zoomy_core[full]" -e library/zoomy_plotting pyamg) ;;
+            jax)       pkgs=(-e "library/zoomy_core[full]" -e library/zoomy_plotting -e library/zoomy_jax pyamg) ;;
+            server)    pkgs=(-e library/zoomy_server -e "library/zoomy_prepost[core]" -e "library/zoomy_core[full]" -e library/zoomy_plotting httpx) ;;
+            prepost)   pkgs=(-e "library/zoomy_prepost[core]" -e "library/zoomy_core[full]" -e library/zoomy_plotting) ;;
+            plotting)  pkgs=(-e "library/zoomy_plotting[testing]" -e "library/zoomy_core[full]" -e "library/zoomy_prepost[core]") ;;
+            superrepo) pkgs=(-e "library/zoomy_core[full]" -e library/zoomy_plotting -e library/zoomy_jax -e "library/zoomy_prepost[core]" -e library/zoomy_mesh) ;;
+            *) echo "::error::unknown component '$COMPONENT'"; exit 1 ;;
+          esac
+          python -m pip install "${pkgs[@]}" pytest pytest-xdist pytest-timeout
+
+      - name: Tests
+        run: |
+          # The libraries with their own pytest configuration run from their folder, the others
+          # from the repository root with the root configuration (and its conftest.py).
+          root=(-c pytest.ini --rootdir=.)
+          case "$COMPONENT" in
+            core)      cd library/zoomy_core; args=(tests) ;;
+            jax)       cd library/zoomy_jax; args=(tests) ;;
+            server)    args=("${root[@]}" library/zoomy_server/tests) ;;
+            prepost)   args=("${root[@]}" library/zoomy_prepost/tests) ;;
+            plotting)  args=("${root[@]}" library/zoomy_plotting/zoomy_plotting/tests) ;;
+            superrepo) args=("${root[@]}" tests --ignore=tests/qr_cases --ignore=tests/backend_e2e --ignore=tests/tutorials --ignore=tests/playground) ;;
+          esac
+          python -m pytest "${args[@]}" -n 4 -m "$MARKS" --timeout="$TEST_TIMEOUT" -p no:cacheprovider -q -rfE --durations=10

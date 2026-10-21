@@ -84,7 +84,7 @@ testpaths = ["tests"]
 # expression takes over selection).  Register the markers so nothing warns.
 markers = [
     "small: size tag — cheap test, member of the default (small) tier.",
-    "large: real time-march / simulation test (multi-step solver marches, DAE Chorin solves). Excluded by default; enable with --run-large or -m large. Each has a 1-step 'small twin' regression canary in the default tier.",
+    "large: too slow for the push tier (real time-march / simulation tests, weekly tier). Excluded by default; enable with --run-large or -m large. Each has a 1-step 'small twin' regression canary in the default tier.",
     "rederive: deliberately clears/bypasses the derivation cache or forces a fresh derivation of a heavy family (double-moment SME, cold-cache sm_cache builds, golden-vs-fresh identity). Excluded by default so routine runs always hit the warm cache; enable with --run-rederive or -m rederive. Mandatory validator for any golden re-bless.",
     "gate: T1 pre-publish gate membership (approved spec v3 delta: 6 model goldens + 7 structure/emit/solver + 24 runtime smalls). scripts/verify.py runs '-m gate' scoped to the touched areas.",
     "model: area tag — model derivation layer (SME/VAM/ML/closures goldens + model-side exceptions).",
@@ -93,6 +93,9 @@ markers = [
     "printer: area tag — emitted-source printers (foam / generic-C).",
     "solver: area tag — numpy runtime (FVM solvers, BCs, kernels, positivity).",
     "fusion_wip: transitional keep for the active REQ-188 Riemann-fusion seam (test_resolve_opaque); sunset into P01/P02 once fusion lands.",
+    "legacy: exercises superseded code (weekly tier only). Applied by test id from tests/ci_tiers.tsv at the repository root.",
+    "broken: fails today, in no tier (reason= is the first error line). Applied by test id from tests/ci_tiers.tsv at the repository root.",
+    "benchmark: timing-regression test (manual tier: in neither the push nor the weekly tier).",
     "study: parked study scaffolding (REQ-194 depth-law study) — excluded from every tier; runs only via -m study; dies when the study closes.",
 ]
 
