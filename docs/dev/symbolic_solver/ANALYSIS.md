@@ -3048,3 +3048,45 @@ used other predictor numerics (Perron wave speed, its stencils; steffler.md, cau
 Open (not a closure defect of this case): free slip on a curved wall is `d u_t/dn = kappa u_t`
 (zero shear), the vector closure imposes `d(t.q)/dn = 0` (the flat-wall form): O(h kappa) at the
 walls, the order of the 4.5e-5 above.
+
+## 61. One wave-speed default, the bound in the face's normal frame (2026-10-21, dev/wavespeed-frame)
+
+- **Rule.**  Closed-form eigenvalues where the model provides them, else the Gelfand bound
+  (section 48) of A_n evaluated in the face's normal frame (`system_model.wave_speed_bound`:
+  `normal_frame` rotates each horizontal vector group to (q.n, q.t), as HLL's Davis speeds of
+  52c already did).  Default `SystemModel.spectral_radius_method = SpectralRadius.gelfand` for
+  every consumer and solver (symbolic and legacy): Rusanov / Positive* speeds, HLL Davis speeds,
+  the faces and the cells CFL rules (`eigenvalues_cfl` of `gate_eigenvalues_dry`, new
+  `bound_wave_speed` for transport systems without a depth gate), MOOD's repair step, IMEX-SSP2,
+  Chorin, coupling (via the Riemann kernels).  `SpectralRadius.eig` (numerical eigenvalues,
+  incl. the JAX device eigensolver of section 59) stays an opt-in; `characteristic_ghost` and
+  NonconservativeRoe still decompose A_n (not a wave speed).
+- **Removed** (no use left): the Perron bound (`SpectralRadius.bound`,
+  `use_spectral_radius_bound`, `spectral_radius_bound`), the SME level >= 2 dt cone (now the
+  bound), `zoomy_core.symsolver.WAVE_SPEED` / `default_wave_speed` (the default lives in the
+  SystemModel).  `symbolic_spectrum()` as a late operation re-gates a stale dt spectrum.
+- **Checks.**  Gate 57 rotation (box 30 deg = 0 deg, SME(0) O2, default wave speed): main 4.4e-7
+  / 4.1e-6 (h / q, FAIL), now 3.9e-16 / 1.9e-15 (JAX, NumPy); C38 with adaptive steps (new rows
+  `box_r*_faces`, `box_r*_cells`): <= 1.5e-15 on NumPy, JAX, foam.  Gate 49 (models, now also
+  the cells rule's slot): 660,000 matrices, min ratio 1.000000000000000, max 1.049; gate 50
+  568,000, PASS.  Thin-cell test: the bound is 1.044 x the near-defective pair u +- 1e-4 at
+  u = 300 (eig and closed form exact).
+- **Tests.**  zoomy_core 502 pass, rederive 41 pass; goldens n01-n03, s02, s03, p01 re-blessed
+  (eigenvalues_cfl / Riemann speed rows: gelfand_bound instead of eigenvalues); prebuilt cache
+  rebuilt (SME keys).  zoomy_jax: legacy-solver refs re-blessed (with `SpectralRadius.eig` they
+  match the old ones; max|diff| 6e-7 .. 3e-5); remaining failures timing gates as on main.
+  QR 28 pass, 2 skipped.  Matrix: not rerun in full (main does it after the merge); a partial
+  serial / mpi2 store comparison against main showed Cartesian cases at round-off (C1-C4, C11,
+  C13, C14, C26, C31, C37 <= 3e-9), triangles C12 <= 1.5e-6, C5 n48 4.6e-6, C10 s2 <= 5.9e-6,
+  Euler C24 bitwise.
+- Open: 3-D (3 directions) and reduced systems keep the lab frame (no unique tangent basis).
+
+## 62. The dry-neighbour rule of section 50 is free-surface specific (2026-10-21, dev/wavespeed-frame)
+
+Audited, no change needed: the template activates it only through `bed_rows` (roles.depth and
+roles.bed declared, reconstruction W = (b, b + h), bed derived) and passes the rows and eps as
+block arguments; NumPy / JAX / foam (`Fit::gradient`, `limit`) / AMReX (`gradient_shore`,
+`limiter_factors`) take them from those arguments, no fixed index.  Without the roles the printed
+blocks are the plain 3-argument gradient and 5-argument limiters (new test
+`test_shore_rule_follows_the_free_surface_roles`).  Pit lake at rest (JAX): all variants
+<= 1.1e-14.

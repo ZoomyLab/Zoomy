@@ -25,7 +25,6 @@ import gate49_wave_speed_bound as G49
 from zoomy_core.fvm.riemann_solvers import HLL
 from zoomy_core.fvm.userfunctions import gelfand_bound as bound_np
 from zoomy_core.numerics import NumericalSystemModel
-from zoomy_core.symsolver import default_wave_speed
 from zoomy_jax.fvm.userfunctions import gelfand_bound as bound_jax
 
 J, D, TOL = G49.J, G49.D, 1e-12
@@ -90,7 +89,6 @@ def random_part():
 def production(nsm):
     """`(f(Q, aux, p, n) -> (s_L, s_R), ev)`: `HLL.wave_speed_bounds` of the NSM at one state on
     both sides, lambdified with the NumPy kernel; `ev` gate 49's speed matrix."""
-    default_wave_speed(nsm)
     ev, names = G49.speed_matrix(nsm)
     num = HLL(nsm.sm)
     Q, A, P, N = (list(num.variables), list(num.aux_variables), list(num.parameters),

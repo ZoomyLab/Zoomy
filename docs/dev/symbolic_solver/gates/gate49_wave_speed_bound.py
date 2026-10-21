@@ -30,7 +30,6 @@ import common as C
 from zoomy_core.fvm.userfunctions import gelfand_bound as bound_np
 from zoomy_core.model.kernel_functions import gelfand_bound
 from zoomy_core.numerics import NumericalSystemModel
-from zoomy_core.symsolver import default_wave_speed
 from zoomy_core.systemmodel import SystemModel
 from zoomy_jax.fvm.userfunctions import gelfand_bound as bound_jax
 
@@ -159,17 +158,23 @@ def random_sets(m=4000):
 
 
 # ── model wave-speed matrices ───────────────────────────────────────────────
-def speed_matrix(nsm):
+def speed_matrix(nsm, slot="riemann"):
     """The flat matrix of the production `gelfand_bound` call, lambdified over (Q, Qaux, p, n),
-    and an aux evaluator."""
-    default_wave_speed(nsm)
+    and an aux evaluator; `slot` "riemann": the Riemann speeds' (`local_max_abs_eigenvalue`),
+    "cells": the cells rule's dt spectrum (`eigenvalues_cfl`, ANALYSIS 61)."""
     num = nsm.build_numerics()
-    calls = sp.sympify(num.functions["local_max_abs_eigenvalue"].definition).atoms(gelfand_bound)
+    if slot == "riemann":
+        expr = num.functions["local_max_abs_eigenvalue"].definition
+        Q, A, P, N = (list(num.variables), list(num.aux_variables), list(num.parameters),
+                      list(num.normal))
+    else:
+        expr = nsm.eigenvalues_cfl
+        Q, A, P, N = (list(nsm.state), list(nsm.aux_state), list(nsm.parameters.values()),
+                      list(nsm.normal.values()))
+    calls = sp.sympify(expr).atoms(gelfand_bound)
     assert len(calls) == 1, calls
     flat = list(next(iter(calls)).args[2:])
     k = int(round(len(flat) ** 0.5))
-    Q, A, P, N = (list(num.variables), list(num.aux_variables), list(num.parameters),
-                  list(num.normal))
     mods = [{"conditional": lambda c, a, b: np.where(c, a, b)}, "numpy"]
     f = sp.lambdify([*Q, *A, *P, *N], flat, modules=mods)
     uav = nsm.operator("update_aux_variables")
@@ -244,6 +249,9 @@ def main():
         built[tuple(names)] = (ev, ndim)
         for kind, Qv in zip(("cells", "faces"), random_states(names, 20000, ndim)):
             rows.append(check(f"{label} {kind}", ev(Qv, normals(Qv.shape[1], ndim))))
+        evc, _ = speed_matrix(nsm, "cells")              # the cells rule's dt spectrum
+        Qv = random_states(names, 20000, ndim)[0]
+        rows.append(check(f"{label} cells rule", evc(Qv, normals(Qv.shape[1], ndim))))
     for path in args.states:
         d = np.load(path, allow_pickle=True)
         names = tuple(str(s) for s in (d["names"] if "names" in d else d["state"]))
