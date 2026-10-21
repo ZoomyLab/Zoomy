@@ -29,6 +29,8 @@ def test_filter_categories_and_harness():
     assert index.FILTERS["physics"] == ("viscous", "inviscid", "hydrostatic", "non-hydrostatic",
                                         "compressible", "incompressible", "free-surface")
     assert index.HARNESS == {"requires": ("cpu", "gpu", "mpi", "container")}
+    assert list(index.HUES) == list(index.FILTERS)              # one colour per category
+    assert len(set(index.HUES.values())) == len(index.HUES)
 
 
 def test_requires_defaults_to_cpu_and_gates_the_runner():
@@ -86,9 +88,15 @@ def test_page_is_built_from_the_metadata(tmp_path):
     assert copy["metadata"]["orphan"] is True and copy["metadata"]["zoomy"]["title"] == "T"
     assert "orphan" not in json.loads((src / "a" / "one.ipynb").read_text())["metadata"]
     page = index.render(notebooks)
-    assert page.count('class="zt-select"') == len(index.FILTERS)
-    assert 'data-cat="requires"' not in page
-    assert '<option value="dimension:2d">2d (1)</option>' in page
-    assert '<option value="dimension:3d" disabled>3d (0)</option>' in page
+    # tag panel: one chip per tag that occurs (with its count), coloured by category
+    assert page.count('class="zt-chip"') == 4          # use-case, tutorial, 2d, viscous (requires: is no filter)
+    assert ('<button type="button" class="zt-chip" data-tag="dimension:2d" title="dimension: 2d" '
+            'aria-pressed="false">2d <span class="zt-n">1</span></button>') in page
+    assert 'data-tag="dimension:3d"' not in page and 'data-tag="requires:' not in page
+    assert f'<section class="zt-group" style="--zt-h:{index.HUES["physics"]}"><div class="zt-gh">physics</div>' in page
+    # the field above the grid and the layout that places the panel right of it
+    assert page.count('class="zt-text"') == 1 and 'class="zt-clear"' in page and 'class="zt-suggest"' in page
+    assert page.index("{div} zt-bar") < page.index("::::{grid}") < page.index("{div} zt-panel")
+    assert 'class="zt-empty" hidden' in page and "zt-select" not in page
     assert ":link: ipynb/a/one" in page and ":link-type: doc" in page
     assert 'data-tags="type:use-case dimension:2d physics:viscous requires:cpu"' in page
