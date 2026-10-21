@@ -1,0 +1,227 @@
+"""JAX **UserFunctions** — the opaque kernels a backend must supply (REQ-168).
+
+The `module` dict handed to `sympy.lambdify` *is* the UserFunctions table:
+it resolves every opaque symbol the printer emits.  Historically it was an
+anonymous dict literal duplicated across `transformation/to_jax.py` (legacy
+`JaxRuntimeModel` / `JaxRuntimeSymbolic`) and `transformation/jax_runtime.py`
+(the LIVE `JaxRuntime`), so a missing kernel was invisible instead of a build
+error.  This module is the single source; the runtimes build their `module`
+from `jax_userfunctions`.
+
+Kernels
+-------
+`compute_derivative` — NON-LOCAL spatial-derivative aux.  Stays `None` here;
+the solver injects the mesh-bound impl (`lsq_gradient_per_field`) before the
+`update_aux_variables` slot is lambdified (mirrors numpy).
+
+`eigensystem(*A_flat)` — the FULL packed stack `[λ(n), R(n·n), L=R⁻¹(n·n)]`
+of the row-major matrix `A`.  Component access is ``pick(eigensystem(*a),
+idx)`` — the canonical form the producers emit, cse-hoisted to ONE call per
+face.  Consumed by `NonconservativeRoe` and the characteristic BCs.
+
+`solve(*args)` — the per-cell linear solve `A⁻¹b` (whole vector; `args` =
+row-major `A` (n·n) then `b` (n)); component access ``pick(solve(*a),
+idx)``.  REQ-68.
+
+`pick(packed, idx)` — trailing-axis index read of a packed kernel result.
+
+⚠ PERFORMANCE / AD CAVEAT (REQ-168, jax): `jnp.linalg.eig` is CPU-only, so
+`eigensystem` here routes through `jax.pure_callback` — a HOST round-trip.
+Both consumers sit inside the fused JIT hot loop (the wave speed is evaluated
+every step inside `lax.while_loop`; Roe evaluates per face inside the flux
+operator), so making this the DEFAULT `dt` path would break the fusion that
+gives the jax backend its throughput, and `pure_callback` has no JVP rule so
+forward-AD through the solver would break too.  The table is complete (Roe and
+opt-in paths work), but the default wave speed should use the lighter λ-only
+`eigenvalues` kernel (on-device) once core exposes it.  See the REQ-168 thread.
+"""
+from __future__ import annotations
+
+import numpy as np
+import jax
+import jax.numpy as jnp
+
+__all__ = ["eigensystem", "eigenvalues", "solve", "pick", "newton_solve",
+           "solve_steady_ode", "jax_userfunctions"]
+
+
+# ── newton_solve (higher-order root-find; Bernoulli moving-equilibrium WB) ────
+def newton_solve(residual, x0, n_iter=60):
+    """Batched scalar Newton root-find of `residual(x) = 0` from guess `x0`.
+
+    The jax twin of `zoomy_core.fvm.userfunctions.newton_solve` — same
+    contract, on-device and jit/AD-safe.  The reconstruction that lives in core
+    builds the `residual` closure (elementwise over the grid) and the guess;
+    this backend runs the loop (``reconstruction lives in core, backend is a
+    loop``).  Consumed by the moving-equilibrium (Bernoulli) WB reconstruction:
+    at SME level 0 the per-face root is the SWE specific-energy surface `η*`.
+
+    Fixed `n_iter` via `lax.scan` (NO data-dependent `while` — the trace
+    is static, so it fuses into the flux hot loop and stays reverse/forward-AD
+    safe).  The residual is elementwise (each lane independent → diagonal
+    Jacobian), so `jax.jvp` with a unit tangent returns the EXACT per-lane
+    derivative in one pass — no eigen/callback host round-trip."""
+    def body(x, _):
+        f, fp = jax.jvp(residual, (x,), (jnp.ones_like(x),))
+        return x - f / fp, None
+    x, _ = jax.lax.scan(body, x0, None, length=int(n_iter))
+    return x
+
+
+# ── solve_steady_ode (moving-equilibrium WB with friction) ────────────────────
+def solve_steady_ode(slope, U0, ds, n_iter=8):
+    """Integrate one collocation step of the local stationary ODE `U_x = G(U)`.
+
+    The jax twin of `zoomy_core.fvm.userfunctions.solve_steady_ode` — same
+    contract, on-device and jit-safe.  The moving-equilibrium WB reconstruction
+    (core) builds the `slope` closure `G` from the emitted operators and the
+    `solve` linear-solve kernel; this backend runs the RK loop.
+
+    Reversible / implicit collocation — **implicit midpoint** (1-stage Gauss),
+    the reversible RK the fully-WB property needs.  Solves the endpoint
+    `U1 = U0 + ds·G((U0+U1)/2)` by `n_iter` fixed-point sweeps via
+    `lax.scan` (NO data-dependent `while` → fuses into the flux hot loop,
+    stays forward/reverse-AD safe).  `U0` is `(n_state, nf)`, `ds` a
+    scalar or `(nf,)` signed step; returns the endpoint `(n_state, nf)`."""
+    def body(U1, _):
+        Umid = 0.5 * (U0 + U1)
+        return U0 + ds * slope(Umid), None
+    U1, _ = jax.lax.scan(body, U0, None, length=int(n_iter))
+    return U1
+
+
+# ── eigenvalues (λ-only; REQ-168 GAP 1) ──────────────────────────────────────
+def eigenvalues(*a_flat):
+    """The λ-only spectrum vector `(…, n)` (real part) of the row-major
+    `n×n` `A_flat`.  Component access is `pick(eigenvalues(*a), idx)`.
+
+    The λ-only companion of `eigensystem`, for the wave-speed / CFL bound
+    `max|λ_i(A_n)|` when the model has no closed-form spectrum (SME / VAM).
+
+    **This one does NOT go through `pure_callback`**: it stays inside the jit
+    (no host round-trip, no broken JVP) and skips the eigenvector solve + the
+    `R⁻¹` inverse entirely, because the wave speed is evaluated EVERY step
+    inside the fused `lax.while_loop`.  CPU: `jnp.linalg.eigvals` (LAPACK);
+    GPU: `zoomy_jax.fvm.eigvals.eigvals_device`, LAPACK's algorithm batched on
+    the device (cuSOLVER `Xgeev`, what `jnp.linalg.eigvals` runs there, takes
+    one host-synchronised call per matrix: ~75x slower for a 60-cell mesh).
+    Batched: each arg may be a scalar or a `(n_faces,)` array."""
+    from zoomy_jax.fvm.eigvals import eigvals
+    n = int(round(len(a_flat) ** 0.5))
+    cols = jnp.broadcast_arrays(*[jnp.asarray(a) for a in a_flat])
+    A = jnp.stack(cols, axis=-1).reshape(cols[0].shape + (n, n))
+    return jnp.real(eigvals(A))
+
+
+# ── eigensystem ──────────────────────────────────────────────────────────────
+def _eig_host(A):
+    """Host (numpy) eigendecomposition — returns the flat [λ, R, L] stack."""
+    w, V = np.linalg.eig(A)
+    w = np.real(w)
+    V = np.real(V)
+    try:
+        L = np.linalg.inv(V)
+    except np.linalg.LinAlgError:
+        L = np.linalg.pinv(V)
+    n = A.shape[-1]
+    return np.concatenate(
+        [w, V.reshape(*A.shape[:-2], n * n), L.reshape(*A.shape[:-2], n * n)],
+        axis=-1,
+    )
+
+
+def eigensystem(*a_flat):
+    """The FULL packed stack `[λ(n), R(n·n), L(n·n)]` (length `n+2n²`) for
+    row-major `A`.  Component access is `pick(eigensystem(*a), idx)`.
+
+    Batched: each arg may be a scalar or a `(n_faces,)` array (broadcast).
+    Routes through `pure_callback` because `jnp.linalg.eig` is CPU-only —
+    see the module-level performance caveat."""
+    n = int(round(len(a_flat) ** 0.5))
+    cols = jnp.broadcast_arrays(*[jnp.asarray(a) for a in a_flat])
+    A = jnp.stack(cols, axis=-1).reshape(cols[0].shape + (n, n))
+    out = jax.ShapeDtypeStruct(A.shape[:-2] + (n + 2 * n * n,), A.dtype)
+    return jax.pure_callback(_eig_host, out, A, vmap_method="broadcast_all")
+
+
+# ── solve (REQ-68) ───────────────────────────────────────────────────────────
+def solve(*args):
+    """The per-cell linear solve `A⁻¹b` (whole vector `(…, n)`).
+
+    `args` = row-major `A` (n·n) followed by `b` (n); `n` inferred from
+    `n·n + n`.  Batched over the grid (each arg scalar or `(n_cells,)`), so
+    the NSM point-implicit source lowers to ONE batched solve; component access
+    is `pick(solve(*a), idx)`.  On-device (`jnp.linalg.solve`) — no
+    callback, jit/vmap/AD-safe."""
+    m = len(args)
+    n = int(round((-1.0 + (1.0 + 4.0 * m) ** 0.5) / 2.0))
+    cols = jnp.broadcast_arrays(*[jnp.asarray(a) for a in args])
+    batch = cols[0].shape
+    A = jnp.stack(cols[: n * n], axis=-1).reshape(batch + (n, n))
+    b = jnp.stack(cols[n * n:], axis=-1).reshape(batch + (n,))
+    return jnp.linalg.solve(A, b[..., None])[..., 0]
+
+
+# ── pick (component read of a packed kernel result) ──────────────────────────
+def pick(packed, idx):
+    """The `idx`-th component of a packed opaque-kernel result
+    (`eigensystem` / `eigenvalues` / `solve`).  Trailing-axis
+    index read — the producers emit `pick(K(*a), idx)` against ONE cse-hoisted
+    `K(*a)` node so each face runs ONE decomposition / solve."""
+    return packed[..., int(idx)]
+
+
+# ── gelfand_bound (the wave speed of models without a closed-form spectrum) ──
+def gelfand_bound(j, delta, *a_flat):
+    """`kernel_functions.gelfand_bound` (the NumPy kernel's arithmetic): matrix products
+    only, so any device; batched over the leading axes; AD-safe at a zero matrix."""
+    n = int(round(len(a_flat) ** 0.5))
+    cols = jnp.broadcast_arrays(*[jnp.asarray(a) for a in a_flat])
+    C = jnp.stack(cols, axis=-1).reshape(cols[0].shape + (n, n))
+    finite = jnp.isfinite(C).all(axis=(-2, -1))
+    C = jnp.where(finite[..., None, None], C, 0.0)
+    scales = []
+    for _ in range(int(j)):
+        s = jnp.abs(C).sum(-1).max(-1)
+        s = jnp.where(s > 0, s, 1.0)
+        C = C / s[..., None, None]
+        scales.append(s)
+        C = C @ C
+    M = jnp.abs(C)
+    r = M.sum(-1)
+    x = r + (delta * r.max(-1))[..., None]          # > 0: w continuous in A
+    y = jnp.einsum("...ik,...k->...i", M, x)
+    w = jnp.where(x > 0, y / jnp.where(x > 0, x, 1.0), 0.0).max(-1)
+    pos = w > 0
+    t = jnp.where(pos, w, 1.0)
+    for s in reversed(scales):
+        t = s * jnp.sqrt(t)
+    return jnp.where(finite, jnp.where(pos, t, 0.0), jnp.inf)
+
+
+# ── the table ────────────────────────────────────────────────────────────────
+def jax_userfunctions() -> dict:
+    """The complete jax UserFunctions table (a fresh dict per runtime, since
+    runtimes inject per-instance entries such as `compute_derivative`)."""
+    return {
+        # arithmetic / structural
+        "ones_like": jnp.ones_like,
+        "zeros_like": jnp.zeros_like,
+        "array": jnp.array,
+        "squeeze": jnp.squeeze,
+        "conditional": lambda c, t, f: jnp.where(c, t, f),
+        # solver-injected (mesh-bound) — see module docstring
+        "compute_derivative": None,
+        # opaque numerical kernels
+        "eigensystem": eigensystem,
+        "eigenvalues": eigenvalues,
+        "gelfand_bound": gelfand_bound,
+        "solve": solve,
+        # component read of a packed kernel result (canonical pick(K(*a), idx))
+        "pick": pick,
+        # higher-order root-find (reconstruction supplies the residual callable
+        # — NOT a lambdify-lowered REQUIRED_KERNEL, like the numpy table's)
+        "newton_solve": newton_solve,
+        # higher-order steady-ODE integrator (moving-equilibrium WB w/ friction)
+        "solve_steady_ode": solve_steady_ode,
+    }
