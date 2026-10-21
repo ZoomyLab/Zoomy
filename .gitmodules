@@ -34,3 +34,6 @@
 	path = library/zoomy_dmplex
 	url = https://github.com/ZoomyLab/zoomy-dmplex.git
 	branch = main
+[submodule "library/zoomy_dune"]
+	path = library/zoomy_dune
+	url = https://github.com/IngoSteldermann/zoomy-dune-fem.git
