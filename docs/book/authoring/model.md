@@ -16,7 +16,7 @@ derivation        F, P, B, S, M           Riemann, reconstruction      AMReX · 
 ```
 
 This page covers the first box. Then: [System Model](system-model.md) →
-[Numerical System Model](numerics.md) → a [backend](../backends/index.md).
+[Numerical System Model](numerics.md) → a [backend](../guide/backends.md).
 
 ## The functions that actually matter
 

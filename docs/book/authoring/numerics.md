@@ -197,6 +197,4 @@ ordinary `SystemModel` that prints like any other.
 - Second-order reconstruction needs a limiter appropriate to the mesh.
 - Every threshold set here, none in the backend.
 
-Backends: [NumPy](../backends/numpy.md) (reference) ·
-[JAX](../backends/jax.md) · [AMReX](../backends/amrex.md) ·
-[OpenFOAM](../backends/openfoam.md).
+Backends: [NumPy, JAX, AMReX, OpenFOAM](../guide/backends.md).

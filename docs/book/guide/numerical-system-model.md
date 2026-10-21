@@ -1,39 +1,20 @@
 # NumericalSystemModel
 
-The `NumericalSystemModel` (NSM) is the SystemModel plus the scheme choices
-that are not a solver option: what is reconstructed and how, the Riemann
-solver, the wave speed.  It also carries the kernels (`nsm.call.<slot>`:
-flux, fluctuations, source, boundary states, ...) that every backend prints
-from the same expressions.
-
-**What you write:**
-
-```python
-from zoomy_core.numerics import Limiter, NumericalSystemModel, ReconstructionSpec
-nsm = NumericalSystemModel.from_system_model(
-    sm, reconstruction=ReconstructionSpec(order=2, limiter=Limiter.minmod))
-```
+The `NumericalSystemModel` (NSM) is the SystemModel plus the scheme choices that are not a solver option.
+Every backend prints its kernels (flux, fluctuations, source, boundary states) from the same NSM.
+`NumericalSystemModel.from_system_model(sm, reconstruction=ReconstructionSpec(order=2), riemann=...)` builds it.
 
 | option | default | meaning |
 |---|---|---|
-| `reconstruction.order` | `1` | 1: piecewise constant; 2: LSQ gradients, limited |
-| `reconstruction.limiter` | `Limiter.venkatakrishnan` | also `minmod`, `barth_jespersen`, `none`; per row: `limiters={"b": Limiter.none}` |
-| `reconstruction.variables` | `ReconstructedVariables.model` | `model`: the model's reconstruction variables (SWE/SME: $\eta = b + h$, $u = q/h$); `conservative`: $Q$ |
-| `reconstruction.bed` | `BedReconstruction.derived` | bed at the faces from $\eta - h$ (lake at rest, $h_f \ge 0$); `reconstructed` |
-| `reconstruction.ties` | `{}` | `{row: lead}`: a row is limited at least as much as its lead |
-| `riemann` | from the model's tags, else `NonconservativeRusanov` (C1 bump: `PositiveNonconservativeRusanov`) | `zoomy_core.fvm.riemann_solvers`: `Rusanov`, `NonconservativeRusanov`, `HLL`, `HLLC`, ... |
-| `diffusion` | on if `diffusion_matrix` is nonzero | `DiffusionSpec` |
-| `spectral_radius_method` | `SpectralRadius.gelfand` | wave speed of a model without closed-form eigenvalues: the upper bound $\lVert A_n^m\rVert^{1/m} \ge \rho(A_n)$, $m = 2^7$ (`spectral_squarings`), sharpened by a Collatz-Wielandt step (offset `spectral_cw_offset`), of $A_n$ in each face's normal frame (rotation invariant), in the Riemann speeds and both CFL rules, the same on every backend and device; `SpectralRadius.eig`: the numerical eigenvalues of $A_n$ (an estimate, no bound; JAX: a device eigensolver on a GPU) |
+| `reconstruction.order` | `1` | 1 is piecewise constant, 2 uses limited least-squares gradients |
+| `reconstruction.limiter` | `Limiter.venkatakrishnan` | also `minmod`, `barth_jespersen`, `none` |
+| `riemann` | from the model, else `NonconservativeRusanov` | a class of `zoomy_core.fvm.riemann_solvers`: `Rusanov`, `NonconservativeRusanov`, `HLL`, `HLLC`, ... |
+| `diffusion` | on for a nonzero `diffusion_matrix` | `DiffusionSpec` |
+| `spectral_radius_method` | `SpectralRadius.gelfand` | wave speed of a model without closed-form eigenvalues: an upper bound, or `SpectralRadius.eig` for numerical eigenvalues |
 
-MOOD (the a-posteriori order fallback) is a solver option
-([Solvers](solvers.md)); what it tests is the model's admissibility
-(e.g. $h \ge 0$; Euler: $\rho, p > 0$).
-
-**Connects to:** every solver takes the NSM unchanged
-(`solver.setup(mesh, nsm)` on JAX, `solver.run(mesh, nsm, Q0, workdir)` on
-foam / AMReX).  The mesh is an `LSQMesh` (`zoomy_core.mesh`:
-`LSQMesh.create_1d/2d/3d`, or from a gmsh file); its least-squares stencils
-serve gradients and boundary closures.
+The mesh is an `LSQMesh` (`zoomy_core.mesh`), created with `LSQMesh.create_1d/2d/3d` or from a gmsh file.
+Every solver takes the same NSM and mesh ([Backends](backends.md)).
+Tutorials: {doc}`NumericalSystemModel <../tutorials/ipynb/components/numerical_system_model>`, {doc}`a 1-D mesh <../tutorials/ipynb/mesh/mesh_1d>`, {doc}`a 2-D gmsh mesh <../tutorials/ipynb/mesh/mesh_2d_gmsh>`.
 
 API: {doc}`zoomy_core.numerics <../api/_autodoc2/zoomy_core/zoomy_core.numerics>`,
 {doc}`zoomy_core.mesh <../api/_autodoc2/zoomy_core/zoomy_core.mesh>`.
