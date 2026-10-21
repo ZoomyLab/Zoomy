@@ -7,37 +7,37 @@ Executable notebooks from `tutorials/`.  Each menu filters one category: a noteb
 <div class="zt-filter">
 <label class="zt-field"><span class="zt-cat">type</span><select class="zt-select" data-cat="type">
 <option value="">any</option>
-<option value="type:tutorial">tutorial (1)</option>
+<option value="type:tutorial">tutorial (12)</option>
 <option value="type:use-case" disabled>use-case (0)</option>
 </select></label>
 <label class="zt-field"><span class="zt-cat">dimension</span><select class="zt-select" data-cat="dimension">
 <option value="">any</option>
-<option value="dimension:1d">1d (1)</option>
-<option value="dimension:2d" disabled>2d (0)</option>
+<option value="dimension:1d">1d (10)</option>
+<option value="dimension:2d">2d (2)</option>
 <option value="dimension:3d" disabled>3d (0)</option>
 </select></label>
 <label class="zt-field"><span class="zt-cat">physics</span><select class="zt-select" data-cat="physics">
 <option value="">any</option>
-<option value="physics:viscous">viscous (1)</option>
-<option value="physics:inviscid" disabled>inviscid (0)</option>
-<option value="physics:hydrostatic">hydrostatic (1)</option>
+<option value="physics:viscous">viscous (2)</option>
+<option value="physics:inviscid">inviscid (8)</option>
+<option value="physics:hydrostatic">hydrostatic (10)</option>
 <option value="physics:non-hydrostatic" disabled>non-hydrostatic (0)</option>
 <option value="physics:compressible" disabled>compressible (0)</option>
-<option value="physics:incompressible">incompressible (1)</option>
-<option value="physics:free-surface">free-surface (1)</option>
+<option value="physics:incompressible">incompressible (10)</option>
+<option value="physics:free-surface">free-surface (10)</option>
 </select></label>
 <label class="zt-field"><span class="zt-cat">component</span><select class="zt-select" data-cat="component">
 <option value="">any</option>
-<option value="component:model">model (1)</option>
-<option value="component:system-model">system-model (1)</option>
-<option value="component:numerical-system-model">numerical-system-model (1)</option>
-<option value="component:solver">solver (1)</option>
-<option value="component:printer">printer (1)</option>
-<option value="component:mesh" disabled>mesh (0)</option>
+<option value="component:model">model (5)</option>
+<option value="component:system-model">system-model (5)</option>
+<option value="component:numerical-system-model">numerical-system-model (5)</option>
+<option value="component:solver">solver (6)</option>
+<option value="component:printer">printer (2)</option>
+<option value="component:mesh">mesh (2)</option>
 </select></label>
 <label class="zt-field"><span class="zt-cat">method</span><select class="zt-select" data-cat="method">
 <option value="">any</option>
-<option value="method:fv">fv (1)</option>
+<option value="method:fv">fv (8)</option>
 <option value="method:lsq">lsq (1)</option>
 <option value="method:mood" disabled>mood (0)</option>
 <option value="method:imex" disabled>imex (0)</option>
@@ -45,23 +45,155 @@ Executable notebooks from `tutorials/`.  Each menu filters one category: a noteb
 </select></label>
 <label class="zt-field"><span class="zt-cat">feature</span><select class="zt-select" data-cat="feature">
 <option value="">any</option>
-<option value="feature:ad" disabled>ad (0)</option>
+<option value="feature:ad">ad (2)</option>
 <option value="feature:mpi" disabled>mpi (0)</option>
 <option value="feature:gpu" disabled>gpu (0)</option>
 <option value="feature:coupling" disabled>coupling (0)</option>
 </select></label>
 <label class="zt-field"><span class="zt-cat">backend</span><select class="zt-select" data-cat="backend">
 <option value="">any</option>
-<option value="backend:numpy">numpy (1)</option>
-<option value="backend:jax" disabled>jax (0)</option>
+<option value="backend:numpy">numpy (4)</option>
+<option value="backend:jax">jax (2)</option>
 <option value="backend:foam" disabled>foam (0)</option>
-<option value="backend:amrex" disabled>amrex (0)</option>
+<option value="backend:amrex">amrex (2)</option>
 </select></label>
 <button type="button" class="zt-clear">reset</button>
 </div>
 
 ::::{grid} 1 2 2 2
 :gutter: 3
+
+:::{grid-item-card} A 1-D mesh
+:class-card: zt-card
+:link: ipynb/mesh/mesh_1d
+:link-type: doc
+
+<span class="zt-data" data-tags="type:tutorial dimension:1d component:mesh requires:cpu"></span>Build a 1-D LSQMesh and inspect cells, faces and boundary ghost cells.
+
+`tutorials/mesh/mesh_1d.ipynb`
++++
+<span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:1d</span> <span class="zt-tag">component:mesh</span>
+:::
+
+:::{grid-item-card} A 2-D gmsh mesh
+:class-card: zt-card
+:link: ipynb/mesh/mesh_2d_gmsh
+:link-type: doc
+
+<span class="zt-data" data-tags="type:tutorial dimension:2d component:mesh requires:cpu"></span>Generate a triangular gmsh mesh of a channel, load it as an LSQMesh and inspect the boundary tags.
+
+`tutorials/mesh/mesh_2d_gmsh.ipynb`
++++
+<span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:2d</span> <span class="zt-tag">component:mesh</span>
+:::
+
+:::{grid-item-card} AMReX: from symbolic model to generated C++
+:class-card: zt-card
+:link: ipynb/amrex/minimal
+:link-type: doc
+
+<span class="zt-data" data-tags="type:tutorial dimension:1d physics:inviscid physics:hydrostatic physics:incompressible physics:free-surface component:system-model component:numerical-system-model component:solver method:fv backend:amrex requires:container"></span>A 1-D dam break printed as C++ headers for AMReX, built, run and read back.
+
+`tutorials/amrex/minimal.ipynb`
++++
+<span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:1d</span> <span class="zt-tag">physics:inviscid</span> <span class="zt-tag">physics:hydrostatic</span> <span class="zt-tag">physics:incompressible</span> <span class="zt-tag">physics:free-surface</span> <span class="zt-tag">component:system-model</span> <span class="zt-tag">component:numerical-system-model</span> <span class="zt-tag">component:solver</span> <span class="zt-tag">method:fv</span> <span class="zt-tag">backend:amrex</span> <span class="zt-tag">requires:container</span>
+:::
+
+:::{grid-item-card} Code printer: AMReX
+:class-card: zt-card
+:link: ipynb/components/printer_amrex
+:link-type: doc
+
+<span class="zt-data" data-tags="type:tutorial dimension:1d physics:inviscid physics:hydrostatic physics:incompressible physics:free-surface component:printer backend:amrex requires:cpu"></span>Print a NumericalSystemModel as an AMReX C++ header and read its flux function.
+
+`tutorials/components/printer_amrex.ipynb`
++++
+<span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:1d</span> <span class="zt-tag">physics:inviscid</span> <span class="zt-tag">physics:hydrostatic</span> <span class="zt-tag">physics:incompressible</span> <span class="zt-tag">physics:free-surface</span> <span class="zt-tag">component:printer</span> <span class="zt-tag">backend:amrex</span>
+:::
+
+:::{grid-item-card} End to end: 1-D dam break
+:class-card: zt-card
+:link: ipynb/components/end_to_end
+:link-type: doc
+
+<span class="zt-data" data-tags="type:tutorial dimension:1d physics:inviscid physics:hydrostatic physics:incompressible physics:free-surface component:model component:system-model component:numerical-system-model component:solver method:fv backend:numpy requires:cpu"></span>The whole pipeline once: model, SystemModel, NumericalSystemModel, NumPy solver and plot of a 1-D dam break.
+
+`tutorials/components/end_to_end.ipynb`
++++
+<span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:1d</span> <span class="zt-tag">physics:inviscid</span> <span class="zt-tag">physics:hydrostatic</span> <span class="zt-tag">physics:incompressible</span> <span class="zt-tag">physics:free-surface</span> <span class="zt-tag">component:model</span> <span class="zt-tag">component:system-model</span> <span class="zt-tag">component:numerical-system-model</span> <span class="zt-tag">component:solver</span> <span class="zt-tag">method:fv</span> <span class="zt-tag">backend:numpy</span>
+:::
+
+:::{grid-item-card} Forward-mode AD through the JAX solver
+:class-card: zt-card
+:link: ipynb/ad/forward_ad
+:link-type: doc
+
+<span class="zt-data" data-tags="type:tutorial dimension:1d physics:inviscid physics:hydrostatic physics:incompressible physics:free-surface component:solver method:fv feature:ad backend:jax requires:cpu"></span>dJ/dn of a 1-D shallow-water march with Manning friction by jax.jvp, checked against central finite differences.
+
+`tutorials/ad/forward_ad.ipynb`
++++
+<span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:1d</span> <span class="zt-tag">physics:inviscid</span> <span class="zt-tag">physics:hydrostatic</span> <span class="zt-tag">physics:incompressible</span> <span class="zt-tag">physics:free-surface</span> <span class="zt-tag">component:solver</span> <span class="zt-tag">method:fv</span> <span class="zt-tag">feature:ad</span> <span class="zt-tag">backend:jax</span>
+:::
+
+:::{grid-item-card} Model and SystemModel
+:class-card: zt-card
+:link: ipynb/components/model_system_model
+:link-type: doc
+
+<span class="zt-data" data-tags="type:tutorial dimension:1d physics:inviscid physics:hydrostatic physics:incompressible physics:free-surface component:model component:system-model requires:cpu"></span>Derive the shallow water equations as a Model, freeze them into a SystemModel and read the wave speeds off its dispersion relation.
+
+`tutorials/components/model_system_model.ipynb`
++++
+<span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:1d</span> <span class="zt-tag">physics:inviscid</span> <span class="zt-tag">physics:hydrostatic</span> <span class="zt-tag">physics:incompressible</span> <span class="zt-tag">physics:free-surface</span> <span class="zt-tag">component:model</span> <span class="zt-tag">component:system-model</span>
+:::
+
+:::{grid-item-card} NumericalSystemModel
+:class-card: zt-card
+:link: ipynb/components/numerical_system_model
+:link-type: doc
+
+<span class="zt-data" data-tags="type:tutorial dimension:1d physics:inviscid physics:hydrostatic physics:incompressible physics:free-surface component:numerical-system-model method:fv requires:cpu"></span>Attach the numerics to a SystemModel: the 1/h regularisation, the reconstruction and the Riemann solver.
+
+`tutorials/components/numerical_system_model.ipynb`
++++
+<span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:1d</span> <span class="zt-tag">physics:inviscid</span> <span class="zt-tag">physics:hydrostatic</span> <span class="zt-tag">physics:incompressible</span> <span class="zt-tag">physics:free-surface</span> <span class="zt-tag">component:numerical-system-model</span> <span class="zt-tag">method:fv</span>
+:::
+
+:::{grid-item-card} Reverse-mode AD through the JAX solver
+:class-card: zt-card
+:link: ipynb/ad/reverse_ad
+:link-type: doc
+
+<span class="zt-data" data-tags="type:tutorial dimension:1d physics:inviscid physics:hydrostatic physics:incompressible physics:free-surface component:solver method:fv feature:ad backend:jax requires:cpu"></span>dJ/dn of a 1-D shallow-water march by AdMode.reverse and jax.grad, equal to forward mode for any ad_checkpoints.
+
+`tutorials/ad/reverse_ad.ipynb`
++++
+<span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:1d</span> <span class="zt-tag">physics:inviscid</span> <span class="zt-tag">physics:hydrostatic</span> <span class="zt-tag">physics:incompressible</span> <span class="zt-tag">physics:free-surface</span> <span class="zt-tag">component:solver</span> <span class="zt-tag">method:fv</span> <span class="zt-tag">feature:ad</span> <span class="zt-tag">backend:jax</span>
+:::
+
+:::{grid-item-card} Shallow moments in 2-D
+:class-card: zt-card
+:link: ipynb/sme/moments_2d
+:link-type: doc
+
+<span class="zt-data" data-tags="type:tutorial dimension:2d physics:viscous physics:hydrostatic physics:incompressible physics:free-surface component:model method:fv backend:numpy requires:cpu"></span>Write a bed-drag closure, inject it into SME, run in 2-D and read the vertical velocity profile back.
+
+`tutorials/sme/moments_2d.ipynb`
++++
+<span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:2d</span> <span class="zt-tag">physics:viscous</span> <span class="zt-tag">physics:hydrostatic</span> <span class="zt-tag">physics:incompressible</span> <span class="zt-tag">physics:free-surface</span> <span class="zt-tag">component:model</span> <span class="zt-tag">method:fv</span> <span class="zt-tag">backend:numpy</span>
+:::
+
+:::{grid-item-card} Shallow water in 1-D
+:class-card: zt-card
+:link: ipynb/swe/simple_numpy
+:link-type: doc
+
+<span class="zt-data" data-tags="type:tutorial dimension:1d physics:inviscid physics:hydrostatic physics:incompressible physics:free-surface component:model component:system-model component:numerical-system-model component:solver method:fv backend:numpy requires:cpu"></span>The whole pipeline once: model, operators, scheme, solve and plot, in 1-D on the NumPy reference solver.
+
+`tutorials/swe/simple_numpy.ipynb`
++++
+<span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:1d</span> <span class="zt-tag">physics:inviscid</span> <span class="zt-tag">physics:hydrostatic</span> <span class="zt-tag">physics:incompressible</span> <span class="zt-tag">physics:free-surface</span> <span class="zt-tag">component:model</span> <span class="zt-tag">component:system-model</span> <span class="zt-tag">component:numerical-system-model</span> <span class="zt-tag">component:solver</span> <span class="zt-tag">method:fv</span> <span class="zt-tag">backend:numpy</span>
+:::
 
 :::{grid-item-card} Zoomy in your browser
 :class-card: zt-card
