@@ -21,6 +21,28 @@ from zoomy_core.transformation.to_numpy import (
 )
 
 
+def _substitute(expr, sub_map):
+    """`expr.subs(sub_map)`, through `xreplace` where the two build the same tree: every key a
+    `Symbol`, no value containing a key it does not map to itself (sequential `subs` would
+    substitute into it), no object whose `_eval_subs` differs from a rebuild (bound variables:
+    `Derivative`, `Subs`, integrals and sums; `cot`; `AccumBounds`).  Both rebuild every
+    node with its evaluated arguments; `xreplace` skips `subs`' pattern matching, ~20x faster
+    on the model operators (ANALYSIS 65).
+    """
+    from sympy.calculus.accumulationbounds import AccumBounds
+    from sympy.concrete.expr_with_limits import ExprWithLimits
+    moved = {k: v for k, v in sub_map.items() if v != k}
+    # an immutable array's args are (flat entries, shape): work on the entries (the array's
+    # own `has` compares whole arrays element by element), rebuild as `subs` does
+    array = isinstance(expr, sp.ImmutableDenseNDimArray)
+    body = expr.args[0] if array else expr
+    if (not moved or not all(isinstance(k, sp.Symbol) for k in moved)
+            or any(set(moved) & getattr(v, "free_symbols", set()) for v in moved.values())
+            or body.has(sp.Derivative, sp.Subs, ExprWithLimits, sp.cot, AccumBounds)):
+        return expr.subs(sub_map)
+    return expr.func(body.xreplace(moved), *expr.args[1:]) if array else expr.xreplace(moved)
+
+
 def _spectral_core(M):
     """Indices left after repeatedly dropping a state whose row or column of the square
     symbolic matrix `M` is structurally zero: the matrix is then block triangular with a
@@ -634,9 +656,9 @@ class Numerics(param.Parameterized, SymbolicRegistrar):
             # quasilinear tensors as mutable arrays, so normalise to
             # immutable before substituting (otherwise the state
             # symbols leak through unsubstituted).
-            out = sp.ImmutableDenseNDimArray(definition).subs(sub_map)
+            out = _substitute(sp.ImmutableDenseNDimArray(definition), sub_map)
         elif hasattr(definition, "subs"):
-            out = definition.subs(sub_map)
+            out = _substitute(definition, sub_map)
         else:
             out = definition
 
