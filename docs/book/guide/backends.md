@@ -64,8 +64,7 @@ the LSQ stencils are the zoomy mesh's own.
 
 `zoomy_core` still contains the earlier NumPy solvers (`zoomy_core.fvm`), and
 `zoomy_jax.fvm` the earlier JAX solvers (`HyperbolicSolver`, `ChorinSplitVAMSolverJax`); the
-symbolic solvers superseded them; the remaining pages that mention them are under
-[Legacy](../legacy.md).
+symbolic solvers superseded them.
 Firedrake, FEniCSx, DMPlex and DUNE backends do not print the symbolic templates.
 
 API: {doc}`zoomy_jax <../api/_autodoc2/zoomy_jax/zoomy_jax>`,

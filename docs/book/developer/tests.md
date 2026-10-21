@@ -1,35 +1,27 @@
-# Tests and timings
+# Tests
 
-Generated from saved results by `docs/scripts/generate_symsolver_results.py`;
-nothing on this page is typed by hand.
-
-```
-run the tests  ──▶  results saved under tests/results/symsolver/  ──▶  docs build regenerates this page
-```
-
-| step | command | writes |
-|---|---|---|
-| cross-backend matrix | `python matrix.py run BACKEND CASE [CONFIG]` in `docs/dev/symbolic_solver/matrix/` | the matrix store (`MATRIX_STORE`) |
-| save the matrix | `MATRIX_STORE=... python docs/scripts/generate_symsolver_results.py --from-store` (zoomy env) | `tests/results/symsolver/matrix_latest.json` (rows, date, library commits) |
-| timings | `taskset -c N pytest tests/symsolver -m benchmark` on an idle machine | `tests/results/symsolver/timings.jsonl`, `timings_latest.json` |
-| render | `python docs/scripts/generate_symsolver_results.py` (part of the docs build) | `docs/_generated/symsolver_*.md` |
-
-Commit the files under `tests/results/symsolver/`; the docs build reads only
-those.  How to add a case: [Extending](extending.md).
+[![QR cases](https://github.com/ZoomyLab/Zoomy/actions/workflows/qr-cases.yml/badge.svg?branch=main)](https://github.com/ZoomyLab/Zoomy/actions/workflows/qr-cases.yml)
+[![Backend e2e](https://github.com/ZoomyLab/Zoomy/actions/workflows/backend-e2e.yml/badge.svg?branch=main)](https://github.com/ZoomyLab/Zoomy/actions/workflows/backend-e2e.yml)
+[![Tutorials](https://github.com/ZoomyLab/Zoomy/actions/workflows/tutorials.yml/badge.svg?branch=main)](https://github.com/ZoomyLab/Zoomy/actions/workflows/tutorials.yml)
+[![Containers](https://github.com/ZoomyLab/Zoomy/actions/workflows/build-containers.yml/badge.svg?branch=main)](https://github.com/ZoomyLab/Zoomy/actions/workflows/build-containers.yml)
 
 ## Cross-backend matrix
-
-Every backend that prints the templates must pass the same physics checks:
-convergence orders, exact solutions, conservation, symmetry, parallel = serial,
-GPU = CPU.
 
 ```{include} ../../_generated/symsolver_matrix.md
 ```
 
 ## Timings
 
-March time of representative runs (`tests/symsolver/timing_cases.py`), one
-CPU core for `serial`.
-
 ```{include} ../../_generated/symsolver_timings.md
 ```
+
+## Where tests live
+
+| tests | location | add one |
+|---|---|---|
+| cross-backend matrix | `docs/dev/symbolic_solver/matrix/` | [Extending](extending.md) |
+| timings | `tests/symsolver/` | [Extending](extending.md) |
+| tutorial notebooks | `tests/tutorials/` | [Adding a tutorial](tutorials.md) |
+| thesis QR cases | `tests/qr_cases/` | `tests/qr_cases/README.md` |
+| backend containers | `tests/backend_e2e/` | `tests/backend_e2e/README.md` |
+| libraries | `library/zoomy_*/tests/` | pytest, the root `conftest.py` sets the markers |

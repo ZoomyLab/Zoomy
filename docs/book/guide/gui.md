@@ -66,5 +66,3 @@ mixed-content blocking, so a `zoomy-server` container on **your own machine**
 (`:8080`) can be connected with no tunnel or certificate — run the container and
 connect. For a backend on another machine, forward it to localhost
 (`ssh -L 8080:localhost:8080 …`) or expose it over HTTPS (e.g. Tailscale Serve).
-
-How the GUI is built: [developer guide](../developer/gui.md).

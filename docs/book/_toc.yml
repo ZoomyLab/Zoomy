@@ -38,9 +38,6 @@ parts:
           - file: developer/extending
           - file: developer/tutorials
           - file: developer/tests
-          - file: developer/ci-reports
-          - file: developer/gui
-          - file: developer/docs
   - caption: Reference
     chapters:
       - file: api/index
@@ -57,32 +54,7 @@ parts:
           - file: api/_autodoc2/zoomy_amrex/zoomy_amrex
             sections:
               - glob: api/_autodoc2/zoomy_amrex/zoomy_amrex.*
-      - file: logging
       - file: literature
       - file: acknowledgements
-  - caption: Legacy / work in progress
-    chapters:
-      - file: legacy
-        sections:
-          - file: user-guide
-            sections:
-              - file: user-guide-cli
-              - file: user-guide-use-cases
-          - file: backends/firedrake
-          - file: backends/dmplex
-          - file: backends/fenicsx
-          - file: authoring/model
-          - file: authoring/system-model
-          - file: authoring/numerics
-          - file: dev-guide
-            sections:
-              - file: dev-architecture
-              - file: dev-components
-              - file: dev-gui-cli
-          - file: testing
-          - file: api/dmplex
-          - file: api/firedrake
-      - file: software
-      - file: documentation
-      - file: research
-      - file: publications
+      - file: cite
+      - file: logo

@@ -1,5 +1,0 @@
-# Writing the docs
-
-- **Markdown (MyST), never reStructuredText**: pages are `.md`, and so are the docstrings. The API reference ([sphinx-autodoc2](https://sphinx-autodoc2.readthedocs.io)) reads them as MyST: backticks for code, `[text](url)` for links, `` ```{note} `` for admonitions; `Args:` / `Returns:` / `References:` sections stay readable (`docs/book/_ext/zoomy_docstrings.py`). Old rST markup in docstrings is rewritten by `python docs/scripts/docstrings_rst_to_md.py PATH` (a dry run unless `--write`).
-- **The site is built by CI from `main`** (`.github/workflows/render-webpage.yml`, in the image of `docs/Dockerfile.docs`): the scripts of `docs/scripts/` write the report and API pages, then `jupyter-book build docs/book`. **Never commit built or generated output** (`_build`, `api/_autodoc2`, `docs/_generated`); preview in that image, do not push a local build.
-- **Two parts**: the user part (Get started, User guide) says how to use Zoomy; what changes Zoomy internals goes to the [developer guide](index.md). The tutorials page and [Adding a tutorial](tutorials.md) are generated from the notebooks by `docs/scripts/generate_tutorial_index.py` and committed.

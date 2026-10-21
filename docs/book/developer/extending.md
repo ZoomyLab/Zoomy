@@ -7,7 +7,8 @@
    (arguments, shapes, boundary behaviour).
 2. Use it in a template or a discretization component.
 3. Implement it under the same name in every runtime: an entry of the table
-   returned by `zoomy_jax/symsolver/runtime.py: runtime()`, an `inline`
+   returned by `runtime()` in `zoomy_core/symsolver/numpy_backend/runtime.py` and in
+   `zoomy_jax/symsolver/runtime.py`, an `inline`
    function in `zoomy_foam/symsolver/rt.H` and in
    `zoomy_amrex/Source/symsolver/rt_amrex.H`.  A backend that cannot provide
    it raises `NotImplementedError` (the matrix records "unsupported").
@@ -23,21 +24,20 @@ The matrix is `docs/dev/symbolic_solver/matrix/` (README there).
    `time_order`, the configs and the backends.
 2. `matrix.py`: the checks in `measure()`, each
    `add(case, check, backend, config, value, threshold, note)` with a
-   threshold `(op, value, source)`; the source says where the number comes
+   threshold `(op, value, source)`.  The source says where the number comes
    from (theory, tolerance, spec, observed).
 3. Run and tabulate, then refresh the published results:
 
 ```bash
 cd docs/dev/symbolic_solver/matrix && source env.sh
-python matrix.py run jax Cnn          # -> store/jax/serial/Cnn/*.npz; foam, amrex alike
+python matrix.py run jax Cnn          # -> store/jax/serial/Cnn/*.npz, foam and amrex alike
 python matrix.py table                # -> table.md
 cd - && MATRIX_STORE=docs/dev/symbolic_solver/matrix/store \
     python docs/scripts/generate_symsolver_results.py --from-store
 ```
 
-`--from-store` rewrites `tests/results/symsolver/matrix_latest.json`;
-commit it, and the [results page](tests.md) follows on the
-next docs build.
+`--from-store` rewrites `tests/results/symsolver/matrix_latest.json`.
+Commit it and the [tests page](tests.md) follows on the next docs build.
 
 ## A timing case
 
@@ -50,7 +50,7 @@ against JAX).  `pytest tests/symsolver -m benchmark` appends a record to
 ## A backend
 
 A runtime (the blocks), a kernel printer and a driver as in
-[Templates and printers](templates.md), then one adapter class in
+[Architecture](templates.md), then one adapter class in
 `docs/dev/symbolic_solver/matrix/backends.py` (`configs`, `launch`, `run`).
-The backend is accepted when every matrix row passes for it; the checks know
+The backend is accepted when every matrix row passes for it.  The checks know
 nothing about the backend.
