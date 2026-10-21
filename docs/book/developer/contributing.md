@@ -31,7 +31,7 @@ The first run of the tests on a fork waits for an approval by a maintainer.
 
 The backends with their own toolchain live in their own repositories, included here as submodules:
 `library/zoomy_amrex`, `library/zoomy_foam`, `library/zoomy_gui`, `library/zoomy_dmplex`,
-`library/zoomy_firedrake`, `library/zoomy_fenicsx`, `library/zoomy_dune`.
+`library/zoomy_firedrake`, `library/zoomy_fenicsx`.
 Each has one protected branch, `main`.
 
 1. Pull request in the backend repository, into its `main`, reviewed as above.
