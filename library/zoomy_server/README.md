@@ -1,6 +1,6 @@
 # zoomy-server
 
-FastAPI solver server for [Zoomy](https://github.com/mbd-rwth/Zoomy) — submits and manages simulation jobs across multiple backends.
+FastAPI solver server for [Zoomy](https://github.com/ZoomyLab/Zoomy) — submits and manages simulation jobs across multiple backends.
 
 ## Installation
 

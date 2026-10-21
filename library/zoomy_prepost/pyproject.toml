@@ -6,7 +6,18 @@ build-backend = "setuptools.build_meta"
 name = "zoomy-prepost"
 version = "0.1.0"
 description = "Shared pre/postprocessing conversions for Zoomy (VTK/.pvd -> HDF5, mesh conversion)."
+readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "LGPL-3.0-or-later" }
+authors = [
+  { name = "Ingo Steldermann", email = "steldermann@mbd.rwth-aachen.de" }
+]
+keywords = ["simulation", "zoomy", "VTK", "HDF5", "mesh", "postprocessing"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
+  "Operating System :: OS Independent",
+]
 dependencies = [
     "numpy",
     "h5py",
@@ -15,10 +26,21 @@ dependencies = [
     "nbformat",
 ]
 
+[project.optional-dependencies]
+# lift3d, mesh_to_gmsh and the composed case files import zoomy_core inside the function.
+# An extra, not a dependency, because zoomy_core imports zoomy_prepost the same way.
+core = ["zoomy-core>=0.2.17", "sympy"]
+
 [project.scripts]
 zoomy-convert = "zoomy_prepost.cli:main"
 zoomy-case = "zoomy_prepost.case_cli:main"
 zoomy-postproc = "zoomy_prepost.postproc_cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ZoomyLab/Zoomy"
+Documentation = "https://zoomylab.github.io/Zoomy"
+Source = "https://github.com/ZoomyLab/Zoomy"
+Issues = "https://github.com/ZoomyLab/Zoomy/issues"
 
 [tool.setuptools.packages.find]
 include = ["zoomy_prepost*"]

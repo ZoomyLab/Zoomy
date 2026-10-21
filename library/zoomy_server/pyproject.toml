@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zoomy-server"
-version = "0.2.0"
+version = "0.2.1"
 description = "FastAPI solver server for Zoomy — submits and manages simulation jobs."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,7 +16,11 @@ keywords = ["simulation", "server", "zoomy", "solver"]
 dependencies = [
     "fastapi>=0.100",
     "uvicorn[standard]>=0.20",
-    "zoomy-core>=0.2.0",
+    "pydantic",
+    "numpy",
+    "h5py",
+    "zoomy-core>=0.2.17",
+    "zoomy-prepost>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -27,8 +31,10 @@ zoomy-server = "zoomy_server.cli:main"
 zoomy-jupyter = "zoomy_server.jupyter:main"
 
 [project.urls]
-Homepage = "https://github.com/mbd-rwth/Zoomy"
-Source = "https://github.com/mbd-rwth/Zoomy"
+Homepage = "https://github.com/ZoomyLab/Zoomy"
+Documentation = "https://zoomylab.github.io/Zoomy"
+Source = "https://github.com/ZoomyLab/Zoomy"
+Issues = "https://github.com/ZoomyLab/Zoomy/issues"
 
 [tool.setuptools.packages.find]
 include = ["zoomy_server*"]
