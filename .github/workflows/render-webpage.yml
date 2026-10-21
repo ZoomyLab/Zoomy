@@ -36,7 +36,6 @@ on:
       - "apps/swe-game/**"
       - "apps/baukasten-preview/**"
       - "tutorials/**/*.ipynb"
-      - "tests/reporting/**"
       - "tests/results/symsolver/**"
       - ".github/workflows/render-webpage.yml"
   # 2026-10-13: no longer chained to Smart Tests (disabled); push + manual only.

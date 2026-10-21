@@ -1,8 +1,0 @@
-# Notebooks executed by the weekly notebook job
-# (.github/workflows/notebooks.yml --execute-smoke).
-#
-# The tutorials themselves are executed by tests/tutorials (every tutorials/**/*.ipynb
-# whose metadata.zoomy `requires` is only cpu; see tests/tutorials/README.md), so this list
-# only keeps the JupyterLite notebook, which that job runs through check_notebooks.py.
-
-tutorials/pyodide/pyodide.ipynb
