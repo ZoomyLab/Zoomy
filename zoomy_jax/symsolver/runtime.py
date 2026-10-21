@@ -1601,9 +1601,12 @@ def hoisted_jit(fn):
         """Trace once per argument shapes, then call the jitted jaxpr with its constants."""
         flat, tree = jax.tree_util.tree_flatten(args)
         key = (tree, tuple((jnp.shape(x), jnp.result_type(x)) for x in flat))
-        if key not in cache:
-            closed, out = jax.make_jaxpr(fn, return_shape=True)(*args)
-            consts = [jnp.asarray(c) for c in closed.consts]
+        if key not in cache:                   # from shapes, outside any outer trace: a first call
+            specs = jax.tree_util.tree_unflatten(  # inside a caller's jit must not cache its tracers
+                tree, [jax.ShapeDtypeStruct(jnp.shape(x), jnp.result_type(x)) for x in flat])
+            with jax.ensure_compile_time_eval():
+                closed, out = jax.make_jaxpr(fn, return_shape=True)(*specs)
+                consts = [jnp.asarray(c) for c in closed.consts]
             body = jax.jit(lambda cs, *xs: jax.core.eval_jaxpr(closed.jaxpr, cs, *xs))
             cache[key] = (body, consts, jax.tree_util.tree_structure(out))
         body, consts, out_tree = cache[key]
