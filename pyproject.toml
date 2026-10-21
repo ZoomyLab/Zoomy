@@ -32,6 +32,7 @@ dependencies = [
   "jax>=0.7.0",
   "h5py",                    # HDF5 output / mesh input (fvm/solver_jax.py, misc/io.py)
   "equinox>=0.13",           # reverse-mode AD: checkpointed time loop (ad_mode=AdMode.reverse)
+  "attrs",                   # fvm/precice_solver.py
 
   # the pure-Python core: models, symbolic derivation, mesh, NumPy solvers
   "zoomy-core>=0.2.17",
