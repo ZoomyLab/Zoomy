@@ -72,7 +72,10 @@ addopts = "--import-mode=importlib"
 markers = [
   "small: fast default-tier test (superrepo convention)",
   "medium: mid-cost test (superrepo convention)",
-  "large: real time-march / simulation test; deselected by default, enable with --run-large (>5 min individually is large)",
+  "large: too slow for the push tier (real time-march / simulation test, weekly tier); deselected by default, enable with --run-large",
   "regression: end-state march asserted against blessed baselines in tests/goldens",
   "jax: requires the jax stack (auto-applied by the superrepo conftest)",
+  "legacy: exercises superseded code (weekly tier only). Applied by test id from tests/ci_tiers.tsv at the repository root",
+  "broken: fails today, in no tier (reason= is the first error line). Applied by test id from tests/ci_tiers.tsv at the repository root",
+  "benchmark: timing-regression test (manual tier: in neither the push nor the weekly tier)",
 ]

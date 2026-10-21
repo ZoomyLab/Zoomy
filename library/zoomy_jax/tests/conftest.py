@@ -96,6 +96,18 @@ ORDER_FLOOR = {1: 0.9, 2: 1.9}      # measured smooth rates are 1.95-2.11
 G = 9.81
 
 
+def pytest_configure(config):
+    """CI tiers: `large` / `legacy` / `broken` by test id (tests/ci_tiers.py, tests/ci_tiers.tsv)."""
+    import importlib.util
+    import pathlib
+    path = pathlib.Path(__file__).resolve().parents[3] / "tests" / "ci_tiers.py"
+    if path.is_file() and not config.pluginmanager.has_plugin("zoomy_ci_tiers"):
+        spec = importlib.util.spec_from_file_location("zoomy_ci_tiers", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        config.pluginmanager.register(module, "zoomy_ci_tiers")
+
+
 # ── tiers + the results option ──────────────────────────────────────────────
 def pytest_addoption(parser):
     # zoomy_core/tests/conftest.py registers the same option; when a
