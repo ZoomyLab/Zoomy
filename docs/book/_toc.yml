@@ -24,6 +24,7 @@ parts:
       - file: guide/gui
   - caption: Developer guide
     chapters:
+      - file: developer/contributing
       - file: developer/installation
       - file: developer/templates
       - file: developer/extending
