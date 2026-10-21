@@ -1,0 +1,107 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "zoomy_core"
+version = "0.2.17"
+description = "zoomy_core is the pure Python core of Zoomy: A simulation software for dimensionally-reduced free surface flows."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "LGPL-3.0-or-later" }
+authors = [
+  { name = "Ingo Steldermann", email = "steldermann@mbd.rwth-aachen.de" }
+]
+keywords = ["simulation", "shallow flow", "free surface flow", "shallow moments", "shallow water", "VAM"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: GNU Lesser General Public License v3 or later (LGPLv3+)",
+  "Operating System :: OS Independent",
+  "Framework :: Jupyter",
+]
+
+dependencies = [
+  "sympy>=1.14",
+  "numpy>=2",                # the array-API `rtol=` of linalg.pinv (mesh/geometry_xp.py)
+  "scipy",
+  "param",
+  "loguru",
+]
+
+[project.optional-dependencies]
+full = [
+  "h5py",
+  "matplotlib",
+  "meshio",
+  "zoomy-plotting",          # zoomy_core.postprocessing re-exports it
+]
+gui = [
+  "pyvista",
+  "trame",
+  "trame-vtk",
+  "trame-vuetify",
+  "panel",
+]
+coupling = [
+  "precice",
+]
+testing = [
+  "swashes",
+  "pyswashes",
+  "pytest",
+]
+mesh = [
+  "gmsh",
+  "python-gmsh",
+  "rasterio",
+  "meshio",
+]
+dev = [
+  "watchfiles",
+  "Cython",
+  "pytest-html",
+]
+server = [
+  "zoomy-server",
+]
+
+# Example: pip install zoomy_core[viz,io]
+# Example: pip install zoomy_core[dev]
+
+[project.urls]
+Homepage = "https://github.com/ZoomyLab/Zoomy"
+Documentation = "https://zoomylab.github.io/Zoomy"
+Source = "https://github.com/ZoomyLab/Zoomy"
+Issues = "https://github.com/ZoomyLab/Zoomy/issues"
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Tiered test suite (see tests/README.md).  The DEFAULT run is the pre-publish
+# gate: it excludes the `large` and `rederive` tiers (conftest.py deselects
+# them unless --run-large / --run-rederive is passed, or an explicit -m
+# expression takes over selection).  Register the markers so nothing warns.
+markers = [
+    "small: size tag — cheap test, member of the default (small) tier.",
+    "large: real time-march / simulation test (multi-step solver marches, DAE Chorin solves). Excluded by default; enable with --run-large or -m large. Each has a 1-step 'small twin' regression canary in the default tier.",
+    "rederive: deliberately clears/bypasses the derivation cache or forces a fresh derivation of a heavy family (double-moment SME, cold-cache sm_cache builds, golden-vs-fresh identity). Excluded by default so routine runs always hit the warm cache; enable with --run-rederive or -m rederive. Mandatory validator for any golden re-bless.",
+    "gate: T1 pre-publish gate membership (approved spec v3 delta: 6 model goldens + 7 structure/emit/solver + 24 runtime smalls). scripts/verify.py runs '-m gate' scoped to the touched areas.",
+    "model: area tag — model derivation layer (SME/VAM/ML/closures goldens + model-side exceptions).",
+    "systemmodel: area tag — SystemModel freeze / Chorin splits / reconstruction maps.",
+    "nsm: area tag — NumericalSystemModel derivation + numerics knobs.",
+    "printer: area tag — emitted-source printers (foam / generic-C).",
+    "solver: area tag — numpy runtime (FVM solvers, BCs, kernels, positivity).",
+    "fusion_wip: transitional keep for the active REQ-188 Riemann-fusion seam (test_resolve_opaque); sunset into P01/P02 once fusion lands.",
+    "study: parked study scaffolding (REQ-194 depth-law study) — excluded from every tier; runs only via -m study; dies when the study closes.",
+]
+
+[tool.setuptools.packages.find]
+include = ["zoomy_core*"]
+
+[tool.setuptools.package-data]
+"zoomy_core.systemmodel" = ["_prebuilt/*.pkl"]
+"zoomy_core.symsolver" = ["*.H"]
+exclude = ["zoomy_core.model.legacy*", "zoomy_core.model.models.legacy*", "zoomy_core.fvm.legacy*"]
+
+

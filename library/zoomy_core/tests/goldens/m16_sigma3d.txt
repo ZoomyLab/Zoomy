@@ -1,0 +1,62 @@
+#| golden: m16_sigma3d
+#| sympy: 1.14.0
+#| regenerate: python scripts/regen_goldens.py
+#| (header lines are informational; comparison is on the body below)
+== Sigma3D() — zeta as flux direction, zeta-zeta diffusion ==
+class: SystemModel
+state: [Symbol('b'), Symbol('h'), Symbol('mom')]
+aux_state: [Symbol('U'), Symbol('\\tilde{tau_xx}'), Symbol('omega'), Symbol('\\tilde{tau_xx}_x'), Symbol('\\tilde{tau_xx}_zeta'), Symbol('b_x'), Symbol('h_x')]
+parameters: [g, rho, nu, lambda_s, e_x]
+symbol_assumptions:
+  b : {complex, extended_real, finite, hermitian, real}
+  h : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  mom : {complex, extended_real, finite, hermitian, real}
+  U : {complex, extended_real, finite, hermitian, real}
+  \tilde{tau_xx} : {complex, extended_real, finite, hermitian, real}
+  omega : {complex, extended_real, finite, hermitian, real}
+  \tilde{tau_xx}_x : {complex, extended_real, finite, hermitian, real}
+  \tilde{tau_xx}_zeta : {complex, extended_real, finite, hermitian, real}
+  b_x : {complex, extended_real, finite, hermitian, real}
+  h_x : {complex, extended_real, finite, hermitian, real}
+  g : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  rho : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  nu : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  lambda_s : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  e_x : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+parameter_values: {g: 9.81, rho: 1.0, nu: 0.0, lambda_s: 0.0, e_x: 0.0}
+n_equations: 3  n_state: 3  n_dim: 2
+equation_to_state_index: [0, 1, 2]
+stationary_indices: [0]
+mass_matrix: shape=(3, 3)
+mass_matrix[0,0] = Integer(1)
+mass_matrix[1,1] = Integer(1)
+mass_matrix[2,2] = Integer(1)
+flux: shape=(3, 2)
+flux[1,0] = Mul(Symbol('U'), Symbol('h'))
+flux[2,0] = Mul(Pow(Symbol('h'), Integer(-1)), Pow(Symbol('mom'), Integer(2)))
+flux[2,1] = Mul(Symbol('mom'), Symbol('omega'))
+hydrostatic_pressure: shape=(3, 2)
+hydrostatic_pressure[2,0] = Mul(Rational(1, 2), Symbol('g'), Pow(Symbol('h'), Integer(2)))
+diffusion_matrix: shape=(3, 3, 2, 2)
+diffusion_matrix[2,2,1,1] = Mul(Pow(Symbol('h'), Integer(-2)), Symbol('nu'))
+nonconservative_matrix: shape=(3, 3, 2)
+nonconservative_matrix[2,0,0] = Mul(Symbol('g'), Symbol('h'))
+source: shape=(3, 1)
+source[2,0] = Add(Mul(Symbol('\\tilde{tau_xx}_x'), Symbol('h'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Symbol('\\tilde{tau_xx}_zeta'), Symbol('b_x'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Symbol('\\tilde{tau_xx}_zeta'), Symbol('h_x'), Pow(Symbol('rho'), Integer(-1)), Symbol('zeta')), Mul(Symbol('e_x'), Symbol('g'), Symbol('h')))
+source_explicit: None
+eigenvalues: None
+eigenvalues_cfl: None
+update_variables: None
+update_aux_variables: None
+reconstruction_variables: None
+state_from_reconstruction: None
+interpolate_to_3d: None
+project_from_3d: None
+boundary_specs: {}
+bc_tags: ['bottom', 'top']
+bc_kernel: Piecewise(ExprCondPair(ImmutableDenseNDimArray(Tuple(Symbol('b'), Symbol('h'), Symbol('mom')), Tuple(Integer(3))), Or(Equality(Symbol('bc_idx'), Integer(0)), Equality(Symbol('bc_idx'), Integer(1)))))
+aux_registry:
+  {atom=Derivative(Symbol('\\tilde{tau_xx}'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('\\tilde{tau_xx}_x'), function_row=1, kind='derivative', multi_index=(1, 0), name='\\tilde{tau_xx}_x', row=3, target_kind='function', target_name='\\tilde{tau_xx}'}
+  {atom=Derivative(Symbol('\\tilde{tau_xx}'), Tuple(Symbol('zeta'), Integer(1))), aux_symbol=Symbol('\\tilde{tau_xx}_zeta'), function_row=1, kind='derivative', multi_index=(0, 1), name='\\tilde{tau_xx}_zeta', row=4, target_kind='function', target_name='\\tilde{tau_xx}'}
+  {atom=Derivative(Symbol('b'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('b_x'), kind='derivative', multi_index=(1, 0), name='b_x', row=5, state_index=0, target_kind='state', target_name='b'}
+  {atom=Derivative(Symbol('h'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('h_x'), kind='derivative', multi_index=(1, 0), name='h_x', row=6, state_index=1, target_kind='state', target_name='h'}

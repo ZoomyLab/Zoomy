@@ -1,0 +1,8 @@
+# How do publish on Pypi
+
+```
+rm -rf dist zoomy_core.egg-info
+python -m build 
+twine check dist/*
+twine upload dist/*
+```

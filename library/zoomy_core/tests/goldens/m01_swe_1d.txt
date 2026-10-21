@@ -1,0 +1,71 @@
+#| golden: m01_swe_1d
+#| sympy: 1.14.0
+#| regenerate: python scripts/regen_goldens.py
+#| (header lines are informational; comparison is on the body below)
+== SWE 1D == SME(level=0, dimension=2) + Manning + BCs + IC ==
+class: SystemModel
+state: [Symbol('b'), Symbol('h'), Symbol('q_0')]
+aux_state: [Symbol('dq0dx'), Symbol('dhdx'), Symbol('dbdx')]
+parameters: [g, rho, nu, lambda_s, e_x, n]
+symbol_assumptions:
+  b : {complex, extended_real, finite, hermitian, real}
+  h : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  q_0 : {complex, extended_real, finite, hermitian, real}
+  dq0dx : {complex, extended_real, finite, hermitian, real}
+  dhdx : {complex, extended_real, finite, hermitian, real}
+  dbdx : {complex, extended_real, finite, hermitian, real}
+  g : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  rho : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  nu : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  lambda_s : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  e_x : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  n : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+parameter_values: {g: 9.81, rho: 1.0, nu: 0.0, lambda_s: 0.0, e_x: 0.0, n: 0.0}
+n_equations: 3  n_state: 3  n_dim: 1
+equation_to_state_index: [0, 1, 2]
+stationary_indices: [0]
+mass_matrix: shape=(3, 3)
+mass_matrix[0,0] = Integer(1)
+mass_matrix[1,1] = Integer(1)
+mass_matrix[2,2] = Integer(1)
+flux: shape=(3, 1)
+flux[1,0] = Symbol('q_0')
+flux[2,0] = Mul(Pow(Symbol('h'), Integer(-1)), Pow(Symbol('q_0'), Integer(2)))
+hydrostatic_pressure: shape=(3, 1)
+hydrostatic_pressure[2,0] = Mul(Rational(1, 2), Symbol('g'), Pow(Symbol('h'), Integer(2)))
+diffusion_matrix: None
+nonconservative_matrix: shape=(3, 3, 1)
+nonconservative_matrix[2,0,0] = Mul(Symbol('g'), Symbol('h'))
+source: shape=(3, 1)
+source[2,0] = Add(Mul(Symbol('e_x'), Symbol('g'), Symbol('h')), Mul(Integer(-1), Symbol('g'), Pow(Symbol('h'), Rational(-7, 3)), Pow(Symbol('n'), Integer(2)), Symbol('q_0'), Abs(Symbol('q_0'))))
+source_explicit: None
+eigenvalues: None
+eigenvalues_cfl: None
+update_variables: None
+update_aux_variables: None
+reconstruction_variables: shape=(3,)
+reconstruction_variables[0] = Symbol('b')
+reconstruction_variables[1] = Add(Symbol('b'), Symbol('h'))
+reconstruction_variables[2] = Mul(Pow(Symbol('h'), Integer(-1)), Symbol('q_0'))
+state_from_reconstruction: shape=(3,)
+state_from_reconstruction[0] = Symbol('WB_b')
+state_from_reconstruction[1] = Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h'))
+state_from_reconstruction[2] = Mul(Symbol('WB_q_0'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+interpolate_to_3d: shape=(6, 1)
+interpolate_to_3d[0,0] = Symbol('b')
+interpolate_to_3d[1,0] = Symbol('h')
+interpolate_to_3d[2,0] = Mul(Pow(Symbol('h'), Integer(-1)), Symbol('q_0'))
+interpolate_to_3d[4,0] = Add(Mul(Symbol('dbdx'), Pow(Symbol('h'), Integer(-1)), Symbol('q_0')), Mul(Symbol('dhdx'), Pow(Symbol('h'), Integer(-1)), Symbol('q_0'), Symbol('z')), Mul(Integer(-1), Symbol('dq0dx'), Symbol('z')))
+interpolate_to_3d[5,0] = Add(Mul(Integer(-1), Symbol('g'), Symbol('h'), Symbol('rho'), Symbol('z')), Mul(Symbol('g'), Symbol('h'), Symbol('rho')))
+project_from_3d: shape=(3, 1)
+project_from_3d[0,0] = Symbol('P3_b')
+project_from_3d[1,0] = Symbol('P3_h')
+project_from_3d[2,0] = Add(Mul(Float('0.030366692131398035', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.015151515151515152', precision=53))), Mul(Float('0.030354755538579095', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.045454545454545456', precision=53))), Mul(Float('0.030343589048522655', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.07575757575757576', precision=53))), Mul(Float('0.030333192661228733', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.10606060606060606', precision=53))), Mul(Float('0.030323566376697326', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.13636363636363635', precision=53))), Mul(Float('0.030314710194928436', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.16666666666666666', precision=53))), Mul(Float('0.030306624115922047', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.19696969696969696', precision=53))), Mul(Float('0.030299308139678176', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.22727272727272727', precision=53))), Mul(Float('0.030292762266196819', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.25757575757575757', precision=53))), Mul(Float('0.030286986495477976', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.2878787878787879', precision=53))), Mul(Float('0.030281980827521641', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.31818181818181818', precision=53))), Mul(Float('0.030277745262327821', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.34848484848484851', precision=53))), Mul(Float('0.030274279799896515', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.37878787878787878', precision=53))), Mul(Float('0.030271584440227723', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.40909090909090912', precision=53))), Mul(Float('0.030269659183321442', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.43939393939393939', precision=53))), Mul(Float('0.030268504029177669', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.46969696969696972', precision=53))), Mul(Float('0.030268118977796417', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.5', precision=53))), Mul(Float('0.030268504029177669', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.53030303030303028', precision=53))), Mul(Float('0.030269659183321442', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.56060606060606055', precision=53))), Mul(Float('0.030271584440227723', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.59090909090909094', precision=53))), Mul(Float('0.030274279799896515', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.62121212121212122', precision=53))), Mul(Float('0.030277745262327821', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.65151515151515149', precision=53))), Mul(Float('0.030281980827521641', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.68181818181818177', precision=53))), Mul(Float('0.030286986495477976', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.71212121212121215', precision=53))), Mul(Float('0.030292762266196819', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.74242424242424243', precision=53))), Mul(Float('0.030299308139678176', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.77272727272727271', precision=53))), Mul(Float('0.030306624115922047', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.80303030303030298', precision=53))), Mul(Float('0.030314710194928436', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.83333333333333337', precision=53))), Mul(Float('0.030323566376697326', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.86363636363636365', precision=53))), Mul(Float('0.030333192661228733', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.89393939393939392', precision=53))), Mul(Float('0.030343589048522655', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.9242424242424242', precision=53))), Mul(Float('0.030354755538579095', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.95454545454545459', precision=53))), Mul(Float('0.030366692131398035', precision=53), Symbol('P3_h'), Function('P3_u')(Float('0.98484848484848486', precision=53))))
+boundary_specs:
+  wall: 2 -> Add(Mul(Integer(-1), Integer(2), Pow(Symbol('n0'), Integer(2)), Symbol('q_0')), Symbol('q_0'))
+bc_tags: ['left', 'right']
+bc_kernel: Piecewise(ExprCondPair(ImmutableDenseNDimArray(Tuple(Symbol('b'), Symbol('h'), Add(Mul(Integer(-1), Integer(2), Pow(Symbol('n0'), Integer(2)), Symbol('q_0')), Symbol('q_0'))), Tuple(Integer(3))), Equality(Symbol('bc_idx'), Integer(0))), ExprCondPair(ImmutableDenseNDimArray(Tuple(Symbol('b'), Symbol('h'), Symbol('q_0')), Tuple(Integer(3))), Equality(Symbol('bc_idx'), Integer(1))))
+aux_registry:
+  {atom=None, aux_symbol=Symbol('dq0dx'), kind='derivative', multi_index=(1,), name='dq0dx', row=0, state_index=2, target_kind='state', target_name='q_0'}
+  {atom=None, aux_symbol=Symbol('dhdx'), kind='derivative', multi_index=(1,), name='dhdx', row=1, state_index=1, target_kind='state', target_name='h'}
+  {atom=None, aux_symbol=Symbol('dbdx'), kind='derivative', multi_index=(1,), name='dbdx', row=2, state_index=0, target_kind='state', target_name='b'}

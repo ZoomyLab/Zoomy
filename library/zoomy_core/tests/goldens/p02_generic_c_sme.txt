@@ -1,0 +1,490 @@
+#| golden: p02_generic_c_sme
+#| sympy: 1.14.0
+#| regenerate: python scripts/regen_goldens.py
+#| (header lines are informational; comparison is on the body below)
+== P02 generic-C emitted source (GenericCppModel <- SME(1)) ==
+#pragma once
+#include <cmath>
+#include <array>
+
+#ifndef ZOOMY_SIMPLE_ARRAY
+#define ZOOMY_SIMPLE_ARRAY
+template <typename T, int N>
+struct SimpleArray {
+    T data[N];
+    T& operator[](int i) { return data[i]; }
+    const T& operator[](int i) const { return data[i]; }
+    T* begin() { return data; }
+    const T* begin() const { return data; }
+    T* end() { return data + N; }
+    const T* end() const { return data + N; }
+};
+#endif
+
+#include <vector>
+#include <string>
+#include <algorithm>
+
+#ifdef __CUDACC__
+#define PORTABLE_FN __host__ __device__
+#else
+#define PORTABLE_FN
+#endif
+
+
+struct Model {
+    static constexpr int n_dof_q    = 4;
+    static constexpr int n_dof_qaux = 5;
+    static constexpr int n_parameters = 5;
+    static constexpr int dimension  = 1;
+    static constexpr double dt_max = 5.0;
+    static constexpr int n_dof_gradQ = 0;
+    static constexpr bool has_diffusion = false;
+    static constexpr bool fluctuations_are_zero = false;
+    static constexpr const char* implicit_mode = "local_source";
+    static constexpr bool has_free_surface = true;
+    static constexpr bool flux_is_zero = false;
+    static constexpr bool hydrostatic_pressure_is_zero = false;
+    static constexpr bool nonconservative_matrix_is_zero = false;
+    static constexpr bool eigenvalues_are_zero = false;
+    static constexpr bool source_is_zero = false;
+    static constexpr bool source_explicit_is_zero = true;
+    static constexpr bool diffusion_matrix_is_zero = true;
+    static constexpr bool diffusion_matrix_explicit_is_zero = true;
+    static constexpr int idx_b = 0;
+    static constexpr int idx_h = 1;
+    static constexpr int n_boundary_tags = 0;
+    static const std::vector<std::string> get_boundary_tags() { return {  }; }
+    static const std::vector<std::string> parameter_names() { return { "g", "rho", "nu", "lambda_s", "e_x" }; }
+    static const std::vector<T> default_parameters() { return { 9.81, 1.0, 0.0, 0.0, 0.0 }; }
+    PORTABLE_FN static inline SimpleArray<T, 4> flux_x(
+        const double* Q,
+        const double* Qaux,
+        const double* p)
+    {
+    SimpleArray<T, 4> res;
+    res[0] = 0;
+    res[1] = Q[2];
+    res[2] = Qaux[4]*std::pow(Q[2], 2) + (1.0/3.0)*Qaux[4]*std::pow(Q[3], 2);
+    res[3] = 2*Qaux[4]*Q[2]*Q[3];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 16> nonconservative_matrix_x(
+        const double* Q,
+        const double* Qaux,
+        const double* p)
+    {
+    SimpleArray<T, 16> res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = p[0]*Q[1];
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
+    res[12] = 0;
+    res[13] = 0;
+    res[14] = 0;
+    res[15] = -Qaux[4]*Q[2];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 16> quasilinear_matrix_x(
+        const double* Q,
+        const double* Qaux,
+        const double* p)
+    {
+    double t0 = std::pow(Qaux[4], 2);
+    double t1 = Qaux[4]*Q[2];
+    double t2 = Qaux[4]*Q[3];
+    SimpleArray<T, 16> res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 1;
+    res[7] = 0;
+    res[8] = p[0]*Q[1];
+    res[9] = p[0]*Q[1] - std::pow(Q[2], 2)*t0 - 1.0/3.0*std::pow(Q[3], 2)*t0;
+    res[10] = 2*t1;
+    res[11] = (2.0/3.0)*t2;
+    res[12] = 0;
+    res[13] = -2*Q[2]*Q[3]*t0;
+    res[14] = 2*t2;
+    res[15] = t1;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 4> eigenvalues(
+        const double* Q,
+        const double* Qaux,
+        const double* p,
+        const double* n)
+    {
+    double t0 = (1.0 / std::pow(std::max((double)1.0e-14, Q[1]), 1));
+    double t1 = n[0]*Q[2];
+    double t2 = n[0]*std::pow(std::max((double)0, p[0]*std::pow(Q[1], 3) + std::pow(Q[3], 2)), 1.0/2.0);
+    SimpleArray<T, 4> res;
+    res[0] = 0;
+    res[1] = t0*t1;
+    res[2] = t0*(t1 - t2);
+    res[3] = t0*(t1 + t2);
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 4> source(
+        const double* Q,
+        const double* Qaux,
+        const double* p,
+        const double time,
+        const double dt,
+        const double* X)
+    {
+    double t0 = (1.0 / std::pow(p[1], 1));
+    double t1 = Qaux[4]*p[3]*t0;
+    double t2 = Q[3]*t1;
+    SimpleArray<T, 4> res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = p[4]*p[0]*Q[1] - Q[2]*t1 + t2;
+    res[3] = -12*std::pow(Qaux[4], 2)*p[2]*Q[3] + 3*Qaux[4]*p[3]*Q[2]*t0 - 3*t2;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 4> flux(
+        const double* Q,
+        const double* Qaux,
+        const double* p)
+    {
+    SimpleArray<T, 4> res;
+    res[0] = 0;
+    res[1] = Q[2];
+    res[2] = Qaux[4]*std::pow(Q[2], 2) + (1.0/3.0)*Qaux[4]*std::pow(Q[3], 2);
+    res[3] = 2*Qaux[4]*Q[2]*Q[3];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 16> nonconservative_matrix(
+        const double* Q,
+        const double* Qaux,
+        const double* p)
+    {
+    SimpleArray<T, 16> res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = p[0]*Q[1];
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
+    res[12] = 0;
+    res[13] = 0;
+    res[14] = 0;
+    res[15] = -Qaux[4]*Q[2];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 16> source_jacobian_wrt_variables(
+        const double* Q,
+        const double* Qaux,
+        const double* p)
+    {
+    double t0 = std::pow(Qaux[4], 2);
+    double t1 = p[3]/p[1];
+    double t2 = t0*t1;
+    double t3 = Q[2]*t2;
+    double t4 = Q[3]*t2;
+    double t5 = Qaux[4]*t1;
+    double t6 = 3*t5;
+    SimpleArray<T, 16> res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = p[4]*p[0] + t3 - t4;
+    res[10] = -t5;
+    res[11] = t5;
+    res[12] = 0;
+    res[13] = 24*std::pow(Qaux[4], 3)*p[2]*Q[3] - 3*t3 + 3*t4;
+    res[14] = t6;
+    res[15] = -12*p[2]*t0 - t6;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 20> source_jacobian_wrt_aux_variables(
+        const double* Q,
+        const double* Qaux,
+        const double* p)
+    {
+    SimpleArray<T, 20> res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = 0;
+    res[10] = 0;
+    res[11] = 0;
+    res[12] = 0;
+    res[13] = 0;
+    res[14] = 0;
+    res[15] = 0;
+    res[16] = 0;
+    res[17] = 0;
+    res[18] = 0;
+    res[19] = 0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 4> update_variables(
+        const double* Q,
+        const double* Qaux,
+        const double* p,
+        const double dt)
+    {
+    SimpleArray<T, 4> res;
+    res[0] = Q[0];
+    res[1] = Q[1];
+    res[2] = Q[2];
+    res[3] = Q[3];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 5> update_aux_variables(
+        const double* Q,
+        const double* Qaux,
+        const double* p,
+        const double time,
+        const double* X)
+    {
+    SimpleArray<T, 5> res;
+    res[0] = Qaux[0];
+    res[1] = Qaux[1];
+    res[2] = Qaux[2];
+    res[3] = Qaux[3];
+    res[4] = std::pow((double)2, 1.0/2.0)*Q[1]/std::pow(std::pow(Q[1], 4) + std::pow(std::max((double)1.0e-8, Q[1]), 4), 1.0/2.0);
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 20> update_aux_variables_jacobian_wrt_variables(
+        const double* Q,
+        const double* Qaux,
+        const double* p,
+        const double time,
+        const double* X)
+    {
+    double t0 = std::pow((double)2, 1.0/2.0);
+    double t1 = std::max((double)1.0e-8, Q[1]);
+    double t2 = std::pow(Q[1], 4) + std::pow(t1, 4);
+    SimpleArray<T, 20> res;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    res[3] = 0;
+    res[4] = 0;
+    res[5] = 0;
+    res[6] = 0;
+    res[7] = 0;
+    res[8] = 0;
+    res[9] = Q[1]*t0*(-2*std::pow(Q[1], 3) - 2*std::pow(t1, 3)*Heaviside(Q[1] - 1.0e-8, 1.0/2.0))/std::pow(t2, 3.0/2.0) + t0/std::pow(t2, 1.0/2.0);
+    res[10] = 0;
+    res[11] = 0;
+    res[12] = 0;
+    res[13] = 0;
+    res[14] = 0;
+    res[15] = 0;
+    res[16] = 0;
+    res[17] = 0;
+    res[18] = 0;
+    res[19] = 0;
+    return res;
+    }
+
+    static inline void update_aux_variables(
+        double* const* Q,
+        double* const* Qaux,
+        const double dt,
+        const ZoomyMesh& mesh)
+    {
+    // Qaux[0] (dq1dx) = D^(1,) Q[3]
+    compute_derivative(Qaux[0], Q[3], 1, 0, 0, mesh);
+    // Qaux[1] (dq0dx) = D^(1,) Q[2]
+    compute_derivative(Qaux[1], Q[2], 1, 0, 0, mesh);
+    // Qaux[2] (dhdx) = D^(1,) Q[1]
+    compute_derivative(Qaux[2], Q[1], 1, 0, 0, mesh);
+    // Qaux[3] (dbdx) = D^(1,) Q[0]
+    compute_derivative(Qaux[3], Q[0], 1, 0, 0, mesh);
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 4> initial_condition(
+        const double* X,
+        const double* p)
+    {
+    SimpleArray<T, 4> res;
+    res[0] = 1.0;
+    res[1] = 0.0;
+    res[2] = 0.0;
+    res[3] = 0.0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 5> initial_aux_condition(
+        const double* X,
+        const double* p)
+    {
+    SimpleArray<T, 5> res;
+    res[0] = 1.0;
+    res[1] = 0.0;
+    res[2] = 0.0;
+    res[3] = 0.0;
+    res[4] = 0.0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 4> reconstruction_variables(
+        const double* Q,
+        const double* Qaux,
+        const double* p)
+    {
+    SimpleArray<T, 4> res;
+    res[0] = Q[0];
+    res[1] = Q[0] + Q[1];
+    res[2] = Qaux[4]*Q[2];
+    res[3] = Qaux[4]*Q[3];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 4> state_from_reconstruction(
+        const double* W,
+        const double* Qaux,
+        const double* p)
+    {
+    double t0 = -W[0] + W[1];
+    SimpleArray<T, 4> res;
+    res[0] = W[0];
+    res[1] = t0;
+    res[2] = W[2]*t0;
+    res[3] = W[3]*t0;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 6> interpolate_to_3d(
+        const double* Q,
+        const double* Qaux,
+        const double* p,
+        const double* X)
+    {
+    double t0 = (1.0 / std::pow(Q[1], 1));
+    double t1 = Q[2]*t0;
+    double t2 = Q[3]*t0;
+    double t3 = t2*X[2];
+    double t4 = std::pow(X[2], 2);
+    double t5 = Qaux[3]*t2;
+    SimpleArray<T, 6> res;
+    res[0] = Q[0];
+    res[1] = Q[1];
+    res[2] = t1 - t2 + 2*t3;
+    res[3] = 0;
+    res[4] = Qaux[3]*t1 + Qaux[2]*t1*X[2] + 2*Qaux[2]*t2*t4 - Qaux[2]*t3 - Qaux[1]*X[2] - Qaux[0]*t4 + Qaux[0]*X[2] + 2*t5*X[2] - t5;
+    res[5] = -p[0]*Q[1]*p[1]*X[2] + p[0]*Q[1]*p[1];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 4> project_from_3d(
+        const double* const* column,
+        const double* p)
+    {
+    double t0 = 0.030366692131398035*column[0][1];
+    double t1 = 0.030354755538579095*column[0][1];
+    double t2 = 0.030281980827521641*column[0][1];
+    double t3 = 0.030277745262327821*column[0][1];
+    double t4 = 0.030274279799896515*column[0][1];
+    double t5 = 0.030271584440227723*column[0][1];
+    double t6 = 0.030269659183321442*column[0][1];
+    double t7 = 0.030268504029177669*column[0][1];
+    double t8 = column[0][1]*column[16][2];
+    double t9 = 0.030343589048522655*column[0][1];
+    double t10 = 0.030286986495477976*column[0][1];
+    double t11 = 0.030292762266196819*column[0][1];
+    double t12 = 0.030299308139678176*column[0][1];
+    double t13 = 0.030306624115922047*column[0][1];
+    double t14 = 0.030314710194928436*column[0][1];
+    double t15 = 0.030323566376697326*column[0][1];
+    double t16 = 0.030333192661228733*column[0][1];
+    double t17 = 0.088807189542483664*column[0][1];
+    double t18 = 0.083078022875817004*column[0][1];
+    double t19 = 0.027308335968796126*column[0][1];
+    double t20 = 0.021832832595403764*column[0][1];
+    double t21 = 0.0054524430740037931*column[0][1];
+    double t22 = 0.043813251106894387*column[0][1];
+    double t23 = 0.049348711258697039*column[0][1];
+    double t24 = 0.060484200400590368*column[0][1];
+    double t25 = 0.066088841450558738*column[0][1];
+    double t26 = 0.071721154859793398*column[0][1];
+    SimpleArray<T, 4> res;
+    res[0] = column[0][0];
+    res[1] = column[0][1];
+    res[2] = column[0][2]*t0 + column[1][2]*t1 + column[10][2]*t2 + column[11][2]*t3 + column[12][2]*t4 + column[13][2]*t5 + column[14][2]*t6 + column[15][2]*t7 + column[17][2]*t7 + column[18][2]*t6 + column[19][2]*t5 + column[2][2]*t9 + column[20][2]*t4 + column[21][2]*t3 + column[22][2]*t2 + column[23][2]*t10 + column[24][2]*t11 + column[25][2]*t12 + column[26][2]*t13 + column[27][2]*t14 + column[28][2]*t15 + column[29][2]*t16 + column[3][2]*t16 + column[30][2]*t9 + column[31][2]*t1 + column[32][2]*t0 + column[4][2]*t15 + column[5][2]*t14 + column[6][2]*t13 + column[7][2]*t12 + column[8][2]*t11 + column[9][2]*t10 + 0.030268118977796417*t8;
+    res[3] = -0.032795369491882789*column[0][1]*column[10][2] - 0.016366553341766815*column[0][1]*column[13][2] - 0.010907192177946452*column[0][1]*column[14][2] + 0.010907192177946442*column[0][1]*column[18][2] + 0.016366553341766826*column[0][1]*column[19][2] - 0.077383446658233199*column[0][1]*column[2][2] + 0.032795369491882775*column[0][1]*column[22][2] + 0.038296239194602601*column[0][1]*column[23][2] + 0.054904925679949403*column[0][1]*column[26][2] + 0.077383446658233185*column[0][1]*column[30][2] - 0.054904925679949416*column[0][1]*column[6][2] - 0.038296239194602587*column[0][1]*column[9][2] - column[0][2]*t17 - column[1][2]*t18 - column[11][2]*t19 - column[12][2]*t20 - column[15][2]*t21 + column[17][2]*t21 + column[20][2]*t20 + column[21][2]*t19 + column[24][2]*t22 + column[25][2]*t23 + column[27][2]*t24 + column[28][2]*t25 + column[29][2]*t26 - column[3][2]*t26 + column[31][2]*t18 + column[32][2]*t17 - column[4][2]*t25 - column[5][2]*t24 - column[7][2]*t23 - column[8][2]*t22 + 4.1259157536853425e-20*t8;
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 4> boundary_conditions(
+        const int bc_idx,
+        const T* Q,
+        const T* Qaux,
+        const T* p,
+        const T* n,
+        const T* X,
+        const T time,
+        const T dX)
+    {
+    SimpleArray<T, 4> res;
+    res[0] = Q[0];
+    res[1] = Q[1];
+    res[2] = Q[2];
+    res[3] = Q[3];
+    return res;
+    }
+
+    PORTABLE_FN static inline SimpleArray<T, 4> aux_boundary_conditions(
+        const int bc_idx,
+        const T* Q,
+        const T* Qaux,
+        const T* p,
+        const T* n,
+        const T* X,
+        const T time,
+        const T dX)
+    {
+    SimpleArray<T, 4> res;
+    res[0] = Q[0];
+    res[1] = Q[1];
+    res[2] = Q[2];
+    res[3] = Q[3];
+    return res;
+    }
+
+};

@@ -1,0 +1,22 @@
+{
+  "7e1f2c8696771681": {
+    "basis_name": "Legendre_shifted",
+    "level": 2,
+    "fingerprint": "Legendre_shifted|2|[0, 1]|1|1|2*z - 1|3*(2*z - 1)**2/2 - 1/2",
+    "created": "2026-06-05 07:32:46",
+    "matrices": [
+      "phib",
+      "M",
+      "A",
+      "B",
+      "D",
+      "Dxi",
+      "Dxi2",
+      "DD",
+      "D1",
+      "DT",
+      "_elapsed",
+      "_strategy"
+    ]
+  }
+}

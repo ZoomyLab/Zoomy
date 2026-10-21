@@ -1,0 +1,268 @@
+#| golden: s02_chorin_split_bump
+#| sympy: 1.14.0
+#| regenerate: python scripts/regen_goldens.py
+#| (header lines are informational; comparison is on the body below)
+== S02 chorin_split(VAM(1) Escalante-bump), desingularize_hinv BEFORE split ==
+stages: [('predictor', 'hyperbolic'), ('pressure', 'elliptic'), ('corrector', 'pointwise')]
+
+== stage predictor ==
+class: NumericalSystemModel
+state: [Symbol('b'), Symbol('h'), Symbol('q_0'), Symbol('q_1'), Symbol('r_0'), Symbol('r_1'), Symbol('P_0'), Symbol('P_1')]
+aux_state: [Symbol('b_x'), Symbol('q_1_x'), Symbol('dbdx'), Symbol('hinv')]
+parameters: [g, rho, nu, lambda_s, e_x]
+symbol_assumptions:
+  b : {complex, extended_real, finite, hermitian, real}
+  h : {complex, extended_real, finite, hermitian, real}
+  q_0 : {complex, extended_real, finite, hermitian, real}
+  q_1 : {complex, extended_real, finite, hermitian, real}
+  r_0 : {complex, extended_real, finite, hermitian, real}
+  r_1 : {complex, extended_real, finite, hermitian, real}
+  P_0 : {complex, extended_real, finite, hermitian, real}
+  P_1 : {complex, extended_real, finite, hermitian, real}
+  b_x : {complex, extended_real, finite, hermitian, real}
+  q_1_x : {complex, extended_real, finite, hermitian, real}
+  dbdx : {complex, extended_real, finite, hermitian, real}
+  hinv : {complex, extended_real, finite, hermitian, real}
+  g : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  rho : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  nu : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  lambda_s : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  e_x : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+parameter_values: {g: 9.81, rho: 1.0, nu: 0.0, lambda_s: 0.0, e_x: 0.0}
+n_equations: 6  n_state: 8  n_dim: 1
+equation_names: [pred_b, pred_h, pred_q_0, pred_q_1, pred_r_0, pred_r_1]
+equation_to_state_index: [0, 1, 2, 3, 4, 5]
+stationary_indices: [0]
+mass_matrix: shape=(6, 8)
+mass_matrix[0,0] = Integer(1)
+mass_matrix[1,1] = Integer(1)
+mass_matrix[2,2] = Integer(1)
+mass_matrix[3,3] = Integer(1)
+mass_matrix[4,4] = Integer(1)
+mass_matrix[5,5] = Integer(1)
+flux: shape=(6, 1)
+flux[1,0] = Symbol('q_0')
+flux[2,0] = Add(Mul(Symbol('hinv'), Pow(Symbol('q_0'), Integer(2))), Mul(Rational(1, 3), Symbol('hinv'), Pow(Symbol('q_1'), Integer(2))))
+flux[3,0] = Mul(Integer(2), Symbol('hinv'), Symbol('q_0'), Symbol('q_1'))
+flux[4,0] = Add(Mul(Symbol('hinv'), Symbol('q_0'), Symbol('r_0')), Mul(Rational(1, 3), Symbol('hinv'), Symbol('q_1'), Symbol('r_1')))
+flux[5,0] = Add(Mul(Rational(2, 5), Symbol('b_x'), Symbol('hinv'), Symbol('q_0'), Symbol('q_1')), Mul(Integer(-1), Rational(2, 5), Symbol('b_x'), Symbol('hinv'), Pow(Symbol('q_1'), Integer(2))), Mul(Symbol('hinv'), Symbol('q_0'), Symbol('r_1')), Mul(Rational(3, 5), Symbol('hinv'), Symbol('q_1'), Symbol('r_0')), Mul(Rational(2, 5), Symbol('hinv'), Symbol('q_1'), Symbol('r_1')))
+hydrostatic_pressure: shape=(6, 1)
+hydrostatic_pressure[2,0] = Mul(Rational(1, 2), Symbol('g'), Pow(Symbol('h'), Integer(2)))
+diffusion_matrix: None
+nonconservative_matrix: shape=(6, 8, 1)
+nonconservative_matrix[2,0,0] = Mul(Symbol('g'), Symbol('h'))
+nonconservative_matrix[3,3,0] = Mul(Integer(-1), Symbol('hinv'), Symbol('q_0'))
+nonconservative_matrix[5,3,0] = Add(Mul(Integer(-1), Rational(6, 5), Symbol('hinv'), Symbol('r_0')), Mul(Rational(1, 5), Symbol('hinv'), Symbol('r_1')))
+source: shape=(6, 1)
+source[2,0] = Add(Mul(Symbol('e_x'), Symbol('g'), Symbol('h')), Mul(Integer(-1), Symbol('hinv'), Symbol('lambda_s'), Symbol('q_0'), Pow(Symbol('rho'), Integer(-1))), Mul(Symbol('hinv'), Symbol('lambda_s'), Symbol('q_1'), Pow(Symbol('rho'), Integer(-1))))
+source[3,0] = Add(Mul(Integer(-1), Integer(12), Pow(Symbol('hinv'), Integer(2)), Symbol('nu'), Symbol('q_1')), Mul(Integer(3), Symbol('hinv'), Symbol('lambda_s'), Symbol('q_0'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(3), Symbol('hinv'), Symbol('lambda_s'), Symbol('q_1'), Pow(Symbol('rho'), Integer(-1))))
+source[5,0] = Add(Mul(Integer(-1), Rational(1, 5), Symbol('b_x'), Symbol('hinv'), Symbol('q_0'), Symbol('q_1_x')), Mul(Rational(1, 5), Symbol('b_x'), Symbol('hinv'), Symbol('q_1'), Symbol('q_1_x')))
+source_explicit: None
+eigenvalues: None
+eigenvalues_cfl: shape=(6, 1)
+eigenvalues_cfl[0,0] = Function('conditional')(LessThan(Symbol('h'), Integer(0)), Integer(0), gelfand_bound(Integer(7), Float('9.3132257461547852e-10', precision=53), Integer(0), Symbol('n0'), Integer(0), Integer(0), Integer(0), Mul(Symbol('g'), Symbol('h'), Symbol('n0')), Mul(Integer(2), Symbol('n0'), Symbol('q_0'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Mul(Rational(2, 3), Symbol('n0'), Symbol('q_1'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Integer(0), Integer(0), Integer(0), Mul(Integer(2), Symbol('n0'), Symbol('q_1'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Mul(Symbol('n0'), Symbol('q_0'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Integer(0), Integer(0), Integer(0), Mul(Symbol('n0'), Symbol('r_0'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Mul(Rational(1, 3), Symbol('n0'), Symbol('r_1'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Mul(Symbol('n0'), Symbol('q_0'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Mul(Rational(1, 3), Symbol('n0'), Symbol('q_1'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Integer(0), Mul(Symbol('n0'), Add(Mul(Rational(2, 5), Symbol('b_x'), Symbol('q_1'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Mul(Symbol('r_1'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))))), Mul(Symbol('n0'), Add(Mul(Rational(2, 5), Symbol('b_x'), Symbol('q_0'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Mul(Integer(-1), Rational(4, 5), Symbol('b_x'), Symbol('q_1'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Mul(Integer(-1), Rational(3, 5), Symbol('r_0'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Mul(Rational(3, 5), Symbol('r_1'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))))), Mul(Rational(3, 5), Symbol('n0'), Symbol('q_1'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Mul(Symbol('n0'), Add(Mul(Symbol('q_0'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1)))), Mul(Rational(2, 5), Symbol('q_1'), Function('conditional')(StrictGreaterThan(Symbol('h'), Float('1.0e-8', precision=53)), Symbol('hinv'), Pow(Max(Float('1.0e-14', precision=53), Symbol('h')), Integer(-1))))))))
+update_variables: None
+update_aux_variables: shape=(4, 1)
+update_aux_variables[0,0] = Symbol('b_x')
+update_aux_variables[1,0] = Symbol('q_1_x')
+update_aux_variables[2,0] = Symbol('dbdx')
+update_aux_variables[3,0] = Mul(Pow(Integer(2), Rational(1, 2)), Symbol('h'), Pow(Add(Pow(Symbol('h'), Integer(4)), Pow(Max(Float('1.0e-8', precision=53), Symbol('h')), Integer(4))), Rational(-1, 2)))
+reconstruction_variables: shape=(8,)
+reconstruction_variables[0] = Symbol('b')
+reconstruction_variables[1] = Add(Symbol('b'), Symbol('h'))
+reconstruction_variables[2] = Mul(Symbol('hinv'), Symbol('q_0'))
+reconstruction_variables[3] = Mul(Symbol('hinv'), Symbol('q_1'))
+reconstruction_variables[4] = Mul(Symbol('hinv'), Symbol('r_0'))
+reconstruction_variables[5] = Mul(Symbol('hinv'), Symbol('r_1'))
+reconstruction_variables[6] = Symbol('P_0')
+reconstruction_variables[7] = Symbol('P_1')
+state_from_reconstruction: shape=(8,)
+state_from_reconstruction[0] = Symbol('WB_b')
+state_from_reconstruction[1] = Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h'))
+state_from_reconstruction[2] = Mul(Symbol('WB_q_0'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+state_from_reconstruction[3] = Mul(Symbol('WB_q_1'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+state_from_reconstruction[4] = Mul(Symbol('WB_r_0'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+state_from_reconstruction[5] = Mul(Symbol('WB_r_1'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+state_from_reconstruction[6] = Symbol('WB_P_0')
+state_from_reconstruction[7] = Symbol('WB_P_1')
+interpolate_to_3d: None
+project_from_3d: None
+boundary_specs: {}
+bc_tags: []
+bc_kernel: ImmutableDenseNDimArray(Tuple(Symbol('b'), Symbol('h'), Symbol('q_0'), Symbol('q_1'), Symbol('r_0'), Symbol('r_1'), Symbol('P_0'), Symbol('P_1')), Tuple(Integer(8)))
+aux_registry:
+  {atom=Derivative(Symbol('b'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('b_x'), kind='derivative', multi_index=(1,), name='b_x', row=0, state_index=0, target_kind='state', target_name='b'}
+  {atom=Derivative(Symbol('q_1'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('q_1_x'), kind='derivative', multi_index=(1,), name='q_1_x', row=1, state_index=3, target_kind='state', target_name='q_1'}
+
+== stage pressure ==
+class: NumericalSystemModel
+state: [Symbol('b'), Symbol('h'), Symbol('q_0'), Symbol('q_1'), Symbol('r_0'), Symbol('r_1'), Symbol('P_0'), Symbol('P_1')]
+aux_state: [Symbol('b_x'), Symbol('q_1_x'), Symbol('dbdx'), Symbol('hinv'), Symbol('P_0_x'), Symbol('P_0_x_x'), Symbol('P_1_x'), Symbol('P_1_x_x'), Symbol('b_x_x'), Symbol('h_x'), Symbol('h_x_x'), Symbol('q_0_x')]
+parameters: [g, rho, nu, lambda_s, e_x]
+symbol_assumptions:
+  b : {complex, extended_real, finite, hermitian, real}
+  h : {complex, extended_real, finite, hermitian, real}
+  q_0 : {complex, extended_real, finite, hermitian, real}
+  q_1 : {complex, extended_real, finite, hermitian, real}
+  r_0 : {complex, extended_real, finite, hermitian, real}
+  r_1 : {complex, extended_real, finite, hermitian, real}
+  P_0 : {complex, extended_real, finite, hermitian, real}
+  P_1 : {complex, extended_real, finite, hermitian, real}
+  b_x : {complex, extended_real, finite, hermitian, real}
+  q_1_x : {complex, extended_real, finite, hermitian, real}
+  dbdx : {complex, extended_real, finite, hermitian, real}
+  hinv : {complex, extended_real, finite, hermitian, real}
+  P_0_x : {complex, extended_real, finite, hermitian, real}
+  P_0_x_x : {complex, extended_real, finite, hermitian, real}
+  P_1_x : {complex, extended_real, finite, hermitian, real}
+  P_1_x_x : {complex, extended_real, finite, hermitian, real}
+  b_x_x : {complex, extended_real, finite, hermitian, real}
+  h_x : {complex, extended_real, finite, hermitian, real}
+  h_x_x : {complex, extended_real, finite, hermitian, real}
+  q_0_x : {complex, extended_real, finite, hermitian, real}
+  g : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  rho : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  nu : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  lambda_s : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  e_x : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+parameter_values: {g: 9.81, rho: 1.0, nu: 0.0, lambda_s: 0.0, e_x: 0.0}
+n_equations: 2  n_state: 8  n_dim: 1
+equation_names: [elliptic_P_0, elliptic_P_1]
+equation_to_state_index: [6, 7]
+stationary_indices: []
+mass_matrix: shape=(2, 8)
+flux: shape=(2, 1)
+hydrostatic_pressure: shape=(2, 1)
+diffusion_matrix: None
+nonconservative_matrix: shape=(2, 8, 1)
+source: shape=(2, 1)
+source[0,0] = Add(Mul(Integer(4), Symbol('P_0'), Symbol('b_x'), Symbol('dt'), Symbol('h_x'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(2), Symbol('P_0'), Symbol('b_x_x'), Symbol('dt'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(2), Symbol('P_0'), Symbol('dt'), Pow(Symbol('h_x'), Integer(2)), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(2), Symbol('P_0_x'), Symbol('b_x'), Symbol('dt'), Symbol('h'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(2), Symbol('P_0_x'), Symbol('b_x'), Symbol('dt'), Pow(Symbol('rho'), Integer(-1))), Mul(Symbol('P_0_x'), Symbol('dt'), Symbol('h'), Symbol('h_x'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Symbol('P_0_x'), Symbol('dt'), Symbol('h_x'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Symbol('P_0_x_x'), Symbol('dt'), Symbol('h'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(4), Symbol('P_1'), Pow(Symbol('b_x'), Integer(2)), Symbol('dt'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(4), Symbol('P_1'), Symbol('b_x_x'), Symbol('dt'), Pow(Symbol('rho'), Integer(-1))), Mul(Rational(2, 3), Symbol('P_1'), Symbol('dt'), Pow(Symbol('h_x'), Integer(2)), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Rational(2, 3), Symbol('P_1'), Symbol('dt'), Symbol('h_x_x'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(4), Symbol('P_1'), Symbol('dt'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(4), Symbol('P_1_x'), Symbol('b_x'), Symbol('dt'), Pow(Symbol('rho'), Integer(-1))), Mul(Rational(1, 3), Symbol('P_1_x'), Symbol('dt'), Symbol('h'), Symbol('h_x'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Symbol('P_1_x'), Symbol('dt'), Symbol('h_x'), Pow(Symbol('rho'), Integer(-1))), Mul(Rational(1, 3), Symbol('P_1_x_x'), Symbol('dt'), Symbol('h'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(2), Symbol('b_x'), Symbol('hinv'), Symbol('q_0')), Mul(Integer(-1), Symbol('h_x'), Symbol('hinv'), Symbol('q_0')), Mul(Integer(-1), Rational(1, 3), Symbol('h_x'), Symbol('hinv'), Symbol('q_1')), Mul(Integer(2), Symbol('hinv'), Symbol('r_0')), Symbol('q_0_x'), Mul(Integer(-1), Rational(1, 3), Symbol('q_1_x')))
+source[1,0] = Add(Mul(Integer(12), Symbol('P_0'), Pow(Symbol('b_x'), Integer(2)), Symbol('dt'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(12), Symbol('P_0'), Symbol('b_x'), Symbol('dt'), Symbol('h_x'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(4), Symbol('P_0'), Symbol('dt'), Pow(Symbol('h_x'), Integer(2)), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Symbol('P_0'), Symbol('dt'), Symbol('h_x_x'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(12), Symbol('P_0'), Symbol('dt'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Symbol('P_0_x'), Symbol('dt'), Symbol('h'), Symbol('h_x'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(2), Symbol('P_0_x'), Symbol('dt'), Symbol('h_x'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Symbol('P_0_x_x'), Symbol('dt'), Symbol('h'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(12), Symbol('P_1'), Pow(Symbol('b_x'), Integer(2)), Symbol('dt'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(8), Symbol('P_1'), Symbol('b_x'), Symbol('dt'), Symbol('h_x'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(2), Symbol('P_1'), Symbol('b_x_x'), Symbol('dt'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(2), Symbol('P_1'), Symbol('dt'), Pow(Symbol('h_x'), Integer(2)), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(12), Symbol('P_1'), Symbol('dt'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(2), Symbol('P_1_x'), Symbol('b_x'), Symbol('dt'), Symbol('h'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(2), Symbol('P_1_x'), Symbol('b_x'), Symbol('dt'), Pow(Symbol('rho'), Integer(-1))), Mul(Symbol('P_1_x'), Symbol('dt'), Symbol('h'), Symbol('h_x'), Symbol('hinv'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(2), Symbol('b_x'), Symbol('hinv'), Symbol('q_1')), Mul(Integer(-1), Symbol('h_x'), Symbol('hinv'), Symbol('q_0')), Mul(Integer(-1), Symbol('h_x'), Symbol('hinv'), Symbol('q_1')), Mul(Integer(2), Symbol('hinv'), Symbol('r_1')), Symbol('q_0_x'))
+source_explicit: None
+eigenvalues: None
+eigenvalues_cfl: None
+update_variables: None
+update_aux_variables: shape=(12, 1)
+update_aux_variables[0,0] = Symbol('b_x')
+update_aux_variables[1,0] = Symbol('q_1_x')
+update_aux_variables[2,0] = Symbol('dbdx')
+update_aux_variables[3,0] = Mul(Pow(Integer(2), Rational(1, 2)), Symbol('h'), Pow(Add(Pow(Symbol('h'), Integer(4)), Pow(Max(Float('1.0e-8', precision=53), Symbol('h')), Integer(4))), Rational(-1, 2)))
+update_aux_variables[4,0] = Symbol('P_0_x')
+update_aux_variables[5,0] = Symbol('P_0_x_x')
+update_aux_variables[6,0] = Symbol('P_1_x')
+update_aux_variables[7,0] = Symbol('P_1_x_x')
+update_aux_variables[8,0] = Symbol('b_x_x')
+update_aux_variables[9,0] = Symbol('h_x')
+update_aux_variables[10,0] = Symbol('h_x_x')
+update_aux_variables[11,0] = Symbol('q_0_x')
+reconstruction_variables: shape=(8,)
+reconstruction_variables[0] = Symbol('b')
+reconstruction_variables[1] = Add(Symbol('b'), Symbol('h'))
+reconstruction_variables[2] = Mul(Symbol('hinv'), Symbol('q_0'))
+reconstruction_variables[3] = Mul(Symbol('hinv'), Symbol('q_1'))
+reconstruction_variables[4] = Mul(Symbol('hinv'), Symbol('r_0'))
+reconstruction_variables[5] = Mul(Symbol('hinv'), Symbol('r_1'))
+reconstruction_variables[6] = Symbol('P_0')
+reconstruction_variables[7] = Symbol('P_1')
+state_from_reconstruction: shape=(8,)
+state_from_reconstruction[0] = Symbol('WB_b')
+state_from_reconstruction[1] = Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h'))
+state_from_reconstruction[2] = Mul(Symbol('WB_q_0'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+state_from_reconstruction[3] = Mul(Symbol('WB_q_1'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+state_from_reconstruction[4] = Mul(Symbol('WB_r_0'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+state_from_reconstruction[5] = Mul(Symbol('WB_r_1'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+state_from_reconstruction[6] = Symbol('WB_P_0')
+state_from_reconstruction[7] = Symbol('WB_P_1')
+interpolate_to_3d: None
+project_from_3d: None
+boundary_specs: {}
+bc_tags: []
+bc_kernel: ImmutableDenseNDimArray(Tuple(Symbol('b'), Symbol('h'), Symbol('q_0'), Symbol('q_1'), Symbol('r_0'), Symbol('r_1'), Symbol('P_0'), Symbol('P_1')), Tuple(Integer(8)))
+aux_registry:
+  {atom=Derivative(Symbol('P_0'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('P_0_x'), kind='derivative', multi_index=(1,), name='P_0_x', row=4, state_index=6, target_kind='state', target_name='P_0'}
+  {atom=Derivative(Symbol('P_0'), Tuple(Symbol('x'), Integer(2))), aux_symbol=Symbol('P_0_x_x'), kind='derivative', multi_index=(2,), name='P_0_x_x', row=5, state_index=6, target_kind='state', target_name='P_0'}
+  {atom=Derivative(Symbol('P_1'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('P_1_x'), kind='derivative', multi_index=(1,), name='P_1_x', row=6, state_index=7, target_kind='state', target_name='P_1'}
+  {atom=Derivative(Symbol('P_1'), Tuple(Symbol('x'), Integer(2))), aux_symbol=Symbol('P_1_x_x'), kind='derivative', multi_index=(2,), name='P_1_x_x', row=7, state_index=7, target_kind='state', target_name='P_1'}
+
+== stage corrector ==
+class: NumericalSystemModel
+state: [Symbol('b'), Symbol('h'), Symbol('q_0'), Symbol('q_1'), Symbol('r_0'), Symbol('r_1'), Symbol('P_0'), Symbol('P_1')]
+aux_state: [Symbol('b_x'), Symbol('q_1_x'), Symbol('dbdx'), Symbol('hinv'), Symbol('P_0_x'), Symbol('h_x'), Symbol('P_1_x')]
+parameters: [g, rho, nu, lambda_s, e_x]
+symbol_assumptions:
+  b : {complex, extended_real, finite, hermitian, real}
+  h : {complex, extended_real, finite, hermitian, real}
+  q_0 : {complex, extended_real, finite, hermitian, real}
+  q_1 : {complex, extended_real, finite, hermitian, real}
+  r_0 : {complex, extended_real, finite, hermitian, real}
+  r_1 : {complex, extended_real, finite, hermitian, real}
+  P_0 : {complex, extended_real, finite, hermitian, real}
+  P_1 : {complex, extended_real, finite, hermitian, real}
+  b_x : {complex, extended_real, finite, hermitian, real}
+  q_1_x : {complex, extended_real, finite, hermitian, real}
+  dbdx : {complex, extended_real, finite, hermitian, real}
+  hinv : {complex, extended_real, finite, hermitian, real}
+  P_0_x : {complex, extended_real, finite, hermitian, real}
+  h_x : {complex, extended_real, finite, hermitian, real}
+  P_1_x : {complex, extended_real, finite, hermitian, real}
+  g : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  rho : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  nu : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  lambda_s : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  e_x : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+parameter_values: {g: 9.81, rho: 1.0, nu: 0.0, lambda_s: 0.0, e_x: 0.0}
+n_equations: 4  n_state: 8  n_dim: 1
+equation_names: [corr_q_0, corr_q_1, corr_r_0, corr_r_1]
+equation_to_state_index: [2, 3, 4, 5]
+stationary_indices: [0, 1, 2, 3]
+mass_matrix: shape=(4, 8)
+flux: shape=(4, 1)
+hydrostatic_pressure: shape=(4, 1)
+diffusion_matrix: None
+nonconservative_matrix: shape=(4, 8, 1)
+source: shape=(4, 1)
+source_explicit: None
+eigenvalues: None
+eigenvalues_cfl: None
+update_variables: shape=(4, 1)
+update_variables[0,0] = Add(Mul(Integer(-1), Symbol('P_0'), Symbol('dt'), Symbol('h_x'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Symbol('P_0_x'), Symbol('dt'), Symbol('h'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(2), Symbol('P_1'), Symbol('b_x'), Symbol('dt'), Pow(Symbol('rho'), Integer(-1))), Symbol('q_0'))
+update_variables[1,0] = Add(Mul(Integer(-1), Integer(6), Symbol('P_0'), Symbol('b_x'), Symbol('dt'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(3), Symbol('P_0'), Symbol('dt'), Symbol('h_x'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(6), Symbol('P_1'), Symbol('b_x'), Symbol('dt'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Integer(2), Symbol('P_1'), Symbol('dt'), Symbol('h_x'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(-1), Symbol('P_1_x'), Symbol('dt'), Symbol('h'), Pow(Symbol('rho'), Integer(-1))), Symbol('q_1'))
+update_variables[2,0] = Add(Mul(Integer(-1), Integer(2), Symbol('P_1'), Symbol('dt'), Pow(Symbol('rho'), Integer(-1))), Symbol('r_0'))
+update_variables[3,0] = Add(Mul(Integer(6), Symbol('P_0'), Symbol('dt'), Pow(Symbol('rho'), Integer(-1))), Mul(Integer(6), Symbol('P_1'), Symbol('dt'), Pow(Symbol('rho'), Integer(-1))), Symbol('r_1'))
+update_aux_variables: shape=(7, 1)
+update_aux_variables[0,0] = Symbol('b_x')
+update_aux_variables[1,0] = Symbol('q_1_x')
+update_aux_variables[2,0] = Symbol('dbdx')
+update_aux_variables[3,0] = Mul(Pow(Integer(2), Rational(1, 2)), Symbol('h'), Pow(Add(Pow(Symbol('h'), Integer(4)), Pow(Max(Float('1.0e-8', precision=53), Symbol('h')), Integer(4))), Rational(-1, 2)))
+update_aux_variables[4,0] = Symbol('P_0_x')
+update_aux_variables[5,0] = Symbol('h_x')
+update_aux_variables[6,0] = Symbol('P_1_x')
+reconstruction_variables: shape=(8,)
+reconstruction_variables[0] = Symbol('b')
+reconstruction_variables[1] = Add(Symbol('b'), Symbol('h'))
+reconstruction_variables[2] = Mul(Symbol('hinv'), Symbol('q_0'))
+reconstruction_variables[3] = Mul(Symbol('hinv'), Symbol('q_1'))
+reconstruction_variables[4] = Mul(Symbol('hinv'), Symbol('r_0'))
+reconstruction_variables[5] = Mul(Symbol('hinv'), Symbol('r_1'))
+reconstruction_variables[6] = Symbol('P_0')
+reconstruction_variables[7] = Symbol('P_1')
+state_from_reconstruction: shape=(8,)
+state_from_reconstruction[0] = Symbol('WB_b')
+state_from_reconstruction[1] = Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h'))
+state_from_reconstruction[2] = Mul(Symbol('WB_q_0'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+state_from_reconstruction[3] = Mul(Symbol('WB_q_1'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+state_from_reconstruction[4] = Mul(Symbol('WB_r_0'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+state_from_reconstruction[5] = Mul(Symbol('WB_r_1'), Add(Mul(Integer(-1), Symbol('WB_b')), Symbol('WB_h')))
+state_from_reconstruction[6] = Symbol('WB_P_0')
+state_from_reconstruction[7] = Symbol('WB_P_1')
+interpolate_to_3d: None
+project_from_3d: None
+boundary_specs: {}
+bc_tags: []
+bc_kernel: ImmutableDenseNDimArray(Tuple(Symbol('b'), Symbol('h'), Symbol('q_0'), Symbol('q_1'), Symbol('r_0'), Symbol('r_1'), Symbol('P_0'), Symbol('P_1')), Tuple(Integer(8)))
+aux_registry:
+  {atom=Derivative(Symbol('P_0'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('P_0_x'), kind='derivative', multi_index=(1,), name='P_0_x', row=4, state_index=6, target_kind='state', target_name='P_0'}
+  {atom=Derivative(Symbol('b'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('b_x'), kind='derivative', multi_index=(1,), name='b_x', row=0, state_index=0, target_kind='state', target_name='b'}
+  {atom=Derivative(Symbol('h'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('h_x'), kind='derivative', multi_index=(1,), name='h_x', row=5, state_index=1, target_kind='state', target_name='h'}
+  {atom=Derivative(Symbol('P_1'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('P_1_x'), kind='derivative', multi_index=(1,), name='P_1_x', row=6, state_index=7, target_kind='state', target_name='P_1'}
+

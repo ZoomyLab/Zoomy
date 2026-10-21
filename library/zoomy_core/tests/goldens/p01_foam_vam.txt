@@ -1,0 +1,1452 @@
+#| golden: p01_foam_vam
+#| sympy: 1.14.0
+#| regenerate: python scripts/regen_goldens.py
+#| (header lines are informational; comparison is on the body below)
+== P01 foam emitted source (SystemModel printer) ==
+#pragma once
+#include "List.H"
+#include "vector.H"
+#include "scalar.H"
+#include "word.H"
+#include "volFields.H"
+#include "fvMesh.H"
+
+namespace Model
+{
+constexpr int n_dof_q    = 8;
+constexpr int n_dof_qaux = 4;
+constexpr int n_parameters = 5;
+constexpr int dimension  = 1;
+constexpr Foam::scalar dt_max = 5.0;
+const Foam::List<Foam::word> map_boundary_tag_to_function_index{  };
+const Foam::List<Foam::word> parameter_names{ "g", "rho", "nu", "lambda_s", "e_x" };
+inline Foam::List<Foam::scalar> default_parameters() { return { 9.81, 1.0, 0.0, 0.0, 0.0 }; }
+constexpr int n_precice_patches = 0;
+const Foam::List<Foam::word> precice_patch_names{  };
+const Foam::List<Foam::word> precice_mesh_names{  };
+const Foam::List<Foam::label> equation_to_state_index{ 0, 1, 2, 3, 4, 5, 6, 7 };
+
+inline Foam::List<Foam::List<Foam::scalar>> flux_x(
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p)
+{
+    Foam::scalar t0 = Foam::pow(Q[3], 2);
+    Foam::scalar t1 = (1.0/3.0)*Qaux[3];
+    Foam::scalar t2 = Q[1]/p[1];
+    Foam::scalar t3 = Qaux[3]*Q[2];
+    Foam::scalar t4 = Q[3]*t3;
+    Foam::scalar t5 = Q[3]*Q[5];
+    Foam::scalar t6 = (2.0/5.0)*Qaux[3];
+    Foam::scalar t7 = -Q[2];
+    auto res = Foam::List<Foam::List<Foam::scalar>>(8, Foam::List<Foam::scalar>(1, 0.0));
+    res[0][0] = 0;
+    res[1][0] = Q[2];
+    res[2][0] = Q[6]*t2 + Qaux[3]*Foam::pow(Q[2], 2) + t0*t1;
+    res[3][0] = Q[7]*t2 + 2*t4;
+    res[4][0] = Q[4]*t3 + t1*t5;
+    res[5][0] = -Qaux[0]*t0*t6 + (2.0/5.0)*Qaux[0]*t4 + (3.0/5.0)*Qaux[3]*Q[3]*Q[4] + Q[5]*t3 + t5*t6;
+    res[6][0] = t7;
+    res[7][0] = t7;
+    return res;
+}
+
+
+inline Foam::List<Foam::List<Foam::scalar>> nonconservative_matrix_x(
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p)
+{
+    Foam::scalar t0 = (1.0 / Foam::pow(p[1], 1));
+    Foam::scalar t1 = Q[7]*t0;
+    Foam::scalar t2 = Q[6]*t0;
+    Foam::scalar t3 = Qaux[3]*Q[2];
+    Foam::scalar t4 = Qaux[3]*Q[3];
+    auto res = Foam::List<Foam::List<Foam::scalar>>(8, Foam::List<Foam::scalar>(8, 0.0));
+    res[0][0] = 0;
+    res[0][1] = 0;
+    res[0][2] = 0;
+    res[0][3] = 0;
+    res[0][4] = 0;
+    res[0][5] = 0;
+    res[0][6] = 0;
+    res[0][7] = 0;
+    res[1][0] = 0;
+    res[1][1] = 0;
+    res[1][2] = 0;
+    res[1][3] = 0;
+    res[1][4] = 0;
+    res[1][5] = 0;
+    res[1][6] = 0;
+    res[1][7] = 0;
+    res[2][0] = p[0]*Q[1] - 2*t1;
+    res[2][1] = 0;
+    res[2][2] = 0;
+    res[2][3] = 0;
+    res[2][4] = 0;
+    res[2][5] = 0;
+    res[2][6] = 0;
+    res[2][7] = 0;
+    res[3][0] = 6*t1 + 6*t2;
+    res[3][1] = t1 + 3*t2;
+    res[3][2] = 0;
+    res[3][3] = -t3;
+    res[3][4] = 0;
+    res[3][5] = 0;
+    res[3][6] = 0;
+    res[3][7] = 0;
+    res[4][0] = 0;
+    res[4][1] = 0;
+    res[4][2] = 0;
+    res[4][3] = 0;
+    res[4][4] = 0;
+    res[4][5] = 0;
+    res[4][6] = 0;
+    res[4][7] = 0;
+    res[5][0] = 0;
+    res[5][1] = 0;
+    res[5][2] = 0;
+    res[5][3] = -6.0/5.0*Qaux[3]*Q[4] + (1.0/5.0)*Qaux[3]*Q[5];
+    res[5][4] = 0;
+    res[5][5] = 0;
+    res[5][6] = 0;
+    res[5][7] = 0;
+    res[6][0] = 2*t3;
+    res[6][1] = t3 + (1.0/3.0)*t4;
+    res[6][2] = 0;
+    res[6][3] = 1.0/3.0;
+    res[6][4] = 0;
+    res[6][5] = 0;
+    res[6][6] = 0;
+    res[6][7] = 0;
+    res[7][0] = 2*t4;
+    res[7][1] = t3 + t4;
+    res[7][2] = 0;
+    res[7][3] = 0;
+    res[7][4] = 0;
+    res[7][5] = 0;
+    res[7][6] = 0;
+    res[7][7] = 0;
+    return res;
+}
+
+
+inline Foam::List<Foam::List<Foam::scalar>> quasilinear_matrix_x(
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p)
+{
+    Foam::scalar t0 = (1.0 / Foam::pow(p[1], 1));
+    Foam::scalar t1 = Q[7]*t0;
+    Foam::scalar t2 = 2*t1;
+    Foam::scalar t3 = Q[6]*t0;
+    Foam::scalar t4 = Foam::pow(Qaux[3], 2);
+    Foam::scalar t5 = Foam::pow(Q[3], 2);
+    Foam::scalar t6 = (1.0/3.0)*t4;
+    Foam::scalar t7 = Qaux[3]*Q[2];
+    Foam::scalar t8 = 2*t7;
+    Foam::scalar t9 = Qaux[3]*Q[3];
+    Foam::scalar t10 = Q[1]*t0;
+    Foam::scalar t11 = Q[2]*t4;
+    Foam::scalar t12 = Q[3]*t11;
+    Foam::scalar t13 = 2*t9;
+    Foam::scalar t14 = Q[3]*Q[5];
+    Foam::scalar t15 = Qaux[3]*Q[4];
+    Foam::scalar t16 = Qaux[3]*Q[5];
+    Foam::scalar t17 = (1.0/3.0)*t9;
+    Foam::scalar t18 = (2.0/5.0)*Qaux[0];
+    Foam::scalar t19 = (2.0/5.0)*t9;
+    auto res = Foam::List<Foam::List<Foam::scalar>>(8, Foam::List<Foam::scalar>(8, 0.0));
+    res[0][0] = 0;
+    res[0][1] = 0;
+    res[0][2] = 0;
+    res[0][3] = 0;
+    res[0][4] = 0;
+    res[0][5] = 0;
+    res[0][6] = 0;
+    res[0][7] = 0;
+    res[1][0] = 0;
+    res[1][1] = 0;
+    res[1][2] = 1;
+    res[1][3] = 0;
+    res[1][4] = 0;
+    res[1][5] = 0;
+    res[1][6] = 0;
+    res[1][7] = 0;
+    res[2][0] = p[0]*Q[1] - t2;
+    res[2][1] = p[0]*Q[1] - Foam::pow(Q[2], 2)*t4 + t3 - t5*t6;
+    res[2][2] = t8;
+    res[2][3] = (2.0/3.0)*t9;
+    res[2][4] = 0;
+    res[2][5] = 0;
+    res[2][6] = t10;
+    res[2][7] = 0;
+    res[3][0] = 6*t1 + 6*t3;
+    res[3][1] = -2*t12 + t2 + 3*t3;
+    res[3][2] = t13;
+    res[3][3] = t7;
+    res[3][4] = 0;
+    res[3][5] = 0;
+    res[3][6] = 0;
+    res[3][7] = t10;
+    res[4][0] = 0;
+    res[4][1] = -Q[4]*t11 - t14*t6;
+    res[4][2] = t15;
+    res[4][3] = (1.0/3.0)*t16;
+    res[4][4] = t7;
+    res[4][5] = t17;
+    res[4][6] = 0;
+    res[4][7] = 0;
+    res[5][0] = 0;
+    res[5][1] = (2.0/5.0)*Qaux[0]*t4*t5 - 3.0/5.0*Q[3]*Q[4]*t4 - Q[5]*t11 - t12*t18 - 2.0/5.0*t14*t4;
+    res[5][2] = Qaux[0]*t19 + t16;
+    res[5][3] = -4.0/5.0*Qaux[0]*t9 - 3.0/5.0*t15 + (3.0/5.0)*t16 + t18*t7;
+    res[5][4] = (3.0/5.0)*t9;
+    res[5][5] = t19 + t7;
+    res[5][6] = 0;
+    res[5][7] = 0;
+    res[6][0] = t8;
+    res[6][1] = t17 + t7;
+    res[6][2] = -1;
+    res[6][3] = 1.0/3.0;
+    res[6][4] = 0;
+    res[6][5] = 0;
+    res[6][6] = 0;
+    res[6][7] = 0;
+    res[7][0] = t13;
+    res[7][1] = t7 + t9;
+    res[7][2] = -1;
+    res[7][3] = 0;
+    res[7][4] = 0;
+    res[7][5] = 0;
+    res[7][6] = 0;
+    res[7][7] = 0;
+    return res;
+}
+
+
+inline Foam::List<Foam::List<Foam::scalar>> eigenvalues(
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::vector& n)
+{
+    auto res = Foam::List<Foam::List<Foam::scalar>>(8, Foam::List<Foam::scalar>(1, 0.0));
+    res[0][0] = 0;
+    res[1][0] = 0;
+    res[2][0] = 0;
+    res[3][0] = 0;
+    res[4][0] = 0;
+    res[5][0] = 0;
+    res[6][0] = 0;
+    res[7][0] = 0;
+    return res;
+}
+
+
+inline Foam::List<Foam::List<Foam::scalar>> source(
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::scalar& time,
+    const Foam::scalar dt,
+    const Foam::vector& X)
+{
+    Foam::scalar t0 = Qaux[3]*Q[3];
+    Foam::scalar t1 = (1.0 / Foam::pow(p[1], 1));
+    Foam::scalar t2 = p[3]*t1;
+    Foam::scalar t3 = t0*t2;
+    Foam::scalar t4 = Qaux[3]*Q[2];
+    Foam::scalar t5 = Q[7]*t1;
+    Foam::scalar t6 = (1.0/5.0)*Qaux[0]*Qaux[1];
+    Foam::scalar t7 = 2*Qaux[3];
+    auto res = Foam::List<Foam::List<Foam::scalar>>(8, Foam::List<Foam::scalar>(1, 0.0));
+    res[0][0] = 0;
+    res[1][0] = 0;
+    res[2][0] = p[4]*p[0]*Q[1] - t2*t4 + t3;
+    res[3][0] = -12*Foam::pow(Qaux[3], 2)*p[2]*Q[3] + 3*Qaux[3]*p[3]*Q[2]*t1 - 3*t3;
+    res[4][0] = -2*t5;
+    res[5][0] = 6*Q[6]*t1 + t0*t6 - t4*t6 + 6*t5;
+    res[6][0] = Q[4]*t7;
+    res[7][0] = Q[5]*t7;
+    return res;
+}
+
+
+inline Foam::List<Foam::List<Foam::scalar>> mass_matrix(
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p)
+{
+    auto res = Foam::List<Foam::List<Foam::scalar>>(8, Foam::List<Foam::scalar>(8, 0.0));
+    res[0][0] = 1;
+    res[0][1] = 0;
+    res[0][2] = 0;
+    res[0][3] = 0;
+    res[0][4] = 0;
+    res[0][5] = 0;
+    res[0][6] = 0;
+    res[0][7] = 0;
+    res[1][0] = 0;
+    res[1][1] = 1;
+    res[1][2] = 0;
+    res[1][3] = 0;
+    res[1][4] = 0;
+    res[1][5] = 0;
+    res[1][6] = 0;
+    res[1][7] = 0;
+    res[2][0] = 0;
+    res[2][1] = 0;
+    res[2][2] = 1;
+    res[2][3] = 0;
+    res[2][4] = 0;
+    res[2][5] = 0;
+    res[2][6] = 0;
+    res[2][7] = 0;
+    res[3][0] = 0;
+    res[3][1] = 0;
+    res[3][2] = 0;
+    res[3][3] = 1;
+    res[3][4] = 0;
+    res[3][5] = 0;
+    res[3][6] = 0;
+    res[3][7] = 0;
+    res[4][0] = 0;
+    res[4][1] = 0;
+    res[4][2] = 0;
+    res[4][3] = 0;
+    res[4][4] = 1;
+    res[4][5] = 0;
+    res[4][6] = 0;
+    res[4][7] = 0;
+    res[5][0] = 0;
+    res[5][1] = 0;
+    res[5][2] = 0;
+    res[5][3] = 0;
+    res[5][4] = 0;
+    res[5][5] = 1;
+    res[5][6] = 0;
+    res[5][7] = 0;
+    res[6][0] = 0;
+    res[6][1] = 0;
+    res[6][2] = 0;
+    res[6][3] = 0;
+    res[6][4] = 0;
+    res[6][5] = 0;
+    res[6][6] = 0;
+    res[6][7] = 0;
+    res[7][0] = 0;
+    res[7][1] = 0;
+    res[7][2] = 0;
+    res[7][3] = 0;
+    res[7][4] = 0;
+    res[7][5] = 0;
+    res[7][6] = 0;
+    res[7][7] = 0;
+    return res;
+}
+
+
+inline Foam::List<Foam::scalar> update_variables(
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::scalar dt)
+{
+    auto res = Foam::List<Foam::scalar>(8, 0.0);
+    res[0] = Q[0];
+    res[1] = Q[1];
+    res[2] = Q[2];
+    res[3] = Q[3];
+    res[4] = Q[4];
+    res[5] = Q[5];
+    res[6] = Q[6];
+    res[7] = Q[7];
+    return res;
+}
+
+
+inline Foam::List<Foam::scalar> reconstruction_variables(
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p)
+{
+    auto res = Foam::List<Foam::scalar>(8, 0.0);
+    res[0] = Q[0];
+    res[1] = Q[0] + Q[1];
+    res[2] = Qaux[3]*Q[2];
+    res[3] = Qaux[3]*Q[3];
+    res[4] = Qaux[3]*Q[4];
+    res[5] = Qaux[3]*Q[5];
+    res[6] = Q[6];
+    res[7] = Q[7];
+    return res;
+}
+
+
+inline Foam::List<Foam::scalar> state_from_reconstruction(
+    const Foam::List<Foam::scalar>& W,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p)
+{
+    Foam::scalar t0 = -W[0] + W[1];
+    auto res = Foam::List<Foam::scalar>(8, 0.0);
+    res[0] = W[0];
+    res[1] = t0;
+    res[2] = W[2]*t0;
+    res[3] = W[3]*t0;
+    res[4] = W[4]*t0;
+    res[5] = W[5]*t0;
+    res[6] = W[6];
+    res[7] = W[7];
+    return res;
+}
+
+
+inline Foam::List<Foam::scalar> interpolate_to_3d_at(
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::scalar& z)
+{
+    Foam::scalar t0 = (1.0 / Foam::pow(Q[1], 1));
+    Foam::scalar t1 = Q[2]*t0;
+    Foam::scalar t2 = Q[3]*t0;
+    Foam::scalar t3 = Qaux[2]*t1;
+    Foam::scalar t4 = Qaux[2]*t2;
+    Foam::scalar t5 = 6*z;
+    Foam::scalar t6 = Q[4]*t0;
+    Foam::scalar t7 = Q[5]*t0;
+    Foam::scalar t8 = 6*Foam::pow(z, 2);
+    auto res = Foam::List<Foam::scalar>(6, 0.0);
+    res[0] = Q[0];
+    res[1] = Q[1];
+    res[2] = t1 + 2*t2*z - t2;
+    res[3] = 0;
+    res[4] = -t3*t5 + t3*t8 + t3 + t4*t5 - t4*t8 - t4 + t5*t6 - t6*t8 + t7*t8 - 4*t7*z;
+    res[5] = -Q[6]*t8 + 6*Q[6]*z - Q[7]*t8 + 8*Q[7]*z - 2*Q[7] - p[0]*Q[1]*p[1]*z + p[0]*Q[1]*p[1];
+    return res;
+}
+
+inline Foam::List<Foam::List<Foam::scalar>> interpolate_to_3d(
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::List<Foam::scalar>& z)
+{
+    Foam::List<Foam::List<Foam::scalar>> out(z.size());
+    forAll(z, k) out[k] = interpolate_to_3d_at(Q, Qaux, p, z[k]);
+    return out;
+}
+
+inline Foam::List<Foam::scalar> project_from_3d(
+    const Foam::List<Foam::List<Foam::scalar>>& column,
+    const Foam::List<Foam::scalar>& p)
+{
+    Foam::scalar t0 = 0.01554951690821256*column[0][1];
+    Foam::scalar t1 = 0.031126482213438732*column[0][1];
+    Foam::scalar t2 = 0.031293828892005611*column[0][1];
+    Foam::scalar t3 = 0.031303568645784631*column[0][1];
+    Foam::scalar t4 = 0.0313115375352402*column[0][1];
+    Foam::scalar t5 = 0.031317735560372303*column[0][1];
+    Foam::scalar t6 = 0.031322162721180949*column[0][1];
+    Foam::scalar t7 = 0.031324819017666143*column[0][1];
+    Foam::scalar t8 = 0.031325704449827872*column[0][1];
+    Foam::scalar t9 = 0.031152159746128887*column[0][1];
+    Foam::scalar t10 = 0.031282318273903126*column[0][1];
+    Foam::scalar t11 = 0.031269036791477182*column[0][1];
+    Foam::scalar t12 = 0.031253984444727781*column[0][1];
+    Foam::scalar t13 = 0.031237161233654921*column[0][1];
+    Foam::scalar t14 = 0.0312185671582586*column[0][1];
+    Foam::scalar t15 = 0.031198202218538824*column[0][1];
+    Foam::scalar t16 = 0.031176066414495586*column[0][1];
+    Foam::scalar t17 = 0.046062483862638781*column[0][1];
+    Foam::scalar t18 = 0.086779307173894135*column[0][1];
+    Foam::scalar t19 = 0.035716836895923754*column[0][1];
+    Foam::scalar t20 = 0.029812779663225826*column[0][1];
+    Foam::scalar t21 = 0.023882132112370058*column[0][1];
+    Foam::scalar t22 = 0.017930212306988026*column[0][1];
+    Foam::scalar t23 = 0.011962338310711296*column[0][1];
+    Foam::scalar t24 = 0.0059838281871714321*column[0][1];
+    Foam::scalar t25 = 0.081353875668037201*column[0][1];
+    Foam::scalar t26 = 0.075853991271338336*column[0][1];
+    Foam::scalar t27 = 0.070284972047429103*column[0][1];
+    Foam::scalar t28 = 0.064652136059941079*column[0][1];
+    Foam::scalar t29 = 0.058960801372505811*column[0][1];
+    Foam::scalar t30 = 0.053216286048754877*column[0][1];
+    Foam::scalar t31 = 0.047423908152319852*column[0][1];
+    Foam::scalar t32 = 0.041588985746832292*column[0][1];
+    Foam::scalar t33 = column[0][1]*p[0]*p[1];
+    auto res = Foam::List<Foam::scalar>(8, 0.0);
+    res[0] = column[0][0];
+    res[1] = column[0][1];
+    res[2] = column[0][2]*t0 + column[1][2]*t1 + column[10][2]*t2 + column[11][2]*t3 + column[12][2]*t4 + column[13][2]*t5 + column[14][2]*t6 + column[15][2]*t7 + column[16][2]*t8 + column[17][2]*t7 + column[18][2]*t6 + column[19][2]*t5 + column[2][2]*t9 + column[20][2]*t4 + column[21][2]*t3 + column[22][2]*t2 + column[23][2]*t10 + column[24][2]*t11 + column[25][2]*t12 + column[26][2]*t13 + column[27][2]*t14 + column[28][2]*t15 + column[29][2]*t16 + column[3][2]*t16 + column[30][2]*t9 + column[31][2]*t1 + column[32][2]*t0 + column[4][2]*t15 + column[5][2]*t14 + column[6][2]*t13 + column[7][2]*t12 + column[8][2]*t11 + column[9][2]*t10;
+    res[3] = 0.0059838281871714321*column[0][1]*column[17][2] + 0.011962338310711296*column[0][1]*column[18][2] + 0.017930212306988026*column[0][1]*column[19][2] + 0.023882132112370058*column[0][1]*column[20][2] + 0.029812779663225826*column[0][1]*column[21][2] + 0.035716836895923754*column[0][1]*column[22][2] + 0.041588985746832292*column[0][1]*column[23][2] + 0.047423908152319852*column[0][1]*column[24][2] + 0.053216286048754877*column[0][1]*column[25][2] + 0.058960801372505811*column[0][1]*column[26][2] + 0.064652136059941079*column[0][1]*column[27][2] + 0.070284972047429103*column[0][1]*column[28][2] + 0.075853991271338336*column[0][1]*column[29][2] + 0.081353875668037201*column[0][1]*column[30][2] + 0.086779307173894135*column[0][1]*column[31][2] + 0.046062483862638781*column[0][1]*column[32][2] - column[0][2]*t17 - column[1][2]*t18 - column[10][2]*t19 - column[11][2]*t20 - column[12][2]*t21 - column[13][2]*t22 - column[14][2]*t23 - column[15][2]*t24 - column[2][2]*t25 - column[3][2]*t26 - column[4][2]*t27 - column[5][2]*t28 - column[6][2]*t29 - column[7][2]*t30 - column[8][2]*t31 - column[9][2]*t32;
+    res[4] = column[0][4]*t0 + column[1][4]*t1 + column[10][4]*t2 + column[11][4]*t3 + column[12][4]*t4 + column[13][4]*t5 + column[14][4]*t6 + column[15][4]*t7 + column[16][4]*t8 + column[17][4]*t7 + column[18][4]*t6 + column[19][4]*t5 + column[2][4]*t9 + column[20][4]*t4 + column[21][4]*t3 + column[22][4]*t2 + column[23][4]*t10 + column[24][4]*t11 + column[25][4]*t12 + column[26][4]*t13 + column[27][4]*t14 + column[28][4]*t15 + column[29][4]*t16 + column[3][4]*t16 + column[30][4]*t9 + column[31][4]*t1 + column[32][4]*t0 + column[4][4]*t15 + column[5][4]*t14 + column[6][4]*t13 + column[7][4]*t12 + column[8][4]*t11 + column[9][4]*t10;
+    res[5] = 0.0059838281871714321*column[0][1]*column[17][4] + 0.011962338310711296*column[0][1]*column[18][4] + 0.017930212306988026*column[0][1]*column[19][4] + 0.023882132112370058*column[0][1]*column[20][4] + 0.029812779663225826*column[0][1]*column[21][4] + 0.035716836895923754*column[0][1]*column[22][4] + 0.041588985746832292*column[0][1]*column[23][4] + 0.047423908152319852*column[0][1]*column[24][4] + 0.053216286048754877*column[0][1]*column[25][4] + 0.058960801372505811*column[0][1]*column[26][4] + 0.064652136059941079*column[0][1]*column[27][4] + 0.070284972047429103*column[0][1]*column[28][4] + 0.075853991271338336*column[0][1]*column[29][4] + 0.081353875668037201*column[0][1]*column[30][4] + 0.086779307173894135*column[0][1]*column[31][4] + 0.046062483862638781*column[0][1]*column[32][4] - column[0][4]*t17 - column[1][4]*t18 - column[10][4]*t19 - column[11][4]*t20 - column[12][4]*t21 - column[13][4]*t22 - column[14][4]*t23 - column[15][4]*t24 - column[2][4]*t25 - column[3][4]*t26 - column[4][4]*t27 - column[5][4]*t28 - column[6][4]*t29 - column[7][4]*t30 - column[8][4]*t31 - column[9][4]*t32;
+    res[6] = 0.01554951690821256*column[0][5] + 0.031126482213438732*column[1][5] + 0.031293828892005611*column[10][5] + 0.031303568645784631*column[11][5] + 0.0313115375352402*column[12][5] + 0.031317735560372303*column[13][5] + 0.031322162721180949*column[14][5] + 0.031324819017666143*column[15][5] + 0.031325704449827872*column[16][5] + 0.031324819017666143*column[17][5] + 0.031322162721180949*column[18][5] + 0.031317735560372303*column[19][5] + 0.031152159746128887*column[2][5] + 0.0313115375352402*column[20][5] + 0.031303568645784631*column[21][5] + 0.031293828892005611*column[22][5] + 0.031282318273903126*column[23][5] + 0.031269036791477182*column[24][5] + 0.031253984444727781*column[25][5] + 0.031237161233654921*column[26][5] + 0.0312185671582586*column[27][5] + 0.031198202218538824*column[28][5] + 0.031176066414495586*column[29][5] + 0.031176066414495586*column[3][5] + 0.031152159746128887*column[30][5] + 0.031126482213438732*column[31][5] + 0.01554951690821256*column[32][5] + 0.031198202218538824*column[4][5] + 0.0312185671582586*column[5][5] + 0.031237161233654921*column[6][5] + 0.031253984444727781*column[7][5] + 0.031269036791477182*column[8][5] + 0.031282318273903126*column[9][5] - 0.49999999999999994*t33;
+    res[7] = -0.046062483862638781*column[0][5] - 0.086779307173894135*column[1][5] - 0.035716836895923754*column[10][5] - 0.029812779663225826*column[11][5] - 0.023882132112370058*column[12][5] - 0.017930212306988026*column[13][5] - 0.011962338310711296*column[14][5] - 0.0059838281871714321*column[15][5] + 0.0059838281871714321*column[17][5] + 0.011962338310711296*column[18][5] + 0.017930212306988026*column[19][5] - 0.081353875668037201*column[2][5] + 0.023882132112370058*column[20][5] + 0.029812779663225826*column[21][5] + 0.035716836895923754*column[22][5] + 0.041588985746832292*column[23][5] + 0.047423908152319852*column[24][5] + 0.053216286048754877*column[25][5] + 0.058960801372505811*column[26][5] + 0.064652136059941079*column[27][5] + 0.070284972047429103*column[28][5] + 0.075853991271338336*column[29][5] - 0.075853991271338336*column[3][5] + 0.081353875668037201*column[30][5] + 0.086779307173894135*column[31][5] + 0.046062483862638781*column[32][5] - 0.070284972047429103*column[4][5] - 0.064652136059941079*column[5][5] - 0.058960801372505811*column[6][5] - 0.053216286048754877*column[7][5] - 0.047423908152319852*column[8][5] - 0.041588985746832292*column[9][5] + 0.50000000000000011*t33;
+    return res;
+}
+
+
+inline Foam::List<Foam::scalar> boundary_conditions(
+    const int bc_idx,
+    const Foam::scalar& time,
+    const Foam::vector& X,
+    const Foam::scalar& dX,
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::vector& n)
+{
+    auto res = Foam::List<Foam::scalar>(8, 0.0);
+    res[0] = Q[0];
+    res[1] = Q[1];
+    res[2] = Q[2];
+    res[3] = Q[3];
+    res[4] = Q[4];
+    res[5] = Q[5];
+    res[6] = Q[6];
+    res[7] = Q[7];
+    return res;
+}
+
+inline void update_aux_variables(
+    const Foam::List<Foam::volScalarField*>& Q,
+    const Foam::List<Foam::volScalarField*>& Qaux,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::scalar dt,
+    const Foam::fvMesh& mesh)
+{
+    // Qaux[0] (b_x) = D^(1,) Q[0]
+    numerics::compute_derivative(*Qaux[0], *Q[0], 1, 0, 0, mesh);
+    // Qaux[1] (q_1_x) = D^(1,) Q[3]
+    numerics::compute_derivative(*Qaux[1], *Q[3], 1, 0, 0, mesh);
+    // Qaux[2] (dbdx) = D^(1,) Q[0]
+    numerics::compute_derivative(*Qaux[2], *Q[0], 1, 0, 0, mesh);
+    // Qaux[3] (hinv) = sqrt(2)*h/sqrt(h**4 + Max(1.0e-8, h)**4)  (algebraic closure)
+    *Qaux[3] = Foam::pow((Foam::scalar)2, 1.0/2.0)**Q[1]/Foam::pow(Foam::pow(*Q[1], 4) + Foam::pow(Foam::max((Foam::scalar)1.0e-8, *Q[1]), 4), 1.0/2.0);
+}
+inline Foam::List<Foam::scalar> pointwise_aux(
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& p)
+{
+    Foam::List<Foam::scalar> Qaux(4, 0.0);
+    // Qaux[3] (hinv) = sqrt(2)*h/sqrt(h**4 + Max(1.0e-8, h)**4)  (algebraic closure)
+    Qaux[3] = Foam::pow((Foam::scalar)2, 1.0/2.0)*Q[1]/Foam::pow(Foam::pow(Q[1], 4) + Foam::pow(Foam::max((Foam::scalar)1.0e-8, Q[1]), 4), 1.0/2.0);
+    return Qaux;
+}
+} // namespace Model
+
+== P01 foam emitted source (Numerics printer) ==
+#pragma once
+#include "List.H"
+#include "vector.H"
+#include "scalar.H"
+#include "Model.H"
+
+namespace Numerics
+{
+constexpr int n_dof_q = 8;
+
+inline Foam::List<Foam::List<Foam::scalar>> numerical_flux(
+    const Foam::List<Foam::scalar>& Q_minus,
+    const Foam::List<Foam::scalar>& Q_plus,
+    const Foam::List<Foam::scalar>& Qaux_minus,
+    const Foam::List<Foam::scalar>& Qaux_plus,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::vector& n)
+{
+    Foam::scalar t0 = Foam::max((Foam::scalar)1.0e-14, Q_minus[1]);
+    Foam::scalar t1 = (1.0 / Foam::pow(t0, 1));
+    Foam::scalar t2 = -Foam::max(Q_minus[0], Q_plus[0]);
+    Foam::scalar t3 = Q_minus[0] + Q_minus[1] + t2;
+    Foam::scalar t4 = Foam::max((Foam::scalar)0.0, t3);
+    Foam::scalar t5 = 0.5*n.x();
+    Foam::scalar t6 = Foam::max((Foam::scalar)1.0e-14, Q_plus[1]);
+    Foam::scalar t7 = (1.0 / Foam::pow(t6, 1));
+    Foam::scalar t8 = Q_plus[0] + Q_plus[1] + t2;
+    Foam::scalar t9 = Foam::max((Foam::scalar)0.0, t8);
+    Foam::scalar t10 = Q_minus[2]*t1*t4*t5 + Q_plus[2]*t5*t7*t9;
+    Foam::scalar t11 = Foam::pow(t4, 2);
+    Foam::scalar t12 = (1.0/2.0)*p[0];
+    Foam::scalar t13 = (1.0 / Foam::pow(p[1], 1));
+    Foam::scalar t14 = t1*t11*t13;
+    Foam::scalar t15 = Foam::pow((Foam::scalar)2, 1.0/2.0);
+    Foam::scalar t16 = t15*Foam::pow(t4, 3)/(Foam::pow(t0, 2)*Foam::pow(Foam::pow(t4, 4) + Foam::pow(Foam::max((Foam::scalar)9.9999999999999998e-13, t3), 4), 1.0/2.0));
+    Foam::scalar t17 = Foam::pow(Q_minus[3], 2);
+    Foam::scalar t18 = (1.0/3.0)*t16;
+    Foam::scalar t19 = Foam::pow(t9, 2);
+    Foam::scalar t20 = t13*t19*t7;
+    Foam::scalar t21 = t15*Foam::pow(t9, 3)/(Foam::pow(t6, 2)*Foam::pow(Foam::pow(t9, 4) + Foam::pow(Foam::max((Foam::scalar)9.9999999999999998e-13, t8), 4), 1.0/2.0));
+    Foam::scalar t22 = Foam::pow(Q_plus[3], 2);
+    Foam::scalar t23 = (1.0/3.0)*t21;
+    Foam::scalar t24 = Q_minus[2]*t16;
+    Foam::scalar t25 = Q_minus[3]*t24;
+    Foam::scalar t26 = Q_plus[2]*t21;
+    Foam::scalar t27 = Q_plus[3]*t26;
+    Foam::scalar t28 = Q_minus[3]*Q_minus[5];
+    Foam::scalar t29 = Q_plus[3]*Q_plus[5];
+    Foam::scalar t30 = (2.0/5.0)*t16;
+    Foam::scalar t31 = (2.0/5.0)*t21;
+    Foam::scalar t32 = -t10;
+    auto res = Foam::List<Foam::List<Foam::scalar>>(8, Foam::List<Foam::scalar>(1, 0.0));
+    res[0][0] = 0;
+    res[1][0] = t10;
+    res[2][0] = t5*(Foam::pow(Q_minus[2], 2)*t16 + Q_minus[6]*t14 + t11*t12 + t17*t18) + t5*(Foam::pow(Q_plus[2], 2)*t21 + Q_plus[6]*t20 + t12*t19 + t22*t23);
+    res[3][0] = t5*(Q_minus[7]*t14 + 2*t25) + t5*(Q_plus[7]*t20 + 2*t27);
+    res[4][0] = t5*(Q_minus[4]*t24 + t18*t28) + t5*(Q_plus[4]*t26 + t23*t29);
+    res[5][0] = t5*((3.0/5.0)*Q_minus[3]*Q_minus[4]*t16 + Q_minus[5]*t24 - Qaux_minus[0]*t17*t30 + (2.0/5.0)*Qaux_minus[0]*t25 + t28*t30) + t5*((3.0/5.0)*Q_plus[3]*Q_plus[4]*t21 + Q_plus[5]*t26 - Qaux_plus[0]*t22*t31 + (2.0/5.0)*Qaux_plus[0]*t27 + t29*t31);
+    res[6][0] = t32;
+    res[7][0] = t32;
+    return res;
+}
+
+
+inline Foam::List<Foam::List<Foam::scalar>> numerical_fluctuations(
+    const Foam::List<Foam::scalar>& Q_minus,
+    const Foam::List<Foam::scalar>& Q_plus,
+    const Foam::List<Foam::scalar>& Qaux_minus,
+    const Foam::List<Foam::scalar>& Qaux_plus,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::vector& n)
+{
+    Foam::scalar t0 = -Foam::max(Q_minus[0], Q_plus[0]);
+    Foam::scalar t1 = Q_minus[0] + Q_minus[1] + t0;
+    Foam::scalar t2 = Foam::max((Foam::scalar)0.0, t1);
+    Foam::scalar t3 = Q_plus[0] + Q_plus[1] + t0;
+    Foam::scalar t4 = Foam::max((Foam::scalar)0.0, t3);
+    Foam::scalar t5 = -t2 + t4;
+    Foam::scalar t6 = (1.0 / Foam::pow(p[1], 1));
+    Foam::scalar t7 = Foam::max((Foam::scalar)1.0e-14, Q_minus[1]);
+    Foam::scalar t8 = (1.0 / Foam::pow(t7, 1));
+    Foam::scalar t9 = Foam::pow(t2, 2);
+    Foam::scalar t10 = (1.0 / Foam::pow(t7, 2));
+    Foam::scalar t11 = Foam::max((Foam::scalar)1.0e-14, t1);
+    Foam::scalar t12 = (1.0 / Foam::pow(t11, 2));
+    Foam::scalar t13 = t10*t12*t9;
+    Foam::scalar t14 = Foam::pow(Q_minus[3], 2);
+    Foam::scalar t15 = (1.0/3.0)*t13;
+    Foam::scalar t16 = (1.0 / Foam::pow(t11, 1));
+    Foam::scalar t17 = t2*t8;
+    Foam::scalar t18 = Q_minus[2]*t17;
+    Foam::scalar t19 = t16*t18;
+    Foam::scalar t20 = n.x()*t19;
+    Foam::scalar t21 = Q_minus[3]*t17;
+    Foam::scalar t22 = t16*t21;
+    Foam::scalar t23 = n.x()*t22;
+    Foam::scalar t24 = n.x()*t6;
+    Foam::scalar t25 = t2*t24;
+    Foam::scalar t26 = 3*t6;
+    Foam::scalar t27 = Q_minus[6]*t17;
+    Foam::scalar t28 = Q_minus[7]*t17;
+    Foam::scalar t29 = 2*t6;
+    Foam::scalar t30 = Q_minus[2]*t13;
+    Foam::scalar t31 = Q_minus[3]*t30;
+    Foam::scalar t32 = Q_minus[3]*Q_minus[5];
+    Foam::scalar t33 = Q_minus[4]*t17;
+    Foam::scalar t34 = t16*t33;
+    Foam::scalar t35 = (1.0/3.0)*n.x();
+    Foam::scalar t36 = Q_minus[5]*t17;
+    Foam::scalar t37 = t16*t36;
+    Foam::scalar t38 = (2.0/5.0)*Qaux_minus[0];
+    Foam::scalar t39 = (2.0/5.0)*t22;
+    Foam::scalar t40 = -n.x();
+    Foam::scalar t41 = Foam::max((Foam::scalar)1.0e-14, Q_plus[1]);
+    Foam::scalar t42 = (1.0 / Foam::pow(t41, 1));
+    Foam::scalar t43 = Foam::pow(t4, 2);
+    Foam::scalar t44 = (1.0 / Foam::pow(t41, 2));
+    Foam::scalar t45 = Foam::max((Foam::scalar)1.0e-14, t3);
+    Foam::scalar t46 = (1.0 / Foam::pow(t45, 2));
+    Foam::scalar t47 = t43*t44*t46;
+    Foam::scalar t48 = Foam::pow(Q_plus[3], 2);
+    Foam::scalar t49 = (1.0/3.0)*t47;
+    Foam::scalar t50 = (1.0 / Foam::pow(t45, 1));
+    Foam::scalar t51 = t4*t42;
+    Foam::scalar t52 = Q_plus[2]*t51;
+    Foam::scalar t53 = t50*t52;
+    Foam::scalar t54 = n.x()*t53;
+    Foam::scalar t55 = Q_plus[3]*t51;
+    Foam::scalar t56 = t50*t55;
+    Foam::scalar t57 = n.x()*t56;
+    Foam::scalar t58 = t24*t4;
+    Foam::scalar t59 = Q_plus[6]*t51;
+    Foam::scalar t60 = Q_plus[7]*t51;
+    Foam::scalar t61 = Q_plus[2]*t47;
+    Foam::scalar t62 = Q_plus[3]*t61;
+    Foam::scalar t63 = Q_plus[3]*Q_plus[5];
+    Foam::scalar t64 = Q_plus[4]*t51;
+    Foam::scalar t65 = t50*t64;
+    Foam::scalar t66 = Q_plus[5]*t51;
+    Foam::scalar t67 = t50*t66;
+    Foam::scalar t68 = (2.0/5.0)*Qaux_plus[0];
+    Foam::scalar t69 = (2.0/5.0)*t56;
+    Foam::scalar t70 = 0.5*Foam::max(numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(-Foam::pow(Q_minus[2], 2)*t13 + Q_minus[6]*t2*t6*t8 + p[0]*t2 - t14*t15), 2*t20, (2.0/3.0)*t23, 0, 0, t25, 0, n.x()*(t26*t27 + t28*t29 - 2*t31), 2*t23, t20, 0, 0, 0, t25, n.x()*(-Q_minus[4]*t30 - t15*t32), n.x()*t34, t35*t37, t20, t22*t35, 0, 0, n.x()*(-3.0/5.0*Q_minus[3]*Q_minus[4]*t13 - Q_minus[5]*t30 + (2.0/5.0)*Qaux_minus[0]*t10*t12*t14*t9 - 2.0/5.0*t13*t32 - t31*t38), n.x()*(Qaux_minus[0]*t39 + t37), n.x()*(-4.0/5.0*Qaux_minus[0]*t22 + t19*t38 - 3.0/5.0*t34 + (3.0/5.0)*t37), (3.0/5.0)*t23, n.x()*(t19 + t39), 0, 0, n.x()*(t19 + (1.0/3.0)*t22), t40, t35, 0, 0, 0, 0, n.x()*(t19 + t22), t40, 0, 0, 0, 0, 0), numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(-Foam::pow(Q_plus[2], 2)*t47 + Q_plus[6]*t4*t42*t6 + p[0]*t4 - t48*t49), 2*t54, (2.0/3.0)*t57, 0, 0, t58, 0, n.x()*(t26*t59 + t29*t60 - 2*t62), 2*t57, t54, 0, 0, 0, t58, n.x()*(-Q_plus[4]*t61 - t49*t63), n.x()*t65, t35*t67, t54, t35*t56, 0, 0, n.x()*(-3.0/5.0*Q_plus[3]*Q_plus[4]*t47 - Q_plus[5]*t61 + (2.0/5.0)*Qaux_plus[0]*t43*t44*t46*t48 - 2.0/5.0*t47*t63 - t62*t68), n.x()*(Qaux_plus[0]*t69 + t67), n.x()*(-4.0/5.0*Qaux_plus[0]*t56 + t53*t68 - 3.0/5.0*t65 + (3.0/5.0)*t67), (3.0/5.0)*t57, n.x()*(t53 + t69), 0, 0, n.x()*(t53 + (1.0/3.0)*t56), t40, t35, 0, 0, 0, 0, n.x()*(t53 + t56), t40, 0, 0, 0, 0, 0));
+    Foam::scalar t71 = t5*t70;
+    Foam::scalar t72 = (1.0/2.0)*p[0];
+    Foam::scalar t73 = t70*(Q_plus[2]*t4*t42 - t18);
+    Foam::scalar t74 = Q_plus[3]*t4*t42 - t21;
+    Foam::scalar t75 = t70*t74;
+    Foam::scalar t76 = 0.27777777777777785*n.x();
+    Foam::scalar t77 = 0.44444444444444442*n.x();
+    Foam::scalar t78 = 0.5*t5;
+    Foam::scalar t79 = t2/Foam::pow(Foam::pow(t2, 4) + Foam::pow(Foam::max((Foam::scalar)9.9999999999999998e-13, t1), 4), 1.0/2.0);
+    Foam::scalar t80 = Foam::pow((Foam::scalar)2, 1.0/2.0);
+    Foam::scalar t81 = 0.8872983346207417*t80;
+    Foam::scalar t82 = t4/Foam::pow(Foam::pow(t4, 4) + Foam::pow(Foam::max((Foam::scalar)9.9999999999999998e-13, t3), 4), 1.0/2.0);
+    Foam::scalar t83 = 0.1127016653792583*t80;
+    Foam::scalar t84 = t79*t81 + t82*t83;
+    Foam::scalar t85 = t84*(0.8872983346207417*t18 + 0.1127016653792583*t52);
+    Foam::scalar t86 = 0.5*t80;
+    Foam::scalar t87 = t79*t86 + t82*t86;
+    Foam::scalar t88 = t87*(0.5*t18 + 0.5*t52);
+    Foam::scalar t89 = t79*t83 + t81*t82;
+    Foam::scalar t90 = t89*(0.1127016653792583*t18 + 0.8872983346207417*t52);
+    Foam::scalar t91 = 0.5*t74;
+    Foam::scalar t92 = t78*(t76*(t26*(0.1127016653792583*t27 + 0.8872983346207417*t59) + t6*(0.1127016653792583*t28 + 0.8872983346207417*t60)) + t76*(t26*(0.8872983346207417*t27 + 0.1127016653792583*t59) + t6*(0.8872983346207417*t28 + 0.1127016653792583*t60)) + t77*(t26*(0.5*t27 + 0.5*t59) + t6*(0.5*t28 + 0.5*t60))) + t91*(-t76*t85 - t76*t90 - t77*t88);
+    Foam::scalar t93 = t70*(Q_plus[4]*t4*t42 - t33);
+    Foam::scalar t94 = t91*(t76*(-6.0/5.0*t84*(0.8872983346207417*t33 + 0.1127016653792583*t64) + (1.0/5.0)*t84*(0.8872983346207417*t36 + 0.1127016653792583*t66)) + t76*(-6.0/5.0*t89*(0.1127016653792583*t33 + 0.8872983346207417*t64) + (1.0/5.0)*t89*(0.1127016653792583*t36 + 0.8872983346207417*t66)) + t77*(-6.0/5.0*t87*(0.5*t33 + 0.5*t64) + (1.0/5.0)*t87*(0.5*t36 + 0.5*t66)));
+    Foam::scalar t95 = t70*(Q_plus[5]*t4*t42 - t36);
+    Foam::scalar t96 = t70*(Q_plus[6]*t4*t42 - t27);
+    Foam::scalar t97 = t84*(0.8872983346207417*t21 + 0.1127016653792583*t55);
+    Foam::scalar t98 = t87*(0.5*t21 + 0.5*t55);
+    Foam::scalar t99 = t89*(0.1127016653792583*t21 + 0.8872983346207417*t55);
+    Foam::scalar t100 = 0.16666666666666669*n.x()*t74 + t78*(t76*(t85 + (1.0/3.0)*t97) + t76*(t90 + (1.0/3.0)*t99) + t77*(t88 + (1.0/3.0)*t98));
+    Foam::scalar t101 = t76*(t85 + t97) + t76*(t90 + t99) + t77*(t88 + t98);
+    Foam::scalar t102 = t70*(Q_plus[7]*t4*t42 - t28);
+    auto res = Foam::List<Foam::List<Foam::scalar>>(2, Foam::List<Foam::scalar>(8, 0.0));
+    res[0][0] = 0;
+    res[0][1] = t71;
+    res[0][2] = n.x()*(-Foam::pow(Q_plus[1], 2)*t72 + (1.0/2.0)*p[0]*t43) + t73;
+    res[0][3] = t75 + t92;
+    res[0][4] = t93;
+    res[0][5] = t94 + t95;
+    res[0][6] = t100 + t96;
+    res[0][7] = t101*t78 + t102;
+    res[1][0] = 0;
+    res[1][1] = -t71;
+    res[1][2] = n.x()*(Foam::pow(Q_minus[1], 2)*t72 - t72*t9) - t73;
+    res[1][3] = -t75 + t92;
+    res[1][4] = -t93;
+    res[1][5] = t94 - t95;
+    res[1][6] = t100 - t96;
+    res[1][7] = 0.5*t101*t5 - t102;
+    return res;
+}
+
+
+inline Foam::List<Foam::List<Foam::scalar>> numerical_face(
+    const Foam::List<Foam::scalar>& Q_minus,
+    const Foam::List<Foam::scalar>& Q_plus,
+    const Foam::List<Foam::scalar>& Qaux_minus,
+    const Foam::List<Foam::scalar>& Qaux_plus,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::vector& n)
+{
+    Foam::scalar t0 = 0.5*n.x();
+    Foam::scalar t1 = -Foam::max(Q_minus[0], Q_plus[0]);
+    Foam::scalar t2 = Q_minus[0] + Q_minus[1] + t1;
+    Foam::scalar t3 = Foam::max((Foam::scalar)0.0, t2);
+    Foam::scalar t4 = Foam::max((Foam::scalar)1.0e-14, Q_minus[1]);
+    Foam::scalar t5 = (1.0 / Foam::pow(t4, 1));
+    Foam::scalar t6 = Q_minus[2]*t5;
+    Foam::scalar t7 = t3*t6;
+    Foam::scalar t8 = Q_plus[0] + Q_plus[1] + t1;
+    Foam::scalar t9 = Foam::max((Foam::scalar)0.0, t8);
+    Foam::scalar t10 = Foam::max((Foam::scalar)1.0e-14, Q_plus[1]);
+    Foam::scalar t11 = (1.0 / Foam::pow(t10, 1));
+    Foam::scalar t12 = Q_plus[2]*t11;
+    Foam::scalar t13 = t12*t9;
+    Foam::scalar t14 = t0*t13 + t0*t7;
+    Foam::scalar t15 = Foam::pow(t3, 2);
+    Foam::scalar t16 = (1.0/2.0)*p[0];
+    Foam::scalar t17 = t15*t16;
+    Foam::scalar t18 = (1.0 / Foam::pow(p[1], 1));
+    Foam::scalar t19 = Q_minus[6]*t18;
+    Foam::scalar t20 = t15*t5;
+    Foam::scalar t21 = (1.0 / Foam::pow(t4, 2));
+    Foam::scalar t22 = Foam::pow(Q_minus[2], 2)*t21;
+    Foam::scalar t23 = Foam::pow((Foam::scalar)2, 1.0/2.0);
+    Foam::scalar t24 = Foam::pow(Foam::pow(t3, 4) + Foam::pow(Foam::max((Foam::scalar)9.9999999999999998e-13, t2), 4), -1.0/2.0);
+    Foam::scalar t25 = t23*t24*Foam::pow(t3, 3);
+    Foam::scalar t26 = Foam::pow(Q_minus[3], 2);
+    Foam::scalar t27 = (1.0/3.0)*t21;
+    Foam::scalar t28 = t26*t27;
+    Foam::scalar t29 = Foam::pow(t9, 2);
+    Foam::scalar t30 = Q_plus[6]*t18;
+    Foam::scalar t31 = t11*t29;
+    Foam::scalar t32 = (1.0 / Foam::pow(t10, 2));
+    Foam::scalar t33 = Foam::pow(Q_plus[2], 2)*t32;
+    Foam::scalar t34 = Foam::pow(Foam::pow(t9, 4) + Foam::pow(Foam::max((Foam::scalar)9.9999999999999998e-13, t8), 4), -1.0/2.0);
+    Foam::scalar t35 = t23*t34*Foam::pow(t9, 3);
+    Foam::scalar t36 = Foam::pow(Q_plus[3], 2);
+    Foam::scalar t37 = (1.0/3.0)*t32;
+    Foam::scalar t38 = t36*t37;
+    Foam::scalar t39 = Q_minus[2]*t21;
+    Foam::scalar t40 = Q_minus[3]*t39;
+    Foam::scalar t41 = 2*t40;
+    Foam::scalar t42 = Q_plus[2]*t32;
+    Foam::scalar t43 = Q_plus[3]*t42;
+    Foam::scalar t44 = 2*t43;
+    Foam::scalar t45 = Q_minus[4]*t39;
+    Foam::scalar t46 = Q_minus[3]*Q_minus[5];
+    Foam::scalar t47 = t27*t46;
+    Foam::scalar t48 = Q_plus[4]*t42;
+    Foam::scalar t49 = Q_plus[3]*Q_plus[5];
+    Foam::scalar t50 = t37*t49;
+    Foam::scalar t51 = Q_minus[5]*t39;
+    Foam::scalar t52 = (3.0/5.0)*Q_minus[3]*Q_minus[4]*t21;
+    Foam::scalar t53 = (2.0/5.0)*t21;
+    Foam::scalar t54 = t46*t53;
+    Foam::scalar t55 = (2.0/5.0)*Qaux_minus[0];
+    Foam::scalar t56 = t40*t55;
+    Foam::scalar t57 = Q_plus[5]*t42;
+    Foam::scalar t58 = (3.0/5.0)*Q_plus[3]*Q_plus[4]*t32;
+    Foam::scalar t59 = (2.0/5.0)*t32;
+    Foam::scalar t60 = t49*t59;
+    Foam::scalar t61 = (2.0/5.0)*Qaux_plus[0];
+    Foam::scalar t62 = t43*t61;
+    Foam::scalar t63 = -t14;
+    Foam::scalar t64 = -t3 + t9;
+    Foam::scalar t65 = Foam::max((Foam::scalar)1.0e-14, t2);
+    Foam::scalar t66 = (1.0 / Foam::pow(t65, 2));
+    Foam::scalar t67 = t15*t66;
+    Foam::scalar t68 = (1.0 / Foam::pow(t65, 1));
+    Foam::scalar t69 = t68*t7;
+    Foam::scalar t70 = n.x()*t69;
+    Foam::scalar t71 = Q_minus[3]*t5;
+    Foam::scalar t72 = t3*t71;
+    Foam::scalar t73 = t68*t72;
+    Foam::scalar t74 = n.x()*t73;
+    Foam::scalar t75 = n.x()*t18;
+    Foam::scalar t76 = t3*t75;
+    Foam::scalar t77 = t3*t5;
+    Foam::scalar t78 = 3*t19;
+    Foam::scalar t79 = Q_minus[7]*t77;
+    Foam::scalar t80 = 2*t18;
+    Foam::scalar t81 = Q_minus[4]*t77;
+    Foam::scalar t82 = t68*t81;
+    Foam::scalar t83 = (1.0/3.0)*n.x();
+    Foam::scalar t84 = Q_minus[5]*t5;
+    Foam::scalar t85 = t3*t84;
+    Foam::scalar t86 = t68*t85;
+    Foam::scalar t87 = (4.0/5.0)*Qaux_minus[0];
+    Foam::scalar t88 = -n.x();
+    Foam::scalar t89 = Foam::max((Foam::scalar)1.0e-14, t8);
+    Foam::scalar t90 = (1.0 / Foam::pow(t89, 2));
+    Foam::scalar t91 = t29*t90;
+    Foam::scalar t92 = (1.0 / Foam::pow(t89, 1));
+    Foam::scalar t93 = t13*t92;
+    Foam::scalar t94 = n.x()*t93;
+    Foam::scalar t95 = Q_plus[3]*t11;
+    Foam::scalar t96 = t9*t95;
+    Foam::scalar t97 = t92*t96;
+    Foam::scalar t98 = n.x()*t97;
+    Foam::scalar t99 = t75*t9;
+    Foam::scalar t100 = t11*t9;
+    Foam::scalar t101 = 3*t30;
+    Foam::scalar t102 = Q_plus[7]*t100;
+    Foam::scalar t103 = Q_plus[4]*t100;
+    Foam::scalar t104 = t103*t92;
+    Foam::scalar t105 = Q_plus[5]*t11;
+    Foam::scalar t106 = t105*t9;
+    Foam::scalar t107 = t106*t92;
+    Foam::scalar t108 = (4.0/5.0)*Qaux_plus[0];
+    Foam::scalar t109 = 0.5*Foam::max(numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(Q_minus[6]*t18*t3*t5 + p[0]*t3 - t22*t67 - t28*t67), 2*t70, (2.0/3.0)*t74, 0, 0, t76, 0, n.x()*(-t41*t67 + t77*t78 + t79*t80), 2*t74, t70, 0, 0, 0, t76, n.x()*(-t45*t67 - t47*t67), n.x()*t82, t83*t86, t70, t73*t83, 0, 0, n.x()*((2.0/5.0)*Qaux_minus[0]*t15*t21*t26*t66 - t51*t67 - t52*t67 - t54*t67 - t56*t67), n.x()*(t55*t73 + t86), n.x()*(t55*t69 - t73*t87 - 3.0/5.0*t82 + (3.0/5.0)*t86), (3.0/5.0)*t74, n.x()*(t69 + (2.0/5.0)*t73), 0, 0, n.x()*(t69 + (1.0/3.0)*t73), t88, t83, 0, 0, 0, 0, n.x()*(t69 + t73), t88, 0, 0, 0, 0, 0), numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(Q_plus[6]*t11*t18*t9 + p[0]*t9 - t33*t91 - t38*t91), 2*t94, (2.0/3.0)*t98, 0, 0, t99, 0, n.x()*(t100*t101 + t102*t80 - t44*t91), 2*t98, t94, 0, 0, 0, t99, n.x()*(-t48*t91 - t50*t91), n.x()*t104, t107*t83, t94, t83*t97, 0, 0, n.x()*((2.0/5.0)*Qaux_plus[0]*t29*t32*t36*t90 - t57*t91 - t58*t91 - t60*t91 - t62*t91), n.x()*(t107 + t61*t97), n.x()*(-3.0/5.0*t104 + (3.0/5.0)*t107 - t108*t97 + t61*t93), (3.0/5.0)*t98, n.x()*(t93 + (2.0/5.0)*t97), 0, 0, n.x()*(t93 + (1.0/3.0)*t97), t88, t83, 0, 0, 0, 0, n.x()*(t93 + t97), t88, 0, 0, 0, 0, 0));
+    Foam::scalar t110 = t109*t64;
+    Foam::scalar t111 = t109*(Q_plus[2]*t11*t9 - t7);
+    Foam::scalar t112 = Q_plus[3]*t11*t9 - t72;
+    Foam::scalar t113 = t109*t112;
+    Foam::scalar t114 = Q_minus[6]*t77;
+    Foam::scalar t115 = Q_plus[6]*t100;
+    Foam::scalar t116 = 3*t18;
+    Foam::scalar t117 = 0.27777777777777785*n.x();
+    Foam::scalar t118 = 0.44444444444444442*n.x();
+    Foam::scalar t119 = 0.5*t64;
+    Foam::scalar t120 = t24*t3;
+    Foam::scalar t121 = 0.8872983346207417*t23;
+    Foam::scalar t122 = t34*t9;
+    Foam::scalar t123 = 0.1127016653792583*t23;
+    Foam::scalar t124 = t120*t121 + t122*t123;
+    Foam::scalar t125 = t124*(0.1127016653792583*t13 + 0.8872983346207417*t7);
+    Foam::scalar t126 = 0.5*t23;
+    Foam::scalar t127 = t120*t126 + t122*t126;
+    Foam::scalar t128 = t127*(0.5*t13 + 0.5*t7);
+    Foam::scalar t129 = t120*t123 + t121*t122;
+    Foam::scalar t130 = t129*(0.8872983346207417*t13 + 0.1127016653792583*t7);
+    Foam::scalar t131 = 0.5*t112;
+    Foam::scalar t132 = t119*(t117*(t116*(0.1127016653792583*t114 + 0.8872983346207417*t115) + t18*(0.8872983346207417*t102 + 0.1127016653792583*t79)) + t117*(t116*(0.8872983346207417*t114 + 0.1127016653792583*t115) + t18*(0.1127016653792583*t102 + 0.8872983346207417*t79)) + t118*(t116*(0.5*t114 + 0.5*t115) + t18*(0.5*t102 + 0.5*t79))) + t131*(-t117*t125 - t117*t130 - t118*t128);
+    Foam::scalar t133 = t109*(Q_plus[4]*t11*t9 - t81);
+    Foam::scalar t134 = t131*(t117*(-6.0/5.0*t124*(0.1127016653792583*t103 + 0.8872983346207417*t81) + (1.0/5.0)*t124*(0.1127016653792583*t106 + 0.8872983346207417*t85)) + t117*(-6.0/5.0*t129*(0.8872983346207417*t103 + 0.1127016653792583*t81) + (1.0/5.0)*t129*(0.8872983346207417*t106 + 0.1127016653792583*t85)) + t118*(-6.0/5.0*t127*(0.5*t103 + 0.5*t81) + (1.0/5.0)*t127*(0.5*t106 + 0.5*t85)));
+    Foam::scalar t135 = t109*(Q_plus[5]*t11*t9 - t85);
+    Foam::scalar t136 = t109*(Q_plus[6]*t11*t9 - t114);
+    Foam::scalar t137 = t124*(0.8872983346207417*t72 + 0.1127016653792583*t96);
+    Foam::scalar t138 = t127*(0.5*t72 + 0.5*t96);
+    Foam::scalar t139 = t129*(0.1127016653792583*t72 + 0.8872983346207417*t96);
+    Foam::scalar t140 = 0.16666666666666669*n.x()*t112 + t119*(t117*(t125 + (1.0/3.0)*t137) + t117*(t130 + (1.0/3.0)*t139) + t118*(t128 + (1.0/3.0)*t138));
+    Foam::scalar t141 = t117*(t125 + t137) + t117*(t130 + t139) + t118*(t128 + t138);
+    Foam::scalar t142 = t109*(Q_plus[7]*t11*t9 - t79);
+    Foam::scalar t143 = n.x()*t6;
+    Foam::scalar t144 = n.x()*t71;
+    Foam::scalar t145 = Q_minus[1]*t75;
+    Foam::scalar t146 = Q_minus[4]*t5;
+    Foam::scalar t147 = (2.0/5.0)*t71;
+    Foam::scalar t148 = n.x()*t12;
+    Foam::scalar t149 = n.x()*t95;
+    Foam::scalar t150 = Q_plus[1]*t75;
+    Foam::scalar t151 = Q_plus[4]*t11;
+    Foam::scalar t152 = (2.0/5.0)*t95;
+    auto res = Foam::List<Foam::List<Foam::scalar>>(25, Foam::List<Foam::scalar>(1, 0.0));
+    res[0][0] = 0;
+    res[1][0] = t14;
+    res[2][0] = t0*(t17 + t19*t20 + t22*t25 + t25*t28) + t0*(t16*t29 + t30*t31 + t33*t35 + t35*t38);
+    res[3][0] = t0*(Q_minus[7]*t18*t20 + t25*t41) + t0*(Q_plus[7]*t18*t31 + t35*t44);
+    res[4][0] = t0*(t25*t45 + t25*t47) + t0*(t35*t48 + t35*t50);
+    res[5][0] = t0*(-Qaux_minus[0]*t25*t26*t53 + t25*t51 + t25*t52 + t25*t54 + t25*t56) + t0*(-Qaux_plus[0]*t35*t36*t59 + t35*t57 + t35*t58 + t35*t60 + t35*t62);
+    res[6][0] = t63;
+    res[7][0] = t63;
+    res[8][0] = 0;
+    res[9][0] = t110;
+    res[10][0] = n.x()*(-Foam::pow(Q_plus[1], 2)*t16 + (1.0/2.0)*p[0]*t29) + t111;
+    res[11][0] = t113 + t132;
+    res[12][0] = t133;
+    res[13][0] = t134 + t135;
+    res[14][0] = t136 + t140;
+    res[15][0] = t119*t141 + t142;
+    res[16][0] = 0;
+    res[17][0] = -t110;
+    res[18][0] = n.x()*(Foam::pow(Q_minus[1], 2)*t16 - t17) - t111;
+    res[19][0] = -t113 + t132;
+    res[20][0] = -t133;
+    res[21][0] = t134 - t135;
+    res[22][0] = -t136 + t140;
+    res[23][0] = 0.5*t141*t64 - t142;
+    res[24][0] = Foam::max(numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(Q_minus[1]*p[0] + t19 - t22 - t28), 2*t143, (2.0/3.0)*t144, 0, 0, t145, 0, n.x()*(Q_minus[7]*t80 - t41 + t78), 2*t144, t143, 0, 0, 0, t145, n.x()*(-t45 - t47), n.x()*t146, t83*t84, t143, t71*t83, 0, 0, n.x()*((2.0/5.0)*Qaux_minus[0]*t21*t26 - t51 - t52 - t54 - t56), n.x()*(Qaux_minus[0]*t147 + t84), n.x()*(-3.0/5.0*t146 + t55*t6 - t71*t87 + (3.0/5.0)*t84), (3.0/5.0)*t144, n.x()*(t147 + t6), 0, 0, n.x()*(t6 + (1.0/3.0)*t71), t88, t83, 0, 0, 0, 0, n.x()*(t6 + t71), t88, 0, 0, 0, 0, 0), numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(Q_plus[1]*p[0] + t30 - t33 - t38), 2*t148, (2.0/3.0)*t149, 0, 0, t150, 0, n.x()*(Q_plus[7]*t80 + t101 - t44), 2*t149, t148, 0, 0, 0, t150, n.x()*(-t48 - t50), n.x()*t151, t105*t83, t148, t83*t95, 0, 0, n.x()*((2.0/5.0)*Qaux_plus[0]*t32*t36 - t57 - t58 - t60 - t62), n.x()*(Qaux_plus[0]*t152 + t105), n.x()*((3.0/5.0)*t105 - t108*t95 + t12*t61 - 3.0/5.0*t151), (3.0/5.0)*t149, n.x()*(t12 + t152), 0, 0, n.x()*(t12 + (1.0/3.0)*t95), t88, t83, 0, 0, 0, 0, n.x()*(t12 + t95), t88, 0, 0, 0, 0, 0));
+    return res;
+}
+
+
+inline Foam::List<Foam::List<Foam::scalar>> numerical_face_sides(
+    const Foam::List<Foam::scalar>& Q_minus,
+    const Foam::List<Foam::scalar>& Q_plus,
+    const Foam::List<Foam::scalar>& Qaux_minus,
+    const Foam::List<Foam::scalar>& Qaux_plus,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::vector& n)
+{
+    Foam::scalar t0 = -Foam::max(Q_minus[0], Q_plus[0]);
+    Foam::scalar t1 = Q_minus[0] + Q_minus[1] + t0;
+    Foam::scalar t2 = Foam::max((Foam::scalar)0.0, t1);
+    Foam::scalar t3 = Q_plus[0] + Q_plus[1] + t0;
+    Foam::scalar t4 = Foam::max((Foam::scalar)0.0, t3);
+    Foam::scalar t5 = -t2 + t4;
+    Foam::scalar t6 = (1.0 / Foam::pow(p[1], 1));
+    Foam::scalar t7 = Foam::max((Foam::scalar)1.0e-14, Q_minus[1]);
+    Foam::scalar t8 = (1.0 / Foam::pow(t7, 1));
+    Foam::scalar t9 = (1.0 / Foam::pow(t7, 2));
+    Foam::scalar t10 = Foam::pow(Q_minus[2], 2)*t9;
+    Foam::scalar t11 = Foam::pow(t2, 2);
+    Foam::scalar t12 = Foam::max((Foam::scalar)1.0e-14, t1);
+    Foam::scalar t13 = (1.0 / Foam::pow(t12, 2));
+    Foam::scalar t14 = t11*t13;
+    Foam::scalar t15 = Foam::pow(Q_minus[3], 2);
+    Foam::scalar t16 = t14*t9;
+    Foam::scalar t17 = (1.0/3.0)*t16;
+    Foam::scalar t18 = (1.0 / Foam::pow(t12, 1));
+    Foam::scalar t19 = t2*t8;
+    Foam::scalar t20 = Q_minus[2]*t19;
+    Foam::scalar t21 = t18*t20;
+    Foam::scalar t22 = n.x()*t21;
+    Foam::scalar t23 = Q_minus[3]*t19;
+    Foam::scalar t24 = t18*t23;
+    Foam::scalar t25 = n.x()*t24;
+    Foam::scalar t26 = n.x()*t6;
+    Foam::scalar t27 = t2*t26;
+    Foam::scalar t28 = 3*t6;
+    Foam::scalar t29 = Q_minus[6]*t19;
+    Foam::scalar t30 = Q_minus[7]*t19;
+    Foam::scalar t31 = 2*t6;
+    Foam::scalar t32 = Q_minus[2]*t16;
+    Foam::scalar t33 = Q_minus[3]*t32;
+    Foam::scalar t34 = Q_minus[3]*Q_minus[5];
+    Foam::scalar t35 = Q_minus[4]*t19;
+    Foam::scalar t36 = t18*t35;
+    Foam::scalar t37 = (1.0/3.0)*n.x();
+    Foam::scalar t38 = Q_minus[5]*t19;
+    Foam::scalar t39 = t18*t38;
+    Foam::scalar t40 = (3.0/5.0)*Q_minus[3]*Q_minus[4];
+    Foam::scalar t41 = (2.0/5.0)*Qaux_minus[0];
+    Foam::scalar t42 = (2.0/5.0)*t24;
+    Foam::scalar t43 = -n.x();
+    Foam::scalar t44 = Foam::max((Foam::scalar)1.0e-14, Q_plus[1]);
+    Foam::scalar t45 = (1.0 / Foam::pow(t44, 1));
+    Foam::scalar t46 = (1.0 / Foam::pow(t44, 2));
+    Foam::scalar t47 = Foam::pow(Q_plus[2], 2)*t46;
+    Foam::scalar t48 = Foam::pow(t4, 2);
+    Foam::scalar t49 = Foam::max((Foam::scalar)1.0e-14, t3);
+    Foam::scalar t50 = (1.0 / Foam::pow(t49, 2));
+    Foam::scalar t51 = t48*t50;
+    Foam::scalar t52 = Foam::pow(Q_plus[3], 2);
+    Foam::scalar t53 = t46*t51;
+    Foam::scalar t54 = (1.0/3.0)*t53;
+    Foam::scalar t55 = (1.0 / Foam::pow(t49, 1));
+    Foam::scalar t56 = t4*t45;
+    Foam::scalar t57 = Q_plus[2]*t56;
+    Foam::scalar t58 = t55*t57;
+    Foam::scalar t59 = n.x()*t58;
+    Foam::scalar t60 = Q_plus[3]*t56;
+    Foam::scalar t61 = t55*t60;
+    Foam::scalar t62 = n.x()*t61;
+    Foam::scalar t63 = t26*t4;
+    Foam::scalar t64 = Q_plus[6]*t56;
+    Foam::scalar t65 = Q_plus[7]*t56;
+    Foam::scalar t66 = Q_plus[2]*t53;
+    Foam::scalar t67 = Q_plus[3]*t66;
+    Foam::scalar t68 = Q_plus[3]*Q_plus[5];
+    Foam::scalar t69 = Q_plus[4]*t56;
+    Foam::scalar t70 = t55*t69;
+    Foam::scalar t71 = Q_plus[5]*t56;
+    Foam::scalar t72 = t55*t71;
+    Foam::scalar t73 = (3.0/5.0)*Q_plus[3]*Q_plus[4];
+    Foam::scalar t74 = (2.0/5.0)*Qaux_plus[0];
+    Foam::scalar t75 = (2.0/5.0)*t61;
+    Foam::scalar t76 = 0.5*Foam::max(numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(Q_minus[6]*t2*t6*t8 + p[0]*t2 - t10*t14 - t15*t17), 2*t22, (2.0/3.0)*t25, 0, 0, t27, 0, n.x()*(t28*t29 + t30*t31 - 2*t33), 2*t25, t22, 0, 0, 0, t27, n.x()*(-Q_minus[4]*t32 - t17*t34), n.x()*t36, t37*t39, t22, t24*t37, 0, 0, n.x()*(-Q_minus[5]*t32 + (2.0/5.0)*Qaux_minus[0]*t11*t13*t15*t9 - 2.0/5.0*t16*t34 - t16*t40 - t33*t41), n.x()*(Qaux_minus[0]*t42 + t39), n.x()*(-4.0/5.0*Qaux_minus[0]*t24 + t21*t41 - 3.0/5.0*t36 + (3.0/5.0)*t39), (3.0/5.0)*t25, n.x()*(t21 + t42), 0, 0, n.x()*(t21 + (1.0/3.0)*t24), t43, t37, 0, 0, 0, 0, n.x()*(t21 + t24), t43, 0, 0, 0, 0, 0), numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(Q_plus[6]*t4*t45*t6 + p[0]*t4 - t47*t51 - t52*t54), 2*t59, (2.0/3.0)*t62, 0, 0, t63, 0, n.x()*(t28*t64 + t31*t65 - 2*t67), 2*t62, t59, 0, 0, 0, t63, n.x()*(-Q_plus[4]*t66 - t54*t68), n.x()*t70, t37*t72, t59, t37*t61, 0, 0, n.x()*(-Q_plus[5]*t66 + (2.0/5.0)*Qaux_plus[0]*t46*t48*t50*t52 - 2.0/5.0*t53*t68 - t53*t73 - t67*t74), n.x()*(Qaux_plus[0]*t75 + t72), n.x()*(-4.0/5.0*Qaux_plus[0]*t61 + t58*t74 - 3.0/5.0*t70 + (3.0/5.0)*t72), (3.0/5.0)*t62, n.x()*(t58 + t75), 0, 0, n.x()*(t58 + (1.0/3.0)*t61), t43, t37, 0, 0, 0, 0, n.x()*(t58 + t61), t43, 0, 0, 0, 0, 0));
+    Foam::scalar t77 = 0.5*n.x();
+    Foam::scalar t78 = t20*t77 + t57*t77;
+    Foam::scalar t79 = -t5*t76 + t78;
+    Foam::scalar t80 = (1.0/2.0)*p[0];
+    Foam::scalar t81 = t11*t80;
+    Foam::scalar t82 = t11*t6*t8;
+    Foam::scalar t83 = Foam::pow((Foam::scalar)2, 1.0/2.0);
+    Foam::scalar t84 = Foam::pow(Foam::pow(t2, 4) + Foam::pow(Foam::max((Foam::scalar)9.9999999999999998e-13, t1), 4), -1.0/2.0);
+    Foam::scalar t85 = Foam::pow(t2, 3)*t83*t84;
+    Foam::scalar t86 = t85*t9;
+    Foam::scalar t87 = (1.0/3.0)*t86;
+    Foam::scalar t88 = t77*(Q_minus[6]*t82 + t10*t85 + t15*t87 + t81);
+    Foam::scalar t89 = t45*t48*t6;
+    Foam::scalar t90 = Foam::pow(Foam::pow(t4, 4) + Foam::pow(Foam::max((Foam::scalar)9.9999999999999998e-13, t3), 4), -1.0/2.0);
+    Foam::scalar t91 = Foam::pow(t4, 3)*t83*t90;
+    Foam::scalar t92 = t46*t91;
+    Foam::scalar t93 = (1.0/3.0)*t92;
+    Foam::scalar t94 = t77*(Q_plus[6]*t89 + t47*t91 + t48*t80 + t52*t93);
+    Foam::scalar t95 = t76*(Q_plus[2]*t4*t45 - t20);
+    Foam::scalar t96 = Q_minus[2]*t86;
+    Foam::scalar t97 = Q_minus[3]*t96;
+    Foam::scalar t98 = t77*(Q_minus[7]*t82 + 2*t97);
+    Foam::scalar t99 = Q_plus[2]*t92;
+    Foam::scalar t100 = Q_plus[3]*t99;
+    Foam::scalar t101 = t77*(Q_plus[7]*t89 + 2*t100);
+    Foam::scalar t102 = Q_plus[3]*t4*t45 - t23;
+    Foam::scalar t103 = t102*t76;
+    Foam::scalar t104 = 0.27777777777777785*n.x();
+    Foam::scalar t105 = 0.44444444444444442*n.x();
+    Foam::scalar t106 = 0.5*t5;
+    Foam::scalar t107 = t2*t84;
+    Foam::scalar t108 = 0.8872983346207417*t83;
+    Foam::scalar t109 = t4*t90;
+    Foam::scalar t110 = 0.1127016653792583*t83;
+    Foam::scalar t111 = t107*t108 + t109*t110;
+    Foam::scalar t112 = t111*(0.8872983346207417*t20 + 0.1127016653792583*t57);
+    Foam::scalar t113 = 0.5*t83;
+    Foam::scalar t114 = t107*t113 + t109*t113;
+    Foam::scalar t115 = t114*(0.5*t20 + 0.5*t57);
+    Foam::scalar t116 = t107*t110 + t108*t109;
+    Foam::scalar t117 = t116*(0.1127016653792583*t20 + 0.8872983346207417*t57);
+    Foam::scalar t118 = 0.5*t102;
+    Foam::scalar t119 = t106*(t104*(t28*(0.1127016653792583*t29 + 0.8872983346207417*t64) + t6*(0.1127016653792583*t30 + 0.8872983346207417*t65)) + t104*(t28*(0.8872983346207417*t29 + 0.1127016653792583*t64) + t6*(0.8872983346207417*t30 + 0.1127016653792583*t65)) + t105*(t28*(0.5*t29 + 0.5*t64) + t6*(0.5*t30 + 0.5*t65))) + t118*(-t104*t112 - t104*t117 - t105*t115);
+    Foam::scalar t120 = -t76*(Q_plus[4]*t4*t45 - t35) + t77*(Q_minus[4]*t96 + t34*t87) + t77*(Q_plus[4]*t99 + t68*t93);
+    Foam::scalar t121 = t104*(-6.0/5.0*t111*(0.8872983346207417*t35 + 0.1127016653792583*t69) + (1.0/5.0)*t111*(0.8872983346207417*t38 + 0.1127016653792583*t71)) + t104*(-6.0/5.0*t116*(0.1127016653792583*t35 + 0.8872983346207417*t69) + (1.0/5.0)*t116*(0.1127016653792583*t38 + 0.8872983346207417*t71)) + t105*(-6.0/5.0*t114*(0.5*t35 + 0.5*t69) + (1.0/5.0)*t114*(0.5*t38 + 0.5*t71));
+    Foam::scalar t122 = (2.0/5.0)*t86;
+    Foam::scalar t123 = (2.0/5.0)*t92;
+    Foam::scalar t124 = -t76*(Q_plus[5]*t4*t45 - t38) + t77*(Q_minus[5]*t96 - Qaux_minus[0]*t122*t15 + t122*t34 + t40*t86 + t41*t97) + t77*(Q_plus[5]*t99 - Qaux_plus[0]*t123*t52 + t100*t74 + t123*t68 + t73*t92);
+    Foam::scalar t125 = t111*(0.8872983346207417*t23 + 0.1127016653792583*t60);
+    Foam::scalar t126 = t114*(0.5*t23 + 0.5*t60);
+    Foam::scalar t127 = t116*(0.1127016653792583*t23 + 0.8872983346207417*t60);
+    Foam::scalar t128 = t104*(t112 + (1.0/3.0)*t125) + t104*(t117 + (1.0/3.0)*t127) + t105*(t115 + (1.0/3.0)*t126);
+    Foam::scalar t129 = t76*(Q_plus[6]*t4*t45 - t29) + t78;
+    Foam::scalar t130 = t104*(t112 + t125) + t104*(t117 + t127) + t105*(t115 + t126);
+    Foam::scalar t131 = t76*(Q_plus[7]*t4*t45 - t30) + t78;
+    auto res = Foam::List<Foam::List<Foam::scalar>>(2, Foam::List<Foam::scalar>(8, 0.0));
+    res[0][0] = 0;
+    res[0][1] = t79;
+    res[0][2] = n.x()*(Foam::pow(Q_minus[1], 2)*t80 - t81) + t88 + t94 - t95;
+    res[0][3] = t101 - t103 + t119 + t98;
+    res[0][4] = t120;
+    res[0][5] = t118*t121 + t124;
+    res[0][6] = 0.16666666666666669*n.x()*t102 + 0.5*t128*t5 - t129;
+    res[0][7] = 0.5*t130*t5 - t131;
+    res[1][0] = 0;
+    res[1][1] = -t79;
+    res[1][2] = n.x()*(-Foam::pow(Q_plus[1], 2)*t80 + (1.0/2.0)*p[0]*t48) - t88 - t94 + t95;
+    res[1][3] = -t101 + t103 + t119 - t98;
+    res[1][4] = -t120;
+    res[1][5] = 0.5*t102*t121 - t124;
+    res[1][6] = 0.16666666666666669*n.x()*t102 + t106*t128 + t129;
+    res[1][7] = t106*t130 + t131;
+    return res;
+}
+
+
+inline Foam::List<Foam::List<Foam::scalar>> numerical_face_sides_speed(
+    const Foam::List<Foam::scalar>& Q_minus,
+    const Foam::List<Foam::scalar>& Q_plus,
+    const Foam::List<Foam::scalar>& Qaux_minus,
+    const Foam::List<Foam::scalar>& Qaux_plus,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::vector& n)
+{
+    Foam::scalar t0 = -Foam::max(Q_minus[0], Q_plus[0]);
+    Foam::scalar t1 = Q_minus[0] + Q_minus[1] + t0;
+    Foam::scalar t2 = Foam::max((Foam::scalar)0.0, t1);
+    Foam::scalar t3 = Q_plus[0] + Q_plus[1] + t0;
+    Foam::scalar t4 = Foam::max((Foam::scalar)0.0, t3);
+    Foam::scalar t5 = -t2 + t4;
+    Foam::scalar t6 = (1.0 / Foam::pow(p[1], 1));
+    Foam::scalar t7 = Foam::max((Foam::scalar)1.0e-14, Q_minus[1]);
+    Foam::scalar t8 = (1.0 / Foam::pow(t7, 1));
+    Foam::scalar t9 = (1.0 / Foam::pow(t7, 2));
+    Foam::scalar t10 = Foam::pow(Q_minus[2], 2)*t9;
+    Foam::scalar t11 = Foam::pow(t2, 2);
+    Foam::scalar t12 = Foam::max((Foam::scalar)1.0e-14, t1);
+    Foam::scalar t13 = (1.0 / Foam::pow(t12, 2));
+    Foam::scalar t14 = t11*t13;
+    Foam::scalar t15 = Foam::pow(Q_minus[3], 2);
+    Foam::scalar t16 = t14*t9;
+    Foam::scalar t17 = (1.0/3.0)*t16;
+    Foam::scalar t18 = (1.0 / Foam::pow(t12, 1));
+    Foam::scalar t19 = t2*t8;
+    Foam::scalar t20 = Q_minus[2]*t19;
+    Foam::scalar t21 = t18*t20;
+    Foam::scalar t22 = n.x()*t21;
+    Foam::scalar t23 = Q_minus[3]*t19;
+    Foam::scalar t24 = t18*t23;
+    Foam::scalar t25 = n.x()*t24;
+    Foam::scalar t26 = n.x()*t6;
+    Foam::scalar t27 = t2*t26;
+    Foam::scalar t28 = 3*t6;
+    Foam::scalar t29 = Q_minus[6]*t19;
+    Foam::scalar t30 = Q_minus[7]*t19;
+    Foam::scalar t31 = 2*t6;
+    Foam::scalar t32 = Q_minus[2]*t16;
+    Foam::scalar t33 = Q_minus[3]*t32;
+    Foam::scalar t34 = Q_minus[3]*Q_minus[5];
+    Foam::scalar t35 = Q_minus[4]*t19;
+    Foam::scalar t36 = t18*t35;
+    Foam::scalar t37 = (1.0/3.0)*n.x();
+    Foam::scalar t38 = Q_minus[5]*t19;
+    Foam::scalar t39 = t18*t38;
+    Foam::scalar t40 = (3.0/5.0)*Q_minus[3]*Q_minus[4];
+    Foam::scalar t41 = (2.0/5.0)*Qaux_minus[0];
+    Foam::scalar t42 = (2.0/5.0)*t24;
+    Foam::scalar t43 = -n.x();
+    Foam::scalar t44 = Foam::max((Foam::scalar)1.0e-14, Q_plus[1]);
+    Foam::scalar t45 = (1.0 / Foam::pow(t44, 1));
+    Foam::scalar t46 = (1.0 / Foam::pow(t44, 2));
+    Foam::scalar t47 = Foam::pow(Q_plus[2], 2)*t46;
+    Foam::scalar t48 = Foam::pow(t4, 2);
+    Foam::scalar t49 = Foam::max((Foam::scalar)1.0e-14, t3);
+    Foam::scalar t50 = (1.0 / Foam::pow(t49, 2));
+    Foam::scalar t51 = t48*t50;
+    Foam::scalar t52 = Foam::pow(Q_plus[3], 2);
+    Foam::scalar t53 = t46*t51;
+    Foam::scalar t54 = (1.0/3.0)*t53;
+    Foam::scalar t55 = (1.0 / Foam::pow(t49, 1));
+    Foam::scalar t56 = t4*t45;
+    Foam::scalar t57 = Q_plus[2]*t56;
+    Foam::scalar t58 = t55*t57;
+    Foam::scalar t59 = n.x()*t58;
+    Foam::scalar t60 = Q_plus[3]*t56;
+    Foam::scalar t61 = t55*t60;
+    Foam::scalar t62 = n.x()*t61;
+    Foam::scalar t63 = t26*t4;
+    Foam::scalar t64 = Q_plus[6]*t56;
+    Foam::scalar t65 = Q_plus[7]*t56;
+    Foam::scalar t66 = Q_plus[2]*t53;
+    Foam::scalar t67 = Q_plus[3]*t66;
+    Foam::scalar t68 = Q_plus[3]*Q_plus[5];
+    Foam::scalar t69 = Q_plus[4]*t56;
+    Foam::scalar t70 = t55*t69;
+    Foam::scalar t71 = Q_plus[5]*t56;
+    Foam::scalar t72 = t55*t71;
+    Foam::scalar t73 = (3.0/5.0)*Q_plus[3]*Q_plus[4];
+    Foam::scalar t74 = (2.0/5.0)*Qaux_plus[0];
+    Foam::scalar t75 = (2.0/5.0)*t61;
+    Foam::scalar t76 = Foam::max(numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(Q_minus[6]*t2*t6*t8 + p[0]*t2 - t10*t14 - t15*t17), 2*t22, (2.0/3.0)*t25, 0, 0, t27, 0, n.x()*(t28*t29 + t30*t31 - 2*t33), 2*t25, t22, 0, 0, 0, t27, n.x()*(-Q_minus[4]*t32 - t17*t34), n.x()*t36, t37*t39, t22, t24*t37, 0, 0, n.x()*(-Q_minus[5]*t32 + (2.0/5.0)*Qaux_minus[0]*t11*t13*t15*t9 - 2.0/5.0*t16*t34 - t16*t40 - t33*t41), n.x()*(Qaux_minus[0]*t42 + t39), n.x()*(-4.0/5.0*Qaux_minus[0]*t24 + t21*t41 - 3.0/5.0*t36 + (3.0/5.0)*t39), (3.0/5.0)*t25, n.x()*(t21 + t42), 0, 0, n.x()*(t21 + (1.0/3.0)*t24), t43, t37, 0, 0, 0, 0, n.x()*(t21 + t24), t43, 0, 0, 0, 0, 0), numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(Q_plus[6]*t4*t45*t6 + p[0]*t4 - t47*t51 - t52*t54), 2*t59, (2.0/3.0)*t62, 0, 0, t63, 0, n.x()*(t28*t64 + t31*t65 - 2*t67), 2*t62, t59, 0, 0, 0, t63, n.x()*(-Q_plus[4]*t66 - t54*t68), n.x()*t70, t37*t72, t59, t37*t61, 0, 0, n.x()*(-Q_plus[5]*t66 + (2.0/5.0)*Qaux_plus[0]*t46*t48*t50*t52 - 2.0/5.0*t53*t68 - t53*t73 - t67*t74), n.x()*(Qaux_plus[0]*t75 + t72), n.x()*(-4.0/5.0*Qaux_plus[0]*t61 + t58*t74 - 3.0/5.0*t70 + (3.0/5.0)*t72), (3.0/5.0)*t62, n.x()*(t58 + t75), 0, 0, n.x()*(t58 + (1.0/3.0)*t61), t43, t37, 0, 0, 0, 0, n.x()*(t58 + t61), t43, 0, 0, 0, 0, 0));
+    Foam::scalar t77 = 0.5*t76;
+    Foam::scalar t78 = 0.5*n.x();
+    Foam::scalar t79 = t20*t78 + t57*t78;
+    Foam::scalar t80 = -t5*t77 + t79;
+    Foam::scalar t81 = (1.0/2.0)*p[0];
+    Foam::scalar t82 = t11*t81;
+    Foam::scalar t83 = t11*t6*t8;
+    Foam::scalar t84 = Foam::pow((Foam::scalar)2, 1.0/2.0);
+    Foam::scalar t85 = Foam::pow(Foam::pow(t2, 4) + Foam::pow(Foam::max((Foam::scalar)9.9999999999999998e-13, t1), 4), -1.0/2.0);
+    Foam::scalar t86 = Foam::pow(t2, 3)*t84*t85;
+    Foam::scalar t87 = t86*t9;
+    Foam::scalar t88 = (1.0/3.0)*t87;
+    Foam::scalar t89 = t78*(Q_minus[6]*t83 + t10*t86 + t15*t88 + t82);
+    Foam::scalar t90 = t45*t48*t6;
+    Foam::scalar t91 = Foam::pow(Foam::pow(t4, 4) + Foam::pow(Foam::max((Foam::scalar)9.9999999999999998e-13, t3), 4), -1.0/2.0);
+    Foam::scalar t92 = Foam::pow(t4, 3)*t84*t91;
+    Foam::scalar t93 = t46*t92;
+    Foam::scalar t94 = (1.0/3.0)*t93;
+    Foam::scalar t95 = t78*(Q_plus[6]*t90 + t47*t92 + t48*t81 + t52*t94);
+    Foam::scalar t96 = t77*(Q_plus[2]*t4*t45 - t20);
+    Foam::scalar t97 = Q_minus[2]*t87;
+    Foam::scalar t98 = Q_minus[3]*t97;
+    Foam::scalar t99 = t78*(Q_minus[7]*t83 + 2*t98);
+    Foam::scalar t100 = Q_plus[2]*t93;
+    Foam::scalar t101 = Q_plus[3]*t100;
+    Foam::scalar t102 = t78*(Q_plus[7]*t90 + 2*t101);
+    Foam::scalar t103 = Q_plus[3]*t4*t45 - t23;
+    Foam::scalar t104 = t103*t77;
+    Foam::scalar t105 = 0.27777777777777785*n.x();
+    Foam::scalar t106 = 0.44444444444444442*n.x();
+    Foam::scalar t107 = 0.5*t5;
+    Foam::scalar t108 = t2*t85;
+    Foam::scalar t109 = 0.8872983346207417*t84;
+    Foam::scalar t110 = t4*t91;
+    Foam::scalar t111 = 0.1127016653792583*t84;
+    Foam::scalar t112 = t108*t109 + t110*t111;
+    Foam::scalar t113 = t112*(0.8872983346207417*t20 + 0.1127016653792583*t57);
+    Foam::scalar t114 = 0.5*t84;
+    Foam::scalar t115 = t108*t114 + t110*t114;
+    Foam::scalar t116 = t115*(0.5*t20 + 0.5*t57);
+    Foam::scalar t117 = t108*t111 + t109*t110;
+    Foam::scalar t118 = t117*(0.1127016653792583*t20 + 0.8872983346207417*t57);
+    Foam::scalar t119 = 0.5*t103;
+    Foam::scalar t120 = t107*(t105*(t28*(0.1127016653792583*t29 + 0.8872983346207417*t64) + t6*(0.1127016653792583*t30 + 0.8872983346207417*t65)) + t105*(t28*(0.8872983346207417*t29 + 0.1127016653792583*t64) + t6*(0.8872983346207417*t30 + 0.1127016653792583*t65)) + t106*(t28*(0.5*t29 + 0.5*t64) + t6*(0.5*t30 + 0.5*t65))) + t119*(-t105*t113 - t105*t118 - t106*t116);
+    Foam::scalar t121 = -t77*(Q_plus[4]*t4*t45 - t35) + t78*(Q_minus[4]*t97 + t34*t88) + t78*(Q_plus[4]*t100 + t68*t94);
+    Foam::scalar t122 = t105*(-6.0/5.0*t112*(0.8872983346207417*t35 + 0.1127016653792583*t69) + (1.0/5.0)*t112*(0.8872983346207417*t38 + 0.1127016653792583*t71)) + t105*(-6.0/5.0*t117*(0.1127016653792583*t35 + 0.8872983346207417*t69) + (1.0/5.0)*t117*(0.1127016653792583*t38 + 0.8872983346207417*t71)) + t106*(-6.0/5.0*t115*(0.5*t35 + 0.5*t69) + (1.0/5.0)*t115*(0.5*t38 + 0.5*t71));
+    Foam::scalar t123 = (2.0/5.0)*t87;
+    Foam::scalar t124 = (2.0/5.0)*t93;
+    Foam::scalar t125 = -t77*(Q_plus[5]*t4*t45 - t38) + t78*(Q_minus[5]*t97 - Qaux_minus[0]*t123*t15 + t123*t34 + t40*t87 + t41*t98) + t78*(Q_plus[5]*t100 - Qaux_plus[0]*t124*t52 + t101*t74 + t124*t68 + t73*t93);
+    Foam::scalar t126 = t112*(0.8872983346207417*t23 + 0.1127016653792583*t60);
+    Foam::scalar t127 = t115*(0.5*t23 + 0.5*t60);
+    Foam::scalar t128 = t117*(0.1127016653792583*t23 + 0.8872983346207417*t60);
+    Foam::scalar t129 = t105*(t113 + (1.0/3.0)*t126) + t105*(t118 + (1.0/3.0)*t128) + t106*(t116 + (1.0/3.0)*t127);
+    Foam::scalar t130 = t77*(Q_plus[6]*t4*t45 - t29) + t79;
+    Foam::scalar t131 = t105*(t113 + t126) + t105*(t118 + t128) + t106*(t116 + t127);
+    Foam::scalar t132 = t77*(Q_plus[7]*t4*t45 - t30) + t79;
+    auto res = Foam::List<Foam::List<Foam::scalar>>(3, Foam::List<Foam::scalar>(8, 0.0));
+    res[0][0] = 0;
+    res[0][1] = t80;
+    res[0][2] = n.x()*(Foam::pow(Q_minus[1], 2)*t81 - t82) + t89 + t95 - t96;
+    res[0][3] = t102 - t104 + t120 + t99;
+    res[0][4] = t121;
+    res[0][5] = t119*t122 + t125;
+    res[0][6] = 0.16666666666666669*n.x()*t103 + 0.5*t129*t5 - t130;
+    res[0][7] = 0.5*t131*t5 - t132;
+    res[1][0] = 0;
+    res[1][1] = -t80;
+    res[1][2] = n.x()*(-Foam::pow(Q_plus[1], 2)*t81 + (1.0/2.0)*p[0]*t48) - t89 - t95 + t96;
+    res[1][3] = -t102 + t104 + t120 - t99;
+    res[1][4] = -t121;
+    res[1][5] = 0.5*t103*t122 - t125;
+    res[1][6] = 0.16666666666666669*n.x()*t103 + t107*t129 + t130;
+    res[1][7] = t107*t131 + t132;
+    res[2][0] = t76;
+    res[2][1] = t76;
+    res[2][2] = t76;
+    res[2][3] = t76;
+    res[2][4] = t76;
+    res[2][5] = t76;
+    res[2][6] = t76;
+    res[2][7] = t76;
+    return res;
+}
+
+
+inline Foam::List<Foam::scalar> numerical_cell_edge_source(
+    const Foam::List<Foam::scalar>& Q_minus,
+    const Foam::List<Foam::scalar>& Q_plus,
+    const Foam::List<Foam::scalar>& Qaux_minus,
+    const Foam::List<Foam::scalar>& Qaux_plus,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::vector& n)
+{
+    Foam::scalar t0 = -Q_minus[0] + Q_plus[0];
+    Foam::scalar t1 = (1.0 / Foam::pow(p[1], 1));
+    Foam::scalar t2 = t1*(0.1127016653792583*Q_minus[7] + 0.8872983346207417*Q_plus[7]);
+    Foam::scalar t3 = 0.27777777777777785*n.x();
+    Foam::scalar t4 = t1*(0.5*Q_minus[7] + 0.5*Q_plus[7]);
+    Foam::scalar t5 = 0.44444444444444442*n.x();
+    Foam::scalar t6 = t1*(0.8872983346207417*Q_minus[7] + 0.1127016653792583*Q_plus[7]);
+    Foam::scalar t7 = -Q_minus[3] + Q_plus[3];
+    Foam::scalar t8 = 0.1127016653792583*Qaux_minus[3] + 0.8872983346207417*Qaux_plus[3];
+    Foam::scalar t9 = t8*(0.1127016653792583*Q_minus[2] + 0.8872983346207417*Q_plus[2]);
+    Foam::scalar t10 = 0.5*Qaux_minus[3] + 0.5*Qaux_plus[3];
+    Foam::scalar t11 = t10*(0.5*Q_minus[2] + 0.5*Q_plus[2]);
+    Foam::scalar t12 = 0.8872983346207417*Qaux_minus[3] + 0.1127016653792583*Qaux_plus[3];
+    Foam::scalar t13 = t12*(0.8872983346207417*Q_minus[2] + 0.1127016653792583*Q_plus[2]);
+    Foam::scalar t14 = -Q_minus[1] + Q_plus[1];
+    Foam::scalar t15 = 0.1127016653792583*Q_minus[6] + 0.8872983346207417*Q_plus[6];
+    Foam::scalar t16 = 3*t1;
+    Foam::scalar t17 = 0.5*Q_minus[6] + 0.5*Q_plus[6];
+    Foam::scalar t18 = 0.8872983346207417*Q_minus[6] + 0.1127016653792583*Q_plus[6];
+    Foam::scalar t19 = 6*t1;
+    Foam::scalar t20 = 0.55555555555555569*n.x();
+    Foam::scalar t21 = 0.88888888888888884*n.x();
+    Foam::scalar t22 = t8*(0.1127016653792583*Q_minus[3] + 0.8872983346207417*Q_plus[3]);
+    Foam::scalar t23 = t10*(0.5*Q_minus[3] + 0.5*Q_plus[3]);
+    Foam::scalar t24 = t12*(0.8872983346207417*Q_minus[3] + 0.1127016653792583*Q_plus[3]);
+    auto res = Foam::List<Foam::scalar>(8, 0.0);
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = t0*(t3*(p[0]*(0.1127016653792583*Q_minus[1] + 0.8872983346207417*Q_plus[1]) - 2*t2) + t3*(p[0]*(0.8872983346207417*Q_minus[1] + 0.1127016653792583*Q_plus[1]) - 2*t6) + t5*(p[0]*(0.5*Q_minus[1] + 0.5*Q_plus[1]) - 2*t4));
+    res[3] = t0*(t3*(t15*t19 + 6*t2) + t3*(t18*t19 + 6*t6) + t5*(t17*t19 + 6*t4)) + t14*(t3*(t15*t16 + t2) + t3*(t16*t18 + t6) + t5*(t16*t17 + t4)) + t7*(-t11*t5 - t13*t3 - t3*t9);
+    res[4] = 0;
+    res[5] = t7*(t3*(-6.0/5.0*t12*(0.8872983346207417*Q_minus[4] + 0.1127016653792583*Q_plus[4]) + (1.0/5.0)*t12*(0.8872983346207417*Q_minus[5] + 0.1127016653792583*Q_plus[5])) + t3*(-6.0/5.0*t8*(0.1127016653792583*Q_minus[4] + 0.8872983346207417*Q_plus[4]) + (1.0/5.0)*t8*(0.1127016653792583*Q_minus[5] + 0.8872983346207417*Q_plus[5])) + t5*(-6.0/5.0*t10*(0.5*Q_minus[4] + 0.5*Q_plus[4]) + (1.0/5.0)*t10*(0.5*Q_minus[5] + 0.5*Q_plus[5])));
+    res[6] = 0.33333333333333337*n.x()*t7 + t0*(t11*t21 + t13*t20 + t20*t9) + t14*(t3*(t13 + (1.0/3.0)*t24) + t3*((1.0/3.0)*t22 + t9) + t5*(t11 + (1.0/3.0)*t23));
+    res[7] = t0*(t20*t22 + t20*t24 + t21*t23) + t14*(t3*(t13 + t24) + t3*(t22 + t9) + t5*(t11 + t23));
+    return res;
+}
+
+
+inline Foam::List<Foam::scalar> local_max_abs_eigenvalue(
+    const Foam::List<Foam::scalar>& Q,
+    const Foam::List<Foam::scalar>& Qaux,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::vector& n)
+{
+    Foam::scalar t0 = (1.0 / Foam::pow(p[1], 1));
+    Foam::scalar t1 = Q[6]*t0;
+    Foam::scalar t2 = Foam::max((Foam::scalar)1.0e-14, Q[1]);
+    Foam::scalar t3 = (1.0 / Foam::pow(t2, 2));
+    Foam::scalar t4 = Foam::pow(Q[3], 2);
+    Foam::scalar t5 = (1.0/3.0)*t3;
+    Foam::scalar t6 = (1.0 / Foam::pow(t2, 1));
+    Foam::scalar t7 = Q[2]*t6;
+    Foam::scalar t8 = n.x()*t7;
+    Foam::scalar t9 = Q[3]*t6;
+    Foam::scalar t10 = n.x()*t9;
+    Foam::scalar t11 = Q[1]*n.x()*t0;
+    Foam::scalar t12 = Q[2]*t3;
+    Foam::scalar t13 = Q[3]*t12;
+    Foam::scalar t14 = Q[3]*Q[5];
+    Foam::scalar t15 = Q[4]*t6;
+    Foam::scalar t16 = Q[5]*t6;
+    Foam::scalar t17 = (1.0/3.0)*n.x();
+    Foam::scalar t18 = (2.0/5.0)*Qaux[0];
+    Foam::scalar t19 = (2.0/5.0)*t9;
+    Foam::scalar t20 = -n.x();
+    auto res = Foam::List<Foam::scalar>(1, 0.0);
+    res[0] = numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(p[0]*Q[1] - Foam::pow(Q[2], 2)*t3 + t1 - t4*t5), 2*t8, (2.0/3.0)*t10, 0, 0, t11, 0, n.x()*(2*Q[7]*t0 + 3*t1 - 2*t13), 2*t10, t8, 0, 0, 0, t11, n.x()*(-Q[4]*t12 - t14*t5), n.x()*t15, t16*t17, t8, t17*t9, 0, 0, n.x()*((2.0/5.0)*Qaux[0]*t3*t4 - 3.0/5.0*Q[3]*Q[4]*t3 - Q[5]*t12 - t13*t18 - 2.0/5.0*t14*t3), n.x()*(Qaux[0]*t19 + t16), n.x()*(-4.0/5.0*Qaux[0]*t9 - 3.0/5.0*t15 + (3.0/5.0)*t16 + t18*t7), (3.0/5.0)*t10, n.x()*(t19 + t7), 0, 0, n.x()*(t7 + (1.0/3.0)*t9), t20, t17, 0, 0, 0, 0, n.x()*(t7 + t9), t20, 0, 0, 0, 0, 0);
+    return res;
+}
+
+
+inline Foam::List<Foam::List<Foam::scalar>> star_state(
+    const Foam::List<Foam::scalar>& Q_minus,
+    const Foam::List<Foam::scalar>& Q_plus,
+    const Foam::List<Foam::scalar>& Qaux_minus,
+    const Foam::List<Foam::scalar>& Qaux_plus,
+    const Foam::List<Foam::scalar>& p,
+    const Foam::vector& n)
+{
+    Foam::scalar t0 = Foam::max(Q_minus[0], Q_plus[0]);
+    Foam::scalar t1 = -t0;
+    Foam::scalar t2 = Q_minus[0] + Q_minus[1] + t1;
+    Foam::scalar t3 = Foam::max((Foam::scalar)0.0, t2);
+    Foam::scalar t4 = (1.0 / Foam::pow(p[1], 1));
+    Foam::scalar t5 = Foam::max((Foam::scalar)1.0e-14, Q_minus[1]);
+    Foam::scalar t6 = (1.0 / Foam::pow(t5, 1));
+    Foam::scalar t7 = (1.0 / Foam::pow(t5, 2));
+    Foam::scalar t8 = Foam::pow(Q_minus[2], 2)*t7;
+    Foam::scalar t9 = Foam::pow(t3, 2);
+    Foam::scalar t10 = Foam::max((Foam::scalar)1.0e-14, t2);
+    Foam::scalar t11 = (1.0 / Foam::pow(t10, 2));
+    Foam::scalar t12 = t11*t9;
+    Foam::scalar t13 = Foam::pow(Q_minus[3], 2);
+    Foam::scalar t14 = t12*t7;
+    Foam::scalar t15 = (1.0/3.0)*t14;
+    Foam::scalar t16 = t3*t6;
+    Foam::scalar t17 = t16/t10;
+    Foam::scalar t18 = Q_minus[2]*t17;
+    Foam::scalar t19 = n.x()*t18;
+    Foam::scalar t20 = Q_minus[3]*t17;
+    Foam::scalar t21 = n.x()*t20;
+    Foam::scalar t22 = n.x()*t4;
+    Foam::scalar t23 = t22*t3;
+    Foam::scalar t24 = Q_minus[6]*t4;
+    Foam::scalar t25 = Q_minus[7]*t4;
+    Foam::scalar t26 = Q_minus[2]*t14;
+    Foam::scalar t27 = Q_minus[3]*t26;
+    Foam::scalar t28 = Q_minus[3]*Q_minus[5];
+    Foam::scalar t29 = Q_minus[4]*t17;
+    Foam::scalar t30 = (1.0/3.0)*n.x();
+    Foam::scalar t31 = Q_minus[5]*t17;
+    Foam::scalar t32 = (3.0/5.0)*Q_minus[3]*Q_minus[4];
+    Foam::scalar t33 = (2.0/5.0)*Qaux_minus[0];
+    Foam::scalar t34 = (2.0/5.0)*t20;
+    Foam::scalar t35 = -n.x();
+    Foam::scalar t36 = Q_plus[0] + Q_plus[1] + t1;
+    Foam::scalar t37 = Foam::max((Foam::scalar)0.0, t36);
+    Foam::scalar t38 = Foam::max((Foam::scalar)1.0e-14, Q_plus[1]);
+    Foam::scalar t39 = (1.0 / Foam::pow(t38, 1));
+    Foam::scalar t40 = (1.0 / Foam::pow(t38, 2));
+    Foam::scalar t41 = Foam::pow(Q_plus[2], 2)*t40;
+    Foam::scalar t42 = Foam::pow(t37, 2);
+    Foam::scalar t43 = Foam::max((Foam::scalar)1.0e-14, t36);
+    Foam::scalar t44 = (1.0 / Foam::pow(t43, 2));
+    Foam::scalar t45 = t42*t44;
+    Foam::scalar t46 = Foam::pow(Q_plus[3], 2);
+    Foam::scalar t47 = t40*t45;
+    Foam::scalar t48 = (1.0/3.0)*t47;
+    Foam::scalar t49 = t37*t39;
+    Foam::scalar t50 = t49/t43;
+    Foam::scalar t51 = Q_plus[2]*t50;
+    Foam::scalar t52 = n.x()*t51;
+    Foam::scalar t53 = Q_plus[3]*t50;
+    Foam::scalar t54 = n.x()*t53;
+    Foam::scalar t55 = t22*t37;
+    Foam::scalar t56 = Q_plus[6]*t4;
+    Foam::scalar t57 = Q_plus[7]*t4;
+    Foam::scalar t58 = Q_plus[2]*t47;
+    Foam::scalar t59 = Q_plus[3]*t58;
+    Foam::scalar t60 = Q_plus[3]*Q_plus[5];
+    Foam::scalar t61 = Q_plus[4]*t50;
+    Foam::scalar t62 = Q_plus[5]*t50;
+    Foam::scalar t63 = (3.0/5.0)*Q_plus[3]*Q_plus[4];
+    Foam::scalar t64 = (2.0/5.0)*Qaux_plus[0];
+    Foam::scalar t65 = (2.0/5.0)*t53;
+    Foam::scalar t66 = Foam::max(numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(Q_minus[6]*t3*t4*t6 + p[0]*t3 - t12*t8 - t13*t15), 2*t19, (2.0/3.0)*t21, 0, 0, t23, 0, n.x()*(3*t16*t24 + 2*t16*t25 - 2*t27), 2*t21, t19, 0, 0, 0, t23, n.x()*(-Q_minus[4]*t26 - t15*t28), n.x()*t29, t30*t31, t19, t20*t30, 0, 0, n.x()*(-Q_minus[5]*t26 + (2.0/5.0)*Qaux_minus[0]*t11*t13*t7*t9 - 2.0/5.0*t14*t28 - t14*t32 - t27*t33), n.x()*(Qaux_minus[0]*t34 + t31), n.x()*(-4.0/5.0*Qaux_minus[0]*t20 + t18*t33 - 3.0/5.0*t29 + (3.0/5.0)*t31), (3.0/5.0)*t21, n.x()*(t18 + t34), 0, 0, n.x()*(t18 + (1.0/3.0)*t20), t35, t30, 0, 0, 0, 0, n.x()*(t18 + t20), t35, 0, 0, 0, 0, 0), numerics::gelfand_bound(7, 9.3132257461547852e-10, 0, n.x(), 0, 0, 0, 0, 0, n.x()*(Q_plus[6]*t37*t39*t4 + p[0]*t37 - t41*t45 - t46*t48), 2*t52, (2.0/3.0)*t54, 0, 0, t55, 0, n.x()*(3*t49*t56 + 2*t49*t57 - 2*t59), 2*t54, t52, 0, 0, 0, t55, n.x()*(-Q_plus[4]*t58 - t48*t60), n.x()*t61, t30*t62, t52, t30*t53, 0, 0, n.x()*(-Q_plus[5]*t58 + (2.0/5.0)*Qaux_plus[0]*t40*t42*t44*t46 - 2.0/5.0*t47*t60 - t47*t63 - t59*t64), n.x()*(Qaux_plus[0]*t65 + t62), n.x()*(-4.0/5.0*Qaux_plus[0]*t53 + t51*t64 - 3.0/5.0*t61 + (3.0/5.0)*t62), (3.0/5.0)*t54, n.x()*(t51 + t65), 0, 0, n.x()*(t51 + (1.0/3.0)*t53), t35, t30, 0, 0, 0, 0, n.x()*(t51 + t53), t35, 0, 0, 0, 0, 0));
+    Foam::scalar t67 = 2*t66;
+    Foam::scalar t68 = (1.0 / Foam::pow(Foam::max((Foam::scalar)1.0e-14, t67), 1));
+    Foam::scalar t69 = Q_minus[2]*n.x()*t16;
+    Foam::scalar t70 = Q_plus[2]*n.x()*t49;
+    Foam::scalar t71 = t3*t66;
+    Foam::scalar t72 = t37*t66;
+    Foam::scalar t73 = (1.0/2.0)*p[0];
+    Foam::scalar t74 = t6*t9;
+    Foam::scalar t75 = Foam::pow((Foam::scalar)2, 1.0/2.0);
+    Foam::scalar t76 = Foam::pow(t3, 3)*t75/Foam::pow(Foam::pow(t3, 4) + Foam::pow(Foam::max((Foam::scalar)9.9999999999999998e-13, t2), 4), 1.0/2.0);
+    Foam::scalar t77 = t7*t76;
+    Foam::scalar t78 = (1.0/3.0)*t77;
+    Foam::scalar t79 = t39*t42;
+    Foam::scalar t80 = Foam::pow(t37, 3)*t75/Foam::pow(Foam::pow(t37, 4) + Foam::pow(Foam::max((Foam::scalar)9.9999999999999998e-13, t36), 4), 1.0/2.0);
+    Foam::scalar t81 = t40*t80;
+    Foam::scalar t82 = (1.0/3.0)*t81;
+    Foam::scalar t83 = t6*t71;
+    Foam::scalar t84 = t39*t72;
+    Foam::scalar t85 = Q_minus[2]*t77;
+    Foam::scalar t86 = Q_minus[3]*t85;
+    Foam::scalar t87 = Q_plus[2]*t81;
+    Foam::scalar t88 = Q_plus[3]*t87;
+    Foam::scalar t89 = (2.0/5.0)*t77;
+    Foam::scalar t90 = (2.0/5.0)*t81;
+    Foam::scalar t91 = -t69 + t70;
+    auto res = Foam::List<Foam::List<Foam::scalar>>(8, Foam::List<Foam::scalar>(1, 0.0));
+    res[0][0] = t0*t67*t68;
+    res[1][0] = Foam::min(Foam::max((Foam::scalar)0.0, t3) + Foam::max((Foam::scalar)0.0, t37), Foam::max((Foam::scalar)0.0, t68*(t69 - t70 + t71 + t72)));
+    res[2][0] = t68*(Q_minus[2]*t83 + Q_plus[2]*t84 + n.x()*(t13*t78 + t24*t74 + t73*t9 + t76*t8) - n.x()*(t41*t80 + t42*t73 + t46*t82 + t56*t79));
+    res[3][0] = t68*(Q_minus[3]*t83 + Q_plus[3]*t84 + n.x()*(t25*t74 + 2*t86) - n.x()*(t57*t79 + 2*t88));
+    res[4][0] = t68*(Q_minus[4]*t83 + Q_plus[4]*t84 + n.x()*(Q_minus[4]*t85 + t28*t78) - n.x()*(Q_plus[4]*t87 + t60*t82));
+    res[5][0] = t68*(Q_minus[5]*t83 + Q_plus[5]*t84 + n.x()*(Q_minus[5]*t85 - Qaux_minus[0]*t13*t89 + t28*t89 + t32*t77 + t33*t86) - n.x()*(Q_plus[5]*t87 - Qaux_plus[0]*t46*t90 + t60*t90 + t63*t81 + t64*t88));
+    res[6][0] = t68*(Q_minus[6]*t83 + Q_plus[6]*t84 + t91);
+    res[7][0] = t68*(Q_minus[7]*t83 + Q_plus[7]*t84 + t91);
+    return res;
+}
+
+} // namespace Numerics

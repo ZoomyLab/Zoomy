@@ -1,0 +1,62 @@
+#| golden: m09_mlswe
+#| sympy: 1.14.0
+#| regenerate: python scripts/regen_goldens.py
+#| (header lines are informational; comparison is on the body below)
+== MLSWE(n_layers=2, dimension=2) — upwind interface (both Piecewise branches) ==
+class: SystemModel
+state: [Symbol('b'), Symbol('h'), Symbol('q_1_0'), Symbol('q_2_0')]
+aux_state: [Symbol('q_1_0_x'), Symbol('q_2_0_x')]
+parameters: [g, rho, nu, lambda_s, l_1]
+symbol_assumptions:
+  b : {complex, extended_real, finite, hermitian, real}
+  h : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  q_1_0 : {complex, extended_real, finite, hermitian, real}
+  q_2_0 : {complex, extended_real, finite, hermitian, real}
+  q_1_0_x : {complex, extended_real, finite, hermitian, real}
+  q_2_0_x : {complex, extended_real, finite, hermitian, real}
+  g : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  rho : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  nu : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  lambda_s : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+  l_1 : {complex, extended_nonnegative, extended_nonzero, extended_positive, extended_real, finite, hermitian, nonnegative, nonzero, positive, real}
+parameter_values: {g: 9.81, rho: 1.0, nu: 0.0, lambda_s: 0.0, l_1: 0.5}
+n_equations: 4  n_state: 4  n_dim: 1
+equation_to_state_index: [0, 1, 2, 3]
+stationary_indices: [0]
+mass_matrix: shape=(4, 4)
+mass_matrix[0,0] = Integer(1)
+mass_matrix[1,1] = Integer(1)
+mass_matrix[2,2] = Integer(1)
+mass_matrix[3,3] = Integer(1)
+flux: shape=(4, 1)
+flux[1,0] = Symbol('q_1_0')
+hydrostatic_pressure: shape=(4, 1)
+diffusion_matrix: None
+nonconservative_matrix: shape=(4, 4, 1)
+nonconservative_matrix[1,1,0] = Add(Mul(Symbol('h'), Symbol('l_1'), Symbol('q_2_0'), Pow(Add(Mul(Integer(-1), Pow(Symbol('h'), Integer(2)), Symbol('l_1')), Pow(Symbol('h'), Integer(2))), Integer(-1))), Mul(Integer(-1), Symbol('h'), Symbol('q_2_0'), Pow(Add(Mul(Integer(-1), Pow(Symbol('h'), Integer(2)), Symbol('l_1')), Pow(Symbol('h'), Integer(2))), Integer(-1))), Mul(Pow(Symbol('h'), Integer(-1)), Symbol('q_2_0')))
+nonconservative_matrix[1,3,0] = Add(Mul(Integer(-1), Symbol('h'), Symbol('l_1'), Pow(Add(Mul(Integer(-1), Symbol('h'), Symbol('l_1')), Symbol('h')), Integer(-1))), Mul(Symbol('h'), Pow(Add(Mul(Integer(-1), Symbol('h'), Symbol('l_1')), Symbol('h')), Integer(-1))))
+nonconservative_matrix[2,0,0] = Mul(Symbol('g'), Symbol('h'), Symbol('l_1'))
+nonconservative_matrix[2,1,0] = Add(Mul(Symbol('g'), Symbol('h'), Symbol('l_1')), Mul(Integer(-1), Pow(Symbol('h'), Integer(-2)), Pow(Symbol('l_1'), Integer(-1)), Pow(Symbol('q_1_0'), Integer(2))))
+nonconservative_matrix[2,2,0] = Add(Mul(Symbol('l_1'), Piecewise(ExprCondPair(Mul(Pow(Symbol('h'), Integer(-1)), Pow(Symbol('l_1'), Integer(-1)), Symbol('q_1_0')), GreaterThan(Add(Mul(Symbol('l_1'), Symbol('q_1_0_x'), Symbol('rho')), Mul(Symbol('l_1'), Symbol('q_2_0_x'), Symbol('rho')), Mul(Integer(-1), Symbol('q_1_0_x'), Symbol('rho'))), Integer(0))), ExprCondPair(Mul(Symbol('q_2_0'), Pow(Add(Mul(Integer(-1), Symbol('h'), Symbol('l_1')), Symbol('h')), Integer(-1))), true))), Mul(Integer(-1), Piecewise(ExprCondPair(Mul(Pow(Symbol('h'), Integer(-1)), Pow(Symbol('l_1'), Integer(-1)), Symbol('q_1_0')), GreaterThan(Add(Mul(Symbol('l_1'), Symbol('q_1_0_x'), Symbol('rho')), Mul(Symbol('l_1'), Symbol('q_2_0_x'), Symbol('rho')), Mul(Integer(-1), Symbol('q_1_0_x'), Symbol('rho'))), Integer(0))), ExprCondPair(Mul(Symbol('q_2_0'), Pow(Add(Mul(Integer(-1), Symbol('h'), Symbol('l_1')), Symbol('h')), Integer(-1))), true))), Mul(Integer(2), Pow(Symbol('h'), Integer(-1)), Pow(Symbol('l_1'), Integer(-1)), Symbol('q_1_0')))
+nonconservative_matrix[2,3,0] = Mul(Symbol('l_1'), Piecewise(ExprCondPair(Mul(Pow(Symbol('h'), Integer(-1)), Pow(Symbol('l_1'), Integer(-1)), Symbol('q_1_0')), GreaterThan(Add(Mul(Symbol('l_1'), Symbol('q_1_0_x'), Symbol('rho')), Mul(Symbol('l_1'), Symbol('q_2_0_x'), Symbol('rho')), Mul(Integer(-1), Symbol('q_1_0_x'), Symbol('rho'))), Integer(0))), ExprCondPair(Mul(Symbol('q_2_0'), Pow(Add(Mul(Integer(-1), Symbol('h'), Symbol('l_1')), Symbol('h')), Integer(-1))), true)))
+nonconservative_matrix[3,0,0] = Add(Mul(Integer(-1), Symbol('g'), Symbol('h'), Symbol('l_1')), Mul(Symbol('g'), Symbol('h')))
+nonconservative_matrix[3,1,0] = Add(Mul(Integer(-1), Symbol('g'), Symbol('h'), Symbol('l_1')), Mul(Symbol('g'), Symbol('h')), Mul(Integer(-1), Pow(Symbol('q_2_0'), Integer(2)), Pow(Add(Mul(Integer(-1), Pow(Symbol('h'), Integer(2)), Symbol('l_1')), Pow(Symbol('h'), Integer(2))), Integer(-1))))
+nonconservative_matrix[3,2,0] = Add(Mul(Integer(-1), Symbol('l_1'), Piecewise(ExprCondPair(Mul(Pow(Symbol('h'), Integer(-1)), Pow(Symbol('l_1'), Integer(-1)), Symbol('q_1_0')), GreaterThan(Add(Mul(Symbol('l_1'), Symbol('q_1_0_x'), Symbol('rho')), Mul(Symbol('l_1'), Symbol('q_2_0_x'), Symbol('rho')), Mul(Integer(-1), Symbol('q_1_0_x'), Symbol('rho'))), Integer(0))), ExprCondPair(Mul(Symbol('q_2_0'), Pow(Add(Mul(Integer(-1), Symbol('h'), Symbol('l_1')), Symbol('h')), Integer(-1))), true))), Piecewise(ExprCondPair(Mul(Pow(Symbol('h'), Integer(-1)), Pow(Symbol('l_1'), Integer(-1)), Symbol('q_1_0')), GreaterThan(Add(Mul(Symbol('l_1'), Symbol('q_1_0_x'), Symbol('rho')), Mul(Symbol('l_1'), Symbol('q_2_0_x'), Symbol('rho')), Mul(Integer(-1), Symbol('q_1_0_x'), Symbol('rho'))), Integer(0))), ExprCondPair(Mul(Symbol('q_2_0'), Pow(Add(Mul(Integer(-1), Symbol('h'), Symbol('l_1')), Symbol('h')), Integer(-1))), true)))
+nonconservative_matrix[3,3,0] = Add(Mul(Integer(-1), Symbol('l_1'), Piecewise(ExprCondPair(Mul(Pow(Symbol('h'), Integer(-1)), Pow(Symbol('l_1'), Integer(-1)), Symbol('q_1_0')), GreaterThan(Add(Mul(Symbol('l_1'), Symbol('q_1_0_x'), Symbol('rho')), Mul(Symbol('l_1'), Symbol('q_2_0_x'), Symbol('rho')), Mul(Integer(-1), Symbol('q_1_0_x'), Symbol('rho'))), Integer(0))), ExprCondPair(Mul(Symbol('q_2_0'), Pow(Add(Mul(Integer(-1), Symbol('h'), Symbol('l_1')), Symbol('h')), Integer(-1))), true))), Mul(Integer(2), Symbol('q_2_0'), Pow(Add(Mul(Integer(-1), Symbol('h'), Symbol('l_1')), Symbol('h')), Integer(-1))))
+source: shape=(4, 1)
+source[2,0] = Mul(Integer(-1), Pow(Symbol('h'), Integer(-1)), Pow(Symbol('l_1'), Integer(-1)), Symbol('lambda_s'), Symbol('q_1_0'), Pow(Symbol('rho'), Integer(-1)))
+source_explicit: None
+eigenvalues: None
+eigenvalues_cfl: None
+update_variables: None
+update_aux_variables: None
+reconstruction_variables: None
+state_from_reconstruction: None
+interpolate_to_3d: None
+project_from_3d: None
+boundary_specs: {}
+bc_tags: []
+bc_kernel: ImmutableDenseNDimArray(Tuple(Symbol('b'), Symbol('h'), Symbol('q_1_0'), Symbol('q_2_0')), Tuple(Integer(4)))
+aux_registry:
+  {atom=Derivative(Symbol('q_1_0'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('q_1_0_x'), kind='derivative', multi_index=(1,), name='q_1_0_x', row=0, state_index=2, target_kind='state', target_name='q_1_0'}
+  {atom=Derivative(Symbol('q_2_0'), Tuple(Symbol('x'), Integer(1))), aux_symbol=Symbol('q_2_0_x'), kind='derivative', multi_index=(1,), name='q_2_0_x', row=1, state_index=3, target_kind='state', target_name='q_2_0'}

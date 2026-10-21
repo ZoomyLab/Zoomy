@@ -1,0 +1,1 @@
+"""Decorator utilities for Zoomy."""

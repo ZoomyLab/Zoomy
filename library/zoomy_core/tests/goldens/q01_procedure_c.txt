@@ -1,0 +1,94 @@
+#| golden: q01_procedure_c
+#| sympy: 1.14.0
+#| regenerate: python scripts/regen_goldens.py
+#| (header lines are informational; comparison is on the body below)
+== Q01 solver Procedure IR -> C family ==
+
+    // v6 §1: dt is computed BEFORE the flux loop.  Stores the two wave-speed bounds per face; the eigenvalues slot stays an opaque backend kernel (_NON_RESOLVABLE).
+    PORTABLE_FN static inline void solver_dt_pass(
+        const double* Q,
+        const double* Qaux,
+        const double* p,
+        const int* face_cells,
+        const double* face_normal,
+        const int n_faces,
+        double* lam_lo_f,
+        double* lam_hi_f)
+    {
+        for (int f = 0; f < n_faces; ++f) {
+            int c_own = face_cells[2*f];
+            lam_lo_f[f] = eigenvalues(0, Q, Qaux, p, face_normal, c_own);
+            lam_hi_f[f] = eigenvalues(1, Q, Qaux, p, face_normal, c_own);
+        }
+    }
+
+-- solver_reduce_dt resolved with coupled=False --
+
+    // D7: dt_window REPLACES the t_end clamp in coupled mode — never min-combined (that combination is a measured preCICE abort).  The choice is a BUILD-time IfStatic, not a runtime branch.  An all-dry domain yields dt = dt_max: zeroed lambda drops out of the min rather than spinning at dt = 0.
+    PORTABLE_FN static inline double solver_reduce_dt(
+        const double* lam_lo_f,
+        const double* lam_hi_f,
+        const double* inradius_f,
+        const int n_faces,
+        const double dt_max,
+        const double dt_window)
+    {
+        double dt = dt_max;
+        for (int f = 0; f < n_faces; ++f) {
+            double lam = std::max(std::fabs(lam_hi_f[f]), std::fabs(lam_lo_f[f]));
+            double dt_f = 0;
+            if (lam < 1.0/1000000000000.0) {
+                dt_f = dt_max;
+            } else {
+                dt_f = (9.0/10.0)*inradius_f[f]/std::max((double)1.0/1000000000000.0, lam);
+            }
+            dt = std::min(dt, dt_f);
+        }
+        return dt;
+    }
+
+-- solver_reduce_dt resolved with coupled=True --
+
+    // D7: dt_window REPLACES the t_end clamp in coupled mode — never min-combined (that combination is a measured preCICE abort).  The choice is a BUILD-time IfStatic, not a runtime branch.  An all-dry domain yields dt = dt_max: zeroed lambda drops out of the min rather than spinning at dt = 0.
+    PORTABLE_FN static inline double solver_reduce_dt(
+        const double* lam_lo_f,
+        const double* lam_hi_f,
+        const double* inradius_f,
+        const int n_faces,
+        const double dt_max,
+        const double dt_window)
+    {
+        double dt = dt_window;
+        for (int f = 0; f < n_faces; ++f) {
+            double lam = std::max(std::fabs(lam_hi_f[f]), std::fabs(lam_lo_f[f]));
+            double dt_f = 0;
+            if (lam < 1.0/1000000000000.0) {
+                dt_f = dt_max;
+            } else {
+                dt_f = (9.0/10.0)*inradius_f[f]/std::max((double)1.0/1000000000000.0, lam);
+            }
+            dt = std::min(dt, dt_f);
+        }
+        return dt;
+    }
+
+    // The ONE While in the design.  Carry = the march state; the final write is the post-loop shell block.
+    PORTABLE_FN static inline void solver_march(
+        const double* Q,
+        const double* Qaux,
+        const double t_end,
+        const double dt,
+        const double write_interval)
+    {
+        double time = 0;
+        int iteration = 0;
+        int i_snapshot = 0;
+        while (time < t_end) {
+            time = dt + time;
+            iteration = iteration + 1;
+            if (time >= write_interval*(i_snapshot + 1)) {
+                i_snapshot = i_snapshot + 1;
+            }
+        }
+        solver_write_fields(Q, Qaux, time, i_snapshot);
+    }
