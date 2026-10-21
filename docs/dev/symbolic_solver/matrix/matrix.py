@@ -12,6 +12,7 @@ BACKEND: jax foam amrex numpy.  CASE: C1 ... C36 (cases.py).  CONFIG: serial
 import functools
 import json
 import os
+import re
 import subprocess
 import sys
 import time as clock
@@ -65,7 +66,8 @@ def _rank0():
 
 def run(backend, case, config="serial", force=False):
     b = BACKENDS[backend]()
-    runs = [r for r in CASES[case][1] if backend in r.backends and config in r.configs]
+    runs = [r for r in CASES[case][1] if backend in r.backends and config in r.configs
+            and re.search(os.environ.get("MATRIX_ONLY", ""), r.key)]
     if config not in b.configs or not runs:
         print(f"{backend} {config} {case}: n/a")
         return
