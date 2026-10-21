@@ -44,7 +44,7 @@ FILTERS = {
     "component": ("model", "system-model", "numerical-system-model", "solver",
                   "printer", "mesh"),
     "method": ("fv", "lsq", "mood", "imex", "chorin"),
-    "feature": ("ad", "mpi", "gpu", "coupling"),
+    "feature": ("ad", "mpi", "gpu", "coupling", "function-hook"),
     "backend": ("numpy", "jax", "foam", "amrex"),
 }
 # Metadata for the test harness, not a filter.

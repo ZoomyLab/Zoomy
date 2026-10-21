@@ -7,12 +7,12 @@ Executable notebooks from `tutorials/`.  Each menu filters one category: a noteb
 <div class="zt-filter">
 <label class="zt-field"><span class="zt-cat">type</span><select class="zt-select" data-cat="type">
 <option value="">any</option>
-<option value="type:tutorial">tutorial (12)</option>
+<option value="type:tutorial">tutorial (13)</option>
 <option value="type:use-case" disabled>use-case (0)</option>
 </select></label>
 <label class="zt-field"><span class="zt-cat">dimension</span><select class="zt-select" data-cat="dimension">
 <option value="">any</option>
-<option value="dimension:1d">1d (10)</option>
+<option value="dimension:1d">1d (11)</option>
 <option value="dimension:2d">2d (2)</option>
 <option value="dimension:3d" disabled>3d (0)</option>
 </select></label>
@@ -20,16 +20,16 @@ Executable notebooks from `tutorials/`.  Each menu filters one category: a noteb
 <option value="">any</option>
 <option value="physics:viscous">viscous (2)</option>
 <option value="physics:inviscid">inviscid (8)</option>
-<option value="physics:hydrostatic">hydrostatic (10)</option>
+<option value="physics:hydrostatic">hydrostatic (11)</option>
 <option value="physics:non-hydrostatic" disabled>non-hydrostatic (0)</option>
 <option value="physics:compressible" disabled>compressible (0)</option>
 <option value="physics:incompressible">incompressible (10)</option>
-<option value="physics:free-surface">free-surface (10)</option>
+<option value="physics:free-surface">free-surface (11)</option>
 </select></label>
 <label class="zt-field"><span class="zt-cat">component</span><select class="zt-select" data-cat="component">
 <option value="">any</option>
 <option value="component:model">model (5)</option>
-<option value="component:system-model">system-model (5)</option>
+<option value="component:system-model">system-model (6)</option>
 <option value="component:numerical-system-model">numerical-system-model (5)</option>
 <option value="component:solver">solver (6)</option>
 <option value="component:printer">printer (2)</option>
@@ -49,11 +49,12 @@ Executable notebooks from `tutorials/`.  Each menu filters one category: a noteb
 <option value="feature:mpi" disabled>mpi (0)</option>
 <option value="feature:gpu" disabled>gpu (0)</option>
 <option value="feature:coupling" disabled>coupling (0)</option>
+<option value="feature:function-hook">function-hook (1)</option>
 </select></label>
 <label class="zt-field"><span class="zt-cat">backend</span><select class="zt-select" data-cat="backend">
 <option value="">any</option>
 <option value="backend:numpy">numpy (4)</option>
-<option value="backend:jax">jax (2)</option>
+<option value="backend:jax">jax (3)</option>
 <option value="backend:foam" disabled>foam (0)</option>
 <option value="backend:amrex">amrex (2)</option>
 </select></label>
@@ -133,6 +134,18 @@ Executable notebooks from `tutorials/`.  Each menu filters one category: a noteb
 `tutorials/ad/forward_ad.ipynb`
 +++
 <span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:1d</span> <span class="zt-tag">physics:inviscid</span> <span class="zt-tag">physics:hydrostatic</span> <span class="zt-tag">physics:incompressible</span> <span class="zt-tag">physics:free-surface</span> <span class="zt-tag">component:solver</span> <span class="zt-tag">method:fv</span> <span class="zt-tag">feature:ad</span> <span class="zt-tag">backend:jax</span>
+:::
+
+:::{grid-item-card} Function hooks
+:class-card: zt-card
+:link: ipynb/hooks/function_hook
+:link-type: doc
+
+<span class="zt-data" data-tags="type:tutorial dimension:1d physics:hydrostatic physics:free-surface component:system-model feature:function-hook backend:jax requires:cpu"></span>Manning friction of a 1-D shallow-water model supplied as a JAX function through the solver setting functions.
+
+`tutorials/hooks/function_hook.ipynb`
++++
+<span class="zt-tag">type:tutorial</span> <span class="zt-tag">dimension:1d</span> <span class="zt-tag">physics:hydrostatic</span> <span class="zt-tag">physics:free-surface</span> <span class="zt-tag">component:system-model</span> <span class="zt-tag">feature:function-hook</span> <span class="zt-tag">backend:jax</span>
 :::
 
 :::{grid-item-card} Model and SystemModel
@@ -226,7 +239,7 @@ Tags are `category:value`; an unknown tag or a missing `type` fails the build.  
 - `physics:` viscous / inviscid / hydrostatic / non-hydrostatic / compressible / incompressible / free-surface
 - `component:` model / system-model / numerical-system-model / solver / printer / mesh
 - `method:` fv / lsq / mood / imex / chorin
-- `feature:` ad / mpi / gpu / coupling
+- `feature:` ad / mpi / gpu / coupling / function-hook
 - `backend:` numpy / jax / foam / amrex
 
 `requires:` cpu / gpu / mpi / container is no filter.  It tells the test harness what the notebook needs (default `requires:cpu`): `pytest tests/tutorials -m tutorial` executes every notebook that needs only the CPU and reports the others as skipped.
