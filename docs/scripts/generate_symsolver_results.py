@@ -102,8 +102,7 @@ def render_matrix():
     path = RESULTS / "matrix_latest.json"
     if not path.exists():
         return ("Not yet measured: no `tests/results/symsolver/matrix_latest.json`. "
-                "Run the matrix and `generate_symsolver_results.py --from-store` "
-                "(see below).\n")
+                "Run the matrix and `generate_symsolver_results.py --from-store`.\n")
     data = json.loads(path.read_text())
     rows = data["rows"]
     count = defaultdict(lambda: defaultdict(int))     # (case, backend) -> verdict -> n
@@ -135,15 +134,15 @@ def render_matrix():
         f"**{total['PASS']} PASS, {total['FAIL']} FAIL** "
         f"({total['info']} information rows, {total['n/a']} n/a, "
         f"{total['unsupported']} unsupported).  "
-        f"Last run {data.get('last_run') or '?'}; library commits: {libs or '?'}; "
-        f"rendered from `matrix_latest.json` of {data['generated'][:10]}.",
+        f"Last run {data.get('last_run') or '?'}.  Library commits: {libs or '?'}.  "
+        f"Rendered from `matrix_latest.json` of {data['generated'][:10]}.",
         "",
         "A cell counts the checks of a case on a backend over every config "
         "(serial, MPI, GPU).  Case setups and pass criteria: "
-        f"[matrix README]({README}#cases-and-pass-criteria); every row: "
+        f"[matrix README]({README}#cases-and-pass-criteria).  Every row: "
         f"[table.md]({GITHUB}/docs/dev/symbolic_solver/matrix/table.md).  `-`: no check "
         "of its own on that backend (JAX is the reference, or the runs are counted "
-        "under C6 / C7 / C9).",
+        "under C6, C7 and C9).",
         "",
         "| case | setup | " + " | ".join(BACKENDS) + " |",
         "|---|---|" + "---|" * len(BACKENDS),

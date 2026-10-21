@@ -25,23 +25,20 @@ See the [Zoomy documentation](https://zoomylab.github.io/Zoomy/) for the user gu
 
 ## Backends
 
-Zoomy's symbolic layer compiles to several solver backends. NumPy, JAX, AMReX and OpenFOAM share one page in the documentation: [Solver backends](https://zoomylab.github.io/Zoomy/guide/backends.html). The prototypes have their own:
-
-- [Firedrake](https://zoomylab.github.io/Zoomy/backends/firedrake.html)
-- [PETSc DMPlex](https://zoomylab.github.io/Zoomy/backends/dmplex.html)
-- [FEniCSx](https://zoomylab.github.io/Zoomy/backends/fenicsx.html)
-
-Note: Many backends are in an very early development status. If you are interested in a particular solver and you find no information, please contact us.
+Zoomy's symbolic layer compiles to several solver backends. NumPy, JAX, AMReX and OpenFOAM share one page in the documentation: [Solver backends](https://zoomylab.github.io/Zoomy/guide/backends.html).
 
 ## Testing
 
-CI test reports for each backend are published with the docs site: see [CI Reports](https://zoomylab.github.io/Zoomy/developer/ci-reports.html).
+The test matrix, the timings and the CI status are on the [Tests](https://zoomylab.github.io/Zoomy/developer/tests.html) page of the documentation.
 
 ## License
 
 The Zoomy source code is free open-source software, licensed under version 3 or later of the GNU Lesser General Public License (LGPLv3+). See [LICENSE](LICENSE) for full copying permissions.
 
 ## Citation
+
+<!-- cite-start -->
+**BibTeX**
 
 ```bibtex
 @misc{steldermann_dimensionally_2025,
@@ -53,8 +50,13 @@ The Zoomy source code is free open-source software, licensed under version 3 or 
 	doi          = {10.3929/ETHZ-B-000727194},
 	url          = {http://hdl.handle.net/20.500.11850/727194},
 }
-
 ```
+
+**Plain text**
+
+Steldermann, I., Bünning, J., Pummer, E., Kowalski, J. (2025). Dimensionally Reduced Shallow Moment Simulations of a Pumped-Storage Plant Tunnel System. ETH Zurich. Edited by E. Pummer and I. Albayrak. https://doi.org/10.3929/ETHZ-B-000727194
+
+<!-- cite-end -->
 
 ## Zoomy or Shallow Moment Method related publication
 

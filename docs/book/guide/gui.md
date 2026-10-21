@@ -24,5 +24,3 @@ Launch the Zoomy GUI in your browser.
 
 A `zoomy-server` on your own machine at `http://localhost:8080` connects without a tunnel or certificate ([Backends](backends.md)).
 For another machine, forward the port (`ssh -L 8080:localhost:8080 ...`) or serve it over HTTPS.
-
-How the GUI is built: [developer guide](../developer/gui.md).

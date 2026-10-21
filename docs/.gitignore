@@ -1,6 +1,4 @@
 book/_build/
-book/_static/pytest-report-small-*.html
-book/_static/pytest-report-large-*.html
 book/tutorials/ipynb/
 jupyterlite/wheels/
 book/examples/work_*/
