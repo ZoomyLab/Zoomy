@@ -37,7 +37,9 @@ if [ -f "$PREFIX/lib/$LIB" ]; then echo "$PREFIX exists"; exit 0; fi
 mkdir -p "$CACHE"
 TAR=$CACHE/hypre-$VER.tar.gz
 if [ ! -f "$TAR" ]; then
-    curl -fsSL "https://github.com/hypre-space/hypre/archive/refs/tags/v$VER.tar.gz" -o "$TAR.part"
+    URL="https://github.com/hypre-space/hypre/archive/refs/tags/v$VER.tar.gz"
+    if command -v curl > /dev/null; then curl -fsSL "$URL" -o "$TAR.part"
+    else wget -q "$URL" -O "$TAR.part"; fi       # the images have wget, not curl
     mv "$TAR.part" "$TAR"
 fi
 WORK=$(mktemp -d "$CACHE/build-hypre-$VARIANT.XXXXXX")
