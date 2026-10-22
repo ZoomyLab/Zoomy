@@ -13,10 +13,10 @@ Tags are `category:value`; an unknown tag or a missing `type` fails the build.  
 - `type:` tutorial / use-case (required)
 - `dimension:` 1d / 2d / 3d
 - `physics:` viscous / inviscid / hydrostatic / non-hydrostatic / compressible / incompressible / free-surface
-- `component:` model / system-model / numerical-system-model / solver / printer / mesh
-- `method:` fv / lsq / mood / imex / chorin
-- `feature:` ad / mpi / gpu / coupling / function-hook
-- `backend:` numpy / jax / foam / amrex
+- `component:` model / system-model / numerical-system-model / solver / code-generation / mesh
+- `method:` finite-volume / limiting / implicit-explicit / predictor-corrector
+- `feature:` automatic-differentiation / parallel / gpu / coupling / function-hook
+- `backend:` numpy / jax / openfoam / amrex
 
 `requires:` cpu / gpu / mpi / container is no filter.  It tells the test harness what the notebook needs (default `requires:cpu`): `pytest tests/tutorials -m tutorial` executes every notebook that needs only the CPU and reports the others as skipped.
 

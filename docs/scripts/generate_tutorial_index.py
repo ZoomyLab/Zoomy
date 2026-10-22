@@ -45,10 +45,10 @@ FILTERS = {
     "physics": ("viscous", "inviscid", "hydrostatic", "non-hydrostatic",
                 "compressible", "incompressible", "free-surface"),
     "component": ("model", "system-model", "numerical-system-model", "solver",
-                  "printer", "mesh"),
-    "method": ("fv", "lsq", "mood", "imex", "chorin"),
-    "feature": ("ad", "mpi", "gpu", "coupling", "function-hook"),
-    "backend": ("numpy", "jax", "foam", "amrex"),
+                  "code-generation", "mesh"),
+    "method": ("finite-volume", "limiting", "implicit-explicit", "predictor-corrector"),
+    "feature": ("automatic-differentiation", "parallel", "gpu", "coupling", "function-hook"),
+    "backend": ("numpy", "jax", "openfoam", "amrex"),
 }
 # One colour (CSS hue) per category: chips, pills and card tags carry it as ``--zt-h``.
 HUES = {"type": 265, "dimension": 205, "physics": 165, "component": 32,

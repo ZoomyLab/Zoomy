@@ -44,7 +44,7 @@ A wrong value or a misspelt name raises an error that names the closest valid on
 | `pressure_linear_solver` | `LinearSolver.auto` | NumPy, JAX: `pyamg`, `amgx` on a GPU, or matrix-free `gmres` |
 | `linear_solver` | `LinearSolver.hypre` | OpenFOAM, AMReX: `hypre`, `gmres`, OpenFOAM also `schur_gamg` |
 
-Tutorials: {doc}`End to end: 1-D dam break <../tutorials/ipynb/components/end_to_end>`, {doc}`Chorin projection: a VAM channel <../tutorials/ipynb/vam/chorin_channel>`, {doc}`Function hooks <../tutorials/ipynb/hooks/function_hook>`.
+Tutorials: {doc}`End to end: 1-D dam break <../tutorials/ipynb/components/end_to_end>`, {doc}`Chorin projection: a VAM channel <../tutorials/ipynb/vam/chorin_channel>`, {doc}`Function hooks <../tutorials/ipynb/hooks/function_hook>`, {doc}`Derivatives of function hooks <../tutorials/ipynb/hooks/hook_derivatives>`.
 
 API: {doc}`zoomy_core.symsolver <../api/_autodoc2/zoomy_core/zoomy_core.symsolver>`,
 {doc}`zoomy_jax.symsolver <../api/_autodoc2/zoomy_jax/zoomy_jax.symsolver>`.
