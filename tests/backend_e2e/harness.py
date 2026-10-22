@@ -246,13 +246,14 @@ class Container:
         envfile.write_text("".join(f"{k}='{v}'\n" for k, v in self.env().items()))
         return cmd + ["--env-file", str(envfile), self.image, *args]
 
-    def _docker(self, args: list[str], detach=False, port=None) -> list[str]:
-        cmd = ["docker", "run", "--rm", "--cpuset-cpus", cpus(), "--name", self.name,
+    def _docker(self, args: list[str], detach=False) -> list[str]:
+        # the host network, as under apptainer: a coupled case's servers and preCICE
+        # participants in different containers reach each other at 127.0.0.1
+        cmd = ["docker", "run", "--rm", "--network", "host", "--cpuset-cpus", cpus(),
+               "--name", self.name,
                "--user", f"{os.getuid()}:{os.getgid()}"]       # bind-mounted files stay ours
         if detach:
             cmd.append("-d")
-        if port:
-            cmd += ["-p", f"127.0.0.1:{port}:8080"]
         if self.gpus:
             cmd += ["--gpus", f'"device={",".join(self.gpus)}"']
         for src, dst, mode in self.binds():
@@ -272,7 +273,7 @@ class Container:
         if self.rt == "apptainer":
             cmd = self._apptainer("run", ["server", self.backend.adapter, str(self.port)])
         else:
-            cmd = self._docker(["server", self.backend.adapter, "8080"], port=self.port)
+            cmd = self._docker(["server", self.backend.adapter, str(self.port)])
         with open(self.log, "w") as f:
             f.write(" ".join(cmd) + "\n")
             f.flush()

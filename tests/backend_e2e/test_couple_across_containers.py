@@ -77,8 +77,7 @@ def _tail(log: Path, n=25) -> str:
 @pytest.mark.parametrize("pair,config", _params())
 def test_couple_across_containers(pair, config, snap, report, request):
     if H.runtime() != "apptainer":
-        pytest.skip("two containers on the host network: apptainer (docker would need "
-                    "--network host for both, not wired)")
+        pytest.skip("apptainer only (docker shares the host network too, not tried here yet)")
     sides = PAIRS[pair]
     imgs = {}
     for b in sides:
