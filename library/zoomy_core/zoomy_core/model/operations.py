@@ -1787,8 +1787,14 @@ class _StripArgsLatexPrinter(_BracketLatexPrinter):
         # ``a(j, t, x) → a_j(t, x)`` — instead of falling through to the
         # unknown-shape ``a(j, t, x)`` form.  Basis ``φ`` / ``c`` were already
         # handled above by their ``_basis`` branch, so this only catches the
-        # genuine coefficient families.
+        # genuine coefficient families.  On the horizontal coordinates alone
+        # the arguments strip like ``f(t, x)``: ``q(0, t, x) → q_0``.
         if expr.args and getattr(expr.args[0], "is_integer", False):
+            if expr.args[1:] in ((self._t, self._x), (self._t, self._x, self._y)):
+                base = _append_subscript(
+                    self._deal_with_super_sub(expr.func.__name__),
+                    self._print(expr.args[0]))
+                return f"{base}^{{{exp}}}" if exp is not None else base
             return super()._print_Function(expr, exp=exp)
 
         name = expr.func.__name__

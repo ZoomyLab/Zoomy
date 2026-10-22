@@ -967,8 +967,11 @@ class Model(Configurable, SymbolicRegistrar):
     def mass_matrix(self):
         """Mass matrix `M[i, j]` = coefficient of `d_t Q[j]` in equation `i`, extracted
         from `time_derivative`-tagged terms. Rows without a time derivative (elliptic
-        constraints) are zero, so `M` is singular for such models.
+        constraints) are zero, so `M` is singular for such models. A model written as
+        operators (no equations) is `d_t Q + ... = S` by definition, so its `M` is the identity.
         """
+        if not self._equations:
+            return ZArray(sp.eye(self.n_variables))
         raw = self._extract_via_tag("time_derivative")
         if raw is None:
             return ZArray.zeros(self.n_variables, self.n_variables)
@@ -1263,7 +1266,13 @@ class Model(Configurable, SymbolicRegistrar):
 
 
 class ModelDescription:
-    """Markdown / plain-text rendering of a `Model` returned by `Model.describe`."""
+    """Markdown / plain-text rendering of a `Model` returned by `Model.describe`.
+
+    The rows are the model's own equations, else the rows of its derivation (`SME`, `MLVAM`,
+    ...; rows that are identically `0 = 0` left out), else the balance law of its operators
+    `M d_t Q + d_d (F + P) + B_d d_d Q - d_d (A d_e Q) - S = 0` (`SWE` and other models written
+    as `flux`, `source`, ...).
+    """
 
     def __init__(self, model, *, show_history=False, include_minor=False):
         """Store the model and the history options."""
@@ -1271,44 +1280,85 @@ class ModelDescription:
         self._show_history = show_history
         self._include_minor = include_minor
 
+    def _content(self):
+        """`(rows, state label, state, parameter source, history)` of the model."""
+        m = self._model
+        if m._equations:
+            rows = [(n, eq.expr) for n, eq in m._equations.items()]
+            return rows, "State $Q$", list(m.variables.values()), m, m.history
+        d = m.derivation
+        if d is not None:
+            rows = [(n, eq.expr) for n, eq in d._equations.items()
+                    if n not in d._aux_names and sp.sympify(eq.expr) != 0]
+            return rows, "Evolved fields", d.explicit_state(), d, d.history
+        return (self._operator_rows(m), "State $Q$", list(m.variables.values()),
+                m, m.history)
+
+    @staticmethod
+    def _operator_rows(m):
+        """One balance-law row per state variable of a model written as operators."""
+        Q = list(m.variables.values())
+        n, nd = len(Q), m.dimension
+        X = [m.position[k] for k in range(nd)]
+        M = sp.Array(m.mass_matrix()).reshape(n, n)
+        F = sp.Array(m.flux()).reshape(n, nd)
+        P = sp.Array(m.hydrostatic_pressure()).reshape(n, nd)
+        B = sp.Array(m.nonconservative_matrix()).reshape(n, n, nd)
+        A = sp.Array(m.diffusion_matrix()).reshape(n, n, nd, nd)
+        S = sp.Array(m.source()).reshape(n) + sp.Array(m.source_explicit()).reshape(n)
+        rows = []
+        for i, name in enumerate(m.variables.keys()):
+            terms = [M[i, j] * sp.Derivative(q, m.time) for j, q in enumerate(Q)]
+            for k, xk in enumerate(X):
+                terms.append(sp.Derivative(F[i, k] + P[i, k], xk))
+                terms += [B[i, j, k] * sp.Derivative(q, xk) for j, q in enumerate(Q)]
+                terms += [-sp.Derivative(A[i, j, k, e] * sp.Derivative(q, X[e]), xk)
+                          for j, q in enumerate(Q) for e in range(nd)
+                          if A[i, j, k, e] != 0]
+            terms.append(-S[i])
+            terms = [t for t in terms
+                     if not (t == 0 or isinstance(t, sp.Derivative) and t.expr == 0)]
+            rows.append((name, sp.Add(*terms, evaluate=False)))
+        return rows
+
+    def _history_entries(self, history):
+        """The history entries to show."""
+        return [h for h in history
+                if self._include_minor or h.get("level") != "minor"]
+
     # ── Jupyter LaTeX path ──────────────────────────────────────────
     def _repr_markdown_(self):
         """Markdown with LaTeX equations for Jupyter."""
+        from zoomy_core.model.operations import _StripArgsLatexPrinter
         m = self._model
-        n_eq = len(m._equations)
-        n_ops = len(m.history)
+        rows, state_label, state, owner, history = self._content()
+        tex = _StripArgsLatexPrinter(
+            settings={"order": "none", "diff_operator": r"\partial"}).doprint
+        n_eq, n_ops = len(rows), len(history)
         parts = [
             f"**{type(m).__name__}** `{m.name}` — "
             f"{n_eq} equation{'s' if n_eq != 1 else ''}, "
             f"{n_ops} op{'s' if n_ops != 1 else ''}"
         ]
-        # State + parameters one-line summaries (only if non-empty).
-        if hasattr(m, "variables") and m.variables.length():
-            state_syms = ", ".join(
-                f"${sp.latex(v)}$" for v in m.variables.values()
-            )
-            parts.append(f"**State $Q$:** {state_syms}")
-        if hasattr(m, "parameters") and m.parameters.length():
+        if state:
+            parts.append(f"**{state_label}:** "
+                         + ", ".join(f"${tex(v)}$" for v in state))
+        if owner.parameters.length():
             param_kv = ", ".join(
-                f"${sp.latex(m.parameters[k])} = "
-                f"{getattr(m.parameter_values, k, '?')}$"
-                for k in m.parameters.keys()
+                f"${sp.latex(owner.parameters[k])} = "
+                f"{getattr(owner.parameter_values, k, '?')}$"
+                for k in owner.parameters.keys()
             )
             parts.append(f"**Parameters:** {param_kv}")
-        # Equations as LaTeX, one per line.
-        if n_eq:
+        if rows:
             parts.append("**Equations:**")
-            for name, eq in m._equations.items():
-                latex = sp.latex(eq.expr)
+            for name, expr in rows:
                 parts.append(
-                    f"- `{name}`: $\\displaystyle {latex} \\;=\\; 0$"
+                    f"- `{name}`: $\\displaystyle {tex(expr)} \\;=\\; 0$"
                 )
-        # Optional history.
-        if self._show_history and m.history:
+        if self._show_history and history:
             parts.append("**History:**")
-            for h in m.history:
-                if not self._include_minor and h.get("level") == "minor":
-                    continue
+            for h in self._history_entries(history):
                 desc = (f" — {h['description']}"
                         if h.get("description") else "")
                 parts.append(
@@ -1320,17 +1370,16 @@ class ModelDescription:
     def __str__(self):
         """Plain-text fallback."""
         m = self._model
+        rows, _, _, _, history = self._content()
         lines = [f"{type(m).__name__}({m.name!r}) — "
-                 f"{len(m._equations)} equations, "
-                 f"{len(m.history)} ops"]
-        for name, eq in m._equations.items():
-            lines.append(f"  {name}  :  {eq.expr}  =  0")
-        if self._show_history and m.history:
+                 f"{len(rows)} equations, "
+                 f"{len(history)} ops"]
+        for name, expr in rows:
+            lines.append(f"  {name}  :  {expr}  =  0")
+        if self._show_history and history:
             lines.append("")
             lines.append("history:")
-            for h in m.history:
-                if not self._include_minor and h.get("level") == "minor":
-                    continue
+            for h in self._history_entries(history):
                 desc = (f" — {h['description']}"
                         if h.get("description") else "")
                 lines.append(f"  [{h['op']}] target={h['target']}{desc}")
@@ -1339,4 +1388,3 @@ class ModelDescription:
     def __repr__(self):
         """Same as `str`."""
         return self.__str__()
-

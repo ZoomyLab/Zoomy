@@ -23,7 +23,9 @@ It has no mesh and no numerics.
 The equations come in one of two forms.
 
 - **Operators**: the model overrides `flux`, `nonconservative_matrix`, `source`, `diffusion_matrix`, ... (`SWE`).
-- **Derived rows**: `derive_model` builds the equations symbolically from a full system and an ansatz (`SME`, `VAM`, the multilayer models). `model.derivation.describe()` prints them.
+- **Derived rows**: `derive_model` builds the equations symbolically from a full system and an ansatz (`SME`, `VAM`, the multilayer models). `model.derivation.describe()` prints them with the derivation history.
+
+`model.describe()` prints the equations of either form.
 
 Closures live on the derived models: `closures=[...]` takes pieces of `zoomy_core.model.models.closures`.
 
