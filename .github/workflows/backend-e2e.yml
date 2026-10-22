@@ -96,13 +96,15 @@ jobs:
       - name: Host JAX (jax job - the image's, the host-vs-container comparison is exact only on one JAX build)
         if: steps.on.outputs.run == '1'
         run: |
+          # equinox: zoomy_jax's reverse AD (the host references of the AD matrix rows)
           if [ "${{ matrix.backend }}" = "jax" ]; then
-            v=$(docker run --rm --entrypoint /opt/conda/envs/zoomy/bin/python ghcr.io/zoomylab/zoomy_jax:latest \
-                  -c "import jax; print(jax.__version__)")
-            echo "image JAX $v"
-            python -m pip install "jax[cpu]==$v"
+            read -r v e < <(docker run --rm --entrypoint /opt/conda/envs/zoomy/bin/python \
+                  ghcr.io/zoomylab/zoomy_jax:latest \
+                  -c "import jax, equinox; print(jax.__version__, equinox.__version__)")
+            echo "image JAX $v, equinox $e"
+            python -m pip install "jax[cpu]==$v" "equinox==$e"
           else
-            python -m pip install "jax[cpu]"
+            python -m pip install "jax[cpu]" equinox
           fi
 
       - name: Backend e2e
