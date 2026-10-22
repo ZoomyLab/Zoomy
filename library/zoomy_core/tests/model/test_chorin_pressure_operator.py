@@ -80,6 +80,12 @@ def _reconstruct(op, smp, aux_of, ndim, k):
     return rec
 
 
+def _value(rng):
+    """A probe value in (0, 1), never 1: the layer fraction `l_1 = 1` is a pole of ML_VAM
+    (`1 / (h - l_1 h)`)."""
+    return sp.Rational(rng.randint(2, 9), rng.choice((11, 13)))
+
+
 def _verify(model, seed=0):
     """Run all three REQ-94 checks for one chorin-split model."""
     smp = model.chorin_split().SM_press
@@ -102,8 +108,9 @@ def _verify(model, seed=0):
     rng = random.Random(seed)
     p_syms = set(op.P_modes)
     d_syms = set(aux_of.values())
-    all_syms = set().union(*[_row_scalar(smp, k).free_symbols
-                             for k in range(NP)])
+    # sorted: the probe cell must not depend on the hash seed
+    all_syms = sorted(set().union(*[_row_scalar(smp, k).free_symbols
+                                    for k in range(NP)]), key=str)
 
     # ── (1) reconstruction == source, every row ──
     # Evaluated at a random concrete cell (pressure modes + derivative aux
@@ -112,8 +119,7 @@ def _verify(model, seed=0):
     # == 0`` is NOT a decision procedure and is hash-order dependent for the
     # larger ML_VAM residuals (see check (2) below), so certify the true-zero
     # numerically instead — deterministic and cache-independent.
-    probe_all = {s: sp.Rational(rng.randint(2, 9), rng.randint(1, 5))
-                 for s in all_syms}
+    probe_all = {s: _value(rng) for s in all_syms}
     for k in range(NP):
         rec = _reconstruct(op, smp, aux_of, ndim, k)
         diff = sp.N(sp.expand(_row_scalar(smp, k) - rec).xreplace(probe_all))
@@ -122,8 +128,7 @@ def _verify(model, seed=0):
 
     # ── (2) A0 == matrix-free probe at a random concrete cell ──
     frozen = [s for s in all_syms if s not in p_syms and s not in d_syms]
-    subs0 = {s: sp.Rational(rng.randint(2, 9), rng.randint(1, 5))
-             for s in frozen}
+    subs0 = {s: _value(rng) for s in frozen}
     subs0.update({s: 0 for s in p_syms})
     subs0.update({s: 0 for s in d_syms})
     for k in range(NP):
