@@ -4,6 +4,7 @@ Sets the process-global JAX float precision (x64 by default) and the persistent 
 """
 
 import os
+import platform
 
 import jax  # type: ignore[reportMissingImports]
 
@@ -38,7 +39,7 @@ jax.config.update("jax_enable_x64", ZOOMY_JAX_ENABLE_X64)
 # disables.
 if _env_on("ZOOMY_JAX_COMPILATION_CACHE") and not os.environ.get(
         "JAX_COMPILATION_CACHE_DIR") and not jax.config.jax_compilation_cache_dir:
-    _host = os.uname().nodename or "unknown-host"
+    _host = platform.node() or "unknown-host"          # os.uname does not exist on Windows
     _xla_cache = os.path.expanduser(
         os.environ.get("ZOOMY_JAX_COMPILATION_CACHE_DIR",
                        os.path.join("~/.cache/zoomy/xla", _host)))

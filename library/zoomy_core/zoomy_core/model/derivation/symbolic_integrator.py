@@ -86,10 +86,14 @@ class SymbolicIntegrator:
 
     def _integrate_sympy_timed(self, expr, var, a, b):
         """`sympy.integrate` under a SIGALRM wall-clock timeout."""
-        if self.integral_timeout is None:
-            return sp_integrate(expr, (var, a, b))
-
         import signal
+        import threading
+
+        # SIGALRM exists only on POSIX and only in the main thread: elsewhere (Windows, a
+        # worker thread) the integral runs without the wall-clock limit
+        if (self.integral_timeout is None or not hasattr(signal, "SIGALRM")
+                or threading.current_thread() is not threading.main_thread()):
+            return sp_integrate(expr, (var, a, b))
 
         def _handler(signum, frame):
             """SIGALRM handler raising `TimeoutError`."""
