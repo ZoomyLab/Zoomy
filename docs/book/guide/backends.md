@@ -31,6 +31,7 @@ A distributed run passes `comm=MPI.COMM_WORLD` under `mpiexec`, one GPU per rank
 `mpiexec -n 4 python -m zoomy_jax.gpurank run.py`.
 `ad_mode` selects forward or reverse differentiation through the time loop.
 Tutorials: {doc}`forward-mode AD <../tutorials/ipynb/ad/forward_ad>`, {doc}`reverse-mode AD <../tutorials/ipynb/ad/reverse_ad>`.
+Sensitivities of a bump, one tutorial per method: {doc}`finite differences <../tutorials/ipynb/ad/bump_finite_differences>`, {doc}`forward-mode AD <../tutorials/ipynb/ad/bump_forward_ad>`, {doc}`reverse-mode AD with the bed gradient <../tutorials/ipynb/ad/bump_reverse_ad>`.
 
 ## AMReX
 

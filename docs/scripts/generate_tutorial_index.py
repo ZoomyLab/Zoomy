@@ -47,7 +47,8 @@ FILTERS = {
     "component": ("model", "system-model", "numerical-system-model", "solver",
                   "code-generation", "mesh"),
     "method": ("finite-volume", "limiting", "implicit-explicit", "predictor-corrector"),
-    "feature": ("automatic-differentiation", "parallel", "gpu", "coupling", "function-hook"),
+    "feature": ("sensitivity", "automatic-differentiation", "parallel", "gpu", "coupling",
+                "function-hook"),
     "backend": ("numpy", "jax", "openfoam", "amrex"),
 }
 # One colour (CSS hue) per category: chips, pills and card tags carry it as ``--zt-h``.
