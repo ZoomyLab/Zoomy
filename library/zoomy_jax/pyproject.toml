@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zoomy-jax"
-version = "0.1.1"
+version = "0.1.2"
 description = "JAX solver backend for the Zoomy simulation framework."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -35,7 +35,7 @@ dependencies = [
   "attrs",                   # fvm/precice_solver.py
 
   # the pure-Python core: models, symbolic derivation, mesh, NumPy solvers
-  "zoomy-core>=0.2.18",
+  "zoomy-core>=0.2.19",
 ]
 
 [project.optional-dependencies]
