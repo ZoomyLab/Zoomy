@@ -260,7 +260,12 @@ class Model(Configurable, SymbolicRegistrar):
         symbols = cls._state_layout(**params)
         if symbols is None:
             from zoomy_core.systemmodel import SystemModel
-            symbols = list(SystemModel.from_model(cls(**params)).state)
+            try:
+                symbols = list(SystemModel.from_model(cls(**params)).state)
+            except Exception as e:
+                e.add_note(f"{cls.__name__}.state derives the model to read its state: pass the same "
+                           "arguments as for the model itself (closures, level, dimension).")
+                raise
         return FieldSymbols(symbols, names=names)
 
     @classmethod
