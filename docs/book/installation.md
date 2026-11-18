@@ -53,6 +53,9 @@ First JAX notebook: {doc}`2-D bump, NumPy and JAX <tutorials/ipynb/swe/bump_2d>`
 by automatic differentiation: the tutorials tagged
 <a href="tutorials/index.html#feature=sensitivity">sensitivity</a>.
 
+Results in [ParaView](https://www.paraview.org): `pip install zoomy-prepost`, then
+{doc}`ParaView output of the 2-D bump <tutorials/ipynb/swe/bump_2d_paraview>`.
+
 JAX on an NVIDIA GPU (Linux, on Windows inside WSL2):
 
 ```bash

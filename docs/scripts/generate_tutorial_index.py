@@ -45,7 +45,7 @@ FILTERS = {
     "physics": ("viscous", "inviscid", "hydrostatic", "non-hydrostatic",
                 "compressible", "incompressible", "free-surface"),
     "component": ("model", "system-model", "numerical-system-model", "solver",
-                  "code-generation", "mesh"),
+                  "code-generation", "mesh", "post-processing"),
     "method": ("finite-volume", "limiting", "implicit-explicit", "predictor-corrector"),
     "feature": ("sensitivity", "automatic-differentiation", "parallel", "gpu", "coupling",
                 "function-hook"),

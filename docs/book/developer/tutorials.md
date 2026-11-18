@@ -13,7 +13,7 @@ Tags are `category:value`; an unknown tag or a missing `type` fails the build.  
 - `type:` tutorial / use-case (required)
 - `dimension:` 1d / 2d / 3d
 - `physics:` viscous / inviscid / hydrostatic / non-hydrostatic / compressible / incompressible / free-surface
-- `component:` model / system-model / numerical-system-model / solver / code-generation / mesh
+- `component:` model / system-model / numerical-system-model / solver / code-generation / mesh / post-processing
 - `method:` finite-volume / limiting / implicit-explicit / predictor-corrector
 - `feature:` sensitivity / automatic-differentiation / parallel / gpu / coupling / function-hook
 - `backend:` numpy / jax / openfoam / amrex
