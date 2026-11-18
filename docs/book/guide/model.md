@@ -77,19 +77,46 @@ An option given as a plain string raises with the typed value to use (`stress="f
 
 ## Boundary conditions
 
-`zoomy_core.model.boundary_conditions`, each on one mesh tag, collected in `BoundaryConditions([...])`.
+`zoomy_core.model.boundary_conditions`, each on one mesh tag, given as a list to the model (`boundary_conditions=[...]`) or attached later with `sm.attach_boundary_conditions([...])`.
 
 | class | meaning |
 |---|---|
 | `Wall(tag)` | reflecting free-slip wall |
 | `FromModel(tag, definition="wall")` | a boundary the model derives, for example the free-slip wall of every moment |
-| `Dirichlet(tag, on=field, value=v)` | prescribed value of a field |
+| `Dirichlet(tag, on=field, value=v)` | prescribed value of a field, a number or an expression in the model's symbols |
 | `Flux(tag, on=field, gradient=g)` | prescribed normal gradient |
 | `Extrapolation(tag)` | zero gradient, transmissive |
-| `InflowOutflow(tag, prescribe_fields={...})` | prescribe some fields, extrapolate the rest |
+| `InflowOutflow(tag, prescribe_fields={field: v})` | prescribe some fields, extrapolate the rest, `InletOutlet(v)` or `Blend(target, weight)` per field |
 | `Periodic(tag, periodic_to_physical_tag=partner)` | periodic pair |
-| `Lambda(tag, prescribe_fields={...})` | face values from a user function |
+| `Lambda(tag, prescribe_fields={field: f})` | face values from a user function `f(t, X, dX, Q, Qaux, p, n)` |
 | `Coupled(tag)` | preCICE interface, see [Backends](backends.md) |
+
+## Fields and parameters by symbol
+
+A field or parameter can be named by its symbol. `SME.state(level=0, dimension=2)` gives the state symbols before the model exists, `sm.fields` after (`.momentum` is the group of momentum components, `names=("b", "h", "hu")` adds aliases). `sm.parameters` holds the parameter symbols. Row numbers and field names keep working, symbols are recommended: a symbol that is not in the state fails at once, a row number silently means another field after a model change.
+
+```python
+s = SME.state(level=0, dimension=2)                 # b, h, q_0
+model = SME(level=0, dimension=2, parameters={"n": 0.03, "h_tail": 0.6}, closures=[...],
+            boundary_conditions=[Dirichlet("left", on=s.q_0, value=0.5),
+                                 Dirichlet("right", on=s.h, value=sp.Symbol("h_tail") - s.b)])
+```
+
+| use case | by row or name | by symbol |
+|---|---|---|
+| fix a field | `Dirichlet("left", on="q_0", value=0.5)` | `Dirichlet("left", on=s.q_0, value=0.5)` |
+| value from other fields, time, position | `Lambda("right", prescribe_fields={1: lambda t, X, dX, Q, Qaux, p, n: 0.6 - Q[0]})` | `Dirichlet("right", on=s.h, value=0.6 - s.b)` |
+| value with a parameter | | `value=P.h_tail - s.b`, differentiable with respect to `h_tail` |
+| several fields | `InflowOutflow("left", prescribe_fields={2: 0.5})` | `InflowOutflow("left", prescribe_fields={s.q_0: 0.5})` |
+| all momentum components | `on="momentum"` | `on=s.momentum` |
+| wall vectors | `Wall("w", momentum_field_indices=[[2, 3]])` | `Wall("w", momentum_field_indices=[[s.q_x_0, s.q_y_0]])` |
+| far field | `CharacteristicFarField("r", far_field=[0.0, 1.0, 0.0])` | `far_field={s.h: 1.0}`, unnamed fields 0 |
+| initial state | `IC.UserFunction(lambda x: np.array([0.0, h(x), 0.0]))` | `IC.UserFunction(lambda x: {s.h: h(x)})`, unnamed fields 0 |
+| read a result | `Q[1]` | `Q[s.slot(s.h)]` |
+| set a parameter | `p = solver.parameters.at[5].set(0.04)` | `solver.run(Q, A, parameters={P.n: 0.04})`, the rest from the model |
+| derivative | | `jax.grad(lambda v: J(solver.run(Q, A, parameters={P.n: v}).Q))(solver.parameters[P.n])` |
+
+`solver.run` returns `(time, Q, Qaux)` with the names `.time`, `.Q`, `.Qaux`.
 
 Tutorial: {doc}`Model and SystemModel <../tutorials/ipynb/components/model_system_model>`.
 
