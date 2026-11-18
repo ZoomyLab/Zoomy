@@ -1707,6 +1707,9 @@ class GenericCppModel(GenericCppBase):
                 name, "the system has no aux variables; nothing to initialize.")
         X = sp.Array([sp.Symbol(f"_ICX{i}", real=True) for i in range(3)])
         params = list(sm.parameters.values())
+        if hasattr(ic, "bind_state"):
+            state = sm.state if ic is sm.initial_conditions else sm.aux_state
+            ic.bind_state([str(s) for s in state])
         expr = ic.get_definition(X, sp.Array(params), n)
         if len(sp.flatten(expr)) == 0 or all(e == 0 for e in sp.flatten(expr)):
             return self._doc_note(

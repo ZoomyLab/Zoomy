@@ -402,7 +402,7 @@ def initial_state(mesh, model):
     nc = int(mesh.n_inner_cells)
     Q = np.zeros((len(sm.state), nc))
     if sm.initial_conditions is not None:
-        Q = sm.initial_conditions.apply(np.asarray(mesh.cell_centers)[:, :nc], Q)
+        Q = sm.initial_conditions.bind_state([str(s) for s in sm.state]).apply(np.asarray(mesh.cell_centers)[:, :nc], Q)
     return np.asarray(Q, dtype=float)
 
 

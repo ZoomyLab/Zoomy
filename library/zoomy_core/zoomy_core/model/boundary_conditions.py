@@ -149,9 +149,9 @@ class BoundaryCondition(param.Parameterized):
     """
 
     tag = param.String(default="bc")
-    on = param.String(default="all", doc=(
-        "Field/family/group this BC applies to ('h', 'q', 'q_0', 'momentum', "
-        "'all'); resolved against the model's declared state."))
+    on = param.Parameter(default="all", doc=(
+        "State field(s) this BC applies to: a state symbol (sm.fields.h), a list of "
+        "symbols or a group (sm.fields.momentum); default all fields."))
     face = param.Parameter(default=None, doc="BC supplying the `face` channel (None: this BC).")
     ghost = param.Parameter(default=None, doc="BC supplying the `ghost` channel (None: this BC).")
     normal_gradient = param.Parameter(
@@ -160,6 +160,12 @@ class BoundaryCondition(param.Parameterized):
     # Resolved slot indices this BC owns (None ⇒ all ⇒ no masking).  Set by
     # ``bind_on`` once the model state is known (see SystemModel.attach_*).
     _on_slots = None
+    # State field names in slot order, set by ``bind_on``; value expressions bind by name.
+    _state_names = None
+    #: Parameters whose dict keys are state fields (symbols, converted to slots by `bind_on`).
+    _slot_keyed = ()
+    #: Parameters holding lists of field groups (symbols, converted to slots by `bind_on`).
+    _slot_grouped = ()
     # True while this BC derives a value from its own face value (`_own_value`).
     _own_face = False
 
@@ -203,15 +209,58 @@ class BoundaryCondition(param.Parameterized):
         return bc
 
     def bind_on(self, state_names, aliases=None):
-        """Resolve `on` to the owned state-slot indices (None: all, no masking); called by
+        """Resolve `on` to the owned state-slot indices (None: all, no masking) and the field
+        keys of the slot-keyed parameters to slots; called by
         `SystemModel.attach_boundary_conditions`.
         """
-        on = self.on or "all"
-        if on in ("all", ""):
+        names = list(state_names)
+        self._state_names = names
+        on = self.on
+        if on is None or (isinstance(on, str) and on in ("all", "")):
             self._on_slots = None
         else:
-            self._on_slots = _resolve_on(
-                on, list(state_names), aliases or {"momentum": "q"})
+            self._on_slots = _resolve_on(on, names, aliases or {"momentum": "q"})
+        for attr in self._slot_keyed:
+            spec = getattr(self, attr)
+            if isinstance(spec, dict):
+                setattr(self, attr, {_slot_of(k, names, f"{type(self).__name__}.{attr}"): v
+                                     for k, v in spec.items()})
+        for attr in self._slot_grouped:
+            spec = getattr(self, attr)
+            if spec is not None:
+                setattr(self, attr, [[_slot_of(k, names, f"{type(self).__name__}.{attr}")
+                                      for k in group] for group in spec])
+
+    def _bind(self, expr, time, X, Q, Qaux, parameters):
+        """`expr` with its symbols bound by name to this kernel's state `Q`, aux, parameters,
+        time and position: a boundary value may be written in the model's symbols
+        (`0.52 - fields.b`, `P.h_tail`, `sm.time`)."""
+        expr = sympy.sympify(expr)
+        free = getattr(expr, "free_symbols", None)
+        if not free:
+            return expr
+        table = {str(time): time}
+        Qv = list(ZArray(Q))
+        for i, nm in enumerate(self._state_names or [str(s) for s in Qv]):
+            table[nm] = Qv[i]
+        for group in (Qaux, parameters, X):
+            if group is None:
+                continue
+            items = (group.items() if hasattr(group, "items")
+                     else ((str(s), s) for s in (group.get_list() if hasattr(group, "get_list") else group)))
+            for k, v in items:
+                table.setdefault(str(k), v)
+                if isinstance(v, sympy.Symbol):
+                    table.setdefault(v.name, v)
+        sub = {}
+        for s in free:
+            if s.name not in table:
+                raise ValueError(
+                    f"{type(self).__name__}(tag={self.tag!r}): unknown symbol {s.name!r} in a "
+                    f"boundary value; state: {self._state_names}, parameters, time and "
+                    "position symbols of the SystemModel are allowed")
+            sub[s] = table[s.name]
+        return expr.xreplace(sub)
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
         """Symbolic boundary value (the outer face state seen by the Riemann problem), assembled
@@ -322,7 +371,7 @@ class Dirichlet(BoundaryCondition):
     `Dirichlet("left", on="h", value=1.5)`.
     """
 
-    value = param.Number(default=0.0)
+    value = param.Parameter(default=0.0, doc="a number or an expression in the model's symbols")
     boundary_value_kind = BoundaryValueKind.face
 
     def __init__(self, tag=None, on=None, value=None, **params):
@@ -332,15 +381,20 @@ class Dirichlet(BoundaryCondition):
         super().__init__(tag=tag, on=on, **params)
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
-        """Symbolic boundary value: `value` in every slot."""
+        """Symbolic boundary value: `value` (a number or an expression in the model's symbols)
+        in every slot."""
         n = len(Q.get_list()) if hasattr(Q, "get_list") else len(Q)
         out = ZArray(Q)
+        v = self._bind(self.value, time, X, Q, Qaux, parameters)
         for i in range(n):
-            out[i] = self.value
+            out[i] = v
         return out
 
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
-        """Numpy boundary state: `value` in every slot."""
+        """Numpy boundary state: `value` in every slot (numbers only on this path)."""
+        if isinstance(self.value, sympy.Basic) and not self.value.is_number:
+            raise NotImplementedError("Dirichlet.face_value: an expression value needs the "
+                                      "codegen path (compute_boundary_condition)")
         return np.full(np.asarray(Q_inner, dtype=float).shape, float(self.value))
 
 
@@ -452,6 +506,23 @@ class Coupled(BoundaryCondition):
         return np.asarray(Q_inner, dtype=float).copy()
 
 
+class InletOutlet:
+    """`InflowOutflow` spec: `value` only where the field is positive (inflowing), else the
+    interior value."""
+
+    def __init__(self, value):
+        """Store the inflow `value`."""
+        self.value = value
+
+
+class Blend:
+    """`InflowOutflow` spec: a soft pull of the field towards `target` with `weight`."""
+
+    def __init__(self, target, weight):
+        """Store `target` and `weight`."""
+        self.target, self.weight = target, weight
+
+
 class InflowOutflow(BoundaryCondition):
     """Prescribe selected state fields, extrapolate the rest. `prescribe_fields` maps a state
     index to a value (scalar or expression) or to a dict with `mode` in `replace` (value),
@@ -460,6 +531,7 @@ class InflowOutflow(BoundaryCondition):
     """
 
     prescribe_fields = param.Dict(default={})
+    _slot_keyed = ("prescribe_fields",)
     boundary_value_kind = BoundaryValueKind.face
 
     @staticmethod
@@ -472,12 +544,19 @@ class InflowOutflow(BoundaryCondition):
         except (ValueError, TypeError):
             return float(eval(v))
 
-    def _symbolic_field(self, k, spec, Q):
-        """Symbolic ghost value of state index `k` for its spec."""
+    def _symbolic_field(self, k, spec, Q, bind=lambda v: v):
+        """Symbolic ghost value of state index `k` for its spec (a value, `InletOutlet` or
+        `Blend`)."""
         from zoomy_core.model.kernel_functions import conditional
 
+        if isinstance(spec, InletOutlet):
+            v = bind(self._coerce(spec.value))
+            return conditional(sympy.GreaterThan(Q[k], 0), v, Q[k])
+        if isinstance(spec, Blend):
+            target, weight = bind(self._coerce(spec.target)), bind(self._coerce(spec.weight))
+            return Q[k] + sympy.Max(0, target - Q[k]) * weight
         if not isinstance(spec, dict):
-            return self._coerce(spec)
+            return bind(self._coerce(spec))
         mode = spec.get("mode", "replace")
         if mode == "replace":
             return self._coerce(spec["value"])
@@ -496,8 +575,9 @@ class InflowOutflow(BoundaryCondition):
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
         """Symbolic boundary value with the prescribed fields replaced."""
         Qout = ZArray(Q)
+        bind = lambda v: self._bind(v, time, X, Q, Qaux, parameters)       # noqa: E731
         for k, spec in self.prescribe_fields.items():
-            Qout[k] = self._symbolic_field(k, spec, Q)
+            Qout[k] = self._symbolic_field(k, spec, Q, bind)
         return Qout
 
     def face_value(self, Q_inner, Qaux_inner, normal, d_face, time, parameters):
@@ -525,13 +605,15 @@ class Lambda(BoundaryCondition):
     `f(time, X, dX, Q, Qaux, p, n)` at the face centre.
     """
     prescribe_fields = param.Dict(default={})
+    _slot_keyed = ("prescribe_fields",)
     boundary_value_kind = BoundaryValueKind.face
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
         """Symbolic boundary value with the prescribed slots from the user functions."""
         Qout = ZArray(Q)
         for k, func in self.prescribe_fields.items():
-            Qout[k] = func(time, X, dX, Q, Qaux, parameters, normal)
+            Qout[k] = self._bind(func(time, X, dX, Q, Qaux, parameters, normal),
+                                 time, X, Q, Qaux, parameters)
         return Qout
 
 
@@ -600,6 +682,7 @@ class Characteristic(BoundaryCondition):
     prescribe_fields = param.Dict(default={}, doc="state_index → callable("
                                   "time, X, dX, Q, Qaux, p, n) for the "
                                   "TARGET state in that slot")
+    _slot_keyed = ("prescribe_fields",)
 
     def resolve(self, sm):
         """Bind the state symbols, normal symbols and eigensystem of `sm`."""
@@ -658,8 +741,14 @@ class CharacteristicFarField(Characteristic):
         """Far-field state vector (the inner state if `far_field` is None)."""
         if self.far_field is None:
             return ZArray(Q)
-        vals = (self.far_field(len(self._state_syms))
-                if callable(self.far_field) else self.far_field)
+        if isinstance(self.far_field, dict):              # {state symbol: value}, the rest 0
+            names = [str(s) for s in self._state_syms]
+            vals = [0.0] * len(names)
+            for key, v in self.far_field.items():
+                vals[_slot_of(key, names, "CharacteristicFarField.far_field")] = v
+        else:
+            vals = (self.far_field(len(self._state_syms))
+                    if callable(self.far_field) else self.far_field)
         target = ZArray(Q)
         for i, v in enumerate(vals):
             target[i] = v
@@ -754,6 +843,7 @@ class CharacteristicWall(_DerivedMomentumIndices, Characteristic):
     """
 
     momentum_field_indices = param.List(default=None, allow_None=True)
+    _slot_grouped = ("momentum_field_indices",)
 
     def target_state(self, time, X, dX, Q, Qaux, parameters, normal):
         """Inner state with the normal momentum of each group reflected."""
@@ -775,6 +865,7 @@ class FromData(BoundaryCondition):
     over `timeline`.
     """
     prescribe_fields = param.Dict(default={})
+    _slot_keyed = ("prescribe_fields",)
     timeline = param.Array(default=None)
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
@@ -827,6 +918,7 @@ class Wall(_DerivedMomentumIndices, BoundaryCondition):
     the model at resolve time, an explicit pin wins.
     """
     momentum_field_indices = param.List(default=None, allow_None=True)
+    _slot_grouped = ("momentum_field_indices",)
     permeability = param.Number(default=0.0)
     wall_slip = param.Number(default=1.0)
     blending = param.Number(default=0.0)
@@ -938,6 +1030,7 @@ class WindStress(BoundaryCondition):
 
     prescribe_values = param.Dict(default={})
     prescribe_gradients = param.Dict(default={})
+    _slot_keyed = ("prescribe_values", "prescribe_gradients")
 
     @staticmethod
     def _coerce(v):
@@ -1487,10 +1580,31 @@ def boundary_face_branches(mesh, bcs):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _slot_of(key, state_names, what):
+    """The state slot of a field key: a state symbol (by name) or, until the port, a slot."""
+    if isinstance(key, sympy.Symbol):
+        if key.name not in state_names:
+            raise ValueError(f"{what}: {key.name!r} is not a state field; fields: {state_names}")
+        return state_names.index(key.name)
+    if isinstance(key, (int, np.integer)) and not isinstance(key, bool):
+        return int(key)
+    raise TypeError(f"{what}: a field key must be a state symbol (sm.fields.h), "
+                    f"got {type(key).__name__} {key!r}")
+
+
 def _resolve_on(on, state_names, aliases):
-    """Resolve an `on` selector (`"all"`, field name, family base, alias) to state-slot
-    indices.
+    """Resolve an `on` selector (state symbol, list of symbols, group, `"all"`; until the port
+    also a field name, family base or alias) to state-slot indices.
     """
+    if isinstance(on, sympy.Symbol):
+        return [_slot_of(on, state_names, "boundary condition on=")]
+    if isinstance(on, (list, tuple)):
+        slots = []
+        for item in on:
+            for s in _resolve_on(item, state_names, aliases):
+                if s not in slots:
+                    slots.append(s)
+        return slots
     on = aliases.get(on, on)
     if on in ("all", "", None):
         return list(range(len(state_names)))

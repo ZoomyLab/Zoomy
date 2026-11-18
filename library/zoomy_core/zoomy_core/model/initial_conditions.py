@@ -41,8 +41,32 @@ def default_user_function(x: FArray) -> FArray:
 
 class InitialConditions(param.Parameterized):
     """Abstract base of initial conditions; subclasses implement `apply` and
-    `get_definition`.
+    `get_definition`. A state may be given as a full vector or as a mapping {field: value}
+    keyed by state symbols (`sm.fields.h`) or rows; unnamed fields are 0.
     """
+    _state_names = None
+
+    def bind_state(self, names):
+        """Bind the state field names (model order), so mappings keyed by symbols resolve;
+        called by the solvers before `apply`."""
+        self._state_names = list(names)
+        return self
+
+    def _row_values(self, vals, n, symbolic=False):
+        """`vals` as a full state of length `n`: a mapping {symbol | row: value} fills the
+        named rows (the rest 0), anything else passes through."""
+        if not isinstance(vals, dict):
+            return vals
+        from zoomy_core.model.boundary_conditions import _slot_of
+        names = self._state_names or [None] * n
+        out = [0] * n if symbolic else np.zeros(n)
+        for key, v in vals.items():
+            if isinstance(key, sp.Symbol) and self._state_names is None:
+                raise RuntimeError(f"{type(self).__name__}: a mapping keyed by symbols needs the "
+                                   "state names; set it as sm.initial_conditions")
+            out[_slot_of(key, names, type(self).__name__)] = v
+        return out
+
     def apply(self, X, Q):
         """Abstract: fill `Q` from `X`."""
         assert False, "InitialConditions is an abstract class."
@@ -59,10 +83,11 @@ class InitialConditions(param.Parameterized):
 
 class Constant(InitialConditions):
     """Spatially constant initial state given by `constants(n_variables)`."""
-    constants = param.Callable(default=default_constant_func)
+    constants = param.Parameter(default=default_constant_func)
 
     def __init__(self, constants=None, **params):
-        """Set `constants` (callable `n_variables -> state`) if given."""
+        """Set `constants` (callable `n_variables -> state`, or a mapping {field: value}) if
+        given."""
         if constants is not None:
             params["constants"] = constants
         super().__init__(**params)
@@ -75,14 +100,16 @@ class Constant(InitialConditions):
             The filled `Q`.
         """
         n_variables = Q.shape[0]
-        const_vals = self.constants(n_variables)
+        const_vals = self._row_values(self.constants if isinstance(self.constants, dict)
+                                      else self.constants(n_variables), n_variables)
         for i in range(Q.shape[1]):
             Q[:, i] = const_vals
         return Q
 
     def get_definition(self, X, p, n_variables):
         """Symbolic initial state `ZArray` of length `n_variables` for code generation."""
-        vals = self.constants(n_variables)
+        vals = self._row_values(self.constants if isinstance(self.constants, dict)
+                                else self.constants(n_variables), n_variables, symbolic=True)
         return ZArray(vals)
 
 
@@ -256,7 +283,8 @@ class RadialDambreak(InitialConditions):
 
 
 class UserFunction(InitialConditions):
-    """Initial state from a user callable `function(x) -> state` evaluated per cell."""
+    """Initial state from a user callable `function(x) -> state` evaluated per cell; the state
+    is a vector or a mapping {field: value} (fields by symbol or row, the rest 0)."""
     function = param.Callable(default=None)
 
     def __init__(self, function=None, **params):
@@ -276,8 +304,9 @@ class UserFunction(InitialConditions):
         func_to_use = self.function
         if func_to_use is None:
             func_to_use = lambda x: np.zeros(Q.shape[0])
+        n = Q.shape[0]
         for i, x in enumerate(X.T):
-            Q[:, i] = func_to_use(x)
+            Q[:, i] = self._row_values(func_to_use(x), n)
         return Q
 
     def get_definition(self, X, p, n_variables):
@@ -288,7 +317,7 @@ class UserFunction(InitialConditions):
             return ZArray.zeros(n_variables)
         try:
             # Try passing symbolic X
-            res = self.function(X)
+            res = self._row_values(self.function(X), n_variables, symbolic=True)
             return ZArray(res)
         except Exception:
             # Fallback for non-symbolic functions (e.g. restarts or complex logic)

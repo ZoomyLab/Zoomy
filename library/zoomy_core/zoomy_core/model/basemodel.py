@@ -248,6 +248,26 @@ class Model(Configurable, SymbolicRegistrar):
     # the result's ICs/BCs.  Default ``False`` leaves a model uncached.
     _cacheable_derivation = False
 
+    @classmethod
+    def state(cls, names=None, **params):
+        """The state symbols of `cls(**params)` (`FieldSymbols`), before the model is built, so
+        boundary and initial conditions can name fields by symbol: `Q = SME.state(level=0,
+        dimension=3)`, then `Dirichlet("left", on=Q.q_x_0, value=0.5)`. `names` (one per field,
+        in model order) adds aliases, e.g. `names=("b", "h", "hu", "hv")` gives `Q.hu`, the same
+        symbol as `Q.q_x_0`. Cheap where the class gives its layout, else one derivation.
+        """
+        from zoomy_core.model.fields import FieldSymbols
+        symbols = cls._state_layout(**params)
+        if symbols is None:
+            from zoomy_core.systemmodel import SystemModel
+            symbols = list(SystemModel.from_model(cls(**params)).state)
+        return FieldSymbols(symbols, names=names)
+
+    @classmethod
+    def _state_layout(cls, **params):
+        """The state symbols of `cls(**params)` without a derivation, or None (derive)."""
+        return None
+
     def __init__(self, init_functions=True, **params):
         """Declare variables and parameters, run the derivation, and (unless `_finalize_lazy`)
         finalize for the SystemModel.

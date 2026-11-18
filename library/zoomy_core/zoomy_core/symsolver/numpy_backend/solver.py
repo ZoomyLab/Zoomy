@@ -84,9 +84,9 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
         Q = np.zeros((len(sm.state), nc))
         Qaux = np.zeros((len(sm.aux_state), nc))
         if sm.initial_conditions is not None:
-            Q = sm.initial_conditions.apply(mesh.cell_centers[:, :nc], Q)
+            Q = sm.initial_conditions.bind_state([str(s) for s in sm.state]).apply(mesh.cell_centers[:, :nc], Q)
         if sm.aux_initial_conditions is not None:
-            Qaux = sm.aux_initial_conditions.apply(mesh.cell_centers[:, :nc], Qaux)
+            Qaux = sm.aux_initial_conditions.bind_state([str(s) for s in sm.aux_state]).apply(mesh.cell_centers[:, :nc], Qaux)
         self.nsm, self.mesh_np = nsm, mesh
         self.topo = build_topology(
             mesh, nsm=nsm, partners=partners,
@@ -205,7 +205,8 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
         BC ghosts and the boundary closure.
         """
         from zoomy_core.symsolver.discretization.residual import derivative_rows
-        p = self.parameters if parameters is None else parameters
+        from zoomy_core.model.fields import parameter_vector
+        p = parameter_vector(self.parameters, parameters)
         m, rt = self.module, self.rt
         if rt.update_aux_variables is not None:
             Qaux = m["cells"](rt.update_aux_variables, Q, Qaux, p, 0.0, 1.0, self.mesh)
@@ -233,19 +234,24 @@ class SymbolicHyperbolicSolverNumpy(HyperbolicSettings):
 
     @property
     def parameters(self):
-        """The kernels' parameter vector."""
-        return self.rt.parameters
+        """The parameter vector, read by symbol: `solver.parameters[sm.parameters.n]`
+        (`Parameters`)."""
+        from zoomy_core.model.fields import Parameters
+        return Parameters([str(s) for s in self.nsm.parameters.get_list()], self.rt.parameters)
 
     # ── run ────────────────────────────────────────────────────────────────
     def run(self, Q, Qaux, parameters=None, time0=None):
         """March from `time0` (default `time_start`; a restart: the saved state) to `time_end`;
-        returns `(time, Q, Qaux)`."""
-        p = self.parameters if parameters is None else np.asarray(parameters, dtype=float)
+        returns `(time, Q, Qaux)` (a `RunResult`: `.Q`).  `parameters` is a mapping {symbol:
+        value} (the rest from the model), `solver.parameters` or a vector."""
+        from zoomy_core.model.fields import parameter_vector
+        p = np.asarray(parameter_vector(self.parameters, parameters), dtype=float)
         time0 = self.time_start if time0 is None else time0
         end = () if getattr(self, "couple", None) else (float(self.time_end),)
         out = self._fn(np.asarray(Q, dtype=float), np.asarray(Qaux, dtype=float), p,
                        float(time0), *end, self.mesh, 0)
-        return float(out[0]), out[1], out[2]
+        from zoomy_core.model.fields import RunResult
+        return RunResult(float(out[0]), out[1], out[2])
 
 
 class SymbolicChorinSolverNumpy(SymbolicHyperbolicSolverNumpy, ChorinSettings):

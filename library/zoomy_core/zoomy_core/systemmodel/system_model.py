@@ -1090,6 +1090,9 @@ class SystemModel:
         if aux_bcs is None:
             tags = [bc.tag for bc in bcs.boundary_conditions_list]
             aux_bcs = BoundaryConditions([AuxBC.Extrapolation(tag=tg) for tg in tags])
+        aux_names = [str(s) for s in self.aux_state]
+        for bc in getattr(aux_bcs, "boundary_conditions_list", []):
+            bc.bind_on(aux_names)                         # aux fields by symbol or row
         self.aux_boundary_conditions = aux_bcs.get_boundary_condition_function(
             *sig, function_name="aux_boundary_conditions")
         # Retain the source objects, mirroring the production ``from_model``
@@ -1098,6 +1101,12 @@ class SystemModel:
         self._bc_source = bcs
         self._aux_bc_source = aux_bcs
         return self
+
+    @property
+    def fields(self):
+        """The state symbols by name, with the group `momentum` (`FieldSymbols`)."""
+        from zoomy_core.model.fields import FieldSymbols
+        return FieldSymbols(self.state)
 
     # ── Declared roles + admissibility (general PDE core) ─────────────
 

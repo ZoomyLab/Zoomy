@@ -13,6 +13,11 @@ import os
 
 import jax
 import jax.numpy as jnp
+from zoomy_core.model.fields import Parameters, RunResult, parameter_vector
+
+jax.tree_util.register_pytree_node(
+    Parameters, lambda p: ((p.values,), tuple(p.names())),
+    lambda names, children: Parameters(names, children[0]))
 import numpy as np
 import param
 import sympy as sp
@@ -133,9 +138,9 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         Q = np.zeros((len(sm.state), nc))
         Qaux = np.zeros((len(sm.aux_state), nc))
         if sm.initial_conditions is not None:
-            Q = sm.initial_conditions.apply(mesh.cell_centers[:, :nc], Q)
+            Q = sm.initial_conditions.bind_state([str(s) for s in sm.state]).apply(mesh.cell_centers[:, :nc], Q)
         if sm.aux_initial_conditions is not None:
-            Qaux = sm.aux_initial_conditions.apply(mesh.cell_centers[:, :nc],
+            Qaux = sm.aux_initial_conditions.bind_state([str(s) for s in sm.aux_state]).apply(mesh.cell_centers[:, :nc],
                                                    Qaux)
 
         self.nsm, self.mesh_np = nsm, mesh
@@ -317,7 +322,7 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
         """
         from zoomy_core.symsolver.discretization.residual import derivative_rows
         Q, Qaux = jnp.asarray(Q), jnp.asarray(Qaux)
-        p = self.parameters if parameters is None else jnp.asarray(parameters)
+        p = jnp.asarray(parameter_vector(self.parameters, parameters))
         mesh = self.mesh if X is None else R.geometry_of(self.topo, X)
         m, rt = self.module, self.rt
         if rt.update_aux_variables is not None:
@@ -338,21 +343,23 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
 
     @property
     def parameters(self):
-        """The runtime's parameter vector."""
-        return self.rt.parameters
+        """The parameter vector, read by symbol: `solver.parameters[sm.parameters.n]`
+        (`Parameters`, a JAX pytree)."""
+        return Parameters([str(s) for s in self.nsm.parameters.get_list()], self.rt.parameters)
 
     # ── run ────────────────────────────────────────────────────────────────
     def run(self, Q, Qaux, parameters=None, time0=None, X=None):
         """March from `time0` (default `time_start`; a restart: the saved state) to `time_end`;
-        returns `(time, Q, Qaux)`.  `parameters` and the vertex coordinates `X`
-        `(dim, n_vertices)` may be traced for AD.
+        returns `(time, Q, Qaux)` (a `RunResult`: `.Q`).  `parameters` is a mapping {symbol:
+        value} (the rest from the model), `solver.parameters` or a vector; it and the vertex
+        coordinates `X` `(dim, n_vertices)` may be traced for AD.
         """
         if self.ad_mode != self._built_ad_mode:
             raise ValueError(
                 f"ad_mode is {self.ad_mode} but setup built the program for "
                 f"{self._built_ad_mode}: ad_mode is read once, at setup.  Set ad_mode before "
                 "setup (a new solver, or assign it and call setup again).")
-        p = self.parameters if parameters is None else parameters
+        p = parameter_vector(self.parameters, parameters)
         time0 = self.time_start if time0 is None else time0
         tok = jnp.int64(0)
         args = (Q, Qaux, p, time0) + (() if self.couple else (self.time_end,))
@@ -372,7 +379,7 @@ class SymbolicHyperbolicSolverJax(HyperbolicSettings):
             msg = march_error(*out[4:9])          # (time, Q, Qaux, tok, *check.march's args)
             if msg is not None:
                 raise FloatingPointError(msg)
-        return out[0], out[1], out[2]
+        return RunResult(out[0], out[1], out[2])
 
 
 class SymbolicChorinSolverJax(SymbolicHyperbolicSolverJax, ChorinSettings):

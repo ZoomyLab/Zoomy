@@ -24,6 +24,7 @@ class Lambda(BoundaryCondition):
     """
 
     prescribe_fields = param.Dict(default={})
+    _slot_keyed = ("prescribe_fields",)
 
     def compute_boundary_condition(self, time, X, dX, Q, Qaux, parameters, normal):
         """Compute boundary condition."""

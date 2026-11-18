@@ -144,8 +144,8 @@ def hdf5_to_vtk(h5_path, out_dir, basename="simulation", *,
     """Convert a zoomy HDF5 result store to a ``.vtu`` series + ``.pvd``.
 
     Each state row ``Q[i]`` becomes a cell_data field (default name ``q<i>``);
-    pass ``field_names`` to name them after the model's state symbols so
-    ParaView shows ``h``, ``hu``, ...  With ``include_aux=True`` the store's
+    pass ``field_names`` (names or symbols, e.g. ``sm.fields``) to name them after the
+    model's state so ParaView shows ``h``, ``q_x_0``, ...  With ``include_aux=True`` the store's
     ``Qaux`` rows are appended as further cell_data fields (default ``aux_<i>``,
     matching the former ``zoomy_core.misc.io.generate_vtk``); name them via
     ``aux_field_names``.  Snapshot times land in the ``.pvd``.  Ghost-cell
@@ -162,6 +162,9 @@ def hdf5_to_vtk(h5_path, out_dir, basename="simulation", *,
     if meshio_type is None:
         raise ValueError(f"unsupported zoomy mesh type {mesh['type']!r}")
     n_inner = mesh["n_inner_cells"]
+
+    field_names = None if field_names is None else [str(s) for s in field_names]
+    aux_field_names = None if aux_field_names is None else [str(s) for s in aux_field_names]
 
     def _name(names, i, default):
         return names[i] if names is not None and i < len(names) else default

@@ -43,6 +43,17 @@ class SME(BaseModel):
         Kowalski & Torrilhon 2019, https://doi.org/10.4208/cicp.OA-2017-0263
     """
 
+    @classmethod
+    def _state_layout(cls, level=2, dimension=2, **params):
+        """`b, h, q_0 .. q_level` (one horizontal direction) or `b, h, q_x_i .., q_y_i ..`; only
+        for SME itself (subclasses may add fields)."""
+        if cls is not SME:
+            return None
+        q = ([f"q_{i}" for i in range(level + 1)] if dimension == 2 else
+             [f"q_{d}_{i}" for d in ("x", "y") for i in range(level + 1)])
+        return [sp.Symbol("b", real=True), sp.Symbol("h", positive=True),
+                *(sp.Symbol(n, real=True) for n in q)]
+
     _finalize_lazy = True               # declarative path — skip the production tag pipeline
     _cacheable_derivation = True        # derive_model returns m; byproducts ride on m
     level = param.Integer(default=2, bounds=(0, None))
